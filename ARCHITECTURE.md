@@ -509,9 +509,10 @@ CREATE TABLE server_config (
 );
 ```
 
-**Presence is never persisted.** It lives in an in-memory `DashMap<UserId, Presence>` in
-the gateway. On restart everyone is offline until they reconnect. This is correct: stale
-persisted presence is worse than none.
+**Presence is never persisted.** It lives in memory in the gateway: what each session
+says, and for each person those merged into the one entry everybody is told (#653,
+PROTOCOL §8). On restart everyone is offline until they reconnect. This is correct:
+stale persisted presence is worse than none.
 
 ---
 
@@ -520,6 +521,8 @@ persisted presence is worse than none.
 Where somebody is: `in_room`, `around`, `idle` (no input for 10 minutes), `away`
 (explicit, with a message), `offline`. It lives in the gateway
 (`crates/linger-server/src/gateway/`), it is held in memory, and it is not stored.
+Somebody on a phone and a computer is two sessions, each with its own say, and what
+everybody is told is merged from them by the rules in PROTOCOL §8 (#653).
 
 **This section used to be "Activity detection — the hard part"** and it described a
 `linger-activity` crate with a per-OS backend for KWin, X11, Windows and macOS, a

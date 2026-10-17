@@ -1420,3 +1420,27 @@ coordinates. Photos never had the problem (SPEC §4.10).
 - **Files already on servers keep their tags.** Cleaning them on update would
   replace originals with copies nobody is watching for a mistake. Deleting the
   message deletes the file.
+
+## Decided — one person on two devices is shown as one
+
+**Decided for Matt during the overnight bug hunt, 2026-10-16 (#653).** With Linger
+open on a phone and a computer, whichever device spoke last was what everybody saw:
+idle while typing on the phone, around after the phone had gone, away undone by the
+phone opening a room. The server kept one presence per person, and every device
+wrote over it.
+
+- **Each session keeps its own presence** on the server, and what everybody is told
+  is worked out from all of them. Nothing on the wire changed, so older apps see the
+  same frames.
+- **Away wins.** Away on any device is away, in no room, with the away message set
+  last. One device always left its room before going away, and this keeps that true.
+- **Then a room, then around, then idle.** In a room on any device beats around, and
+  two devices in different rooms show the room opened last. Idle only when every
+  device is idle. Offline when the last one goes.
+- **A device can't undo another's away.** Its `room.focus`, idle and back-from-idle
+  change only its own part. Away ends when the device that set it says it's back, or
+  when that device's session ends.
+- **Not built here:** the app telling a device that you went away, or came back, on
+  another one. Until it does, coming back from the phone doesn't end an away set on
+  the computer: the computer still says away. That is a client follow-up. A short
+  network drop showing you offline is #654, built on this.

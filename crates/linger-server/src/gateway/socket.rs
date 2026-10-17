@@ -17,7 +17,7 @@ use linger_core::limits::{
 use linger_core::UserId;
 use tokio::sync::{mpsc, oneshot};
 
-use super::{spawn_session, Ctl, HeldVoice, SessionHandle, VoiceJoined, WantedSeat};
+use super::{spawn_session, Ctl, HeldVoice, Merged, SessionHandle, VoiceJoined, WantedSeat};
 use crate::db::now_ms;
 use crate::state::AppState;
 use crate::{auth, repo, validate};
@@ -91,7 +91,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
         }
     };
 
-    state.gateway.connection_opened(user_id);
+    state.gateway.connection_opened(user_id, &session_id);
     let _ = sqlx::query("UPDATE users SET last_seen_at = ? WHERE id = ?")
         .bind(now_ms())
         .bind(user_id.to_vec())
@@ -158,7 +158,10 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     if let Some(ctl) = ctl {
         let _ = ctl.send(Ctl::Detach { from: sink.clone() }).await;
     }
-    state.gateway.connection_closed(user_id);
+    // What this session said goes with it (#653): somebody still on another
+    // device is told what that one says.
+    let merged = state.gateway.connection_closed(user_id, &session_id);
+    tell_merged(&state, user_id, merged).await;
     let _ = sqlx::query("UPDATE users SET last_seen_at = ? WHERE id = ?")
         .bind(now_ms())
         .bind(user_id.to_vec())
@@ -368,12 +371,11 @@ async fn handle_client_frame(
             {
                 return;
             }
-            if state
-                .gateway
-                .update_presence(user_id, presence_state, away_message)
-            {
-                tell_presence(state, user_id);
-            }
+            let merged =
+                state
+                    .gateway
+                    .update_presence(user_id, session_id, presence_state, away_message);
+            tell_merged(state, user_id, merged).await;
         }
         ClientFrame::RoomFocus { room_id } => {
             // Standing in a DM you are not in would put you in its occupancy
@@ -396,9 +398,8 @@ async fn handle_client_frame(
             }
             // Where they are changes now; telling everybody waits for their
             // turn when they move faster than `RATE_ROOM_FOCUS` (#527).
-            if state.gateway.move_to(user_id, room_id) {
-                tell_focus(state, user_id).await;
-            }
+            let merged = state.gateway.move_to(user_id, session_id, room_id);
+            tell_merged(state, user_id, merged).await;
         }
         ClientFrame::TypingStart { room_id } => {
             // Same check, same reason: without it somebody outside a DM can
@@ -477,6 +478,21 @@ async fn handle_client_frame(
 
         // Handshake ops after the handshake: ignore.
         ClientFrame::Identify { .. } | ClientFrame::Resume { .. } => {}
+    }
+}
+
+/// Tell everybody what a change to one of a person's sessions did to them
+/// (#653), the way that kind of change is told. A `presence.update` can move
+/// somebody, and a `room.focus` can leave them where they were: away on the
+/// computer takes them out of the room the phone has open, and the phone
+/// opening a room while they're away moves nobody. What it did decides it,
+/// not which frame did it, so a room always hears its `room.leave` and
+/// `room.enter` in order (`tell_focus`).
+async fn tell_merged(state: &AppState, user_id: UserId, merged: Merged) {
+    match merged {
+        Merged::Same => {}
+        Merged::Changed => tell_presence(state, user_id),
+        Merged::Moved => tell_focus(state, user_id).await,
     }
 }
 

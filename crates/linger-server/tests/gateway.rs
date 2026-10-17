@@ -1141,3 +1141,177 @@ async fn your_place_reaches_your_own_sessions_and_nobody_elses() {
         "nobody else learns where you've read to, got {author_frames:?}"
     );
 }
+
+// --- one person on two devices (#653) ---------------------------------------
+
+/// Wait until the server has handled everything this socket sent before now.
+/// One socket's frames are handled in order, and a heartbeat is answered on
+/// the spot, so its ack means every frame before it is done, and anything
+/// they told everybody is already on its way.
+async fn handled(ws: &mut Ws) {
+    send_json(ws, json!({ "op": "heartbeat", "d": { "s": 0 } })).await;
+    wait_for(ws, "heartbeat_ack").await;
+}
+
+/// Everything the watcher is told up to now: a message posted after it is
+/// the last of it, because everybody hears frames in the order they're told.
+async fn told_so_far(
+    server: &common::TestServer,
+    host: &str,
+    room: &str,
+    watcher: &mut Ws,
+) -> Vec<Value> {
+    rest_send(server, host, room, "caught up").await;
+    let (_, before) = wait_for(watcher, "message.create").await;
+    before
+}
+
+/// What a person's presence is in the `ready` of somebody connecting now.
+async fn presence_in_ready(server: &common::TestServer, token: &str, user_id: &str) -> Value {
+    let (_ws, ready) = connect_with_ready(server, token).await;
+    ready["d"]["presence"]
+        .as_array()
+        .expect("ready carries presence")
+        .iter()
+        .find(|entry| entry["user_id"] == user_id)
+        .expect("their presence is in ready")
+        .clone()
+}
+
+/// #653. Chatting in a room on the phone while the computer, untouched for
+/// ten minutes, says idle: everybody saw idle. The computer speaks only for
+/// itself now, and a room on any device beats idle on another.
+#[tokio::test]
+async fn idle_on_one_device_does_not_hide_a_room_on_the_other() {
+    let (server, host, room) = common::server_with_room("garage").await;
+    let member = common::join_member(&server, &host.access_token, "callie").await;
+    let member_id = member.user.id.to_string();
+    let room_id = room.id.to_string();
+    let (mut watcher, _) = connect_ready(&server, &host.access_token).await;
+    let (mut phone, _) = connect_ready(&server, &member.access_token).await;
+    let (mut computer, _) = connect_ready(&server, &member.access_token).await;
+
+    send_json(
+        &mut phone,
+        json!({ "op": "room.focus", "d": { "room_id": room_id } }),
+    )
+    .await;
+    wait_for_presence(&mut watcher, &member_id, "in_room").await;
+
+    send_json(
+        &mut computer,
+        json!({ "op": "presence.update", "d": { "state": "idle", "away_message": null } }),
+    )
+    .await;
+    handled(&mut computer).await;
+    let before = told_so_far(&server, &host.access_token, &room_id, &mut watcher).await;
+    let told = presence_of(&before, &member_id);
+    assert!(
+        told.is_empty(),
+        "the computer going idle was told to everybody while the phone was in the room: {told:?}"
+    );
+    let held = presence_in_ready(&server, &host.access_token, &member_id).await;
+    assert_eq!(held["state"], "in_room", "ready carried {held}");
+    assert_eq!(held["room_id"], room_id.as_str(), "ready carried {held}");
+}
+
+/// #653. The phone said around and then closed, while the computer had said
+/// idle earlier and won't say it again: everybody went on seeing around, from
+/// a device that was gone. When it goes, what it said goes with it.
+#[tokio::test]
+async fn the_device_that_said_around_closing_leaves_the_idle_one() {
+    let (server, host, room) = common::server_with_room("garage").await;
+    let member = common::join_member(&server, &host.access_token, "callie").await;
+    let member_id = member.user.id.to_string();
+    let room_id = room.id.to_string();
+    let (mut watcher, _) = connect_ready(&server, &host.access_token).await;
+    let (mut computer, _) = connect_ready(&server, &member.access_token).await;
+    let (mut phone, _) = connect_ready(&server, &member.access_token).await;
+    wait_for_presence(&mut watcher, &member_id, "around").await;
+
+    send_json(
+        &mut computer,
+        json!({ "op": "presence.update", "d": { "state": "idle", "away_message": null } }),
+    )
+    .await;
+    handled(&mut computer).await;
+    send_json(
+        &mut phone,
+        json!({ "op": "presence.update", "d": { "state": "around", "away_message": null } }),
+    )
+    .await;
+    handled(&mut phone).await;
+    let before = told_so_far(&server, &host.access_token, &room_id, &mut watcher).await;
+    assert!(
+        presence_of(&before, &member_id).is_empty(),
+        "one device idle while the other is around is still around, got {before:?}"
+    );
+
+    phone.close(None).await.expect("the phone closes");
+    let after = drain_for(&mut watcher, Duration::from_secs(2)).await;
+    let last = presence_of(&after, &member_id)
+        .last()
+        .map(|frame| frame["d"].clone());
+    assert_eq!(
+        last.as_ref().map(|entry| entry["state"].clone()),
+        Some(json!("idle")),
+        "the phone that said around closed, and everybody was told {last:?}"
+    );
+    let held = presence_in_ready(&server, &host.access_token, &member_id).await;
+    assert_eq!(held["state"], "idle", "ready carried {held}");
+}
+
+/// #653. Away set on the computer, then a room opened on the phone: the
+/// phone's `room.focus` put them in the room and the away was gone. Away is
+/// undone only by the device that set it, so the room hears nobody come in.
+#[tokio::test]
+async fn a_room_on_one_device_does_not_undo_away_on_the_other() {
+    let (server, host, room) = common::server_with_room("garage").await;
+    let member = common::join_member(&server, &host.access_token, "callie").await;
+    let member_id = member.user.id.to_string();
+    let room_id = room.id.to_string();
+    // The watcher is in the room, so it would hear somebody come in.
+    let (mut watcher, _) = connect_ready(&server, &host.access_token).await;
+    send_json(
+        &mut watcher,
+        json!({ "op": "room.focus", "d": { "room_id": room_id } }),
+    )
+    .await;
+    wait_for(&mut watcher, "room.enter").await;
+    let (mut computer, _) = connect_ready(&server, &member.access_token).await;
+    let (mut phone, _) = connect_ready(&server, &member.access_token).await;
+    wait_for_presence(&mut watcher, &member_id, "around").await;
+
+    send_json(
+        &mut computer,
+        json!({ "op": "presence.update", "d": { "state": "away", "away_message": "out for a walk" } }),
+    )
+    .await;
+    let (away, _) = wait_for_presence(&mut watcher, &member_id, "away").await;
+    assert_eq!(away["d"]["away_message"], "out for a walk");
+
+    send_json(
+        &mut phone,
+        json!({ "op": "room.focus", "d": { "room_id": room_id } }),
+    )
+    .await;
+    handled(&mut phone).await;
+    let before = told_so_far(&server, &host.access_token, &room_id, &mut watcher).await;
+    let entered: Vec<&Value> = before
+        .iter()
+        .filter(|f| f["op"] == "room.enter" && f["d"]["user_id"] == member_id.as_str())
+        .collect();
+    assert!(
+        entered.is_empty(),
+        "somebody away came into the room from their other device: {entered:?}"
+    );
+    let told = presence_of(&before, &member_id);
+    assert!(
+        told.is_empty(),
+        "the phone's room undid the computer's away: {told:?}"
+    );
+    let held = presence_in_ready(&server, &host.access_token, &member_id).await;
+    assert_eq!(held["state"], "away", "ready carried {held}");
+    assert!(held["room_id"].is_null(), "ready carried {held}");
+    assert_eq!(held["away_message"], "out for a walk");
+}

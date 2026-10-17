@@ -16,11 +16,12 @@
 mod frame;
 mod socket;
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
+use dashmap::mapref::entry::{Entry, OccupiedEntry};
 use dashmap::{DashMap, DashSet};
 use linger_core::gateway::{
     ServerEvent, ServerFrame, VoiceControls, VoicePeer, VoiceRoomState, VoiceTrack,
@@ -39,7 +40,23 @@ pub use socket::ws_route;
 pub struct Gateway {
     bus: broadcast::Sender<Arc<Fanout>>,
     sessions: DashMap<String, SessionHandle>,
+    /// What everybody is told about where each person is: their sessions'
+    /// own say (`session_presence`) merged into one (`merge`, #653). Only
+    /// a person with a session open has an entry.
     presence: DashMap<UserId, PresenceEntry>,
+    /// What each of a person's sessions says about where they are, by
+    /// person and then by session (#653): a phone and a computer each speak
+    /// for themselves, and neither overwrites the other.
+    ///
+    /// Every change to a person's presence takes their entry here first and
+    /// holds it while `presence` is worked out again, so two of their
+    /// devices speaking at once can't leave it merged from a mix of old and
+    /// new. Nothing takes this while holding `presence` or `focus_told`.
+    /// A person is offline once their last session's record goes.
+    session_presence: DashMap<UserId, HashMap<String, SessionPresence>>,
+    /// Numbers moves and aways as they happen, so `merge` can tell which
+    /// session moved, or went away, most recently.
+    presence_order: AtomicU64,
     /// People whose newest `presence.update` is held back by `RATE_PRESENCE`
     /// until their turn (#497). One waiting task each, however many changes
     /// pile up behind it: the turn tells whatever is newest by then.
@@ -56,7 +73,6 @@ pub struct Gateway {
     /// Each session's newest `voice.join` or `voice.leave` held back by
     /// `RATE_VOICE_SEAT` until its turn (#527).
     voice_held: DashMap<String, HeldVoice>,
-    conn_count: DashMap<UserId, u32>,
     /// Who is in each DM (SPEC §4.13). Public rooms are not in here — their
     /// members are everybody, and a room absent from this map is treated as
     /// public, which is the one place this design has to be careful.
@@ -92,6 +108,116 @@ pub struct Gateway {
     /// server carries no voice at all: the mesh it used to fall back on is
     /// gone (#306).
     forwarding: OnceLock<linger_sfu::Sfu>,
+}
+
+/// One session's own say in where its person is (#653). Somebody on a phone
+/// and a computer has two, and what everybody is told is worked out from
+/// both (`merge`).
+#[derive(Debug, Clone)]
+struct SessionPresence {
+    /// The room this session has open, by its `room.focus`.
+    room_id: Option<RoomId>,
+    /// What its `presence.update`s say: `Around`, `Idle` or `Away`, and
+    /// never anything else. Being in a room is `room_id`, and offline is
+    /// having no session at all.
+    state: PresenceState,
+    /// Its away message, while `state` is `Away`.
+    away_message: Option<String>,
+    /// When it last moved rooms, from `Gateway::presence_order`: a larger
+    /// number is later.
+    moved_at: u64,
+    /// When it last went away or changed its away message, the same way.
+    away_at: u64,
+    /// How many sockets it has open: one, but for the moment a resume takes
+    /// it over while the server still holds the socket it replaces (#451).
+    /// The record goes when the last of them closes.
+    sockets: u32,
+}
+
+impl SessionPresence {
+    /// A session as its first socket opens: around, in no room, as one
+    /// person's first connection always was.
+    fn arrived() -> Self {
+        Self {
+            room_id: None,
+            state: PresenceState::Around,
+            away_message: None,
+            moved_at: 0,
+            away_at: 0,
+            sockets: 0,
+        }
+    }
+}
+
+/// What a change to one session did to what everybody is told about its
+/// person (#653), which is how the change is told.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Merged {
+    /// Nothing anybody is told changed: nobody hears anything.
+    Same,
+    /// Their presence changed, in the same room or none: a `presence.update`.
+    Changed,
+    /// The room they're in changed: told as a move (`tell_focus`), which
+    /// ends with the `presence.update`.
+    Moved,
+}
+
+/// What everybody is told about somebody, from what each of their sessions
+/// says (#653). `None` when they have no session, which is offline.
+///
+/// The rules make several devices look like one, and one device leaves its
+/// room before it goes away and holds away against every clock
+/// (`client/src/lib/presence.ts`). In order:
+/// 1. Away on any session is away, in no room, with the away message set
+///    most recently.
+/// 2. Otherwise, in a room on any session is in that room: the one moved
+///    into most recently.
+/// 3. Otherwise, around on any session is around.
+/// 4. Otherwise every session is idle, and so are they.
+fn merge<'a>(
+    user_id: UserId,
+    sessions: impl IntoIterator<Item = &'a SessionPresence>,
+) -> Option<PresenceEntry> {
+    let sessions: Vec<&SessionPresence> = sessions.into_iter().collect();
+    if sessions.is_empty() {
+        return None;
+    }
+    let entry = |state, room_id, away_message| PresenceEntry {
+        user_id,
+        state,
+        room_id,
+        away_message,
+    };
+    let away = sessions
+        .iter()
+        .filter(|session| session.state == PresenceState::Away)
+        .max_by_key(|session| session.away_at);
+    if let Some(away) = away {
+        return Some(entry(PresenceState::Away, None, away.away_message.clone()));
+    }
+    let room = sessions
+        .iter()
+        .filter(|session| session.room_id.is_some())
+        .max_by_key(|session| session.moved_at);
+    if let Some(room) = room {
+        return Some(entry(PresenceState::InRoom, room.room_id, None));
+    }
+    if sessions
+        .iter()
+        .any(|session| session.state == PresenceState::Around)
+    {
+        return Some(entry(PresenceState::Around, None, None));
+    }
+    Some(entry(PresenceState::Idle, None, None))
+}
+
+/// Whether two entries tell everybody the same thing. `PresenceEntry` is a
+/// wire type, and comparing is only the gateway's business.
+fn same_presence(a: &PresenceEntry, b: &PresenceEntry) -> bool {
+    a.user_id == b.user_id
+        && a.state == b.state
+        && a.room_id == b.room_id
+        && a.away_message == b.away_message
 }
 
 /// One session's place in a voice room. Every seat's voice goes through the
@@ -330,11 +456,12 @@ impl Gateway {
             bus,
             sessions: DashMap::new(),
             presence: DashMap::new(),
+            session_presence: DashMap::new(),
+            presence_order: AtomicU64::new(0),
             presence_held: DashSet::new(),
             focus_told: DashMap::new(),
             focus_held: DashSet::new(),
             voice_held: DashMap::new(),
-            conn_count: DashMap::new(),
             dm_members: DashMap::new(),
             voice: DashMap::new(),
             seats: AtomicU64::new(0),
@@ -777,55 +904,75 @@ impl Gateway {
             .collect()
     }
 
-    /// Set somebody's presence state and away message. Room membership only
-    /// changes via `room.focus`, so it is carried over from the existing entry.
-    /// The away message loses the characters that turn text around, as a saved
-    /// one does (#488): it's drawn beside the person's name.
-    fn apply_presence(
-        &self,
-        user_id: UserId,
-        state: PresenceState,
-        away_message: Option<String>,
-    ) -> PresenceEntry {
-        let prev = self.presence.get(&user_id).map(|e| e.value().clone());
-        let room_id = prev.as_ref().and_then(|p| p.room_id);
-        let entry = PresenceEntry {
-            user_id,
-            state,
-            room_id,
-            away_message: away_message
-                .as_deref()
-                .map(crate::validate::without_direction_overrides),
-        };
-        self.presence.insert(user_id, entry.clone());
-        entry
+    /// The next number in `presence_order`.
+    fn next_presence_order(&self) -> u64 {
+        self.presence_order.fetch_add(1, Ordering::Relaxed) + 1
     }
 
-    /// Apply a client `presence.update`, answering whether it changed
-    /// anything. Saying the same thing again tells nobody anything new, so
-    /// nobody is told it (#497).
+    /// Work a person's presence out again from what their sessions say
+    /// (#653), and keep it when it changed. Called holding their entry in
+    /// `session_presence`, which is what `sessions` is. Answers what
+    /// changed, and so how it is told; a person with no session left is the
+    /// caller's to take offline.
+    fn remerge(&self, user_id: UserId, sessions: &HashMap<String, SessionPresence>) -> Merged {
+        let Some(merged) = merge(user_id, sessions.values()) else {
+            return Merged::Same;
+        };
+        let before = self.presence.get(&user_id).map(|e| e.value().clone());
+        let answer = match &before {
+            Some(before) if same_presence(before, &merged) => return Merged::Same,
+            Some(before) if before.room_id != merged.room_id => Merged::Moved,
+            _ => Merged::Changed,
+        };
+        self.presence.insert(user_id, merged);
+        answer
+    }
+
+    /// Apply a client `presence.update` to the session that sent it, and
+    /// only to that one (#653), answering what it changed of what
+    /// everybody is told. Saying the same thing again tells nobody anything
+    /// new, so nobody is told it (#497), and nor does a change another of
+    /// their sessions outranks: idle here while the phone is in a room.
     ///
-    /// The away message is compared as it is held, without the characters
-    /// that turn text around (#488). Compared as sent, one carrying an
-    /// override would never equal the stored one, and every repeat would
-    /// count as a change and spend the person's `RATE_PRESENCE`.
+    /// A state other than idle or away counts as around: where somebody is
+    /// comes from `room.focus`, and offline from their last session closing.
+    /// The away message is kept only with away, and loses the characters
+    /// that turn text around, as a saved one does (#488): it's drawn beside
+    /// the person's name. It is compared as it is held: compared as sent,
+    /// one carrying an override would never equal the stored one, and every
+    /// repeat would count as a change and spend the person's `RATE_PRESENCE`.
     fn update_presence(
         &self,
         user_id: UserId,
+        session_id: &str,
         state: PresenceState,
         away_message: Option<String>,
-    ) -> bool {
+    ) -> Merged {
+        let state = match state {
+            PresenceState::Away | PresenceState::Idle => state,
+            PresenceState::Around | PresenceState::InRoom | PresenceState::Offline => {
+                PresenceState::Around
+            }
+        };
         let away_message = away_message
+            .filter(|_| state == PresenceState::Away)
             .as_deref()
             .map(crate::validate::without_direction_overrides);
-        let same = self
-            .presence
-            .get(&user_id)
-            .is_some_and(|held| held.state == state && held.away_message == away_message);
-        if !same {
-            self.apply_presence(user_id, state, away_message);
+        let Some(mut sessions) = self.session_presence.get_mut(&user_id) else {
+            return Merged::Same;
+        };
+        let Some(own) = sessions.get_mut(session_id) else {
+            return Merged::Same;
+        };
+        if own.state == state && own.away_message == away_message {
+            return Merged::Same;
         }
-        !same
+        if state == PresenceState::Away {
+            own.away_at = self.next_presence_order();
+        }
+        own.state = state;
+        own.away_message = away_message;
+        self.remerge(user_id, &sessions)
     }
 
     /// Tell everybody somebody's presence as it is now.
@@ -833,7 +980,7 @@ impl Gateway {
     /// A change held back by `RATE_PRESENCE` is told this way when its turn
     /// comes, as the newest of everything that arrived meanwhile (#497). When
     /// they have gone offline in between there is nothing to tell:
-    /// `connection_closed` already said so.
+    /// `session_gone` already said so.
     ///
     /// **Published while the entry is still held.** Copying it and letting go
     /// first leaves a gap in which their last connection can close (or a
@@ -848,27 +995,32 @@ impl Gateway {
         }
     }
 
-    /// Move somebody to a room, or out of every room (`None`), answering
-    /// whether that moved them. Only in memory: a `ready` from now on has it,
-    /// and `tell_focus` tells everybody else.
-    fn move_to(&self, user_id: UserId, room_id: Option<RoomId>) -> bool {
-        let prev_room = self.presence.get(&user_id).and_then(|e| e.value().room_id);
-        if prev_room == room_id {
-            return false;
-        }
-        let mut entry = self
-            .presence
-            .get(&user_id)
-            .map(|e| e.value().clone())
-            .unwrap_or_else(|| offline_entry(user_id));
-        entry.room_id = room_id;
-        entry.state = if room_id.is_some() {
-            PresenceState::InRoom
-        } else {
-            PresenceState::Around
+    /// Move one of somebody's sessions to a room, or out of every room
+    /// (`None`), answering what that changed of what everybody is told. Only
+    /// in memory: a `ready` from now on has it, and `tell_focus` tells
+    /// everybody else.
+    ///
+    /// It moves that session and no other (#653). Moving is the person
+    /// being there, so a session that was idle is around again; one that
+    /// is away stays away, and a phone opening a room can't undo the away
+    /// set on the computer. Away ends when the session that set it says so,
+    /// or goes.
+    fn move_to(&self, user_id: UserId, session_id: &str, room_id: Option<RoomId>) -> Merged {
+        let Some(mut sessions) = self.session_presence.get_mut(&user_id) else {
+            return Merged::Same;
         };
-        self.presence.insert(user_id, entry);
-        true
+        let Some(own) = sessions.get_mut(session_id) else {
+            return Merged::Same;
+        };
+        if own.room_id == room_id {
+            return Merged::Same;
+        }
+        own.room_id = room_id;
+        own.moved_at = self.next_presence_order();
+        if own.state == PresenceState::Idle {
+            own.state = PresenceState::Around;
+        }
+        self.remerge(user_id, &sessions)
     }
 
     /// Tell everybody where somebody is now, against where they were last
@@ -885,7 +1037,7 @@ impl Gateway {
     fn tell_focus(&self, user_id: UserId, entrance_sound: Option<String>) {
         let mut told = self.focus_told.entry(user_id).or_insert(None);
         let Some(now) = self.presence.get(&user_id).map(|e| e.value().room_id) else {
-            // Offline in between: `connection_closed` told everybody.
+            // Offline in between: `session_gone` told everybody.
             drop(told);
             self.focus_told.remove(&user_id);
             return;
@@ -923,39 +1075,84 @@ impl Gateway {
         }
     }
 
-    /// A connection came up for this user. First connection ⇒ visible presence.
-    fn connection_opened(&self, user_id: UserId) {
-        let mut count = self.conn_count.entry(user_id).or_insert(0);
-        *count += 1;
-        if *count == 1 {
-            let entry = self.apply_presence(user_id, PresenceState::Around, None);
-            self.publish(ServerEvent::PresenceUpdate(entry));
+    /// A socket came up on this session. A session's first socket gives it
+    /// a record of its own, around and in no room (#653); a person's first
+    /// session makes them visible.
+    ///
+    /// Told at once when it changes what everybody is told, as a first
+    /// connection always was. It can only be their state, never their room:
+    /// the newcomer is in none. Told while their entry is held, so nothing
+    /// else about them can go out between the change and the telling.
+    fn connection_opened(&self, user_id: UserId, session_id: &str) {
+        let mut sessions = self.session_presence.entry(user_id).or_default();
+        sessions
+            .entry(session_id.to_string())
+            .or_insert_with(SessionPresence::arrived)
+            .sockets += 1;
+        if self.remerge(user_id, &sessions) != Merged::Same {
+            if let Some(entry) = self.presence.get(&user_id) {
+                self.publish(ServerEvent::PresenceUpdate(entry.value().clone()));
+            }
         }
     }
 
-    /// A connection went away. Last connection ⇒ offline (leaving any room).
-    fn connection_closed(&self, user_id: UserId) {
-        let remaining = {
-            let mut count = self.conn_count.entry(user_id).or_insert(1);
-            *count = count.saturating_sub(1);
-            *count
+    /// A socket went away, answering what that changed of what everybody is
+    /// told for the caller to tell. When it was its session's last socket,
+    /// the session's record goes (`session_gone`).
+    fn connection_closed(&self, user_id: UserId, session_id: &str) -> Merged {
+        let Entry::Occupied(mut person) = self.session_presence.entry(user_id) else {
+            return Merged::Same;
         };
-        if remaining == 0 {
-            self.conn_count.remove(&user_id);
-            // Out of their room, told at once whatever their turn: the room
-            // they were last told to be in, if a move was still held.
-            let moved = self.move_to(user_id, None);
-            let told_somewhere = self
-                .focus_told
-                .get(&user_id)
-                .is_some_and(|room| room.is_some());
-            if moved || told_somewhere {
-                self.tell_focus(user_id, None);
-            }
-            self.focus_told.remove(&user_id);
-            self.presence.remove(&user_id);
-            self.publish(ServerEvent::PresenceUpdate(offline_entry(user_id)));
+        let Some(own) = person.get_mut().get_mut(session_id) else {
+            return Merged::Same;
+        };
+        own.sockets = own.sockets.saturating_sub(1);
+        if own.sockets > 0 {
+            return Merged::Same;
         }
+        self.session_gone(user_id, session_id, person)
+    }
+
+    /// A session has no socket left, so what it said goes with it (#653):
+    /// its room, its idle, its away. Somebody with other sessions is worked
+    /// out again from those, for the caller to tell. Their last session
+    /// going takes them offline, out of any room, and that is told here and
+    /// now, whatever their turn.
+    ///
+    /// The one place a session's record ends, so that a session kept for a
+    /// while after its socket drops (#654) has one place to change.
+    fn session_gone(
+        &self,
+        user_id: UserId,
+        session_id: &str,
+        mut person: OccupiedEntry<'_, UserId, HashMap<String, SessionPresence>>,
+    ) -> Merged {
+        person.get_mut().remove(session_id);
+        if !person.get().is_empty() {
+            return self.remerge(user_id, person.get());
+        }
+        // Out of their room, told at once whatever their turn: the room they
+        // were last told to be in, if a move was still held.
+        let moved = self.presence.get_mut(&user_id).is_some_and(|mut entry| {
+            let moved = entry.room_id.is_some();
+            if moved {
+                entry.room_id = None;
+                entry.state = PresenceState::Around;
+            }
+            moved
+        });
+        let told_somewhere = self
+            .focus_told
+            .get(&user_id)
+            .is_some_and(|room| room.is_some());
+        if moved || told_somewhere {
+            self.tell_focus(user_id, None);
+        }
+        self.focus_told.remove(&user_id);
+        self.presence.remove(&user_id);
+        self.publish(ServerEvent::PresenceUpdate(offline_entry(user_id)));
+        person.remove();
+        Merged::Same
     }
 
     /// PROTOCOL §8 fan-out rules: what this person gets, if anything, as
@@ -1267,5 +1464,228 @@ mod tests {
         );
         tokio::time::sleep(Duration::from_secs(2)).await;
         assert!(ctl.is_closed(), "the session outlived its window");
+    }
+
+    // --- one person on several devices (#653) -------------------------------
+
+    /// A session's record as the merge sees it.
+    fn said(state: PresenceState, room_id: Option<RoomId>, moved_at: u64) -> SessionPresence {
+        SessionPresence {
+            room_id,
+            state,
+            moved_at,
+            ..SessionPresence::arrived()
+        }
+    }
+
+    fn away(message: &str, away_at: u64) -> SessionPresence {
+        SessionPresence {
+            state: PresenceState::Away,
+            away_message: Some(message.to_string()),
+            away_at,
+            ..SessionPresence::arrived()
+        }
+    }
+
+    fn merged(
+        sessions: &[SessionPresence],
+    ) -> Option<(PresenceState, Option<RoomId>, Option<String>)> {
+        merge(UserId::new(), sessions).map(|entry| (entry.state, entry.room_id, entry.away_message))
+    }
+
+    #[test]
+    fn nobody_left_is_offline() {
+        assert_eq!(merged(&[]), None);
+    }
+
+    #[test]
+    fn one_session_is_what_it_says() {
+        use PresenceState::{Around, Idle, InRoom};
+        let room = RoomId::new();
+        assert_eq!(merged(&[said(Around, None, 0)]), Some((Around, None, None)));
+        assert_eq!(merged(&[said(Idle, None, 0)]), Some((Idle, None, None)));
+        assert_eq!(
+            merged(&[said(Around, Some(room), 1)]),
+            Some((InRoom, Some(room), None))
+        );
+        assert_eq!(
+            merged(&[away("lunch", 1)]),
+            Some((PresenceState::Away, None, Some("lunch".into())))
+        );
+    }
+
+    /// Rule 1: away on any session is away, in no room, whatever the others
+    /// say, with the away message set most recently.
+    #[test]
+    fn away_on_any_session_is_away_in_no_room() {
+        let room = RoomId::new();
+        let in_room = said(PresenceState::Around, Some(room), 5);
+        assert_eq!(
+            merged(&[in_room.clone(), away("lunch", 1)]),
+            Some((PresenceState::Away, None, Some("lunch".into())))
+        );
+        // A session that went away without leaving its room first is away
+        // too, and in no room.
+        let mut away_in_room = away("lunch", 1);
+        away_in_room.room_id = Some(room);
+        assert_eq!(
+            merged(&[away_in_room]),
+            Some((PresenceState::Away, None, Some("lunch".into())))
+        );
+        assert_eq!(
+            merged(&[away("lunch", 1), in_room, away("gym", 2)]),
+            Some((PresenceState::Away, None, Some("gym".into())))
+        );
+        assert_eq!(
+            merged(&[away("gym", 2), away("lunch", 3)]),
+            Some((PresenceState::Away, None, Some("lunch".into())))
+        );
+    }
+
+    /// Rule 2: otherwise in a room on any session is in a room, the one moved
+    /// into most recently, and it beats around and idle on the others.
+    #[test]
+    fn a_room_on_any_session_is_in_the_room_moved_into_last() {
+        use PresenceState::{Around, Idle, InRoom};
+        let (first, second) = (RoomId::new(), RoomId::new());
+        assert_eq!(
+            merged(&[said(Idle, None, 9), said(Around, Some(first), 1)]),
+            Some((InRoom, Some(first), None))
+        );
+        assert_eq!(
+            merged(&[said(Around, Some(first), 1), said(Around, Some(second), 2)]),
+            Some((InRoom, Some(second), None))
+        );
+        assert_eq!(
+            merged(&[said(Around, Some(first), 3), said(Around, Some(second), 2)]),
+            Some((InRoom, Some(first), None))
+        );
+        // Leaving a room is a move too, but it moves nobody into one.
+        assert_eq!(
+            merged(&[said(Around, Some(first), 1), said(Around, None, 4)]),
+            Some((InRoom, Some(first), None))
+        );
+    }
+
+    /// Rules 3 and 4: in no room anywhere, around on any session is around,
+    /// and idle only when every session is.
+    #[test]
+    fn idle_only_when_every_session_is() {
+        use PresenceState::{Around, Idle};
+        assert_eq!(
+            merged(&[said(Idle, None, 0), said(Around, None, 0)]),
+            Some((Around, None, None))
+        );
+        assert_eq!(
+            merged(&[said(Idle, None, 0), said(Idle, None, 0)]),
+            Some((Idle, None, None))
+        );
+    }
+
+    /// What everybody is told about somebody now, if anything.
+    fn told(
+        gateway: &Gateway,
+        user_id: UserId,
+    ) -> Option<(PresenceState, Option<RoomId>, Option<String>)> {
+        gateway
+            .presence
+            .get(&user_id)
+            .map(|entry| (entry.state, entry.room_id, entry.away_message.clone()))
+    }
+
+    /// Each session speaks for itself (#653): idle, around and a room from a
+    /// device that never said away can't undo the away the other set. Away
+    /// ends when the session that set it says around, and the room the other
+    /// has open is where they are then.
+    #[test]
+    fn away_ends_only_by_the_session_that_set_it() {
+        let gateway = Gateway::new();
+        let user = UserId::new();
+        let room = RoomId::new();
+        gateway.connection_opened(user, "computer");
+        gateway.connection_opened(user, "phone");
+        let away = Some("out".to_string());
+        assert_eq!(
+            gateway.update_presence(user, "computer", PresenceState::Away, away.clone()),
+            Merged::Changed
+        );
+        assert_eq!(gateway.move_to(user, "phone", Some(room)), Merged::Same);
+        assert_eq!(
+            gateway.update_presence(user, "phone", PresenceState::Idle, None),
+            Merged::Same
+        );
+        assert_eq!(
+            gateway.update_presence(user, "phone", PresenceState::Around, None),
+            Merged::Same
+        );
+        assert_eq!(
+            told(&gateway, user),
+            Some((PresenceState::Away, None, away))
+        );
+
+        assert_eq!(
+            gateway.update_presence(user, "computer", PresenceState::Around, None),
+            Merged::Moved
+        );
+        assert_eq!(
+            told(&gateway, user),
+            Some((PresenceState::InRoom, Some(room), None))
+        );
+    }
+
+    /// The session that set away going takes its away with it (#653), and
+    /// the room the other device has open is where they are.
+    #[test]
+    fn away_ends_when_the_session_that_set_it_goes() {
+        let gateway = Gateway::new();
+        let user = UserId::new();
+        let room = RoomId::new();
+        gateway.connection_opened(user, "computer");
+        gateway.connection_opened(user, "phone");
+        gateway.update_presence(user, "computer", PresenceState::Away, Some("out".into()));
+        gateway.move_to(user, "phone", Some(room));
+        assert_eq!(gateway.connection_closed(user, "computer"), Merged::Moved);
+        assert_eq!(
+            told(&gateway, user),
+            Some((PresenceState::InRoom, Some(room), None))
+        );
+    }
+
+    /// Moving is somebody being there: a session that was idle is around
+    /// again, as one device always was.
+    #[test]
+    fn moving_ends_that_sessions_idle() {
+        let gateway = Gateway::new();
+        let user = UserId::new();
+        let room = RoomId::new();
+        gateway.connection_opened(user, "computer");
+        gateway.update_presence(user, "computer", PresenceState::Idle, None);
+        assert_eq!(gateway.move_to(user, "computer", Some(room)), Merged::Moved);
+        assert_eq!(gateway.move_to(user, "computer", None), Merged::Moved);
+        assert_eq!(
+            told(&gateway, user),
+            Some((PresenceState::Around, None, None))
+        );
+    }
+
+    /// A resume can take a session over while the server still holds the
+    /// socket it replaces (#451). The record lasts until the session's last
+    /// socket goes, and the person until their last session's record does.
+    #[test]
+    fn a_session_lasts_until_its_last_socket_closes() {
+        let gateway = Gateway::new();
+        let user = UserId::new();
+        let room = RoomId::new();
+        gateway.connection_opened(user, "phone");
+        gateway.move_to(user, "phone", Some(room));
+        gateway.connection_opened(user, "phone");
+        assert_eq!(gateway.connection_closed(user, "phone"), Merged::Same);
+        assert_eq!(
+            told(&gateway, user),
+            Some((PresenceState::InRoom, Some(room), None))
+        );
+        assert_eq!(gateway.connection_closed(user, "phone"), Merged::Same);
+        assert_eq!(told(&gateway, user), None, "offline once it's gone");
+        assert!(gateway.session_presence.get(&user).is_none());
     }
 }

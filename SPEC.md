@@ -332,6 +332,13 @@ with message), `offline`.
 That is the whole of it. Where somebody is, and nothing about what they are doing.
 Nor which device they are on: a phone shows the same states (§4.15).
 
+**Open on two devices is one person** (#653). Away on either is away. Otherwise a
+room open on either is where they are, the one opened last if each has one. They
+are idle only when every device is. Each device speaks for itself: the phone
+opening a room doesn't undo the away set on the computer, and the computer going
+idle doesn't hide the room open on the phone. Away ends on the device that set it,
+or when that device goes (PROTOCOL §8).
+
 **Activity detection was cut on 2026-08-28** (Matt — `docs/decisions.md`). This
 section used to specify a feature that watched which application you had in front
 of you, resolved it against a bundled registry, and showed it to the room. It is
@@ -1002,11 +1009,12 @@ volume and vibration settings, as a message app's do.
 
 **Presence is the same five states** (§4.3). Open on screen, a phone is `around` or
 `in_room`. Sent to the background, the phone soon stops the app and its connection
-closes, so it shows `offline`. That is the truth: it hears nothing until it is opened
-again. Presence never says which device somebody is on, because it is where they are,
-not what they are holding. There is no `mobile` state. One would also break older
-desktop apps: they can't read a presence value they don't know, and it would arrive
-in the first message they get on connecting.
+closes, so it shows `offline`, or whatever their other devices say (§4.3). That is
+the truth: it hears nothing until it is opened again. Presence never says which
+device somebody is on, because it is where they are, not what they are holding.
+There is no `mobile` state. One would also break older desktop apps: they can't read
+a presence value they don't know, and it would arrive in the first message they get
+on connecting.
 
 **What it does:** rooms, DMs, statuses, media, search, and uploads. A photo or video
 from the phone's camera has where it was taken stripped like any other (§4.10). One screen shows at a

@@ -1636,6 +1636,32 @@ newest, never dropped.
   it waited, and ends up back in the seat it had, still gets a fresh `voice.offer`: its
   app closed the old connection.
 
+**Each session speaks for itself** (#653). Somebody signed in on a phone and a computer
+is two sessions, and the server keeps what each one's `presence.update` and `room.focus`
+said apart. What everybody is told, in `presence.update`, `room.*` and every `ready`, is
+worked out from all of them, in this order:
+
+1. **Away** on any session is `away`, in no room, with the away message set most
+   recently.
+2. Otherwise, **in a room** on any session is `in_room`, in the room moved into most
+   recently.
+3. Otherwise, **around** on any session is `around`.
+4. Otherwise every session is idle, and so is the person: `idle`.
+
+With no session open they are `offline`. A frame changes only its own session's part.
+Moving ends that session's idle, but not its away, so a phone opening a room can't undo
+the away set on the computer. Away ends when the session that set it sends another
+state, or closes. A session's part goes when its socket closes, and a resume starts it
+again as `around` in no room; the app says where it is again on every `ready` and
+`resumed`. A `presence.update` saying `in_room` or `offline` counts as `around`: where
+somebody is comes from `room.focus`, and offline from their last session closing.
+
+The frames are the same as with one session; only what goes in them is worked out
+differently. A change that moves somebody is told as a move (`room.leave`, `room.enter`,
+`room.occupancy`, then `presence.update`) under `RATE_ROOM_FOCUS`, whichever frame
+caused it: away on the computer takes them out of the room open on the phone. A change
+that tells everybody nothing new is told to nobody.
+
 ### Server → client
 
 | op | payload |
