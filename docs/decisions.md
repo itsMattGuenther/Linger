@@ -954,7 +954,9 @@ on Matt's DigitalOcean droplet (1 vCPU, 2 GB, New York).
     desktop and back alone is 48 ms). Each app covers gaps and reorders itself: it
     conceals a missing frame and drops one arriving after its place was played, both
     read from the timestamps the server keeps, since it numbers packets afresh. Until
-    #462 (0.4.10) it played a late one backwards instead.
+    #462 (0.4.10) it played a late one backwards instead. Since #655 the last missing
+    frame of a gap is rebuilt from the copy the packet after it carries (Opus's in-band
+    FEC), not guessed at.
 - **Where that leaves one shared core**: 50 people with 3 talking about 65%, with 8
   about 90%; 60 with 8 talking 96% and 5% of packets late. Ten people on an app from
   before 0.4.9, sending silence, take 50 with 3 talking to the limit (95% heard), so a

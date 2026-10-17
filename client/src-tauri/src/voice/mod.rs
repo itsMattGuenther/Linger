@@ -740,11 +740,12 @@ fn opus_capability() -> RTCRtpCodecCapability {
 ///
 /// An Opus RTP payload is one Opus packet (RFC 7587), so there is nothing to
 /// reassemble. Each packet's place is read from its timestamp ([`arrival`]):
-/// a missing frame is concealed, so a lost packet is a smear rather than a
-/// click and the far end's clock keeps its place; a packet whose place has
-/// already been played is dropped rather than played out of order (#462).
-/// A pause is told to the sink, so it can tell one from a packet arriving
-/// late.
+/// a missing frame is rebuilt from the copy the next packet carries, or
+/// concealed where it can't be ([`fill_gap`], #655), so a lost packet is
+/// nearly the real sound rather than a click and the far end's clock keeps
+/// its place; a packet whose place has already been played is dropped
+/// rather than played out of order (#462). A pause is told to the sink, so
+/// it can tell one from a packet arriving late.
 /// The level gate runs on what was decoded, so "they are talking" is judged
 /// on the same samples that reach the speaker.
 async fn receive_forwarded<W: Watcher>(
@@ -796,10 +797,8 @@ async fn receive_forwarded<W: Watcher>(
         match arrival(expected, stamp) {
             Arrival::Late => continue,
             Arrival::After(missing) => {
-                for _ in 0..missing {
-                    if let Ok(guess) = decoder.conceal() {
-                        sink.play(who, &guess).await;
-                    }
+                for frame in fill_gap(decoder, missing, &packet.payload) {
+                    sink.play(who, &frame).await;
                 }
             }
             // A gap the speaker shouldn't take for this frame being late
@@ -841,7 +840,8 @@ const LATE_FRAMES: u32 = 10;
 enum Arrival {
     /// The frame after the last one, or the first: play it.
     Next,
-    /// This many frames before it never came: conceal them, then play it.
+    /// This many frames before it never came: fill them in ([`fill_gap`]),
+    /// then play it.
     After(u32),
     /// They stopped sending for a while (#197): play it, nothing to conceal.
     Pause,
@@ -876,6 +876,28 @@ fn arrival(expected: Option<u32>, stamp: u32) -> Arrival {
     } else {
         Arrival::Pause
     }
+}
+
+/// The frames that go where `missing` packets never came, before `next`,
+/// the packet that came after them (#655).
+///
+/// Every one is guessed at (concealed) but the last, which is rebuilt from
+/// the copy of it `next` carries (in-band FEC, `codec::Decoder::rebuild`):
+/// nearly the real sound, where a guess is a smear. Only the last can be
+/// rebuilt, since a packet carries a copy of the one before it and no
+/// further. `next` itself is not decoded here; the caller plays it after
+/// these, as it plays any packet.
+fn fill_gap(decoder: &mut codec::Decoder, missing: u32, next: &[u8]) -> Vec<Vec<i16>> {
+    (1..=missing)
+        .filter_map(|n| {
+            let frame = if n == missing {
+                decoder.rebuild(next)
+            } else {
+                decoder.conceal()
+            };
+            frame.ok()
+        })
+        .collect()
 }
 
 /// Somewhere for an error to go that is not a panic and not silence.
@@ -934,6 +956,66 @@ mod tests {
     #[test]
     fn a_stream_starting_over_is_played() {
         assert_eq!(arrival(Some(at(0, 5000)), at(0, 7)), Arrival::Pause);
+    }
+
+    /// A gap is filled with one frame for every packet missing from it
+    /// (#655): each guessed at but the last, which is rebuilt from the copy
+    /// the packet after the gap carries, and that packet is left to be
+    /// decoded as usual, once. Checked against a second decoder taken
+    /// through those steps by hand, since libopus gives the same samples for
+    /// the same steps, and against a third that guesses at every frame, as
+    /// the app did before.
+    #[test]
+    fn a_gap_s_last_frame_is_rebuilt_from_the_packet_after_it() {
+        let mut encoder = codec::Encoder::new().expect("encoder");
+        let packets: Vec<Vec<u8>> = codec::tests::speech(40)
+            .chunks(audio::FRAME_SAMPLES)
+            .map(|frame| encoder.encode(frame).expect("encode"))
+            .collect();
+        // Packet 30 comes after the gap, in the loud part of a syllable.
+        let next = &packets[30];
+        for missing in [1, 3, 4] {
+            let gap = usize::try_from(missing).expect("missing");
+            let heard = 30 - gap;
+            let mut decoder = codec::Decoder::new().expect("decoder");
+            let mut by_hand = codec::Decoder::new().expect("decoder");
+            let mut guessing = codec::Decoder::new().expect("decoder");
+            for packet in &packets[..heard] {
+                decoder.decode(packet).expect("decode");
+                by_hand.decode(packet).expect("decode");
+                guessing.decode(packet).expect("decode");
+            }
+
+            let filled = fill_gap(&mut decoder, missing, next);
+            let played = decoder.decode(next).expect("decode");
+
+            assert_eq!(filled.len(), gap, "a gap of {missing}");
+            assert!(filled
+                .iter()
+                .chain([&played])
+                .all(|frame| frame.len() == audio::FRAME_SAMPLES));
+            let mut steps: Vec<Vec<i16>> = (1..missing)
+                .map(|_| by_hand.conceal().expect("conceal"))
+                .collect();
+            steps.push(by_hand.rebuild(next).expect("rebuild"));
+            // `assert!` rather than `assert_eq!`: a failure would print
+            // thousands of samples that say nothing.
+            assert!(
+                filled == steps,
+                "a gap of {missing}: not filled as it should be"
+            );
+            assert!(
+                played == by_hand.decode(next).expect("decode"),
+                "a gap of {missing}: the packet after it was decoded twice"
+            );
+            let guesses: Vec<Vec<i16>> = (0..missing)
+                .map(|_| guessing.conceal().expect("conceal"))
+                .collect();
+            assert!(
+                filled.last() != guesses.last(),
+                "a gap of {missing}: the last frame was guessed at"
+            );
+        }
     }
 
     /// Timestamps wrap around after about a day at 48 kHz; a frame across

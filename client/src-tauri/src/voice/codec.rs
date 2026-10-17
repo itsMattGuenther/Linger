@@ -135,10 +135,26 @@ impl Decoder {
         out.truncate(n);
         Ok(out)
     }
+
+    /// The frame for a packet that never arrived, rebuilt from `next`, the
+    /// one that came after it (#655).
+    ///
+    /// In-band FEC (`Encoder::new`) puts a rougher copy of every frame in the
+    /// packet after it, in Opus's speech layer, and libopus reads that copy
+    /// out when `next` is decoded with `fec` set. Where `next` holds none (a
+    /// quiet frame, which Opus doesn't copy), libopus conceals instead. The
+    /// output must be exactly one frame long: that is how libopus knows how
+    /// much is missing. `next` itself still has to be decoded after this.
+    pub fn rebuild(&mut self, next: &[u8]) -> Result<Vec<i16>, opus::Error> {
+        let mut out = vec![0i16; FRAME_SAMPLES];
+        let n = self.0.decode(next, &mut out, true)?;
+        out.truncate(n);
+        Ok(out)
+    }
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     /// A frame of 440 Hz at a comfortable level, `n` frames in.
@@ -370,6 +386,151 @@ mod tests {
         let quiet = vec![0i16; FRAME_SAMPLES];
         for _ in 0..50 {
             assert!(!is_silence(&encoder.encode(&quiet).expect("encode")));
+        }
+    }
+
+    /// `frames` of something Opus takes for a voice (#655), where a tone
+    /// isn't enough: a buzz of harmonics whose pitch wanders around 160 Hz,
+    /// shaped by two moving resonances as a mouth shapes it, rising and
+    /// falling four times a second like syllables, with breath through it.
+    /// The same every time.
+    #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+    pub(crate) fn speech(frames: usize) -> Vec<i16> {
+        use std::f64::consts::{PI, TAU};
+        let rate = f64::from(SAMPLE_RATE);
+        let mut seed: u32 = 0x9e37_79b9;
+        let mut phase = 0.0f64;
+        let raw: Vec<f64> = (0..frames * FRAME_SAMPLES)
+            .map(|i| {
+                let t = i as f64 / rate;
+                let pitch = 160.0 + 48.0 * (TAU * 0.6 * t).sin() + 16.0 * (TAU * 2.3 * t).sin();
+                phase += TAU * pitch / rate;
+                let low = 600.0 + 200.0 * (TAU * 1.1 * t).sin();
+                let high = 1600.0 + 500.0 * (TAU * 0.8 * t + 1.0).sin();
+                let mut buzz = 0.0;
+                let mut h = 1.0;
+                while h * pitch < 4000.0 {
+                    let f = h * pitch;
+                    let shape = 1.0 / h
+                        + 1.5 * (-((f - low) / 200.0).powi(2)).exp()
+                        + (-((f - high) / 300.0).powi(2)).exp();
+                    buzz += shape * (h * phase).sin();
+                    h += 1.0;
+                }
+                seed ^= seed << 13;
+                seed ^= seed >> 17;
+                seed ^= seed << 5;
+                let breath = (f64::from(seed) / f64::from(u32::MAX) - 0.5) * 0.6;
+                let syllable = 0.15 + 0.85 * (PI * 4.0 * t).sin().powi(2);
+                (buzz + breath) * syllable
+            })
+            .collect();
+        let peak = raw.iter().fold(0.0f64, |most, v| most.max(v.abs()));
+        raw.iter().map(|v| (v / peak * 16000.0) as i16).collect()
+    }
+
+    fn energy(samples: &[i16]) -> f64 {
+        samples.iter().map(|s| f64::from(*s).powi(2)).sum()
+    }
+
+    /// How far `heard` is from `meant`, as the energy of the difference.
+    fn error(meant: &[i16], heard: &[i16]) -> f64 {
+        meant
+            .iter()
+            .zip(heard)
+            .map(|(m, h)| (f64::from(*m) - f64::from(*h)).powi(2))
+            .sum()
+    }
+
+    /// Signal against error, in dB: higher is closer.
+    fn db(signal: f64, error: f64) -> f64 {
+        10.0 * (signal / error.max(1.0)).log10()
+    }
+
+    /// A lost packet rebuilt from the copy the next one carries (#655)
+    /// comes out far closer to what was said than one guessed at, at Opus's
+    /// own rate (a server from before #431) and at both a room's qualities.
+    ///
+    /// One frame is lost at a time, every sixth frame of three seconds of
+    /// voice, each time with two fresh decoders that heard the same 200 ms
+    /// before it: one conceals the lost frame, as the app did before, and
+    /// one rebuilds it. Both are measured against the voice that went in,
+    /// over the lost frame. Opus is lossy, so even a frame that arrived
+    /// isn't the original; it is printed for comparison. Measured on
+    /// 2026-10-16 (libopus 1.6.1), at Opus's own rate, 96 and 128 kbit/s:
+    /// received 9.8, 10.1 and 10.2 dB, rebuilt 8.1, 8.9 and 9.1, guessed
+    /// 0.2, 0.0 and 0.0. Rebuilt was closer in 17 of 22 trials each time and
+    /// the same in the rest: a quiet frame has no copy, so it is concealed
+    /// either way.
+    #[test]
+    fn a_lost_packet_is_rebuilt_far_closer_than_it_is_guessed() {
+        const FRAMES: usize = 150;
+        const HEARD_BEFORE: usize = 10;
+        let voice = speech(FRAMES);
+        for bits in [None, Some(96_000), Some(128_000)] {
+            let mut encoder = Encoder::new().expect("encoder");
+            encoder.set_bits(bits).expect("set");
+            let lookahead = usize::from(encoder.lookahead().expect("lookahead"));
+            let packets: Vec<Vec<u8>> = voice
+                .chunks(FRAME_SAMPLES)
+                .map(|frame| encoder.encode(frame).expect("encode"))
+                .collect();
+            assert!(
+                !packets.iter().any(|packet| is_silence(packet)),
+                "{bits:?}: the voice was taken for silence"
+            );
+            let mut decoder = Decoder::new().expect("decoder");
+            let received: Vec<i16> = packets
+                .iter()
+                .flat_map(|packet| decoder.decode(packet).expect("decode"))
+                .collect();
+            // Opus hands a voice back late by about its lookahead: line what
+            // comes out up with what went in where they match best.
+            let (from, to) = (20 * FRAME_SAMPLES, (FRAMES - 1) * FRAME_SAMPLES);
+            let closeness = |delay: usize| {
+                let meant = &voice[from - delay..to - delay];
+                db(energy(meant), error(meant, &received[from..to]))
+            };
+            let delay = (lookahead - 20..=lookahead + 20)
+                .max_by(|a, b| closeness(*a).total_cmp(&closeness(*b)))
+                .expect("a delay");
+            let (mut said, mut arrived, mut rebuilt, mut guessed) = (0.0, 0.0, 0.0, 0.0);
+            let (mut trials, mut closer) = (0, 0);
+            for lost in (20..FRAMES - 1).step_by(6) {
+                let meant = &voice[lost * FRAME_SAMPLES - delay..][..FRAME_SAMPLES];
+                let mut guessing = Decoder::new().expect("decoder");
+                let mut rebuilding = Decoder::new().expect("decoder");
+                for packet in &packets[lost - HEARD_BEFORE..lost] {
+                    guessing.decode(packet).expect("decode");
+                    rebuilding.decode(packet).expect("decode");
+                }
+                let guess = guessing.conceal().expect("conceal");
+                let rebuild = rebuilding.rebuild(&packets[lost + 1]).expect("rebuild");
+                assert_eq!(rebuild.len(), FRAME_SAMPLES, "{bits:?}: wrong length");
+                let (rebuild, guess) = (error(meant, &rebuild), error(meant, &guess));
+                said += energy(meant);
+                arrived += error(meant, &received[lost * FRAME_SAMPLES..][..FRAME_SAMPLES]);
+                rebuilt += rebuild;
+                guessed += guess;
+                trials += 1;
+                if rebuild < guess {
+                    closer += 1;
+                }
+            }
+            let (arrived, rebuilt, guessed) =
+                (db(said, arrived), db(said, rebuilt), db(said, guessed));
+            eprintln!(
+                "{bits:?}: a lost frame received {arrived:.1} dB, rebuilt {rebuilt:.1} dB, \
+                 guessed {guessed:.1} dB; rebuilt closer in {closer} of {trials}"
+            );
+            assert!(
+                rebuilt > guessed + 5.0,
+                "{bits:?}: rebuilt {rebuilt:.1} dB against guessed {guessed:.1} dB"
+            );
+            assert!(
+                closer * 2 > trials,
+                "{bits:?}: rebuilt closer in only {closer} of {trials}"
+            );
         }
     }
 }
