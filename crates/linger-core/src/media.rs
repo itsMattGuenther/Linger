@@ -17,12 +17,14 @@
 /// which strips EXIF (SPEC §4.10) and neutralises polyglots in the same step.
 pub const IMAGE_MIME: [&str; 4] = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 
-/// Video types. No transcoding in V1 — the server generates a poster frame and
-/// a blurhash and stores the bytes as they arrived.
+/// Video types. No transcoding in V1: every one is copied, picture and sound
+/// only, into a fresh file of its own type, which leaves behind its tags and
+/// with them where it was filmed (SPEC §4.10, #651). The server generates a
+/// poster frame and a blurhash.
 pub const VIDEO_MIME: [&str; 3] = ["video/mp4", "video/webm", "video/quicktime"];
 
-/// Audio types. `audio/webm` is a voice message (#401): Opus in WebM, which
-/// every engine Linger runs in plays.
+/// Audio types, copied without their tags as videos are. `audio/webm` is a
+/// voice message (#401): Opus in WebM, which every engine Linger runs in plays.
 pub const AUDIO_MIME: [&str; 7] = [
     "audio/mpeg",
     "audio/ogg",

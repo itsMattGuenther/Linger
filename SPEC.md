@@ -647,6 +647,15 @@ carry sender feedback to a different person.
   an embarrassing bug. The one thing EXIF says that is kept is which way up the photo
   goes: a picture is turned the way its Orientation tag says first, then stripped, so a
   phone photo shows the way it was taken (#569).
+- **Videos and sound files lose their tags the same way, always, no toggle** (#651).
+  A phone writes where a video was filmed into the file, and a sound file's tags can
+  say anything, a voice memo named after its street included. The server copies the
+  picture and sound into a fresh file of the same kind and keeps nothing else: no
+  tags, no chapters, no cover pictures, no tracks of a phone's own data. Nothing is
+  re-encoded, so nothing is lost, and a portrait video stays upright. A file that
+  can't be copied is refused, as a picture that can't be re-encoded is, so a server
+  needs ffmpeg to take videos and sound at all. Files shared before this keep their
+  tags; deleting the message deletes the file.
 - Video: server generates a poster frame and a blurhash. No transcoding in V1.
 - A picture in a conversation or on a media tile is drawn from a copy the server
   makes, 960 px on its longest side; the viewer and downloads open the original.
@@ -999,8 +1008,8 @@ not what they are holding. There is no `mobile` state. One would also break olde
 desktop apps: they can't read a presence value they don't know, and it would arrive
 in the first message they get on connecting.
 
-**What it does:** rooms, DMs, statuses, media, search, and uploads. A photo from the
-phone's camera has its location stripped like any other (§4.10). One screen shows at a
+**What it does:** rooms, DMs, statuses, media, search, and uploads. A photo or video
+from the phone's camera has where it was taken stripped like any other (§4.10). One screen shows at a
 time, as phone chat apps do (Matt, 2026-10-03): the list is home, and a conversation,
 Media or Search opens over it with a way back. It has no Interface size of its own:
 the phone's display size and text size settings do that job.
@@ -1258,7 +1267,7 @@ first two are the system defaults.
 | 9 | Name styling + optional message font | §4.5 |
 | 10 | Statuses and away messages | §4.6 |
 | 11 | Reactions — taken out as a trial (#168), back the Discord and Slack way (#485) | §4.8 |
-| 12 | File upload 500 MB, EXIF stripped | §4.10 |
+| 12 | File upload 500 MB, EXIF and video and sound tags stripped | §4.10 |
 | 13 | Media collection | §4.4 |
 | 14 | Readable, responsive message layout | §4.7 |
 | 15 | Full export | §4.11 |

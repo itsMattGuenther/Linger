@@ -652,6 +652,10 @@ E2EE launders a false promise, which is worse than an honest limitation.
 - Re-encode images server-side. This strips EXIF (spec §4.10) and neutralizes polyglot
   files in one step. The picture is first turned the way its EXIF Orientation says
   (#569): rotation applied, then stripped.
+- Copy videos and sound files server-side, picture and sound only, into a fresh file of
+  the same kind (#651, §8). Their tags, chapters, cover pictures and extra data tracks
+  stay behind, and with them where a phone says a video was filmed. A file that can't be
+  copied is refused, never stored as it came.
 - CSP on the app origin: no remote scripts or remote fonts. The shipped policy
   permits HTTPS and WSS origins generally, so members can connect to multiple
   self-hosted servers and fetch their media. It is not an allowlist of the
@@ -772,7 +776,7 @@ Never proxy bytes through the app server.
 3. Client  → PUT direct to object store (multipart if > 8 MB, resumable)
 4. Client  → POST /uploads/{id}/complete
 5. Server  → verifies size, sniffs real MIME, re-encodes image (turns it as its EXIF
-             says, then strips EXIF),
+             says, then strips EXIF), copies video and sound without their tags,
              generates blurhash + poster frame + an image's display copy,
              sets state=complete
 6. Server  → attaches to message, fans out over gateway
@@ -923,13 +927,28 @@ more and only then does the row go; a failed upload's row goes the same way. A
 `complete` only), the local part listener refuses it, and `complete` on it is
 `NOT_FOUND`.
 
-**ffmpeg is optional.** `ffprobe` supplies video and audio duration and video dimensions;
-`ffmpeg` grabs the poster frame. A server without them stores media perfectly well and
-simply has no poster. The published image installs them. The file they read is an
-upload and so hostile (§7), which makes both tools the video equivalent of the image
-decoder's limits: `ffprobe` gets 15 seconds, the poster gets 30 across both of its seek
-positions, and a run past its limit is killed and counts as no probe data or no poster —
-the same outcome as a server without ffmpeg.
+**ffmpeg is needed for video and sound** (#651). A phone writes where a video was filmed
+into the file: an iPhone as a QuickTime location key, an Android camera app as a text
+`©xyz` box. So `ffmpeg` first copies every video and sound file into a fresh file of the
+same container (`media::strip_tags`): `-map 0:V? -map 0:a?` for a video (`V` is video that
+isn't a cover picture), `-map 0:a` for sound, then `-c copy -map_metadata -1
+-map_chapters -1`. Tags, chapters, cover pictures and the timed data tracks an iPhone
+adds are left behind; nothing is re-encoded, so the copy is quick and loses nothing. A
+portrait video stays upright: which way up it goes is the track's display matrix, not a
+tag, and the copy keeps it byte for byte (checked on ffmpeg 5.1, the published image's,
+and on 9.0). The copy is written beside the upload and renamed over it once whole. A
+file `ffmpeg` can't copy is refused like a picture that can't be re-encoded, and so is
+every video and sound file on a server without `ffmpeg`, with a message that says the
+server is missing it. The published image installs it. Files stored before #651 were
+left as they are: nobody was watching to catch a copy gone wrong, and the copy would
+replace the original.
+
+Then `ffprobe` supplies video and audio duration and video dimensions, and `ffmpeg` grabs
+the poster frame. The file they read is an upload and so hostile (§7), which makes the
+tools the video equivalent of the image decoder's limits: the copy gets 20 seconds,
+`ffprobe` 15, the poster 30 across both of its seek positions, and a run past its limit is
+killed. A killed copy refuses the upload; a killed probe or poster counts as no probe data
+or no poster.
 
 **Display copies** (#382). An engine that decodes a whole picture holds all of it in
 memory however small it is drawn: about 80 MB a phone photo in WebKit, measured. So

@@ -81,11 +81,12 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: ffmpeg
-        # Video posters and durations shell out to ffmpeg, and the tests for
-        # them skip themselves when it is missing rather than failing (a server
-        # without ffmpeg is a supported thing — ARCHITECTURE §8). A skipped test
-        # is a test nobody is running, so the runner gets ffmpeg. The published
-        # image has had it since T-501.
+        # Video and sound uploads shell out to ffmpeg: it copies each without
+        # its tags (#651) and gives a video its poster and duration. The tests
+        # for them skip themselves when it is missing rather than failing, so a
+        # contributor without ffmpeg can still run the rest (ARCHITECTURE §8).
+        # A skipped test is a test nobody is running, so the runner gets
+        # ffmpeg. The published image has had it since T-501.
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ffmpeg

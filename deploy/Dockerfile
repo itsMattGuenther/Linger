@@ -9,9 +9,10 @@ COPY crates ./crates
 RUN cargo build --release -p linger-server
 
 FROM debian:bookworm-slim
-# ffmpeg is optional (ARCHITECTURE §8): without it a server stores video fine
-# and simply has no poster frame or duration. It is installed here because the
-# published image should do the whole job.
+# ffmpeg copies every video and sound file without its tags, which is where a
+# phone writes the place a video was filmed (#651), then gives a video its
+# poster frame and duration (ARCHITECTURE §8). Without it the server refuses
+# videos and sound files.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates ffmpeg \
     && rm -rf /var/lib/apt/lists/* \

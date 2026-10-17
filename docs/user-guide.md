@@ -600,9 +600,10 @@ fails, **Try again**. A file may have expired. Treat download links as
 private, especially for DM files.
 
 - Up to 500 MB per file.
-- **Location data is stripped from every photo, always.** Phone cameras record
-  where a picture was taken, and Linger removes that before anyone else sees it.
-  There is no setting for this and no way to turn it off.
+- **Location data is stripped from every photo and video, always.** Phone
+  cameras record where a picture or video was taken, and Linger removes that
+  before anyone else sees it. Sound files lose their tags the same way. There is
+  no setting for this and no way to turn it off.
 - Files may be deleted after a while — a year, unless whoever runs the server
   chose differently. **Starring a file keeps it forever.**
 - You can have up to 1 GB of files uploading at once, so nobody fills the

@@ -5,21 +5,23 @@
 //! 1. **Find out what the file actually is.** The type the client declared is a
 //!    claim, not a fact. Magic bytes decide, and a file whose contents disagree
 //!    with its label is refused.
-//! 2. **Re-encode every image.** Decoding and re-encoding drops EXIF — which
-//!    carries the GPS coordinates of the room the photo was taken in (SPEC
-//!    §4.10) — and destroys polyglots, files that are a valid image and a valid
-//!    something-else at the same time, in the same step. There is no toggle.
-//!    The one thing EXIF says that survives is which way up the photo goes: it
-//!    is turned that way first (#569).
+//! 2. **Clean it.** Every image is re-encoded. Decoding and re-encoding drops
+//!    EXIF — which carries the GPS coordinates of the room the photo was taken
+//!    in (SPEC §4.10) — and destroys polyglots, files that are a valid image
+//!    and a valid something-else at the same time, in the same step. The one
+//!    thing EXIF says that survives is which way up the photo goes: it is
+//!    turned that way first (#569). Every video and sound file is copied into
+//!    a fresh file of its own kind, picture and sound only, which leaves its
+//!    tags behind: a phone writes where a video was filmed into them (#651).
+//!    There is no toggle for either.
 //! 3. **Describe it.** Dimensions, a blurhash to show while the real thing
 //!    loads, a poster frame and duration for video, and a display copy of a
 //!    large image to draw where it is shown small (#382). No transcoding in V1.
 //!
-//! Video work shells out to `ffmpeg`/`ffprobe`. They are optional: a server
-//! without them stores videos perfectly well and simply has no poster frame.
-//! Every run is on a clock and killed when the clock runs out, because the
-//! file they are reading is untrusted and a crafted one can keep either tool
-//! busy forever.
+//! Video and sound work shells out to `ffmpeg`/`ffprobe`. A server without
+//! them takes neither: what it can't clean, it doesn't store. Every run is on
+//! a clock and killed when the clock runs out, because the file they are
+//! reading is untrusted and a crafted one can keep either tool busy forever.
 
 use std::io::Write;
 use std::path::Path;
@@ -78,6 +80,11 @@ const POSTER_SECONDS: &str = "1";
 /// takes well under a second even for a 500 MB upload; this is room for a slow
 /// disk, not for a slow file.
 const PROBE_TIMEOUT: Duration = Duration::from_secs(15);
+/// How long `ffmpeg` gets to copy a video or sound file without its tags
+/// (#651). The copy reads the file once and writes it once, decoding nothing:
+/// a 450 MB video took under a second on a desktop, so this is room for a
+/// slow disk. The app stops waiting for the upload at 30 seconds anyway.
+const STRIP_TIMEOUT: Duration = Duration::from_secs(20);
 /// How long the poster frame gets, across both seek positions together — a
 /// file that is merely slow must not cost twice for being tried twice.
 const POSTER_TIMEOUT: Duration = Duration::from_secs(30);
@@ -152,6 +159,8 @@ pub async fn process(
             out.display = clean.display;
         }
         "video" => {
+            strip_tags(path, &mime).await?;
+            out.size_bytes = tokio::fs::metadata(path).await.map_err(io)?.len();
             let probe = ffprobe(path).await;
             out.duration_ms = probe.as_ref().and_then(|p| p.duration_ms);
             out.width = probe.as_ref().and_then(|p| p.width);
@@ -160,7 +169,7 @@ pub async fn process(
                 // A poster is a picture of the video's own size, and the video
                 // is as hostile as any upload: it waits its turn like an image.
                 // A video whose turn doesn't come in time is stored without
-                // a blurhash, as one is on a server without ffmpeg.
+                // a blurhash, as one with no frame to give is.
                 let described = match ImageLane::wait_at_most(IMAGE_WAIT).await {
                     Ok(lane) => {
                         let frame = poster.clone();
@@ -184,6 +193,8 @@ pub async fn process(
             }
         }
         "audio" => {
+            strip_tags(path, &mime).await?;
+            out.size_bytes = tokio::fs::metadata(path).await.map_err(io)?.len();
             out.duration_ms = ffprobe(path).await.and_then(|p| p.duration_ms);
         }
         _ => {}
@@ -747,7 +758,7 @@ fn blurhash_of(source: &image::DynamicImage) -> Option<String> {
 }
 
 // ---------------------------------------------------------------------------
-// Video and audio: ffmpeg, if the host has it
+// Video and audio: ffmpeg, which the host has to have for either
 // ---------------------------------------------------------------------------
 
 struct Probe {
@@ -756,29 +767,144 @@ struct Probe {
     height: Option<u32>,
 }
 
+/// Why a media tool gave no answer.
+#[derive(Debug, PartialEq, Eq)]
+enum NoAnswer {
+    /// It isn't installed: a server without ffmpeg.
+    Missing,
+    /// It couldn't be started for some other reason, or it ran out of time.
+    Failed,
+}
+
 /// Run a tool against an untrusted file and wait for it, but not forever.
 ///
-/// `None` when the tool is missing, fails to start, or runs past `limit`. On
-/// the last of those the child is killed rather than left behind: dropping the
-/// future is what gives up waiting, and `kill_on_drop` makes the drop take the
-/// process with it. Callers already treat `None` as "no probe data" or "no
-/// poster", which is the ordinary outcome on a server without ffmpeg.
-async fn bounded_output(mut command: tokio::process::Command, limit: Duration) -> Option<Output> {
+/// No answer when the tool is missing, fails to start, or runs past `limit`.
+/// On the last of those the child is killed rather than left behind: dropping
+/// the future is what gives up waiting, and `kill_on_drop` makes the drop take
+/// the process with it. For a probe or a poster, no answer is "no probe data"
+/// or "no poster". Copying a file without its tags has no such fallback, and
+/// tells a missing tool apart so it can say what the server lacks.
+async fn bounded_output(
+    mut command: tokio::process::Command,
+    limit: Duration,
+) -> Result<Output, NoAnswer> {
     command.stdin(Stdio::null()).kill_on_drop(true);
     // Bound first and match after, so the timed-out future (and with it the
     // child) is dropped here rather than at the end of the match.
     let finished = tokio::time::timeout(limit, command.output()).await;
     match finished {
-        Ok(output) => output.ok(),
+        Ok(Ok(output)) => Ok(output),
+        Ok(Err(err)) if err.kind() == std::io::ErrorKind::NotFound => Err(NoAnswer::Missing),
+        Ok(Err(_)) => Err(NoAnswer::Failed),
         Err(_) => {
             tracing::warn!(
                 program = ?command.as_std().get_program(),
                 limit_secs = limit.as_secs(),
                 "media tool ran out of time; killed it"
             );
-            None
+            Err(NoAnswer::Failed)
         }
     }
+}
+
+/// The container a video or sound file is copied into: its own, as ffmpeg
+/// names it. `None` for a type that is neither, which nothing calls this with.
+fn container_of(mime: &str) -> Option<&'static str> {
+    Some(match media::canonical_mime(mime) {
+        "video/mp4" | "audio/mp4" => "mp4",
+        "video/quicktime" => "mov",
+        "video/webm" | "audio/webm" => "webm",
+        "audio/mpeg" => "mp3",
+        "audio/ogg" => "ogg",
+        "audio/wav" => "wav",
+        "audio/flac" => "flac",
+        "audio/aac" => "adts",
+        _ => return None,
+    })
+}
+
+/// Copy a video or sound file's picture and sound into a fresh file of the
+/// same kind, leaving everything else behind, and put the copy in the
+/// upload's place (#651).
+///
+/// A phone writes where a video was filmed into the file: an iPhone as a
+/// QuickTime location key, an Android camera app as a text `©xyz` box. A
+/// sound file's tags can say anything, down to a voice memo named after the
+/// street it was recorded on. So nothing of the file is kept but its video
+/// and audio tracks: no tags, no chapters, no cover picture, and none of the
+/// tracks of timed data an iPhone adds. The tracks are copied as they are,
+/// never re-encoded, so this is quick and loses nothing. Which way up a video
+/// goes is not a tag but the track's display matrix, which the copy keeps:
+/// a portrait phone video stays upright (checked on ffmpeg 5.1, the published
+/// image's, and on 9.0).
+///
+/// There is no keeping a file as it came. One ffmpeg can't copy is refused,
+/// as a picture that can't be re-encoded is, and on a server without ffmpeg
+/// every video and sound file is. The copy is written beside the upload and
+/// renamed over it once whole, as a re-encoded picture is.
+async fn strip_tags(path: &Path, mime: &str) -> Result<(), ApiError> {
+    let unreadable = || {
+        ApiError::unsupported_media(if media::kind_of(mime) == "video" {
+            "That video can't be read."
+        } else {
+            "That sound file can't be read."
+        })
+    };
+    let container = container_of(mime).ok_or_else(ApiError::internal)?;
+    // The map picks the tracks: `V` is video that isn't a cover picture, and
+    // the `?` lets a video with no sound through. Sound is sound alone.
+    let tracks: &[&str] = if media::kind_of(mime) == "video" {
+        &["-map", "0:V?", "-map", "0:a?"]
+    } else {
+        &["-map", "0:a"]
+    };
+    let beside = path.parent().ok_or_else(ApiError::internal)?;
+    let clean = tempfile::NamedTempFile::new_in(beside)
+        .map_err(io)?
+        .into_temp_path();
+
+    let mut command = tokio::process::Command::new("ffmpeg");
+    command
+        .args(["-v", "error", "-nostdin", "-y"])
+        .args(PROBE_ARGS)
+        .arg("-i")
+        .arg(path)
+        .args(tracks)
+        .args(["-c", "copy", "-map_metadata", "-1", "-map_chapters", "-1"])
+        .args(["-f", container])
+        .arg(&clean);
+    match bounded_output(command, STRIP_TIMEOUT).await {
+        Ok(output) if output.status.success() => {}
+        Ok(output) => {
+            // The last thing ffmpeg said is the reason. Only that, and only
+            // so much of it: a broken file can make it say a great deal.
+            let said = String::from_utf8_lossy(&output.stderr);
+            let reason: String = said
+                .trim()
+                .lines()
+                .last()
+                .unwrap_or("")
+                .chars()
+                .take(300)
+                .collect();
+            tracing::info!(%reason, "ffmpeg couldn't copy an upload; refused it");
+            return Err(unreadable());
+        }
+        Err(NoAnswer::Missing) => {
+            tracing::warn!("a video or sound file was refused: ffmpeg isn't installed");
+            return Err(ApiError::unsupported_media(
+                "This server can't take videos or sound files until its host installs ffmpeg.",
+            ));
+        }
+        Err(NoAnswer::Failed) => return Err(unreadable()),
+    }
+
+    // Stored as the upload was, not as the private scratch file it began as.
+    let permissions = tokio::fs::metadata(path).await.map_err(io)?.permissions();
+    tokio::fs::set_permissions(&clean, permissions)
+        .await
+        .map_err(io)?;
+    clean.persist(path).map_err(|err| io(err.error))
 }
 
 async fn ffprobe(path: &Path) -> Option<Probe> {
@@ -788,7 +914,7 @@ async fn ffprobe(path: &Path) -> Option<Probe> {
         .args(PROBE_ARGS)
         .args(["-print_format", "json", "-show_format", "-show_streams"])
         .arg(path);
-    let output = bounded_output(command, PROBE_TIMEOUT).await?;
+    let output = bounded_output(command, PROBE_TIMEOUT).await.ok()?;
     if !output.status.success() {
         return None;
     }
@@ -820,9 +946,8 @@ async fn ffprobe(path: &Path) -> Option<Probe> {
     })
 }
 
-/// One frame, as JPEG. `None` whenever ffmpeg isn't installed, the file has
-/// no frame to give, or it takes too long to give one — a missing poster is not
-/// a failed upload.
+/// One frame, as JPEG. `None` whenever the file has no frame to give, or it
+/// takes too long to give one — a missing poster is not a failed upload.
 async fn poster_frame(path: &Path) -> Option<Vec<u8>> {
     let deadline = tokio::time::Instant::now() + POSTER_TIMEOUT;
     for seek in [POSTER_SECONDS, "0"] {
@@ -840,7 +965,7 @@ async fn poster_frame(path: &Path) -> Option<Vec<u8>> {
             .args(["-an", "-sn", "-dn", "-frames:v", "1", "-f", "image2"])
             .arg(&temp);
         let left = deadline.saturating_duration_since(tokio::time::Instant::now());
-        let output = bounded_output(command, left).await?;
+        let output = bounded_output(command, left).await.ok()?;
         if output.status.success() {
             if let Ok(bytes) = tokio::fs::read(&temp).await {
                 if !bytes.is_empty() {
@@ -1378,9 +1503,12 @@ mod tests {
             .arg(format!("echo $$ > '{}'; exec sleep 30", pidfile.display()));
 
         let started = std::time::Instant::now();
-        assert!(bounded_output(command, Duration::from_millis(500))
-            .await
-            .is_none());
+        assert_eq!(
+            bounded_output(command, Duration::from_millis(500))
+                .await
+                .err(),
+            Some(NoAnswer::Failed)
+        );
         assert!(started.elapsed() < Duration::from_secs(5));
 
         // `exec` makes the sleep the same process the shell was, so the pid
@@ -1416,13 +1544,25 @@ mod tests {
         assert_eq!(output.stdout, b"probed\n");
     }
 
-    /// A tool that is not installed is the ordinary case on a server without
-    /// ffmpeg, and it is an absence, not an error.
+    /// A tool that is not installed is a server without ffmpeg. That is told
+    /// apart from a tool that failed, because a video or sound file can't be
+    /// cleaned there, and the refusal says what the server lacks (#651).
     #[tokio::test]
-    async fn a_missing_tool_gives_no_answer() {
+    async fn a_missing_tool_is_told_apart() {
         let command = tokio::process::Command::new("linger-no-such-tool");
-        assert!(bounded_output(command, Duration::from_secs(1))
-            .await
-            .is_none());
+        assert_eq!(
+            bounded_output(command, Duration::from_secs(1)).await.err(),
+            Some(NoAnswer::Missing)
+        );
+    }
+
+    /// Every video and sound type the server takes is copied without its tags
+    /// (#651), so each needs a container to be copied into. A type added to
+    /// the lists without one would be refused every time.
+    #[test]
+    fn every_video_and_sound_type_has_a_container() {
+        for mime in media::VIDEO_MIME.iter().chain(&media::AUDIO_MIME) {
+            assert!(container_of(mime).is_some(), "{mime}");
+        }
     }
 }

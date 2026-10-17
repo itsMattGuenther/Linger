@@ -1396,3 +1396,27 @@ sign-in link in the app instead (PROTOCOL §5).
   host. Using one ends every other sign-in, and the person's own Settings says who
   made them one and when.
 
+
+## Decided — videos and sound files lose their tags, and need ffmpeg
+
+**Settled while building #651, 2026-10-16**, on the issue's own lean. A phone
+video kept the place it was filmed in its tags: Linger stored videos exactly as
+uploaded, so everybody who played, downloaded or exported one got the
+coordinates. Photos never had the problem (SPEC §4.10).
+
+- **Copied, not re-encoded.** ffmpeg copies the picture and sound into a fresh
+  file of the same kind and keeps nothing else: no tags, chapters, cover
+  pictures or extra data tracks. Quick, and no quality is lost. A portrait video
+  stays upright: checked on ffmpeg 5.1 (the published image's) and 9.0.
+- **Refused when it can't be cleaned**, as a picture that can't be re-encoded
+  already was. That includes every video and sound file on a server without
+  ffmpeg. Before, ffmpeg was optional (the poster frame was all it gave). The
+  published image has always installed it, so only somebody running the server
+  from source notices; the message says the host needs to install ffmpeg.
+- **Sound files too.** Their tags can say anything, and a voice memo app may
+  name a recording after its street. Not checked against a real voice memo. The
+  cost is that a shared song loses its title, artist and cover picture.
+  Linger's own voice messages carry nothing and come through intact.
+- **Files already on servers keep their tags.** Cleaning them on update would
+  replace originals with copies nobody is watching for a mistake. Deleting the
+  message deletes the file.

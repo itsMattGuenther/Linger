@@ -81,7 +81,8 @@ This is not an attempt to build a better platform. It's an attempt to not need o
 - **Styled names and statuses**: your own font, color, gradient and glow; a
   status with up to three short fields you label yourself, links included;
   away messages; and, if you turn it on, your local time on your card.
-- **Files and media.** 500 MB uploads, EXIF always stripped. Media, a tab
+- **Files and media.** 500 MB uploads, with where a photo or video was taken
+  always stripped. Media, a tab
   beside your list, keeps everything ever shared; star things to keep them forever.
 - **Voice rooms** with mute, deafen, push-to-talk and per-person volume. The
   talk key works with a game in front on Windows and Linux, and Linger listens
@@ -131,7 +132,8 @@ runs yours. If you need guarantees against your host, use Signal.
 
 What *is* guaranteed: no telemetry, analytics or crash reporting, not even
 opt-in (the app only contacts GitHub to check for updates); EXIF, including
-GPS, stripped from every image; and no code that could read a window title
+GPS, stripped from every image, and the tags, location included, from every
+video and sound file; and no code that could read a window title
 ([decision](docs/decisions.md), 2026-08-28).
 
 ## 📦 Installing the app
@@ -213,7 +215,9 @@ cd client && pnpm tauri android dev           # the phone app, on Android
 The desktop app needs a webview, ALSA headers, cmake, the GStreamer plugins
 for sound, and the appindicator library for the tray; the packages for each
 distribution are in [docs/development.md](docs/development.md), with
-everything else about building and testing. The phone app needs Android
+everything else about building and testing. The server needs ffmpeg to take
+videos and sound files (the Docker image has it); without it those uploads are
+refused, and the tests for them skip. The phone app needs Android
 Studio, Java 21 and the Rust Android targets; the steps are in its section
 there. **Run `scripts/check.sh` before
 pushing**; it runs what CI runs for your change, and

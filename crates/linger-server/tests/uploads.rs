@@ -3,7 +3,7 @@
 //! The three things T-501 promised to prove are
 //! `a_killed_upload_resumes_and_completes`, `exif_never_survives_an_upload`
 //! and `a_file_that_lies_about_its_type_is_refused`. The rest guard the
-//!边 cases around them.
+//! edge cases around them.
 
 mod common;
 
@@ -426,16 +426,19 @@ async fn a_photo_post_sent_again_with_its_nonce_is_answered_not_refused() {
 
 /// A voice message (#401): Opus in WebM, as the app records it. The sniffer
 /// calls any WebM a video, so this is the case that proves one declared as
-/// sound goes up as sound and is played in place.
+/// sound goes up as sound and is played in place. Sound is copied without its
+/// tags on the way in (#651), so this needs ffmpeg, and real sound.
 #[tokio::test]
 async fn a_voice_message_goes_up_as_sound_and_plays_in_place() {
+    let Some(bytes) = ffmpeg_made(
+        &["-f", "lavfi", "-i", "sine=duration=1", "-c:a", "libopus"],
+        "webm",
+    ) else {
+        eprintln!("skipping: ffmpeg is not installed");
+        return;
+    };
     let server = spawn_server().await;
     let host = bootstrap_host(&server).await;
-    let mut bytes = vec![0x1a, 0x45, 0xdf, 0xa3, 0x8f, 0x42, 0x86, 0x81, 0x01];
-    bytes.extend_from_slice(&[0x42, 0x82, 0x84]);
-    bytes.extend_from_slice(b"webm");
-    bytes.extend_from_slice(&[0x42, 0x87, 0x81, 0x04]);
-    bytes.extend(filler(2_000));
     let attachment = upload(
         &server,
         &host.access_token,
@@ -524,17 +527,6 @@ async fn a_file_name_cannot_turn_itself_around() {
 // Serving part of a file (#222)
 // ---------------------------------------------------------------------------
 
-/// A video as far as the server can tell: an MP4 `ftyp` box, which is what it
-/// sniffs, then bytes nothing could play. ffprobe finding nothing in them is
-/// the same path as a server without ffmpeg, so no toolchain is needed.
-fn fake_video(len: usize) -> Vec<u8> {
-    let mut bytes = vec![0, 0, 0, 0x18];
-    bytes.extend_from_slice(b"ftypisom");
-    let rest = len - bytes.len();
-    bytes.extend(filler(rest));
-    bytes
-}
-
 /// `GET` a served file, with a `Range` header or without one.
 async fn fetch(url: &str, range: Option<&str>) -> reqwest::Response {
     let mut request = client().get(url);
@@ -544,58 +536,60 @@ async fn fetch(url: &str, range: Option<&str>) -> reqwest::Response {
     request.send().await.unwrap()
 }
 
-const VIDEO_LEN: usize = 100_000;
-
-/// A server with one video on it, its host, and where that video is served.
-async fn server_with_video() -> (TestServer, AuthResponse, String, Vec<u8>) {
+/// A server with one video on it, its host, where that video is served, and
+/// the bytes it is served as: the server's copy, not the upload (#651).
+/// `None` without ffmpeg, which a server needs to take a video at all.
+async fn server_with_video() -> Option<(TestServer, AuthResponse, String, Vec<u8>)> {
+    let sample = sample_video()?;
     let server = spawn_server().await;
     let host = bootstrap_host(&server).await;
-    let video = fake_video(VIDEO_LEN);
-    let attachment = upload(
-        &server,
-        &host.access_token,
-        "clip.mp4",
-        "video/mp4",
-        video.clone(),
-    )
-    .await;
+    let attachment = upload(&server, &host.access_token, "clip.mp4", "video/mp4", sample).await;
     assert_eq!(attachment.mime, "video/mp4");
     let url = absolute(&server, &attachment.url);
-    (server, host, url, video)
+    let video = fetch(&url, None).await.bytes().await.unwrap().to_vec();
+    assert!(
+        video.len() > 2_000,
+        "too short to cut into the pieces below"
+    );
+    Some((server, host, url, video))
 }
 
 #[tokio::test]
 async fn a_video_is_served_in_the_pieces_a_player_asks_for() {
-    let (_server, _host, url, video) = server_with_video().await;
+    let Some((_server, _host, url, video)) = server_with_video().await else {
+        eprintln!("skipping: ffmpeg is not installed");
+        return;
+    };
+    let len = video.len();
 
     // Asked for nothing in particular: all of it, and word that pieces work.
     let whole = fetch(&url, None).await;
     assert_eq!(whole.status(), 200);
     assert_eq!(whole.headers()["accept-ranges"], "bytes");
-    assert_eq!(whole.headers()["content-length"], VIDEO_LEN.to_string());
+    assert_eq!(whole.headers()["content-length"], len.to_string());
     assert!(whole.headers().get("content-range").is_none());
     assert_eq!(whole.bytes().await.unwrap(), video);
 
     for (range, start, end) in [
         // The first request a player makes, and a plain slice.
-        ("bytes=0-", 0, VIDEO_LEN - 1),
-        ("bytes=0-99", 0, 99),
+        ("bytes=0-".to_string(), 0, len - 1),
+        ("bytes=0-99".to_string(), 0, 99),
         // A seek: from somewhere in the middle to the end.
-        ("bytes=50000-", 50_000, VIDEO_LEN - 1),
+        (format!("bytes={}-", len / 2), len / 2, len - 1),
         // The last n bytes, which is where an MP4's index often lives.
-        ("bytes=-1000", VIDEO_LEN - 1000, VIDEO_LEN - 1),
+        ("bytes=-1000".to_string(), len - 1000, len - 1),
         // Running past the end is cut to the end; asking for more than there
         // is gets all of it.
-        ("bytes=99990-200000", 99_990, VIDEO_LEN - 1),
-        ("bytes=-500000", 0, VIDEO_LEN - 1),
+        (format!("bytes={}-{}", len - 10, len * 2), len - 10, len - 1),
+        (format!("bytes=-{}", len * 5), 0, len - 1),
         // The last byte on its own.
-        ("bytes=99999-99999", VIDEO_LEN - 1, VIDEO_LEN - 1),
+        (format!("bytes={0}-{0}", len - 1), len - 1, len - 1),
     ] {
-        let part = fetch(&url, Some(range)).await;
+        let part = fetch(&url, Some(&range)).await;
         assert_eq!(part.status(), 206, "{range}");
         assert_eq!(
             part.headers()["content-range"],
-            format!("bytes {start}-{end}/{VIDEO_LEN}"),
+            format!("bytes {start}-{end}/{len}"),
             "{range}"
         );
         assert_eq!(
@@ -609,7 +603,10 @@ async fn a_video_is_served_in_the_pieces_a_player_asks_for() {
 
 #[tokio::test]
 async fn a_piece_goes_out_with_every_header_the_whole_file_does() {
-    let (server, host, video_url, _) = server_with_video().await;
+    let Some((server, host, video_url, _)) = server_with_video().await else {
+        eprintln!("skipping: ffmpeg is not installed");
+        return;
+    };
     let download = upload(
         &server,
         &host.access_token,
@@ -672,19 +669,23 @@ async fn a_piece_goes_out_with_every_header_the_whole_file_does() {
 
 #[tokio::test]
 async fn a_range_past_the_end_is_refused_with_the_real_length() {
-    let (_server, _host, url, _) = server_with_video().await;
+    let Some((_server, _host, url, video)) = server_with_video().await else {
+        eprintln!("skipping: ffmpeg is not installed");
+        return;
+    };
+    let len = video.len();
     for range in [
-        "bytes=100000-",
-        "bytes=100000-100010",
-        "bytes=250000-",
+        format!("bytes={len}-"),
+        format!("bytes={len}-{}", len + 10),
+        format!("bytes={}-", len * 2 + 50_000),
         // Zero bytes from the end is no bytes at all.
-        "bytes=-0",
+        "bytes=-0".to_string(),
     ] {
-        let refused = fetch(&url, Some(range)).await;
+        let refused = fetch(&url, Some(&range)).await;
         assert_eq!(refused.status(), 416, "{range}");
         assert_eq!(
             refused.headers()["content-range"],
-            format!("bytes */{VIDEO_LEN}"),
+            format!("bytes */{len}"),
             "{range}"
         );
         assert_eq!(refused.headers()["accept-ranges"], "bytes", "{range}");
@@ -697,7 +698,10 @@ async fn a_range_past_the_end_is_refused_with_the_real_length() {
 
 #[tokio::test]
 async fn anything_but_one_plain_range_gets_the_whole_file() {
-    let (_server, _host, url, video) = server_with_video().await;
+    let Some((_server, _host, url, video)) = server_with_video().await else {
+        eprintln!("skipping: ffmpeg is not installed");
+        return;
+    };
     for range in [
         // Several ranges would need a multipart body no player asks for.
         "bytes=0-1,5-6",
@@ -1183,8 +1187,8 @@ async fn stored_objects_stay_inside_the_object_directory() {
     }
 }
 
-/// Video work is optional: a server with no ffmpeg stores the file and simply
-/// has no poster frame. Skipped when the toolchain isn't installed.
+/// A video's poster frame and length come from ffmpeg. Skipped when it isn't
+/// installed.
 #[tokio::test]
 async fn a_video_gets_a_poster_frame_and_a_duration() {
     let Some(sample) = sample_video() else {
@@ -1216,24 +1220,318 @@ async fn a_video_gets_a_poster_frame_and_a_duration() {
 
 /// Two seconds of ffmpeg's test pattern, or `None` if ffmpeg isn't here.
 fn sample_video() -> Option<Vec<u8>> {
-    let out = tempfile::Builder::new().suffix(".mp4").tempfile().ok()?;
-    let path = out.into_temp_path();
-    let status = std::process::Command::new("ffmpeg")
-        .args([
-            "-v",
-            "error",
-            "-y",
+    ffmpeg_made(
+        &[
             "-f",
             "lavfi",
             "-i",
             "testsrc=size=160x120:rate=15:duration=2",
             "-pix_fmt",
             "yuv420p",
-        ])
+        ],
+        "mp4",
+    )
+}
+
+/// What ffmpeg makes from `args`, in a file ending `.{ext}` (which is how it
+/// picks the container), or `None` if ffmpeg isn't here.
+fn ffmpeg_made(args: &[&str], ext: &str) -> Option<Vec<u8>> {
+    let out = tempfile::Builder::new()
+        .suffix(&format!(".{ext}"))
+        .tempfile()
+        .ok()?;
+    let path = out.into_temp_path();
+    let status = std::process::Command::new("ffmpeg")
+        .args(["-v", "error", "-y"])
+        .args(args)
         .arg(&path)
         .status()
         .ok()?;
     status.success().then(|| std::fs::read(&path).ok())?
+}
+
+fn has_ffmpeg() -> bool {
+    std::process::Command::new("ffmpeg")
+        .arg("-version")
+        .output()
+        .is_ok_and(|out| out.status.success())
+}
+
+// ---------------------------------------------------------------------------
+// Where it was filmed (#651)
+// ---------------------------------------------------------------------------
+
+/// Where a phone says a video was filmed, in the ISO 6709 form phones write.
+const FILMED_AT: &str = "+48.8584+002.2945";
+/// Where the phone's own track of timed data says it was, a moment later.
+const TRACKED_AT: &str = "+48.8600+002.2900";
+
+/// A video the way a phone saves one. Filmed upright, so stored on its side
+/// with a matrix saying how to turn it; with `tags`; and with a track of the
+/// phone's own timed data beside the picture and sound. That track is text
+/// here: an iPhone's are `mebx`, which ffmpeg can't write. `None` without
+/// ffmpeg.
+fn phone_video(ext: &str, tags: &[&str]) -> Option<Vec<u8>> {
+    let dir = tempfile::tempdir().ok()?;
+    let track = dir.path().join("track.srt");
+    std::fs::write(
+        &track,
+        format!("1\n00:00:00,000 --> 00:00:02,000\n{TRACKED_AT}\n"),
+    )
+    .ok()?;
+    let mut args = vec![
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc=size=160x120:rate=15:duration=2",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=duration=2",
+        "-i",
+        track.to_str()?,
+        "-map",
+        "0",
+        "-map",
+        "1",
+        "-map",
+        "2",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:s",
+        "mov_text",
+        "-shortest",
+    ];
+    args.extend_from_slice(tags);
+    let mut bytes = ffmpeg_made(&args, ext)?;
+    let at = video_matrix(&bytes);
+    bytes[at..at + 36].copy_from_slice(&upright());
+    Some(bytes)
+}
+
+/// An Android camera app writes where a video was filmed as text, in a `©xyz`
+/// box in the movie's user data. ffmpeg's MP4 writer only writes the binary
+/// `loci` form, so the box is added here, at the end of the `moov` box, which
+/// ffmpeg writes last.
+fn with_android_place(mut bytes: Vec<u8>) -> Vec<u8> {
+    let place = format!("{FILMED_AT}/");
+    let place_len = u16::try_from(place.len()).unwrap();
+    let mut xyz = (12 + u32::from(place_len)).to_be_bytes().to_vec();
+    xyz.extend_from_slice(b"\xa9xyz");
+    xyz.extend_from_slice(&place_len.to_be_bytes());
+    // The language, packed as ISO 639-2: "eng".
+    xyz.extend_from_slice(&0x15c7_u16.to_be_bytes());
+    xyz.extend_from_slice(place.as_bytes());
+    let added = u32::try_from(8 + xyz.len()).unwrap();
+    let mut udta = added.to_be_bytes().to_vec();
+    udta.extend_from_slice(b"udta");
+    udta.extend_from_slice(&xyz);
+
+    let moov = bytes.windows(4).position(|w| w == b"moov").unwrap() - 4;
+    let size = u32::from_be_bytes(bytes[moov..moov + 4].try_into().unwrap());
+    assert_eq!(moov + size as usize, bytes.len(), "moov is the last box");
+    bytes[moov..moov + 4].copy_from_slice(&(size + added).to_be_bytes());
+    bytes.extend_from_slice(&udta);
+    bytes
+}
+
+/// The matrix a phone writes for a video filmed upright: a quarter turn, then
+/// moved back into view by the picture's height (120 here). Nine 32-bit
+/// numbers, 16.16 fixed point but for the last column, which is 2.30.
+fn upright() -> Vec<u8> {
+    [
+        0,
+        0x0001_0000,
+        0,
+        0xFFFF_0000,
+        0,
+        0,
+        120 << 16,
+        0,
+        0x4000_0000_u32,
+    ]
+    .iter()
+    .flat_map(|n| n.to_be_bytes())
+    .collect()
+}
+
+/// Where the first track's display matrix starts, in its `tkhd` box after a
+/// run of times and ids whose width depends on the box's version (ISO/IEC
+/// 14496-12 §8.3.2). The first track is the video in every file here.
+fn video_matrix(bytes: &[u8]) -> usize {
+    let find = |name: &[u8], from: usize| {
+        bytes[from..]
+            .windows(name.len())
+            .position(|w| w == name)
+            .map(|at| at + from)
+    };
+    let moov = find(b"moov", 0).expect("an MP4 has a moov box");
+    let tkhd = find(b"tkhd", moov).expect("and a track header in it");
+    tkhd + if bytes[tkhd + 4] == 1 { 56 } else { 44 }
+}
+
+/// The kinds of track in a file, in order, as ffprobe sees them.
+fn tracks(bytes: &[u8]) -> Vec<String> {
+    let file = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(file.path(), bytes).unwrap();
+    let out = std::process::Command::new("ffprobe")
+        .args(["-v", "error", "-show_entries", "stream=codec_type"])
+        .args(["-of", "json"])
+        .arg(file.path())
+        .output()
+        .unwrap();
+    let probed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    probed["streams"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|stream| stream["codec_type"].as_str().unwrap().to_string())
+        .collect()
+}
+
+/// SPEC §4.10: a shared video carries no trace of where it was filmed, in
+/// either phone's form, the same as a photo. What the server keeps is the
+/// same picture and sound, still the right way up. Skipped without ffmpeg.
+#[tokio::test]
+async fn a_video_keeps_no_trace_of_where_it_was_filmed() {
+    // An iPhone writes the place as a QuickTime metadata key.
+    let iphone_place = format!("com.apple.quicktime.location.ISO6709={FILMED_AT}+035.000/");
+    let iphone = phone_video(
+        "mov",
+        &["-movflags", "use_metadata_tags", "-metadata", &iphone_place],
+    );
+    let android = phone_video("mp4", &[]).map(with_android_place);
+    let (Some(iphone), Some(android)) = (iphone, android) else {
+        eprintln!("skipping: ffmpeg is not installed");
+        return;
+    };
+    let server = spawn_server().await;
+    let host = bootstrap_host(&server).await;
+
+    for (name, mime, original) in [
+        ("IMG_0001.mov", "video/quicktime", iphone),
+        ("VID_0001.mp4", "video/mp4", android),
+    ] {
+        let text = String::from_utf8_lossy(&original);
+        assert!(
+            text.contains(FILMED_AT) && text.contains(TRACKED_AT),
+            "{name}: the fixture has to carry the place, or this test proves nothing"
+        );
+
+        let attachment = upload(&server, &host.access_token, name, mime, original).await;
+        assert_eq!(attachment.mime, mime);
+        assert_eq!(attachment.filename, name);
+        let stored = fetch(&absolute(&server, &attachment.url), None)
+            .await
+            .bytes()
+            .await
+            .unwrap();
+        assert_eq!(attachment.size_bytes, stored.len() as u64, "{name}");
+
+        let text = String::from_utf8_lossy(&stored);
+        assert!(!text.contains(FILMED_AT), "{name}: the place came through");
+        assert!(
+            !text.contains(TRACKED_AT),
+            "{name}: the phone's own track came through"
+        );
+        // Still the picture and the sound, and still the right way up.
+        assert_eq!(tracks(&stored), ["video", "audio"], "{name}");
+        let at = video_matrix(&stored);
+        assert_eq!(
+            &stored[at..at + 36],
+            upright().as_slice(),
+            "{name}: no longer the right way up"
+        );
+        let duration = attachment.duration_ms.expect("ffprobe reports a duration");
+        assert!((1500..2500).contains(&duration), "duration was {duration}");
+    }
+}
+
+/// A sound file's tags can say anything: a voice memo app may name a
+/// recording after the street it was made on. They go the way a video's do,
+/// and the sound stays. Skipped without ffmpeg.
+#[tokio::test]
+async fn a_sound_file_keeps_its_sound_and_none_of_its_tags() {
+    let title = format!("title=Recorded at {FILMED_AT}");
+    let Some(original) = ffmpeg_made(
+        &[
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=duration=2",
+            "-c:a",
+            "aac",
+            "-metadata",
+            &title,
+        ],
+        "m4a",
+    ) else {
+        eprintln!("skipping: ffmpeg is not installed");
+        return;
+    };
+    assert!(
+        String::from_utf8_lossy(&original).contains(FILMED_AT),
+        "the fixture has to carry the place, or this test proves nothing"
+    );
+    let server = spawn_server().await;
+    let host = bootstrap_host(&server).await;
+
+    let attachment = upload(
+        &server,
+        &host.access_token,
+        "Memo.m4a",
+        "audio/mp4",
+        original,
+    )
+    .await;
+    assert_eq!(attachment.mime, "audio/mp4");
+    let stored = fetch(&absolute(&server, &attachment.url), None)
+        .await
+        .bytes()
+        .await
+        .unwrap();
+    assert!(!String::from_utf8_lossy(&stored).contains(FILMED_AT));
+    assert_eq!(tracks(&stored), ["audio"]);
+    let duration = attachment.duration_ms.expect("ffprobe reports a duration");
+    assert!((1500..2500).contains(&duration), "duration was {duration}");
+}
+
+/// A video the server can't copy is refused, as a picture it can't re-encode
+/// is: kept as it came, it would keep whatever it carries. Bytes that only
+/// look like an MP4 to the sniffer are such a video, and so is every video
+/// on a server without ffmpeg, where the message says so.
+#[tokio::test]
+async fn a_video_that_cannot_be_copied_is_refused() {
+    let server = spawn_server().await;
+    let host = bootstrap_host(&server).await;
+    let mut bytes = vec![0, 0, 0, 0x18];
+    bytes.extend_from_slice(b"ftypisom");
+    bytes.extend(filler(4_000));
+
+    let slot = slot(
+        &server,
+        &host.access_token,
+        "clip.mp4",
+        bytes.len() as u64,
+        "video/mp4",
+    )
+    .await;
+    let (status, _) = put_part(&server, &slot.url, bytes).await;
+    assert_eq!(status, 200);
+    let resp = finish(&server, &host.access_token, &slot, None).await;
+    assert_eq!(resp.status(), 415);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["error"]["code"], "UNSUPPORTED_MEDIA");
+    let message = if has_ffmpeg() {
+        "That video can't be read."
+    } else {
+        "This server can't take videos or sound files until its host installs ffmpeg."
+    };
+    assert_eq!(body["error"]["message"], message);
+
+    // Final, like any refusal about the bytes.
+    let again = finish(&server, &host.access_token, &slot, None).await;
+    assert_eq!(again.status(), 409);
 }
 
 // ---------------------------------------------------------------------------

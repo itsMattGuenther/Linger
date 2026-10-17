@@ -1139,7 +1139,11 @@ values. A file whose bytes disagree with its declared type is
 `UNSUPPORTED_MEDIA`; a file that is not the size it said it would be is
 `VALIDATION_FAILED`. An image that can't be decoded, or that would take more memory to
 re-encode than the server allows (ARCHITECTURE §8), is `UNSUPPORTED_MEDIA` with "That
-image can't be read."
+image can't be read." A video or sound file the server can't copy without its tags
+(#651) is `UNSUPPORTED_MEDIA` with "That video can't be read." or "That sound file can't
+be read.", and every video and sound file on a server without ffmpeg is
+`UNSUPPORTED_MEDIA` with "This server can't take videos or sound files until its host
+installs ffmpeg."
 
 `upload_id` and `attachment_id` are the same identifier. An upload is an attachment that
 has not arrived yet, and there is nothing to remember about one that the attachment does
@@ -1230,7 +1234,9 @@ type Attachment = {
 **stored**, not what the client declared. Images are re-encoded on upload, which strips
 EXIF and can change the format (a WebP comes back as a PNG, with its extension corrected).
 A photo is turned the way its EXIF Orientation says before that, so `width` and `height`
-are as it is seen, and a client draws the stored picture as it is (#569).
+are as it is seen, and a client draws the stored picture as it is (#569). Video and sound
+files are copied without their tags (#651), in the same container, so their `size_bytes`
+is usually a little smaller than what was sent.
 The stored `filename` has no folders in it, and no control characters, double quotes,
 backslashes or direction controls (§2).
 

@@ -8,7 +8,7 @@ in [releasing.md](releasing.md).
 
 ## System packages
 
-Only the desktop app needs system libraries: a webview, ALSA headers for the
+The desktop app needs system libraries: a webview, ALSA headers for the
 microphone, cmake for the bundled Opus codec, the GStreamer plugins for sound
 and for shared videos (libav decodes their AAC sound and H.264 picture; without
 it a video plays silent, or not at all, #358), and the appindicator library for the tray icon (without it the app runs, but
@@ -24,6 +24,12 @@ sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev \
 sudo pacman -S webkit2gtk-4.1 gtk3 librsvg alsa-lib cmake gst-plugins-base gst-plugins-good \
                gst-libav libayatana-appindicator
 ```
+
+The server needs one thing: ffmpeg, to take videos and sound files. It copies
+each one without its tags, which is how a phone video loses where it was filmed
+(#651). Without ffmpeg those uploads are refused, and the server tests that need
+it skip themselves (CI installs it). `apt install ffmpeg` or `pacman -S ffmpeg`;
+the Docker image has it.
 
 ## Checks
 
