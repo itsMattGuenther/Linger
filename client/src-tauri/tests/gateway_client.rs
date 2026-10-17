@@ -150,6 +150,7 @@ fn ready_frame(session_id: &str) -> Value {
         voice: None,
         emoji: None,
         reactions: None,
+        deleted_users: None,
     };
     json!({ "op": "ready", "d": data, "s": 0 })
 }
