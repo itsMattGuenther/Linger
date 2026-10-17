@@ -1440,7 +1440,12 @@ wrote over it.
 - **A device can't undo another's away.** Its `room.focus`, idle and back-from-idle
   change only its own part. Away ends when the device that set it says it's back, or
   when that device's session ends.
-- **Not built here:** the app telling a device that you went away, or came back, on
-  another one. Until it does, coming back from the phone doesn't end an away set on
-  the computer: the computer still says away. That is a client follow-up. A short
-  network drop showing you offline is #654, built on this.
+- **I'm back on any device ends it everywhere.** Clearing the away saved on your
+  status (`PATCH /me`) ends away on every one of your sessions. Without it, I'm back
+  on the phone had nothing to undo, and the computer kept everybody seeing away.
+  Only clearing does this: setting away is still the device's own frame.
+- **Not built here:** the app following your saved away on every device. A device
+  that set away still holds it in memory, so it says away again after its next
+  reconnect, as it already did before this. And a device doesn't learn that you went
+  away on another one. Both are a client follow-up. A short network drop showing you
+  offline is #654, built on this.

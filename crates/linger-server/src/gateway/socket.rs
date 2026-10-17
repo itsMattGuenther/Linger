@@ -496,6 +496,14 @@ async fn tell_merged(state: &AppState, user_id: UserId, merged: Merged) {
     }
 }
 
+/// Somebody cleared the away saved on their status (#653): end it on every
+/// one of their sessions, and tell everybody what that changed, the way a
+/// session's own change is told (`tell_merged`).
+pub async fn tell_back_everywhere(state: &AppState, user_id: UserId) {
+    let merged = state.gateway.back_everywhere(user_id);
+    tell_merged(state, user_id, merged).await;
+}
+
 /// Tell everybody a person's presence changed, at most `RATE_PRESENCE` times
 /// (#497). Each `presence.update` goes to everybody connected, so without
 /// this one app in a loop is every app on the server redrawing in one.

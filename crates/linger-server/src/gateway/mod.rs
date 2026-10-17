@@ -33,7 +33,7 @@ use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::time::Instant;
 
 use frame::EventJson;
-pub use socket::ws_route;
+pub use socket::{tell_back_everywhere, ws_route};
 
 /// Everything the fan-out layer holds. Lives in `AppState` as `Arc<Gateway>`;
 /// REST handlers publish mutation events through [`Gateway::publish`].
@@ -1004,7 +1004,7 @@ impl Gateway {
     /// being there, so a session that was idle is around again; one that
     /// is away stays away, and a phone opening a room can't undo the away
     /// set on the computer. Away ends when the session that set it says so,
-    /// or goes.
+    /// or goes, or with I'm back on any of them (`back_everywhere`).
     fn move_to(&self, user_id: UserId, session_id: &str, room_id: Option<RoomId>) -> Merged {
         let Some(mut sessions) = self.session_presence.get_mut(&user_id) else {
             return Merged::Same;
@@ -1019,6 +1019,33 @@ impl Gateway {
         own.moved_at = self.next_presence_order();
         if own.state == PresenceState::Idle {
             own.state = PresenceState::Around;
+        }
+        self.remerge(user_id, &sessions)
+    }
+
+    /// Somebody cleared the away saved on their status (`PATCH /me`, #653):
+    /// away ends on every one of their sessions, not only the one that set
+    /// it. I'm back on the phone has no away of its own to undo, and without
+    /// this the computer would keep everybody seeing away. Each away session
+    /// is around again, in whatever room it has open, and the answer is what
+    /// that changed of what everybody is told.
+    ///
+    /// With one device, its own `around` frame follows and changes nothing,
+    /// so nobody is told twice.
+    fn back_everywhere(&self, user_id: UserId) -> Merged {
+        let Some(mut sessions) = self.session_presence.get_mut(&user_id) else {
+            return Merged::Same;
+        };
+        let mut came_back = false;
+        for own in sessions.values_mut() {
+            if own.state == PresenceState::Away {
+                own.state = PresenceState::Around;
+                own.away_message = None;
+                came_back = true;
+            }
+        }
+        if !came_back {
+            return Merged::Same;
         }
         self.remerge(user_id, &sessions)
     }
@@ -1687,5 +1714,31 @@ mod tests {
         assert_eq!(gateway.connection_closed(user, "phone"), Merged::Same);
         assert_eq!(told(&gateway, user), None, "offline once it's gone");
         assert!(gateway.session_presence.get(&user).is_none());
+    }
+
+    /// Clearing the away saved on the status ends away on every session
+    /// (#653), each in whatever room it has open, and changes nothing for
+    /// somebody who wasn't away.
+    #[test]
+    fn coming_back_ends_away_on_every_session() {
+        let gateway = Gateway::new();
+        let user = UserId::new();
+        let room = RoomId::new();
+        gateway.connection_opened(user, "computer");
+        gateway.connection_opened(user, "phone");
+        assert_eq!(gateway.back_everywhere(user), Merged::Same);
+        gateway.update_presence(user, "computer", PresenceState::Away, Some("out".into()));
+        gateway.update_presence(user, "phone", PresenceState::Away, Some("out".into()));
+        gateway.move_to(user, "phone", Some(room));
+        assert_eq!(gateway.back_everywhere(user), Merged::Moved);
+        assert_eq!(
+            told(&gateway, user),
+            Some((PresenceState::InRoom, Some(room), None))
+        );
+        // The device's own `around` afterwards changes nothing.
+        assert_eq!(
+            gateway.update_presence(user, "computer", PresenceState::Around, None),
+            Merged::Same
+        );
     }
 }

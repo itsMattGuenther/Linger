@@ -337,7 +337,7 @@ room open on either is where they are, the one opened last if each has one. They
 are idle only when every device is. Each device speaks for itself: the phone
 opening a room doesn't undo the away set on the computer, and the computer going
 idle doesn't hide the room open on the phone. Away ends on the device that set it,
-or when that device goes (PROTOCOL §8).
+or when that device goes, or with I'm back on any of them (PROTOCOL §8).
 
 **Activity detection was cut on 2026-08-28** (Matt — `docs/decisions.md`). This
 section used to specify a feature that watched which application you had in front

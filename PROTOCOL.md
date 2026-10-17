@@ -865,6 +865,11 @@ them" (§8).
 whole object when present. `entrance_sound: ""` clears the sound (bundled keys are
 validated against `linger-core::ENTRANCE_SOUNDS` until custom uploads land in M4).
 
+A `status` that clears the away message the saved one had (from a message to `null` or
+`""`) also **ends away on every one of the person's gateway sessions** (#653, §8). A
+save that keeps the away, or sets one, leaves presence alone: setting away is the
+device's own `presence.update`.
+
 `time_zone` is "Show my local time" (#604, SPEC §4.6): a time-zone name turns it on or
 moves it, and `""` turns it off. Absent or `null` leaves it as it is, so an app from
 before it never turns it off by saving a status. The server checks the name's shape
@@ -1651,7 +1656,10 @@ worked out from all of them, in this order:
 With no session open they are `offline`. A frame changes only its own session's part.
 Moving ends that session's idle, but not its away, so a phone opening a room can't undo
 the away set on the computer. Away ends when the session that set it sends another
-state, or closes. A session's part goes when its socket closes, and a resume starts it
+state, or closes, or when a `PATCH /me` clears the away saved on the person's status
+(§5): that ends it on every session, so I'm back on the phone ends an away the computer
+set. The app saves the status before it sends its own frame, so with one device the
+frame that follows changes nothing and nobody is told twice. A session's part goes when its socket closes, and a resume starts it
 again as `around` in no room; the app says where it is again on every `ready` and
 `resumed`. A `presence.update` saying `in_room` or `offline` counts as `around`: where
 somebody is comes from `room.focus`, and offline from their last session closing.

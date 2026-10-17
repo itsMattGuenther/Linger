@@ -1315,3 +1315,90 @@ async fn a_room_on_one_device_does_not_undo_away_on_the_other() {
     assert!(held["room_id"].is_null(), "ready carried {held}");
     assert_eq!(held["away_message"], "out for a walk");
 }
+
+/// Save or clear the away on somebody's status, as the app's away and I'm
+/// back buttons do, before they send their `presence.update`.
+async fn save_away(server: &common::TestServer, token: &str, message: Option<&str>) {
+    let resp = reqwest::Client::new()
+        .patch(server.url("/me"))
+        .bearer_auth(token)
+        .json(&json!({ "status": { "away_message": message } }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+}
+
+/// #653. Away set on the computer, and I'm back pressed on the phone. The
+/// phone never said away, so it has no frame to send, and the computer kept
+/// everybody seeing away. Clearing the away saved on your status ends it on
+/// every one of your sessions.
+#[tokio::test]
+async fn coming_back_on_one_device_ends_away_set_on_the_other() {
+    let (server, host, room) = common::server_with_room("garage").await;
+    let member = common::join_member(&server, &host.access_token, "callie").await;
+    let member_id = member.user.id.to_string();
+    let room_id = room.id.to_string();
+    let (mut watcher, _) = connect_ready(&server, &host.access_token).await;
+    let (mut computer, _) = connect_ready(&server, &member.access_token).await;
+    let (_phone, _) = connect_ready(&server, &member.access_token).await;
+    wait_for_presence(&mut watcher, &member_id, "around").await;
+
+    save_away(&server, &member.access_token, Some("out for a walk")).await;
+    send_json(
+        &mut computer,
+        json!({ "op": "presence.update", "d": { "state": "away", "away_message": "out for a walk" } }),
+    )
+    .await;
+    wait_for_presence(&mut watcher, &member_id, "away").await;
+
+    // I'm back, on the phone: the status is cleared, and no frame follows.
+    save_away(&server, &member.access_token, None).await;
+    let before = told_so_far(&server, &host.access_token, &room_id, &mut watcher).await;
+    let last = presence_of(&before, &member_id)
+        .last()
+        .map(|frame| frame["d"].clone());
+    assert_eq!(
+        last,
+        Some(json!({
+            "user_id": member_id, "state": "around", "room_id": null, "away_message": null
+        })),
+        "coming back on the phone left the computer's away in place"
+    );
+    let held = presence_in_ready(&server, &host.access_token, &member_id).await;
+    assert_eq!(held["state"], "around", "ready carried {held}");
+}
+
+/// #653. With one device, I'm back clears the status and then sends its own
+/// `around`. The first ends the away, so the frame changes nothing, and
+/// everybody is told once.
+#[tokio::test]
+async fn coming_back_on_one_device_is_told_once() {
+    let (server, host, room) = common::server_with_room("garage").await;
+    let member = common::join_member(&server, &host.access_token, "callie").await;
+    let member_id = member.user.id.to_string();
+    let room_id = room.id.to_string();
+    let (mut watcher, _) = connect_ready(&server, &host.access_token).await;
+    let (mut theirs, _) = connect_ready(&server, &member.access_token).await;
+    wait_for_presence(&mut watcher, &member_id, "around").await;
+
+    save_away(&server, &member.access_token, Some("lunch")).await;
+    send_json(
+        &mut theirs,
+        json!({ "op": "presence.update", "d": { "state": "away", "away_message": "lunch" } }),
+    )
+    .await;
+    wait_for_presence(&mut watcher, &member_id, "away").await;
+
+    save_away(&server, &member.access_token, None).await;
+    send_json(
+        &mut theirs,
+        json!({ "op": "presence.update", "d": { "state": "around", "away_message": null } }),
+    )
+    .await;
+    handled(&mut theirs).await;
+    let before = told_so_far(&server, &host.access_token, &room_id, &mut watcher).await;
+    let told = presence_of(&before, &member_id);
+    assert_eq!(told.len(), 1, "coming back was told as {told:?}");
+    assert_eq!(told[0]["d"]["state"], "around");
+}

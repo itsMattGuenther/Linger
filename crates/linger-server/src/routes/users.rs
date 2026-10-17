@@ -280,6 +280,10 @@ async fn patch_me(
         validate::time_zone(zone)?;
     }
 
+    // Whether this save clears an away the status had (#653). Only that
+    // change: a save that keeps the away, or sets one, leaves presence alone.
+    let mut cleared_away = false;
+
     let mut tx = state.db.write.begin().await.map_err(ApiError::from)?;
 
     if let Some(name) = &req.display_name {
@@ -336,6 +340,10 @@ async fn patch_me(
                 .bind(auth.id.to_vec())
                 .fetch_optional(&mut *tx)
                 .await?;
+        // An empty message is no away, as the app reads it.
+        let away = |message: Option<&str>| message.is_some_and(|message| !message.is_empty());
+        cleared_away = away(prev_away.as_ref().and_then(|(old, _)| old.as_deref()))
+            && !away(status.away_message.as_deref());
         let away_since = match (&status.away_message, prev_away) {
             (None, _) => None,
             (Some(new), Some((Some(old), Some(since)))) if new == &old => Some(since),
@@ -411,6 +419,11 @@ async fn patch_me(
 
     let user = repo::users::expect(&state.db.read, auth.id).await?;
     state.gateway.publish(ServerEvent::UserUpdate(user.clone()));
+    // I'm back, wherever it was pressed, ends away on every one of their
+    // devices (#653): the one that set it may never hear about it otherwise.
+    if cleared_away {
+        crate::gateway::tell_back_everywhere(&state, auth.id).await;
+    }
     Ok(Json(user))
 }
 
