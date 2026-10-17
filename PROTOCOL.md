@@ -1831,10 +1831,18 @@ says `voice: false` (§3).
 - **What the server sees.** Voice is encrypted on the wire (DTLS-SRTP) but each hop ends
   at the server, which forwards packets without decoding them. It stores nothing. It
   could, in principle, listen: SPEC §4.14 says so, and #200 is the layer that would stop it.
-- **A failed connection is restarted, not left.** A client whose connection to the
-  server fails sends `voice.restart` a few seconds later: the server starts that
-  session's connection afresh and sends a new `voice.offer`. Its seat, and what the room
-  sees, don't change. A client that isn't in voice is ignored.
+- **A failed connection is restarted, not left.** A client sends `voice.restart` when its
+  connection to the server has heard nothing for a few seconds (the app: 3 s for ICE to
+  call it disconnected, and still so 2 s later), when it fails, or when its gateway socket
+  resumes while it's in voice, the plainest sign the network under it changed (#656). The
+  server starts that session's connection afresh and sends a new `voice.offer`. Its seat,
+  and what the room sees, don't change. A client that isn't in voice is ignored. The app
+  keeps one restart in flight at a time, until the new offer is answered, asks again if
+  none comes within 3 s, and never sends two closer than that. A `voice.offer` in a
+  resume's replay is for the connection the restart replaces, so the app doesn't answer it.
+  Each connection the server starts has an ICE username fragment (`a=ice-ufrag`) of its
+  own; an offer with a different one from the connection a client holds is from a fresh
+  start, and the client answers it on a new connection, never by renegotiating the old one.
 - **Limits.** `voice.answer`'s `sdp` is at most `MAX_VOICE_PAYLOAD_BYTES`; anything
   larger is dropped. Answers and restarts are rate-limited per session
   (`RATE_VOICE_SIGNAL`), loosely, because a busy room re-offers everybody each time

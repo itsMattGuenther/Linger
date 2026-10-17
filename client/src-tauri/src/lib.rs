@@ -182,6 +182,14 @@ impl gateway::Events for WindowEvents {
             },
         );
     }
+
+    /// Straight to this server's voice, not through the window: a call
+    /// whose network changed starts its connection afresh (#656). The phone
+    /// has no voice (SPEC §4.15).
+    fn resumed(&self) {
+        #[cfg(desktop)]
+        voice_commands::gateway_resumed(&self.app, &self.server);
+    }
 }
 
 /// Open (or reopen) the connection to one server. Calling this again for the

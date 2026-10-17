@@ -13,7 +13,7 @@ use std::sync::{mpsc as std_mpsc, Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use linger_client_lib::voice::audio::{Devices, Discard, Silence, Sink, Tone};
+use linger_client_lib::voice::audio::{Devices, Discard, Silence, Sink, Source, Tone};
 use linger_client_lib::voice::{Engine, Signaller, Watcher};
 use linger_core::gateway::{ClientFrame, VoiceControls, VoiceTrack};
 use linger_core::RoomId;
@@ -122,6 +122,8 @@ struct Gateway {
     seated: BTreeSet<String>,
     /// Every join routed, with the controls it carried, in order.
     joins: Vec<(String, Option<VoiceControls>)>,
+    /// Every restart routed, by whom and when (#656).
+    restarts: Vec<(String, std::time::Instant)>,
 }
 
 impl Gateway {
@@ -138,6 +140,7 @@ impl Gateway {
             room,
             seated: BTreeSet::new(),
             joins: Vec::new(),
+            restarts: Vec::new(),
         }
     }
 
@@ -165,7 +168,11 @@ impl Gateway {
                     }
                     ClientFrame::VoiceAnswer { sdp } => self.sfu.answer(session, &sdp),
                     // What the gateway does with a restart: join afresh, same room.
-                    ClientFrame::VoiceRestart => self.sfu.join(session, &room),
+                    ClientFrame::VoiceRestart => {
+                        self.restarts
+                            .push(((*session).to_string(), std::time::Instant::now()));
+                        self.sfu.join(session, &room);
+                    }
                     ClientFrame::VoiceLeave => {
                         self.seated.remove(*session);
                         self.sfu.leave(session);
@@ -468,6 +475,240 @@ async fn a_restarted_connection_brings_the_voice_back() {
     assert!(
         heard_from_a(&recorder) >= before + 10,
         "B didn't hear A again after restarting"
+    );
+}
+
+/// A call of two through the forwarding server (#656): A sends a tone, and
+/// B is heard to hear it before this hands the call back.
+struct Call {
+    gateway: Gateway,
+    a: Arc<Engine<Wire, Log>>,
+    a_rx: mpsc::UnboundedReceiver<ClientFrame>,
+    a_log: Arc<Log>,
+    b: Arc<Engine<Wire, Log>>,
+    b_rx: mpsc::UnboundedReceiver<ClientFrame>,
+    b_log: Arc<Log>,
+    recorder: Arc<Recorder>,
+}
+
+impl Call {
+    async fn start() -> Self {
+        let mut call = Self::join(Arc::new(Tone::default())).await;
+        call.until(Duration::from_secs(10), |call| call.heard_from_a() >= 10)
+            .await;
+        assert!(
+            call.heard_from_a() >= 10,
+            "B never heard A in the first place"
+        );
+        call
+    }
+
+    /// Both in the room, A sending what `source` hears and B silent.
+    async fn join(source: Arc<dyn Source>) -> Self {
+        let room = RoomId::new();
+        let gateway = Gateway::start(room);
+        let (a, a_rx, a_log) = engine(A).await;
+        let (b, b_rx, b_log) = engine(B).await;
+        let recorder = Arc::new(Recorder::default());
+        a.join(
+            room,
+            Devices {
+                source,
+                sink: Arc::new(Discard),
+            },
+            Vec::new(),
+        )
+        .await;
+        b.join(
+            room,
+            Devices {
+                source: Arc::new(Silence),
+                sink: Arc::clone(&recorder) as Arc<dyn Sink>,
+            },
+            Vec::new(),
+        )
+        .await;
+        Self {
+            gateway,
+            a,
+            a_rx,
+            a_log,
+            b,
+            b_rx,
+            b_log,
+            recorder,
+        }
+    }
+
+    fn heard_from_a(&self) -> usize {
+        heard(&self.recorder, A).len()
+    }
+
+    /// Route frames until `done` says so or `patience` runs out.
+    async fn until(&mut self, patience: Duration, done: impl Fn(&Self) -> bool) {
+        let deadline = std::time::Instant::now() + patience;
+        while std::time::Instant::now() < deadline {
+            self.gateway
+                .route(&mut [(A, &self.a, &mut self.a_rx), (B, &self.b, &mut self.b_rx)])
+                .await;
+            if done(self) {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    }
+
+    /// B's voice is back: a new connection up, and A heard through it.
+    async fn hears_a_again(&mut self) {
+        let before = self.heard_from_a();
+        self.until(Duration::from_secs(10), |call| {
+            call.heard_from_a() >= before + 10
+        })
+        .await;
+        assert!(
+            self.b.is_forward_connected().await,
+            "the new connection never came up: {:?}",
+            self.b_log.0.lock().unwrap()
+        );
+        assert!(
+            self.heard_from_a() >= before + 10,
+            "B didn't hear A again after restarting"
+        );
+    }
+}
+
+/// The path under a call goes away mid-call, as it does when a laptop moves
+/// from Wi-Fi to Ethernet (#656): here the forwarding server forgets B's
+/// connection without B being told, so nothing reaches B any more. B asks
+/// for a fresh connection by itself once it has heard nothing for a few
+/// seconds (ICE's 3 s, and 2 s more), well before ICE would call it failed
+/// (9 s), and A's voice comes back through it. It used to take half a
+/// minute.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_call_whose_path_went_away_asks_for_a_fresh_connection_in_seconds() {
+    let mut call = Call::start().await;
+
+    let cut = std::time::Instant::now();
+    call.gateway.sfu.leave(B);
+    call.until(Duration::from_secs(12), |call| {
+        call.gateway.restarts.iter().any(|(who, _)| who == B)
+    })
+    .await;
+    let asked = call
+        .gateway
+        .restarts
+        .iter()
+        .find(|(who, _)| who == B)
+        .map(|(_, at)| *at - cut);
+    let Some(asked) = asked else {
+        panic!(
+            "B never asked for a fresh connection: {:?}",
+            call.b_log.0.lock().unwrap()
+        );
+    };
+    assert!(
+        asked < Duration::from_secs(8),
+        "B took {asked:?} to ask for a fresh connection"
+    );
+    assert!(
+        asked >= Duration::from_secs(3),
+        "B asked after {asked:?}, before its connection could have gone quiet"
+    );
+    assert_eq!(
+        call.gateway.restarts.len(),
+        1,
+        "asked more than once: {:?}",
+        call.gateway.restarts
+    );
+    call.hears_a_again().await;
+}
+
+/// The gateway coming back while in a call (#656) is the plainest sign the
+/// network changed: the call's connection is started afresh at once, without
+/// waiting for it to go quiet, and the voice carries on through the new one.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_gateway_resuming_mid_call_starts_the_connection_afresh() {
+    let mut call = Call::start().await;
+
+    let resumed = std::time::Instant::now();
+    call.b.gateway_resumed().await;
+    call.until(Duration::from_secs(2), |call| {
+        !call.gateway.restarts.is_empty()
+    })
+    .await;
+    let asked: Vec<_> = call
+        .gateway
+        .restarts
+        .iter()
+        .map(|(who, at)| (who.clone(), *at - resumed))
+        .collect();
+    assert!(
+        matches!(asked.as_slice(), [(who, after)] if who == B && *after < Duration::from_secs(1)),
+        "B didn't ask once, at once: {asked:?}"
+    );
+    call.hears_a_again().await;
+    assert_eq!(call.gateway.restarts.len(), 1, "asked again after");
+}
+
+/// A room where nobody talks sends no voice at all (#197), so ICE's own
+/// checks are all that cross the line. With the shorter timeouts (#656)
+/// they still keep a quiet call up: nobody is ever called disconnected,
+/// and nothing is restarted. (On loopback, with no loss; a lossy Wi-Fi is
+/// the laptop test's to show.)
+#[tokio::test(flavor = "multi_thread")]
+async fn a_quiet_call_stays_up_with_nothing_but_ice_checks() {
+    let mut call = Call::join(Arc::new(Silence)).await;
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while !(call.a.is_forward_connected().await && call.b.is_forward_connected().await) {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the call never came up: {:?}",
+            call.b_log.0.lock().unwrap()
+        );
+        call.until(Duration::from_millis(25), |_| false).await;
+    }
+
+    call.until(Duration::from_secs(10), |_| false).await;
+
+    for log in [&call.a_log, &call.b_log] {
+        let states = log.0.lock().unwrap();
+        assert!(
+            states.iter().all(|(_, state)| state != "disconnected"),
+            "called disconnected in a quiet call: {states:?}"
+        );
+    }
+    assert!(
+        call.gateway.restarts.is_empty(),
+        "restarted a quiet call: {:?}",
+        call.gateway.restarts
+    );
+    assert!(call.a.is_forward_connected().await && call.b.is_forward_connected().await);
+    // Opus eases out over its first few quiet frames, then sends nothing:
+    // the ten seconds were the line with no voice on it.
+    assert!(
+        call.heard_from_a() <= 10,
+        "A sent {} frames into a quiet call",
+        call.heard_from_a()
+    );
+}
+
+/// The server starts B's connection afresh without B asking (#656): a
+/// restart asked for twice, or the server's own after B's gateway came back
+/// while a join waited. Its offer arrives while B still holds a connection
+/// to the last one. B takes it up on a new connection, and hears A again.
+/// Taken up by the old connection, ICE carried on with the new end, so
+/// nothing ever looked wrong, and the voice never came back.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_offer_from_a_fresh_server_connection_gets_a_new_one() {
+    let mut call = Call::start().await;
+
+    let room = call.gateway.room.to_string();
+    call.gateway.sfu.join(B, &room);
+    call.hears_a_again().await;
+    assert!(
+        call.gateway.restarts.is_empty(),
+        "B asked for a restart: {:?}",
+        call.gateway.restarts
     );
 }
 

@@ -604,6 +604,20 @@ describe("voice in the store", () => {
     expect(played.at(-1)).toBe("peer-join");
   });
 
+  // The core starts the call afresh on every resume, so an offer from the
+  // replay is for the connection being replaced; answering it would cross
+  // with the new one's.
+  it("hands the core a live offer, and not one from a resume's replay (#656)", async () => {
+    await seated(HOME);
+    const offer: ServerFrame = { s: 3, op: "voice.offer", d: { sdp: "v=0", tracks: [] } };
+    const handed = () => invoked.filter((call) => call.cmd === "voice_frame");
+    handlers.get("gateway:frame")?.({ payload: { server: HOME, frame: offer, replayed: true } });
+    expect(handed()).toEqual([]);
+    arrive(HOME, { ...offer, s: 4 });
+    expect(handed()).toHaveLength(1);
+    expect(handed()[0]?.args).toMatchObject({ baseUrl: HOME, frame: { op: "voice.offer" } });
+  });
+
   it("somebody joining and leaving over and over sounds once a minute each, not every time (#473)", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(Date.parse("2026-10-10T20:00:00Z"));

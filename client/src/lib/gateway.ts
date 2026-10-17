@@ -1269,8 +1269,11 @@ async function attachListeners(): Promise<void> {
       }
       // The forwarding server's offer is the core's business, not this
       // page's (ARCHITECTURE §2, #197): it is handed straight over, and the
-      // core answers it.
-      if (frame.op === "voice.offer") void voiceFrame(server, frame);
+      // core answers it. Not one from a resume's replay: the core starts a
+      // call afresh whenever the gateway resumes (#656), so a replayed offer
+      // is for the connection being replaced, and answering it would cross
+      // with the new one's.
+      if (frame.op === "voice.offer" && !replayed) void voiceFrame(server, frame);
       if (seated && next.myVoice === null) {
         // The fold above ended our seat: the host took us out (#423), the
         // room's list no longer has us, or a fresh `ready` means the server

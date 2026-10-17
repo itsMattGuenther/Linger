@@ -108,6 +108,12 @@ pub trait Events: Send + Sync + 'static {
     /// `ServerFrame` annotation is true rather than hopeful; unknown ops never
     /// get this far.
     fn frame(&self, frame: &ServerFrame, replayed: bool);
+
+    /// The socket came back and the server resumed the session (`resumed`),
+    /// before anything it replays. Not a fresh `ready`: the session, and a
+    /// voice seat with it, carried on. Voice listens (#656): a socket that
+    /// had to come back says the network under a call may have changed.
+    fn resumed(&self) {}
 }
 
 /// An access token and when it dies. The frontend computes `expires_at_ms` from
@@ -545,6 +551,9 @@ fn apply<E: Events>(
             events.status(Status::Ready {
                 latency_ms: since_ms(opened_at),
             });
+            if resuming {
+                events.resumed();
+            }
             return Step::Ready;
         }
         // A second hello, or anything else without a sequence number, is not

@@ -169,6 +169,8 @@ fn typing(seq: u64) -> Value {
 enum Note {
     Status(Status),
     Frame(Box<ServerFrame>, bool),
+    /// The session was resumed, which voice listens for (#656).
+    Resumed,
 }
 
 struct Recorder {
@@ -182,6 +184,10 @@ impl Events for Recorder {
 
     fn frame(&self, frame: &ServerFrame, replayed: bool) {
         let _ = self.tx.send(Note::Frame(Box::new(frame.clone()), replayed));
+    }
+
+    fn resumed(&self) {
+        let _ = self.tx.send(Note::Resumed);
     }
 }
 
@@ -210,12 +216,12 @@ impl Watcher {
         let note = self
             .until(what, |note| match note {
                 Note::Status(status) => matches(status),
-                Note::Frame(_, _) => false,
+                Note::Frame(_, _) | Note::Resumed => false,
             })
             .await;
         match note {
             Note::Status(status) => status,
-            Note::Frame(_, _) => unreachable!("matched on a status"),
+            Note::Frame(_, _) | Note::Resumed => unreachable!("matched on a status"),
         }
     }
 
@@ -235,7 +241,7 @@ impl Watcher {
             .iter()
             .filter_map(|note| match note {
                 Note::Status(status) => Some(status.clone()),
-                Note::Frame(_, _) => None,
+                Note::Frame(_, _) | Note::Resumed => None,
             })
             .collect()
     }
@@ -246,7 +252,7 @@ impl Watcher {
             .iter()
             .filter_map(|note| match note {
                 Note::Frame(frame, _) => frame.s,
-                Note::Status(_) => None,
+                Note::Status(_) | Note::Resumed => None,
             })
             .collect()
     }
@@ -571,6 +577,61 @@ async fn an_expired_session_re_identifies_by_itself() {
         "saw {:?}",
         watch.statuses()
     );
+    handle.shutdown();
+}
+
+/// A resume is told as one (#656), before anything it replays, so a call
+/// whose network changed starts its voice afresh at once; a fresh identify,
+/// after the server lost the session, is not, since the voice seat went with
+/// the old session.
+#[tokio::test]
+async fn a_resume_is_told_and_a_fresh_identify_is_not() {
+    let server = FakeServer::bind().await;
+    let (handle, mut watch) = start(&server, "access-token");
+
+    let mut peer = server.accept().await;
+    peer.hello(30_000).await;
+    assert_eq!(peer.recv().await["op"], "identify");
+    peer.ready("session-1").await;
+    watch.until_ready().await;
+    peer.kill();
+
+    let mut peer = server.accept().await;
+    peer.hello(30_000).await;
+    assert_eq!(peer.recv().await["op"], "resume");
+    peer.send(&json!({"op":"resumed","d":{"replayed":1}})).await;
+    peer.send(&typing(1)).await;
+    watch
+        .until(
+            "the replayed frame",
+            |note| matches!(note, Note::Frame(frame, true) if frame.s == Some(1)),
+        )
+        .await;
+    peer.kill();
+
+    // This time the server has lost the session, and it starts over.
+    let mut peer = server.accept().await;
+    peer.hello(30_000).await;
+    assert_eq!(peer.recv().await["op"], "resume");
+    peer.send(&json!({"op":"invalid_session","d":{"reason":"expired"}}))
+        .await;
+    peer.kill();
+    let mut peer = server.accept().await;
+    peer.hello(30_000).await;
+    assert_eq!(peer.recv().await["op"], "identify");
+    peer.ready("session-2").await;
+    watch.until_ready().await;
+
+    let told: Vec<&str> = watch
+        .seen
+        .iter()
+        .filter_map(|note| match note {
+            Note::Resumed => Some("resumed"),
+            Note::Frame(_, true) => Some("replayed"),
+            Note::Frame(_, false) | Note::Status(_) => None,
+        })
+        .collect();
+    assert_eq!(told, vec!["resumed", "replayed"], "saw {:?}", watch.seen);
     handle.shutdown();
 }
 

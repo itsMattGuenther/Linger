@@ -185,6 +185,19 @@ fn engine_for(app: &AppHandle, base_url: &str) -> std::sync::Arc<VoiceEngine> {
     })
 }
 
+/// The gateway for `base_url` came back and resumed its session (#656):
+/// that server's call, if there is one, starts its connection to the
+/// forwarding server afresh. Only an engine that exists is told; a server
+/// without one has no call to restart.
+pub(crate) fn gateway_resumed(app: &AppHandle, base_url: &str) {
+    let engine = app
+        .try_state::<VoiceEngines>()
+        .and_then(|engines| engines.with(|held| held.get(base_url).map(std::sync::Arc::clone)));
+    if let Some(engine) = engine {
+        tauri::async_runtime::spawn(async move { engine.gateway_resumed().await });
+    }
+}
+
 /// Join voice in a room (SPEC §4.14).
 ///
 /// Joining is turning the microphone on, so the default microphone and the

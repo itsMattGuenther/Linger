@@ -24,6 +24,7 @@ pub mod audio;
 pub mod codec;
 pub mod device;
 pub mod level;
+mod restart;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -33,10 +34,11 @@ use std::time::{Duration, Instant};
 use bytes::Bytes;
 use linger_core::gateway::{ClientFrame, VoiceControls, VoiceTrack};
 use linger_core::RoomId;
-use tokio::sync::Mutex;
+use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
 use webrtc::api::interceptor_registry::register_default_interceptors;
 use webrtc::api::media_engine::{MediaEngine, MIME_TYPE_OPUS};
+use webrtc::api::setting_engine::SettingEngine;
 use webrtc::api::APIBuilder;
 pub use webrtc::ice_transport::ice_server::RTCIceServer;
 use webrtc::interceptor::registry::Registry;
@@ -146,6 +148,10 @@ struct Inner {
     /// Whose voice each receiving m-line carries, by mid, from the latest
     /// `voice.offer`.
     tracks: BTreeMap<String, String>,
+    /// While we're in voice, where the connection's ups and downs go: to the
+    /// loop that decides when to start it afresh (`steer_restarts`, #656).
+    /// Dropping it ends that loop.
+    restarts: Option<mpsc::UnboundedSender<restart::Event>>,
 }
 
 impl<S: Signaller, W: Watcher> Engine<S, W> {
@@ -306,8 +312,18 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
             },
             Arc::clone(&self.bits),
         ));
-        self.inner.lock().await.pump = Some(pump);
-        let inner = self.inner.lock().await;
+        // A new call starts its restart rules fresh; the last call's loop
+        // ends as its sender is replaced.
+        let (restarts, events) = mpsc::unbounded_channel();
+        tokio::spawn(steer_restarts(
+            Arc::clone(&self.inner),
+            Arc::clone(&self.signaller),
+            Arc::clone(&self.watcher),
+            events,
+        ));
+        let mut inner = self.inner.lock().await;
+        inner.pump = Some(pump);
+        inner.restarts = Some(restarts);
         self.signaller.send(ClientFrame::VoiceJoin {
             room_id,
             controls: Some(inner.controls),
@@ -324,6 +340,7 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
         let (devices, pump, forward, tracks) = {
             let mut inner = self.inner.lock().await;
             inner.room = None;
+            inner.restarts = None;
             (
                 inner.devices.take(),
                 inner.pump.take(),
@@ -397,8 +414,15 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
             self.watcher.peer_state(&session, "closed");
         }
         let conn = match conn {
-            Some(conn) => conn,
-            None => self.open_forward().await?,
+            Some(conn) if !same_far_end(&conn, sdp).await => {
+                self.replace_forward(&conn, tracks).await;
+                None
+            }
+            conn => conn,
+        };
+        let (conn, fresh) = match conn {
+            Some(conn) => (conn, false),
+            None => (self.open_forward().await?, true),
         };
         conn.set_remote_description(RTCSessionDescription::offer(sdp.to_string())?)
             .await?;
@@ -406,6 +430,11 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
         conn.set_local_description(answer.clone()).await?;
         self.signaller
             .send(ClientFrame::VoiceAnswer { sdp: answer.sdp });
+        // A new connection answered is the server's reply to a restart (or
+        // to the join): the one in flight is over (#656).
+        if fresh {
+            self.steer(restart::Event::Answered).await;
+        }
         // Somebody new, on a connection that's already up, is reachable now.
         if conn.connection_state() == RTCPeerConnectionState::Connected {
             for track in tracks {
@@ -413,6 +442,33 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
             }
         }
         Ok(())
+    }
+
+    /// An offer from a connection the server started afresh arrived while we
+    /// still hold one to its last (#656): a restart asked for twice, or one
+    /// the server made by itself. Ours is closed so the offer gets a new
+    /// one, as after a restart. Taken up by ours, ICE would carry on with
+    /// the new end while the encryption was still agreed with the old one,
+    /// and the call would stay up, and silent, with nothing to restart it.
+    async fn replace_forward(&self, conn: &Arc<RTCPeerConnection>, tracks: &[VoiceTrack]) {
+        let (replaced, sink) = {
+            let mut inner = self.inner.lock().await;
+            (
+                inner
+                    .forward
+                    .take_if(|forward| Arc::ptr_eq(&forward.conn, conn)),
+                inner.devices.as_ref().map(|d| Arc::clone(&d.sink)),
+            )
+        };
+        if let Some(forward) = replaced {
+            let _ = forward.conn.close().await;
+        }
+        for track in tracks {
+            if let Some(sink) = &sink {
+                sink.forget(&track.session_id).await;
+            }
+            self.watcher.peer_state(&track.session_id, "connecting");
+        }
     }
 
     /// Build the connection to the forwarding server. The microphone's
@@ -478,33 +534,40 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
             })
         }));
 
-        // One connection carries everybody, so its state is everybody's. A
-        // failed one is started afresh after a moment, while we're still in
-        // voice, so a network blip doesn't leave the room silent.
+        // One connection carries everybody, so its state is everybody's. Its
+        // ups and downs go to the restart rules (#656), which start it afresh
+        // when it has gone quiet for good, so a network change doesn't leave
+        // the room silent. Only the current connection's: one already
+        // replaced is closing, and says so.
         let inner = Arc::clone(&self.inner);
         let watcher = Arc::clone(&self.watcher);
-        let signaller = Arc::clone(&self.signaller);
         let this = Arc::downgrade(&conn);
         conn.on_peer_connection_state_change(Box::new(move |state| {
             let inner = Arc::clone(&inner);
             let watcher = Arc::clone(&watcher);
-            let signaller = Arc::clone(&signaller);
             let this = this.clone();
             Box::pin(async move {
-                let sessions: Vec<String> = inner.lock().await.tracks.values().cloned().collect();
+                let (sessions, restarts) = {
+                    let held = inner.lock().await;
+                    let current = held.forward.as_ref().is_some_and(|forward| {
+                        std::ptr::eq(Arc::as_ptr(&forward.conn), this.as_ptr())
+                    });
+                    (
+                        held.tracks.values().cloned().collect::<Vec<String>>(),
+                        held.restarts.clone().filter(|_| current),
+                    )
+                };
                 for session in &sessions {
                     watcher.peer_state(session, &state.to_string());
                 }
-                if state == RTCPeerConnectionState::Failed {
-                    tokio::spawn(async move {
-                        tokio::time::sleep(RESTART_AFTER).await;
-                        let current = inner.lock().await.forward.as_ref().is_some_and(|forward| {
-                            std::ptr::eq(Arc::as_ptr(&forward.conn), this.as_ptr())
-                        });
-                        if current {
-                            restart_forward(&inner, &*signaller, &*watcher).await;
-                        }
-                    });
+                let event = match state {
+                    RTCPeerConnectionState::Connected => Some(restart::Event::Connected),
+                    RTCPeerConnectionState::Disconnected => Some(restart::Event::Disconnected),
+                    RTCPeerConnectionState::Failed => Some(restart::Event::Failed),
+                    _ => None,
+                };
+                if let (Some(event), Some(restarts)) = (event, restarts) {
+                    let _ = restarts.send(event);
                 }
             })
         }));
@@ -518,9 +581,26 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
 
     /// Start the connection to the forwarding server afresh, without leaving
     /// voice: the old one is closed and the server is asked for a new offer.
-    /// Called on its own when the connection fails; public for the tests.
+    /// The restart rules (`restart.rs`) do this on their own; public for the
+    /// tests, and outside those rules.
     pub async fn restart_forward(&self) {
         restart_forward(&self.inner, &*self.signaller, &*self.watcher).await;
+    }
+
+    /// The gateway's socket came back and resumed its session (#656). In
+    /// voice, that is the plainest sign the network under the call changed,
+    /// so the connection to the forwarding server is started afresh to find
+    /// the new way, rather than waiting until it notices by itself. Outside
+    /// voice, nothing.
+    pub async fn gateway_resumed(&self) {
+        self.steer(restart::Event::GatewayResumed).await;
+    }
+
+    /// Hand the restart rules something that happened, while we're in voice.
+    async fn steer(&self, event: restart::Event) {
+        if let Some(restarts) = &self.inner.lock().await.restarts {
+            let _ = restarts.send(event);
+        }
     }
 
     /// What the room's latest offer said to send at (#431); `None` when it
@@ -666,9 +746,43 @@ async fn pump<W: Watcher>(
     watcher.audio_state("stopped");
 }
 
-/// How long a failed connection to the forwarding server waits before it is
-/// started afresh: long enough not to hammer a server that's restarting.
-const RESTART_AFTER: Duration = Duration::from_secs(3);
+/// The loop that starts the connection to the forwarding server afresh when
+/// the restart rules say to (`restart.rs`, #656), for one call. It hears the
+/// connection's ups and downs, the server's answers and the gateway coming
+/// back, and wakes when the rules are waiting on the clock. It ends when the
+/// call does: leaving, or joining again, drops its sender.
+async fn steer_restarts<S: Signaller, W: Watcher>(
+    inner: Arc<Mutex<Inner>>,
+    signaller: Arc<S>,
+    watcher: Arc<W>,
+    mut events: mpsc::UnboundedReceiver<restart::Event>,
+) {
+    let mut rules = restart::Restarts::default();
+    let mut wake: Option<Instant> = None;
+    loop {
+        let event = match wake {
+            Some(at) => tokio::select! {
+                event = events.recv() => event,
+                () = tokio::time::sleep_until(tokio::time::Instant::from_std(at)) => {
+                    Some(restart::Event::Tick)
+                }
+            },
+            None => events.recv().await,
+        };
+        let Some(event) = event else {
+            return;
+        };
+        let plan = rules.on(event, Instant::now());
+        wake = plan.wake;
+        if plan.restart {
+            // Something to time a real network change by: nothing else says
+            // when a call started afresh, or what set it off (`Tick` is the
+            // rules' own wait running out).
+            eprintln!("voice: asking the server for a fresh connection (on {event:?})");
+            restart_forward(&inner, &*signaller, &*watcher).await;
+        }
+    }
+}
 
 /// Close the connection to the forwarding server, forget whose voice it
 /// carried, and ask the server for a new offer. Nothing happens unless we're
@@ -701,9 +815,31 @@ async fn restart_forward<S: Signaller, W: Watcher>(
     signaller.send(ClientFrame::VoiceRestart);
 }
 
+/// How long ICE hears nothing before it calls the connection disconnected
+/// (#656). Left to webrtc-ice's own timeouts, that was 5 s, failed came 25 s
+/// after it, and only failed started the connection afresh: half a minute of
+/// silence after a network change. Now the restart rules (`restart.rs`) start
+/// it afresh 2 s after this, 5 s in all.
+const ICE_DISCONNECTED_AFTER: Duration = Duration::from_secs(3);
+
+/// How much longer, after disconnected, before ICE calls it failed. The
+/// restart rules act sooner on a connection that was up, so this is the
+/// backstop there; it is also what a new connection gets to come up at all,
+/// since ICE gives its checks this and the disconnected time together: 9 s.
+const ICE_FAILED_AFTER: Duration = Duration::from_secs(6);
+
+/// How often ICE checks the line when nothing else crosses it. A room where
+/// nobody talks sends no voice (#197), so these checks and the server's own
+/// (every 3 s at most) are all the line carries, and only they keep it from
+/// looking disconnected after the 3 s above. Once a second, rather than
+/// webrtc-ice's own 2 s, so a check or two lost on a busy Wi-Fi doesn't do
+/// it.
+const ICE_KEEPALIVE: Duration = Duration::from_secs(1);
+
 /// A WebRTC API with the default codecs and interceptors (NACKs, reports),
 /// and the audio level each voice packet carries, which the forwarding server
-/// offers and ranks a room's voices by (#197).
+/// offers and ranks a room's voices by (#197). ICE's timeouts are Linger's
+/// own (#656), so a connection that went quiet is noticed in seconds.
 fn build_api() -> Result<webrtc::api::API, webrtc::Error> {
     let mut media = MediaEngine::default();
     media.register_default_codecs()?;
@@ -716,10 +852,34 @@ fn build_api() -> Result<webrtc::api::API, webrtc::Error> {
     )?;
     let mut registry = Registry::new();
     registry = register_default_interceptors(registry, &mut media)?;
+    let mut settings = SettingEngine::default();
+    settings.set_ice_timeouts(
+        Some(ICE_DISCONNECTED_AFTER),
+        Some(ICE_FAILED_AFTER),
+        Some(ICE_KEEPALIVE),
+    );
     Ok(APIBuilder::new()
         .with_media_engine(media)
         .with_interceptor_registry(registry)
+        .with_setting_engine(settings)
         .build())
+}
+
+/// Whether an offer comes from the same connection at the server's end as
+/// the one `conn` was last offered by (#656). Each connection the server
+/// starts has an ICE username fragment of its own, and keeps it through
+/// every offer after; one we can't read is taken as the same, as before.
+async fn same_far_end(conn: &RTCPeerConnection, offer: &str) -> bool {
+    let Some(current) = conn.remote_description().await else {
+        return true;
+    };
+    ice_ufrag(&current.sdp) == ice_ufrag(offer)
+}
+
+/// The ICE username fragment an SDP gives (RFC 8839 §5.4).
+fn ice_ufrag(sdp: &str) -> Option<&str> {
+    sdp.lines()
+        .find_map(|line| line.trim_end().strip_prefix("a=ice-ufrag:"))
 }
 
 /// Opus, as WebRTC audio is.
@@ -1016,6 +1176,17 @@ mod tests {
                 "a gap of {missing}: the last frame was guessed at"
             );
         }
+    }
+
+    /// Which connection at the server's end an offer is from (#656): its
+    /// ICE username fragment, wherever the offer puts it first.
+    #[test]
+    fn an_offer_names_its_far_end_by_its_ice_ufrag() {
+        let offer = "v=0\r\no=- 1 2 IN IP4 0.0.0.0\r\ns=-\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n\
+                     a=ice-ufrag:Abc1\r\na=ice-pwd:secret\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n\
+                     a=ice-ufrag:Abc1\r\n";
+        assert_eq!(ice_ufrag(offer), Some("Abc1"));
+        assert_eq!(ice_ufrag("v=0\r\ns=-\r\n"), None);
     }
 
     /// Timestamps wrap around after about a day at 48 kHz; a frame across
