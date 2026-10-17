@@ -47,4 +47,12 @@ reactions_off?: boolean,
  * Left out on every other room and DM, and by a server from before
  * leaving, which an app reads the same way.
  */
-someone_left?: boolean, };
+someone_left?: boolean, 
+/**
+ * The people in this DM whose accounts were deleted (#650, PROTOCOL §5).
+ * Only a one-to-one DM keeps one: a group's is left as it is deleted. Not
+ * in `member_ids`, which is who can read it; this is so the app can call
+ * the DM "Deleted account" rather than "just you". Left out when there are
+ * none, and by a server from before, which an app reads the same way.
+ */
+deleted_member_ids?: Array<UserId>, };

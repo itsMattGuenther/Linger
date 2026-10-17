@@ -112,6 +112,7 @@ mod tests {
             }),
             reactions_off: Some(true),
             someone_left: None,
+            deleted_member_ids: Some(vec![UserId::new()]),
         }
     }
 

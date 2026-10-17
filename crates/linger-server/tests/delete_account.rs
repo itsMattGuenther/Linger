@@ -888,6 +888,21 @@ async fn their_dms() {
     // The one-to-one is still Callie's, with what Sam said in it.
     let said = history(&server, &callie.access_token, &pair.id.to_string()).await;
     assert!(said.iter().any(|m| m.body == "just us"));
+    // And it says who it was with, so her app can call it "Deleted account".
+    let dms: Vec<Room> = client()
+        .get(server.url("/dms"))
+        .bearer_auth(&callie.access_token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let pair_now = dms.iter().find(|r| r.id == pair.id).expect("still hers");
+    assert_eq!(pair_now.deleted_member_ids, Some(vec![sam.user.id]));
+    assert_eq!(pair_now.member_ids, Some(vec![callie.user.id]));
+    let group_now = dms.iter().find(|r| r.id == group.id).expect("still hers");
+    assert_eq!(group_now.deleted_member_ids, None, "Sam left the group");
 
     // Sam and Dex's: deleted, the way a DM everybody left is.
     let kept: Vec<(Option<i64>,)> =

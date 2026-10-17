@@ -57,6 +57,8 @@ fn row_to_room(row: &SqliteRow) -> Result<Room, ApiError> {
         // Only ever `Some(true)`: "on" is the field left out (#485).
         reactions_off: (row.get::<i64, _>("reactions_off") != 0).then_some(true),
         someone_left,
+        // Filled in with `member_ids`, for a DM that has any.
+        deleted_member_ids: None,
     })
 }
 
@@ -100,6 +102,7 @@ pub async fn by_id(db: &SqlitePool, id: RoomId) -> Result<Option<Room>, ApiError
     let mut room = row_to_room(&row)?;
     if room.kind == RoomKind::Dm {
         room.member_ids = Some(members(db, id).await?);
+        room.deleted_member_ids = deleted_members(db, id).await?;
     }
     Ok(Some(room))
 }
@@ -169,9 +172,35 @@ pub async fn dms_for(db: &SqlitePool, user_id: UserId) -> Result<Vec<Room>, ApiE
     for row in &rows {
         let mut room = row_to_room(row)?;
         room.member_ids = Some(members(db, room.id).await?);
+        room.deleted_member_ids = deleted_members(db, room.id).await?;
         out.push(room);
     }
     Ok(out)
+}
+
+/// The people in a DM whose accounts were deleted (#650), or `None`. Only a
+/// one-to-one DM keeps a deleted account's row (`repo::dms::leave_all`), so
+/// this is at most one person; it lets the app call the DM "Deleted account".
+async fn deleted_members(
+    db: &SqlitePool,
+    room_id: RoomId,
+) -> Result<Option<Vec<UserId>>, ApiError> {
+    let rows: Vec<Vec<u8>> = sqlx::query_scalar(
+        "SELECT rm.user_id FROM room_members rm
+         JOIN users u ON u.id = rm.user_id AND u.deleted_at IS NOT NULL
+         WHERE rm.room_id = ?
+         ORDER BY rm.user_id",
+    )
+    .bind(room_id.to_vec())
+    .fetch_all(db)
+    .await?;
+    if rows.is_empty() {
+        return Ok(None);
+    }
+    rows.iter()
+        .map(|bytes| UserId::from_slice(bytes).map_err(|e| ApiError::from(anyhow::Error::from(e))))
+        .collect::<Result<Vec<_>, _>>()
+        .map(Some)
 }
 
 /// Who is in a DM. Empty for a public room, which has no rows here — its

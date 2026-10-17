@@ -602,6 +602,14 @@ pub struct Room {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub someone_left: Option<bool>,
+    /// The people in this DM whose accounts were deleted (#650, PROTOCOL §5).
+    /// Only a one-to-one DM keeps one: a group's is left as it is deleted. Not
+    /// in `member_ids`, which is who can read it; this is so the app can call
+    /// the DM "Deleted account" rather than "just you". Left out when there are
+    /// none, and by a server from before, which an app reads the same way.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub deleted_member_ids: Option<Vec<UserId>>,
 }
 
 /// A room's message of the day (SPEC §4.1, #464): what's happening now, set by

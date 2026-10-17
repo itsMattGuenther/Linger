@@ -327,6 +327,7 @@ type Room = {
   motd?: { text: string; set_by: string; set_at: number };   // left out when none
   reactions_off?: true;             // the host turned reactions off here (§4); left out when on
   someone_left?: true;              // a DM somebody has left (§3.1, #565); left out otherwise
+  deleted_member_ids?: UserId[];    // a DM whose other person deleted their account (§5, #650): not in member_ids, named so the app can say "Deleted account"; left out otherwise
 }
 ```
 
