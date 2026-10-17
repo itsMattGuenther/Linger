@@ -152,6 +152,7 @@ export const HEADINGS = {
   updates: "Updates",
   computer: "This Computer",
   phone: "This Phone",
+  deleteAccount: "Delete Your Account",
   newRoom: "New Room",
   rooms: "Your Rooms, in Order",
   newInvite: "New Invite",

@@ -2,6 +2,7 @@ import { memo, useCallback, useMemo } from "react";
 import type { CustomEmoji } from "../../../generated/CustomEmoji";
 import type { Motd } from "../../../generated/Motd";
 import type { User } from "../../../generated/User";
+import { nameless } from "../../../lib/gone";
 import { setWhen } from "../../../lib/time";
 import { Icon, IconButton, Name } from "../../kit";
 import { type CustomEmojiByName, type MentionLookup, MessageText } from "./MessageText";
@@ -22,6 +23,7 @@ const NO_EMOJI: readonly CustomEmoji[] = [];
 export const MotdStrip = memo(function MotdStrip({
   motd,
   people,
+  gone,
   me,
   customEmoji = NO_EMOJI,
   now,
@@ -32,6 +34,8 @@ export const MotdStrip = memo(function MotdStrip({
   motd: Motd;
   /** Everyone the room may name, by id: who set it, and anybody it mentions. */
   people: ReadonlyMap<string, User>;
+  /** Deleted accounts (#650): one that set it is named so. */
+  gone?: ReadonlySet<string>;
   me: User | null;
   customEmoji?: readonly CustomEmoji[];
   now: number;
@@ -59,7 +63,7 @@ export const MotdStrip = memo(function MotdStrip({
         <MessageText source={motd.text} mentions={mentions} emoji={emoji} onOpenLink={onOpenLink} writtenAt={motd.set_at} />
         {folded ? null : (
           <p className="nx-motd-by">
-            Message of the day, set by {by ? <Name person={by} size="inline" /> : "someone"}
+            Message of the day, set by {by ? <Name person={by} size="inline" /> : nameless(motd.set_by, gone)}
             {when === "" ? null : ` ${when}`}
           </p>
         )}

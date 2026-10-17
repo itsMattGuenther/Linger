@@ -529,6 +529,32 @@ describe("the gateway store, with two servers", () => {
     expect(serverState(HOME).users.map((person) => person.id)).toEqual([matt.id, callie.id]);
   });
 
+  it("remembers who deleted their account, from ready and as it happens (#650)", async () => {
+    await connect(fakeApi(HOME));
+    const matt = person("u-matt", "Matt");
+    const callie = person("u-callie", "Callie");
+
+    // A server from before deletion says nothing, and can't delete.
+    arrive(HOME, ready({ user: matt, users: [matt, callie] }));
+    expect(serverState(HOME).deletedUsers).toEqual([]);
+    expect(serverState(HOME).accountDeletion).toBe(false);
+
+    arrive(HOME, ready({ user: matt, users: [matt, callie], deleted_users: ["u-gone"] }));
+    expect(serverState(HOME).deletedUsers).toEqual(["u-gone"]);
+    expect(serverState(HOME).accountDeletion).toBe(true);
+
+    // A removal isn't a deletion: off the roster, and nothing else.
+    arrive(HOME, { s: 2, op: "user.remove", d: { user_id: callie.id } });
+    expect(serverState(HOME).deletedUsers).toEqual(["u-gone"]);
+
+    // The host deletes somebody they'd removed: not on the roster, so only
+    // the label changes. Twice is once.
+    arrive(HOME, { s: 3, op: "user.remove", d: { user_id: callie.id, deleted: true } });
+    arrive(HOME, { s: 4, op: "user.remove", d: { user_id: callie.id, deleted: true } });
+    expect(serverState(HOME).deletedUsers).toEqual(["u-gone", callie.id]);
+    expect(serverState(HOME).users.map((one) => one.id)).toEqual([matt.id]);
+  });
+
   it("drops frames for a server nobody is following", async () => {
     await connect(fakeApi(HOME));
     const matt = person("u-matt", "Matt");

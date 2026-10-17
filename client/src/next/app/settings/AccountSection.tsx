@@ -6,7 +6,7 @@ import { ignoredLine, type StartAtSignIn } from "../../core/autostart";
 import { thisDevice } from "../../core/phone";
 import { HEADINGS } from "../../core/settings";
 import type { User } from "../../../generated/User";
-import { Button, Name, SettingRow, Switch, TextField } from "../../kit";
+import { Button, Checkbox, Name, SettingRow, Switch, TextField } from "../../kit";
 import { Actions, Block, Fields, Note, SaveLine, useSave } from "./parts";
 
 export interface AccountProps {
@@ -62,6 +62,14 @@ export interface AccountProps {
    * somebody on it.
    */
   blocked?: { people: readonly User[]; unblock: (id: User["id"]) => Promise<string | null> };
+  /**
+   * Delete your account on this server (#650, SPEC §4.19), after your
+   * password, with what you wrote if `everything`. Resolves to the problem in
+   * words, or null, after which the wiring signs this server out. `host` is
+   * true for the host, who can't, and is told why instead; `outdated` for a
+   * server from before it, which needs an update first.
+   */
+  deleteAccount?: { host: boolean; outdated: boolean; run: (password: string, everything: boolean) => Promise<string | null> };
   /** Sign out on this computer (SIGN-13). With several servers this is all of them. */
   signOut: () => void;
   severalServers: boolean;
@@ -79,6 +87,7 @@ export function AccountSection({
   updates,
   startAtSignIn,
   blocked,
+  deleteAccount,
   signOut,
   severalServers,
   addServer,
@@ -179,7 +188,116 @@ export function AccountSection({
           </Button>
         </Actions>
       </Block>
+      {deleteAccount ? <DeleteAccount serverName={serverName} device={device} archive={archive} {...deleteAccount} /> : null}
     </>
+  );
+}
+
+/**
+ * Deleting your account on this server (#650, SPEC §4.19). One button until
+ * it's asked for; then what goes, the one box, a way to take a copy first,
+ * and the password, so a borrowed, unlocked phone can't do it. The host
+ * can't, and is told why instead.
+ */
+function DeleteAccount({
+  serverName,
+  device,
+  archive,
+  host,
+  outdated,
+  run,
+}: { serverName: string; device: string; archive: AccountProps["archive"] } & NonNullable<AccountProps["deleteAccount"]>) {
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [everything, setEverything] = useState(false);
+  const save = useSave();
+  const working = save.phase.kind === "saving";
+  const ready = password !== "" && !working;
+  const submit = async () => {
+    if (!ready) return;
+    await save.run(run(password, everything));
+  };
+
+  if (host) {
+    return (
+      <Block heading={HEADINGS.deleteAccount}>
+        <Note>
+          {`You're the host, so your account on ${serverName} can't be deleted: the server would have nobody in charge. To close the server, shut it down and delete its data. The host guide says how.`}
+        </Note>
+      </Block>
+    );
+  }
+  if (outdated) {
+    return (
+      <Block heading={HEADINGS.deleteAccount}>
+        <Note>{`${serverName} needs an update before an account can be deleted from the app. Ask its host to update it.`}</Note>
+      </Block>
+    );
+  }
+  const copy = archive.phase;
+  return (
+    <Block heading={HEADINGS.deleteAccount} lead={`Deletes your account on ${serverName} for good, and signs ${device} out of it. Your accounts on other servers stay.`}>
+      {open ? (
+        <>
+          <Note>Your name, status, style, sign-ins and settings here go at once, and can't be brought back. Your username stays taken, so nobody new can pass as you.</Note>
+          <Checkbox checked={everything} disabled={working} onChange={setEverything}>
+            Also delete everything I wrote
+          </Checkbox>
+          <Note>
+            {everything
+              ? "Your messages and the files on them go, and so do your reactions and your votes in polls still open."
+              : "Left unticked, what you wrote stays where it is, and shows as “Deleted account”."}
+          </Note>
+          <Actions start>
+            {copy.kind === "ready" ? (
+              <Button icon="go" onClick={() => archive.download(copy.url)}>
+                Download your copy
+              </Button>
+            ) : (
+              <Button variant="quiet" busy={copy.kind === "working"} disabled={working} onClick={archive.start}>
+                Download your copy first
+              </Button>
+            )}
+          </Actions>
+          {copy.kind === "idle" ? null : <Note tone={copy.kind === "failed" ? "problem" : "status"}>{exportLine(copy)}</Note>}
+          <Fields>
+            <TextField
+              label="Your password"
+              type="password"
+              value={password}
+              onChange={(value) => {
+                setPassword(value);
+                save.reset();
+              }}
+              onEnter={() => void submit()}
+            />
+          </Fields>
+          <Actions phase={save.phase} saved="Deleted">
+            <Button
+              variant="quiet"
+              disabled={working}
+              onClick={() => {
+                setOpen(false);
+                setPassword("");
+                setEverything(false);
+                save.reset();
+              }}
+            >
+              Keep my account
+            </Button>
+            <Button variant="danger" disabled={!ready} busy={working} onClick={() => void submit()}>
+              Delete my account
+            </Button>
+          </Actions>
+        </>
+      ) : (
+        <Actions start>
+          <Button variant="danger" onClick={() => setOpen(true)}>
+            {`Delete my account on ${serverName}…`}
+          </Button>
+        </Actions>
+      )}
+    </Block>
   );
 }
 

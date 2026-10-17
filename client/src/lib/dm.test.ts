@@ -108,6 +108,19 @@ describe("dmLabel", () => {
   it("says something rather than nothing when everybody else is gone", () => {
     expect(dmLabel(dm("d1", ["u-matt", "u-ghost"]), everyone, "u-matt")).toBe("just you");
   });
+
+  // #650: a friend who deleted their account. The DM stays yours, and says
+  // who it was with rather than "just you".
+  it("calls a DM with somebody who deleted their account Deleted account", () => {
+    // As the server says it from the next `ready`: they're not a member any
+    // more, and it names them as deleted.
+    const after = { ...dm("d1", ["u-matt"]), deleted_member_ids: ["u-ghost"] };
+    expect(dmLabel(after, everyone, "u-matt")).toBe("Deleted account");
+    // As the app has it before then: still a member, and in the deleted set.
+    expect(dmLabel(dm("d1", ["u-matt", "u-ghost"]), everyone, "u-matt", new Set(["u-ghost"]))).toBe("Deleted account");
+    // A group where somebody else is still known is named by them.
+    expect(dmLabel(dm("d1", ["u-matt", "u-callie", "u-ghost"]), everyone, "u-matt", new Set(["u-ghost"]))).toBe("Callie");
+  });
 });
 
 describe("peopleIn", () => {

@@ -14,6 +14,7 @@ import { uploadFile } from "../../../lib/upload";
 import { useNow } from "../../../lib/clock";
 import { type ExportPhase, runExport } from "../../../lib/export";
 import { openExternal } from "../../../lib/external";
+import { nameless } from "../../../lib/gone";
 import { closeReport, type GatewayState, saveDisplayName, saveStatus, saveStyle, saveTimeZone, setBlocked, useServers } from "../../../lib/gateway";
 import { hostsHere, inviteUrl, moveRoom, signInLinkProblem, signInLinkWords, signInUrl } from "../../../lib/host";
 import { type TalkKeyReach, talkKeyReach, type VoiceDeviceList, voiceDevices } from "../../../lib/ipc";
@@ -645,6 +646,20 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
               openNotes: (wanted) => openExternal(releaseNotesUrl(wanted)),
             },
         startAtSignIn: startup && !phone ? { ...startup, onChange: changeStartup, openGuide: () => openExternal(START_GUIDE_URL) } : undefined,
+        // Deleting your account here (#650). The server ends every sign-in it
+        // had, so the app lets go of the server straight after; Settings
+        // then shows what's left, or closes.
+        deleteAccount: state?.me
+          ? {
+              host: state.me.is_host,
+              outdated: !state.accountDeletion,
+              run: async (password, everything) => {
+                const problem = await said(api.deleteAccount({ password, everything }), "Couldn't delete your account.");
+                if (problem === null) void intend({ kind: "signout", server }).catch(() => undefined);
+                return problem;
+              },
+            }
+          : undefined,
         signOut: () => {
           for (const one of apis.keys()) void intend({ kind: "signout", server: one }).catch(() => undefined);
           closeWindow();
@@ -706,7 +721,7 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
               invites: {
                 invites,
                 linkOf: (code) => inviteUrl(server, code),
-                nameOf: (userId) => state.users.find((user) => user.id === userId)?.display_name ?? "someone",
+                nameOf: (userId) => state.users.find((user) => user.id === userId)?.display_name ?? nameless(userId, new Set(state.deletedUsers)),
                 now,
                 create: async (choice) => {
                   try {
@@ -728,7 +743,7 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
               emoji: {
                 emoji: state.emoji,
                 serverName,
-                nameOf: (userId) => state.users.find((user) => user.id === userId)?.display_name ?? "someone",
+                nameOf: (userId) => state.users.find((user) => user.id === userId)?.display_name ?? nameless(userId, new Set(state.deletedUsers)),
                 add: async (file, name) => {
                   const ready = await emojiPicture(file);
                   if (typeof ready === "string") return ready;
@@ -760,6 +775,15 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
                   if (problem === null) readHostLists();
                   return problem;
                 },
+                // For somebody removed who asks (#650): they can't sign in to
+                // delete their own. The host's alone, as sign-in links are.
+                deleteRemoved: host
+                  ? async (userId, everything) => {
+                      const problem = await said(api.deleteRemovedUser(userId, { everything }), "Couldn't delete their account.");
+                      if (problem === null) readHostLists();
+                      return problem;
+                    }
+                  : undefined,
                 // A way back in for somebody who forgot their password
                 // (#581). The host's alone: whoever holds a link can sign in
                 // as that person, so a co-host isn't offered it, and the
@@ -783,6 +807,7 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
                   ? {
                       open: state.reports,
                       personOf: (userId) => state.users.find((user) => user.id === userId) ?? removed?.find((user) => user.id === userId),
+                      nameless: (userId) => nameless(userId, new Set(state.deletedUsers), "somebody"),
                       placeOf: (roomId) => {
                         const room = state.rooms.find((one) => one.id === roomId);
                         return room ? `#${room.name}` : "a DM";

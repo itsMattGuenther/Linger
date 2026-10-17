@@ -104,6 +104,19 @@ async function firstInView(page: Page): Promise<string> {
 }
 
 test.describe("what it shows", () => {
+  test("what a deleted account wrote says so, and a removed member's says someone (#650)", async ({ page }) => {
+    await open(page, "?gone");
+    // By its own words, not a reply's quote of them.
+    const row = (words: string) => log(page).locator(".nx-msg").filter({ has: page.locator(".nx-msg-body", { hasText: words }) });
+    await expect(row("taking a break from everything")).toContainText("Deleted account");
+    await expect(row("see you around")).toContainText("someone");
+    await expect(row("see you around")).not.toContainText("Deleted account");
+    // No card to open: nothing to click on the name.
+    await expect(row("taking a break from everything").locator(".nx-msg-person")).toHaveCount(0);
+    // A reply to it names it too.
+    await expect(row("take care").locator(".nx-quote")).toContainText("Deleted account");
+  });
+
   test.beforeEach(async ({ page }) => open(page));
 
   test("the tabs, with the showing conversation's header, voice and box", async ({ page }) => {

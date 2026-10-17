@@ -404,7 +404,7 @@ Settings opens in its own window:
   quiet hours; microphone, speakers, push to talk
 - **Notifications**: desktop banners, and whose messages you want them for
 - **Account & App**: password, export, updates, starting Linger when you sign
-  in to the computer, adding a server, and signing out
+  in to the computer, adding a server, signing out, and deleting your account
 - **Servers** (with more than one): their order, Quiet, and signing out of one
 
 Everything this guide calls *Settings → something* is one of those.
@@ -1248,6 +1248,36 @@ link**. Only the host can make one, not a co-host. Paste it into **Server or lin
 choose a new password, and you're in. It works once, within a day, and signs you out
 everywhere else. **Settings → Account & App** says who made you one and whether it was
 used; if you didn't ask for one, tell the host.
+
+## Deleting your account
+
+**Settings → Account & App → Delete Your Account.** Your account lives on one
+server, so this deletes it there and nowhere else; if you're on several servers,
+pick the one first. It happens at once and can't be undone, so it asks for your
+password.
+
+- **What goes:** your name, status, name style, sound, local time, sign-ins, read
+  positions, notification rules, the people you blocked, and your export. The app
+  signs out of that server.
+- **What you wrote is up to you.** Leave **Also delete everything I wrote**
+  unticked and your messages, files, reactions and poll votes stay where they are,
+  and show as **Deleted account**, with no name or color. Tick it and they go, the
+  way a deleted message does. Votes in a poll that already closed stay either way,
+  nameless, because it keeps how it came out.
+- **Want a copy first?** **Download your copy first** builds the same archive as
+  [Taking everything with you](#taking-everything-with-you).
+- **What stays:** your username, so nobody new can take it and pass as you. Reports
+  you made, or that were made about you, stay with the host. Group DMs say you left.
+  A one-to-one DM stays your friend's, as "Deleted account".
+
+**The host can't delete their own account.** The server would have nobody in charge;
+whoever runs the server can shut it down and delete its data instead.
+
+**The host removed you?** Then you can't sign in to do it. Ask the host: they can
+delete a removed account for you, with the same choice about what you wrote.
+
+**Don't have the app any more?** Ask your server's host to delete it. Linger the
+project holds nobody's data; every account lives on its own server.
 
 ---
 

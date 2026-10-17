@@ -5,6 +5,7 @@ import type { LinkPreview } from "../../../generated/LinkPreview";
 import type { Message } from "../../../generated/Message";
 import type { MessageId } from "../../../generated/MessageId";
 import type { User } from "../../../generated/User";
+import { nameless } from "../../../lib/gone";
 import { mayActOn } from "../../../lib/host";
 import { useResizeAnchor } from "../../../lib/resize";
 import { sessionLabel } from "../../../lib/time";
@@ -62,6 +63,8 @@ export interface ConversationProps {
    */
   land: { ready: boolean; at: "left-off" | "end" };
   people: ReadonlyMap<string, User>;
+  /** Deleted accounts (#650): what they left says "Deleted account". */
+  gone?: ReadonlySet<string>;
   me: User | null;
   /**
    * Who you've blocked (PROTOCOL §5): each of their messages is drawn as one
@@ -434,6 +437,7 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
                   <RowView
                     row={row}
                     people={people}
+                    gone={props.gone}
                     quoted={row.kind === "message" && row.message.reply_to !== null ? byId.get(row.message.reply_to) : undefined}
                     me={me}
                     blocked={props.blocked}
@@ -468,6 +472,7 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
 interface RowViewProps {
   row: ChatRow;
   people: ReadonlyMap<string, User>;
+  gone: ReadonlySet<string> | undefined;
   /** The message a reply quotes, when it's held. */
   quoted: Message | undefined;
   me: User | null;
@@ -497,6 +502,7 @@ function sameRowView(a: RowViewProps, b: RowViewProps): boolean {
 const RowView = memo(function RowView({
   row,
   people,
+  gone,
   quoted,
   me,
   blocked,
@@ -526,7 +532,7 @@ const RowView = memo(function RowView({
       // Somebody joining voice (#473). Nobody you blocked is in it: their
       // arriving isn't news you asked for (PROTOCOL §5).
       const joined = blocked === undefined ? row.messages : row.messages.filter((message) => !blocked.has(message.author_id));
-      return joined.length > 0 ? <JoinLine messages={joined} people={people} /> : null;
+      return joined.length > 0 ? <JoinLine messages={joined} people={people} gone={gone} /> : null;
     }
     case "left-off":
       // The whole of what replaces an unread badge (SPEC §4.2).
@@ -544,9 +550,9 @@ const RowView = memo(function RowView({
       }
       // Somebody leaving a group DM (#565): a quiet line saying who. Shown
       // even for somebody you blocked: it's who can still read what you say.
-      if (message.left === true) return <LeftLine message={message} person={people.get(message.author_id)} />;
+      if (message.left === true) return <LeftLine message={message} person={people.get(message.author_id)} gone={gone} />;
       if (blocked?.has(message.author_id) && message.deleted_at === null && !shown) {
-        return <BlockedLine who={people.get(message.author_id)?.display_name ?? "someone"} onShow={() => onShow(message.id)} />;
+        return <BlockedLine who={people.get(message.author_id)?.display_name ?? nameless(message.author_id, gone)} onShow={() => onShow(message.id)} />;
       }
       return (
         <MessageRow
@@ -567,6 +573,7 @@ const RowView = memo(function RowView({
           mediaUrl={mediaUrl}
           actions={actions}
           people={people}
+          gone={gone}
         />
       );
     }

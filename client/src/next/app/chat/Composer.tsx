@@ -58,7 +58,8 @@ export interface ComposerProps {
   /** "#general", or the people in a DM. */
   title: string;
   isDm: boolean;
-  replyTo: { message: Message; author: User | undefined } | null;
+  /** What a reply answers. `nameless` is what to call its author when there's no card: "someone", or "Deleted account" (#650). */
+  replyTo: { message: Message; author: User | undefined; nameless?: string } | null;
   onClearReply: () => void;
   /** A failed send went back in the box: reply to this again. */
   onRestoreReply: (id: MessageId) => void;
@@ -571,7 +572,7 @@ export const Composer = memo(function Composer({
         <div className="nx-composer-reply">
           <span className="nx-composer-reply-text">
             <span aria-hidden="true">↩ </span>
-            Replying to {replyTo.author ? <Name person={replyTo.author} size="inline" /> : "someone"}:{" "}
+            Replying to {replyTo.author ? <Name person={replyTo.author} size="inline" /> : (replyTo.nameless ?? "someone")}:{" "}
             <span className="nx-composer-reply-words">{excerpt(replyTo.message.body, 90)}</span>
           </span>
           <IconButton icon="close" label="Don't reply" size="sm" onClick={onClearReply} />

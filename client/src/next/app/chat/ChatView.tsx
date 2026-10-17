@@ -5,6 +5,7 @@ import type { Message } from "../../../generated/Message";
 import type { MessageId } from "../../../generated/MessageId";
 import type { Motd } from "../../../generated/Motd";
 import type { User } from "../../../generated/User";
+import { nameless } from "../../../lib/gone";
 import type { MentionPerson } from "../../core/chat/mentions";
 import { lastEditable } from "../../core/chat/rows";
 import type { VoiceStrip as VoiceStripModel } from "../../core/chat/voice";
@@ -76,6 +77,8 @@ export interface ChatPane {
   } | null;
   /** Everyone the pane may name, by id: authors, voice, typing. */
   people: ReadonlyMap<string, User>;
+  /** Deleted accounts on the pane's server (#650): what they left says "Deleted account". */
+  gone?: ReadonlySet<string>;
   /** The conversation's server's own emoji (#359): drawn in messages, offered in the box. */
   customEmoji?: readonly CustomEmoji[];
   /** The conversation's server's name, which the picker calls its own emoji by. */
@@ -199,8 +202,11 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
   const held = paneId === null ? undefined : replies.get(paneId);
   const target = held === undefined ? undefined : (messages?.find((one) => one.id === held.id) ?? held);
   const replyTo = useMemo(
-    () => (target === undefined ? null : { message: target, author: pane?.people.get(target.author_id) }),
-    [target, pane?.people],
+    () =>
+      target === undefined
+        ? null
+        : { message: target, author: pane?.people.get(target.author_id), nameless: nameless(target.author_id, pane?.gone) },
+    [target, pane?.people, pane?.gone],
   );
 
   const onClearReply = useCallback(() => {
@@ -256,6 +262,7 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
               <MotdStrip
                 motd={pane.motd.motd}
                 people={pane.people}
+                gone={pane.gone}
                 me={pane.me}
                 customEmoji={pane.customEmoji}
                 now={pane.stream.now}
@@ -271,6 +278,7 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
               label={pane.header.kind === "room" ? `Messages in ${titleOf(pane.header)}` : `Messages with ${pane.header.label}`}
               {...pane.stream}
               people={pane.people}
+              gone={pane.gone}
               me={pane.me}
               blocked={pane.blocked}
               customEmoji={pane.customEmoji}

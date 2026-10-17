@@ -19,6 +19,7 @@ import { onPhone } from "../../core/phone";
 import { FloatingForm, ReportForm } from "./ReportBlock";
 import { type CustomEmojiByName, type MentionLookup, MessageText } from "./MessageText";
 import { QuickReactions, quickKeys, type ReactionKit, ReactionPicker, ReactionPills } from "./Reactions";
+import { nameless } from "../../../lib/gone";
 import "./MessageRow.css";
 
 /** What a message row can ask for. Stable, so a scroll doesn't redraw rows (L-14). */
@@ -93,6 +94,7 @@ export const MessageRow = memo(function MessageRow({
   mediaUrl,
   actions,
   people,
+  gone,
 }: {
   message: Message;
   head: boolean;
@@ -115,6 +117,8 @@ export const MessageRow = memo(function MessageRow({
   actions: MessageActions;
   /** Everybody the server knows, for the voters on a poll (#474). */
   people?: ReadonlyMap<string, User>;
+  /** Deleted accounts (#650): what they left says "Deleted account". */
+  gone?: ReadonlySet<string>;
 }) {
   const [menu, setMenu] = useState<{ anchor: MenuAnchor; confirming: boolean } | null>(null);
   // Reporting it to the host (T-1605): the form floats where the menu was.
@@ -169,7 +173,7 @@ export const MessageRow = memo(function MessageRow({
   useEffect(() => {
     if (linkKey !== "") wantCards?.(linkKey.split(" "));
   }, [linkKey, wantCards]);
-  const who = author?.display_name ?? "someone";
+  const who = author?.display_name ?? nameless(message.author_id, gone);
 
   const run = (work: Promise<void>): void => {
     setProblem(null);
@@ -308,7 +312,7 @@ export const MessageRow = memo(function MessageRow({
       data-menu={menu || picking ? "yes" : undefined}
       data-message={message.id}
     >
-      {reply ? <Quote target={quoted} author={quotedAuthor} onJump={actions.jumpTo} /> : null}
+      {reply ? <Quote target={quoted} author={quotedAuthor} gone={gone} onJump={actions.jumpTo} /> : null}
 
       {head ? (
         // The name on a line of its own at the start of a run, with no colon
@@ -329,7 +333,7 @@ export const MessageRow = memo(function MessageRow({
           ) : author ? (
             <Name person={author} size="body" />
           ) : (
-            <span className="nx-msg-someone">someone</span>
+            <span className="nx-msg-someone">{who}</span>
           )}
           {motd ? <span className="nx-msg-did">set the message of the day</span> : null}
         </span>
@@ -370,6 +374,7 @@ export const MessageRow = memo(function MessageRow({
             groups={groups}
             meId={meId}
             people={people ?? NO_PEOPLE}
+            gone={gone}
             kit={kit}
             onToggle={toggle}
             onAdd={roomForMore ? setPicking : undefined}
@@ -502,7 +507,17 @@ export const MessageRow = memo(function MessageRow({
 });
 
 /** The line above a reply saying what it answers. It jumps there when loaded. */
-function Quote({ target, author, onJump }: { target: Message | undefined; author: User | undefined; onJump: (id: MessageId) => void }) {
+function Quote({
+  target,
+  author,
+  gone,
+  onJump,
+}: {
+  target: Message | undefined;
+  author: User | undefined;
+  gone: ReadonlySet<string> | undefined;
+  onJump: (id: MessageId) => void;
+}) {
   if (target === undefined) {
     return (
       <p className="nx-quote" data-missing="yes">
@@ -513,7 +528,7 @@ function Quote({ target, author, onJump }: { target: Message | undefined; author
       </p>
     );
   }
-  const who = author?.display_name ?? "someone";
+  const who = author?.display_name ?? nameless(target.author_id, gone);
   const words = target.deleted_at !== null ? "deleted" : excerpt(target.body) || "a file";
   return (
     <button type="button" className="nx-quote" aria-label={`Replying to ${who}: ${words}. Go to it.`} onClick={() => onJump(target.id)}>

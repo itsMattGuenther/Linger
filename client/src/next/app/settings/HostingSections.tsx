@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import type { CustomEmoji } from "../../../generated/CustomEmoji";
 import type { EmojiId } from "../../../generated/EmojiId";
 import type { Invite } from "../../../generated/Invite";
@@ -28,7 +28,7 @@ import {
   slugNeeded,
   slugTyped,
 } from "../../core/settings";
-import { Button, HashMark, Icon, IconButton, Marker, markerOf, Name, Select, SettingRow, Swatch, Switch, TextField } from "../../kit";
+import { Button, Checkbox, HashMark, Icon, IconButton, Marker, markerOf, Name, Select, SettingRow, Swatch, Switch, TextField } from "../../kit";
 import { Actions, Block, ChoiceRow, Fields, Note, type SavePhase, SaveLine, useFollowSaved, useSave } from "./parts";
 import "../chat/ReportBlock.css";
 
@@ -259,8 +259,28 @@ function EditRoom({ room, update, onDone }: { room: Room; update: HostRoomsProps
   );
 }
 
-/** A yes-or-no asked in place: the question, then the two answers. Escape is "no". */
-function Question({ words, yes, no, busy, onYes, onNo }: { words: string; yes: string; no: string; busy: boolean; onYes: () => void; onNo: () => void }) {
+/**
+ * A yes-or-no asked in place: the question, then the two answers. Escape is
+ * "no". `children` go above the words, inside it, so Escape works from them
+ * too: a box that changes what "yes" does (#650).
+ */
+function Question({
+  words,
+  yes,
+  no,
+  busy,
+  onYes,
+  onNo,
+  children,
+}: {
+  words: string;
+  yes: string;
+  no: string;
+  busy: boolean;
+  onYes: () => void;
+  onNo: () => void;
+  children?: ReactNode;
+}) {
   const first = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     first.current?.querySelector<HTMLButtonElement>("button")?.focus();
@@ -268,6 +288,7 @@ function Question({ words, yes, no, busy, onYes, onNo }: { words: string; yes: s
   const onKeyDown = useBackOut(onNo, () => null);
   return (
     <div className="nx-set-question" role="group" aria-label={words} onKeyDown={onKeyDown}>
+      {children}
       <p className="nx-set-question-words">{words}</p>
       <div className="nx-set-buttons" ref={first}>
         <Button size="sm" disabled={busy} onClick={onNo}>
@@ -665,6 +686,12 @@ export interface HostPeopleProps {
   remove: (userId: string) => Promise<string | null>;
   restore: (userId: string) => Promise<string | null>;
   /**
+   * Delete a removed person's account (#650, SPEC §4.19), for somebody who
+   * can't sign in to do it; with what they wrote if `everything`. The host's
+   * alone: it can't be undone, and is left out for a co-host.
+   */
+  deleteRemoved?: (userId: string, everything: boolean) => Promise<string | null>;
+  /**
    * Make a one-time sign-in link for somebody who forgot their password
    * (#581). The wiring puts it on the clipboard and says whether that worked.
    * The host's alone: left out, as it is for a co-host, the Sign-in Links
@@ -686,6 +713,8 @@ export interface HostReports {
   open: readonly Report[];
   /** Somebody a report names, if the server still knows them. */
   personOf: (userId: string) => User | undefined;
+  /** What to call somebody it doesn't: "somebody", or "Deleted account" (#650). */
+  nameless?: (userId: string) => string;
   /** Where a reported message was said: "#general", or "a DM". */
   placeOf: (roomId: RoomId) => string;
   /** Delete the reported message, then close the report. */
@@ -694,10 +723,28 @@ export interface HostReports {
   close: (reportId: string) => Promise<string | null>;
 }
 
-export function PeopleSection({ members, meId, presenceOf, removed, remove, restore, reports, makeSignInLink, copyLink, now = Date.now() }: HostPeopleProps) {
+export function PeopleSection({
+  members,
+  meId,
+  presenceOf,
+  removed,
+  remove,
+  restore,
+  deleteRemoved,
+  reports,
+  makeSignInLink,
+  copyLink,
+  now = Date.now(),
+}: HostPeopleProps) {
   const [asking, setAsking] = useState<string | null>(null);
   const save = useSave();
   const busy = save.phase.kind === "saving";
+  // The Removed list's own: letting somebody back in, or deleting their account.
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [everything, setEverything] = useState(false);
+  const back = useSave();
+  const backBusy = back.phase.kind === "saving";
+  const removedList = useRef<HTMLUListElement | null>(null);
   const list = useRef<HTMLUListElement | null>(null);
   const ordered = [...members].sort((a, b) => Number(b.id === meId) - Number(a.id === meId) || a.display_name.localeCompare(b.display_name));
 
@@ -756,24 +803,67 @@ export function PeopleSection({ members, meId, presenceOf, removed, remove, rest
         ) : removed.length === 0 ? (
           <Note>Nobody has been removed.</Note>
         ) : (
-          <ul className="nx-set-list" aria-label="Removed">
+          <ul className="nx-set-list" ref={removedList} aria-label="Removed">
             {removed.map((person) => (
-              <li key={person.id} className="nx-set-item">
+              <li key={person.id} className="nx-set-item" data-person={person.id}>
                 <div className="nx-set-item-line">
                   {/* An empty lead, so these names start where the members' names do. */}
                   <span className="nx-set-item-mark" />
                   <Name person={person} />
                   <span className="nx-set-item-sub nx-set-mono">@{person.username}</span>
-                  <span className="nx-set-item-buttons">
-                    <Button size="sm" disabled={busy} onClick={() => void save.run(restore(person.id))}>
-                      Let them back in
-                    </Button>
-                  </span>
+                  {deleting === person.id ? null : (
+                    <span className="nx-set-item-buttons">
+                      <Button size="sm" disabled={backBusy} onClick={() => void back.run(restore(person.id))}>
+                        Let them back in
+                      </Button>
+                      {deleteRemoved ? (
+                        <span data-do="delete">
+                          <Button
+                            size="sm"
+                            variant="quiet"
+                            disabled={backBusy}
+                            onClick={() => {
+                              setEverything(false);
+                              back.reset();
+                              setDeleting(person.id);
+                            }}
+                          >
+                            Delete account
+                          </Button>
+                        </span>
+                      ) : null}
+                    </span>
+                  )}
                 </div>
+                {deleting === person.id && deleteRemoved ? (
+                  <Question
+                      words={`Delete ${person.display_name}'s account for good? Their name, status and settings go, and it can't be undone. ${
+                        everything ? "Their messages, files, reactions and votes in open polls go too." : "What they wrote stays, as “Deleted account”."
+                      } Their username stays taken.`}
+                      yes="Yes, delete it"
+                      no="Keep it"
+                      busy={backBusy}
+                      onYes={() => void back.run(deleteRemoved(person.id, everything)).then((ok) => ok && setDeleting(null))}
+                      onNo={() => {
+                        setDeleting(null);
+                        requestAnimationFrame(() =>
+                          removedList.current?.querySelector<HTMLElement>(`[data-person="${CSS.escape(person.id)}"] [data-do="delete"] button`)?.focus(),
+                        );
+                      }}
+                    >
+                      <Checkbox checked={everything} disabled={backBusy} onChange={setEverything}>
+                        Also delete everything they wrote
+                      </Checkbox>
+                    </Question>
+                ) : null}
               </li>
             ))}
           </ul>
         )}
+        <SaveLine phase={back.phase.kind === "problem" ? back.phase : { kind: "idle" }} />
+        {deleteRemoved && removed !== null && removed.length > 0 ? (
+          <Note>Somebody removed can't sign in to delete their own account. If they ask you to, Delete account does it for them. It can't be undone.</Note>
+        ) : null}
         <Note>
           Letting somebody back in isn't an undo. Their old sign-ins stay ended and the invite links they made stay revoked, so they sign in again with their
           password. Their username is the one they always had, and everything they wrote is where they left it.
@@ -884,7 +974,7 @@ function ReportsBlock({ reports, remove, meId, members }: { reports: HostReports
   const [asking, setAsking] = useState<string | null>(null);
   const save = useSave();
   const busy = save.phase.kind === "saving";
-  const nameOf = (userId: string) => reports.personOf(userId)?.display_name ?? "somebody";
+  const nameOf = (userId: string) => reports.personOf(userId)?.display_name ?? reports.nameless?.(userId) ?? "somebody";
   // Reports reach the host and every co-host (#424): said as it is.
   const shared = members.some((person) => person.id !== meId && (person.is_host || person.is_cohost === true));
   return (

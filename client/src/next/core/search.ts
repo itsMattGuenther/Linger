@@ -16,6 +16,7 @@ import type { SearchSnippetPart } from "../../generated/SearchSnippetPart";
 import type { User } from "../../generated/User";
 import type { UserId } from "../../generated/UserId";
 import { conversationLabel } from "../../lib/dm";
+import { nameless } from "../../lib/gone";
 import { fileNameToShow } from "../../lib/media";
 import { snippetText } from "../../lib/search";
 import { dateFormat, hitTime, validTime } from "../../lib/time";
@@ -24,21 +25,24 @@ import type { ViewServer } from "./scope";
 /** Who and where on one server, looked up by id. Built once per server, not per hit. */
 export interface Directory {
   person: (id: UserId) => User | undefined;
+  /** What to call somebody `person` doesn't know: "someone", or "Deleted account" (#650). */
+  nameless: (id: UserId) => string;
   /** A conversation written out: "#general", or a DM's people. Undefined when it isn't one of yours any more. */
   where: (id: string) => string | undefined;
   /** Whether a conversation is a DM, which is named by its people and needs saying so. */
   isDm: (id: string) => boolean;
 }
 
-export function directory(place: Pick<ViewServer, "me" | "users" | "rooms">): Directory {
+export function directory(place: Pick<ViewServer, "me" | "users" | "rooms" | "gone">): Directory {
   const users = [...place.users];
   const people = new Map(users.map((user) => [user.id, user]));
   const rooms = new Map(place.rooms.filter((room) => room.archived_at === null).map((room) => [room.id, room]));
   const named = new Map<string, string | undefined>();
   return {
     person: (id) => people.get(id),
+    nameless: (id) => nameless(id, place.gone),
     where: (id) => {
-      if (!named.has(id)) named.set(id, conversationLabel(rooms.get(id), users, place.me));
+      if (!named.has(id)) named.set(id, conversationLabel(rooms.get(id), users, place.me, place.gone));
       return named.get(id);
     },
     isDm: (id) => rooms.get(id)?.kind === "dm",
@@ -51,7 +55,7 @@ export function hitOrder(a: SearchHit, b: SearchHit): number {
 }
 
 /** The room filter's choices: anywhere, then the rooms in the list's order, then your DMs by who's in them. */
-export function roomChoices(place: Pick<ViewServer, "me" | "users" | "rooms">): { value: string; label: string }[] {
+export function roomChoices(place: Pick<ViewServer, "me" | "users" | "rooms" | "gone">): { value: string; label: string }[] {
   const live = place.rooms.filter((room) => room.archived_at === null);
   const users = [...place.users];
   const rooms = live
@@ -60,7 +64,7 @@ export function roomChoices(place: Pick<ViewServer, "me" | "users" | "rooms">): 
     .map((room) => ({ value: room.id, label: `#${room.slug}` }));
   const dms = live
     .filter((room) => room.kind === "dm")
-    .map((room: Room) => ({ value: room.id, label: conversationLabel(room, users, place.me) ?? "a DM" }))
+    .map((room: Room) => ({ value: room.id, label: conversationLabel(room, users, place.me, place.gone) ?? "a DM" }))
     .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
   return [{ value: "", label: "Anywhere" }, ...rooms, ...dms];
 }
@@ -157,7 +161,7 @@ export function inWhere(where: string | undefined, dm: boolean): string {
  */
 export function hitLine(hit: SearchHit, names: Directory, serverName: string | null, now: number): HitLine {
   const who = names.person(hit.author_id);
-  const whoName = who?.display_name ?? "someone";
+  const whoName = who?.display_name ?? names.nameless(hit.author_id);
   const where = names.where(hit.room_id);
   const when = hitTime(hit.created_at);
   const text = snippetText(hit.snippet).trim();

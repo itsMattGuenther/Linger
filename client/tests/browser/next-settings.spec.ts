@@ -528,6 +528,54 @@ test.describe("this app", () => {
     await expect(page.getByRole("button", { name: "Install and restart" })).toHaveCount(0);
   });
 
+  test("deleting your account asks first, takes your password, and offers a copy (#650)", async ({ page }) => {
+    await open(page, "?section=account&member");
+    const block = page.getByRole("region", { name: "Delete Your Account" });
+    await expect(block).toContainText("Deletes your account on The Good Company for good");
+    // One button until it's asked for.
+    await expect(block.getByLabel("Your password")).toHaveCount(0);
+    await block.getByRole("button", { name: "Delete my account on The Good Company…" }).click();
+
+    // Off, what you wrote stays, and says so; ticked, it says what goes.
+    await expect(block).toContainText("what you wrote stays where it is, and shows as “Deleted account”");
+    await block.getByRole("checkbox", { name: "Also delete everything I wrote" }).check();
+    await expect(block).toContainText("Your messages and the files on them go");
+
+    // A copy first, from the same archive as Take Everything with You.
+    await block.getByRole("button", { name: "Download your copy first" }).click();
+    await block.getByRole("button", { name: "Download your copy", exact: true }).click();
+
+    const go = block.getByRole("button", { name: "Delete my account", exact: true });
+    await expect(go).toBeDisabled();
+    await block.getByLabel("Your password").fill("my password");
+    await go.click();
+    await expect.poll(() => did(page)).toEqual(
+      expect.arrayContaining(["export", "download:https://good-company.example/exports/archive.zip", "delete-account:11:true"]),
+    );
+  });
+
+  test("a wrong password says so, and keeping your account closes it again (#650)", async ({ page }) => {
+    await open(page, "?section=account&member&fail");
+    const block = page.getByRole("region", { name: "Delete Your Account" });
+    await block.getByRole("button", { name: /^Delete my account on/ }).click();
+    await block.getByLabel("Your password").fill("not it");
+    await block.getByLabel("Your password").press("Enter");
+    await expect(block.getByText("That password doesn't match.")).toBeVisible();
+    expect(await did(page)).toContain("delete-account:6:false");
+    await block.getByRole("button", { name: "Keep my account" }).click();
+    await expect(block.getByLabel("Your password")).toHaveCount(0);
+  });
+
+  test("the host is told why their account can't be deleted, and an old server needs an update (#650)", async ({ page }) => {
+    await open(page, "?section=account");
+    const block = page.getByRole("region", { name: "Delete Your Account" });
+    await expect(block).toContainText("You're the host, so your account on The Good Company can't be deleted");
+    await expect(block.getByRole("button")).toHaveCount(0);
+
+    await open(page, "?section=account&member&oldserver");
+    await expect(page.getByRole("region", { name: "Delete Your Account" })).toContainText("needs an update before an account can be deleted");
+  });
+
   test("an archive asked for too soon says when to come back", async ({ page }) => {
     await open(page, "?section=account&fail");
     await page.getByRole("button", { name: "Export everything" }).click();
@@ -729,6 +777,26 @@ test.describe("hosting", () => {
     await expect(removed.filter({ hasText: "Callie" })).toHaveCount(1);
     await removed.filter({ hasText: "Rory" }).getByRole("button", { name: "Let them back in" }).click();
     await expect(members.filter({ hasText: "Rory" })).toHaveCount(1);
+  });
+
+  test("the host can delete a removed person's account, asking first, with the box (#650)", async ({ page }) => {
+    await open(page, "?section=people");
+    const removed = page.getByRole("list", { name: "Removed" }).locator(":scope > li");
+    const rory = removed.filter({ hasText: "Rory" });
+    await rory.getByRole("button", { name: "Delete account" }).click();
+    const question = page.getByRole("group", { name: /^Delete Rory's account for good\?/ });
+    await expect(question).toContainText("What they wrote stays, as “Deleted account”.");
+    await rory.getByRole("checkbox", { name: "Also delete everything they wrote" }).check();
+    await expect(question).toContainText("Their messages, files, reactions and votes in open polls go too.");
+    // Escape is "no", and focus goes back to the button.
+    await page.keyboard.press("Escape");
+    await expect(question).toHaveCount(0);
+    await expect(rory.getByRole("button", { name: "Delete account" })).toBeFocused();
+
+    await rory.getByRole("button", { name: "Delete account" }).click();
+    await page.getByRole("button", { name: "Yes, delete it" }).click();
+    await expect(rory).toHaveCount(0);
+    expect(await did(page)).toContain("delete-account-of:u-rory:false");
   });
 
   test("a sign-in link asks first, then shows the link, copied, and how long it works (#581)", async ({ page }) => {

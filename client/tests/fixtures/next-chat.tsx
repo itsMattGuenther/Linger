@@ -43,6 +43,9 @@
  *   removed, which isn't drawn. Each reaction asked for is written to
  *   `body[data-did]` as `react:<id>:<key>:on|off`, and put in place as the
  *   server would. `&reactfail`: the server refuses them.
+ * - `?gone`: somebody whose account was deleted (#650) said the newest thing
+ *   in #general, which Sam answers, and somebody the host removed said the
+ *   one before, as did a third person neither: the app doesn't know them.
  *
  * `window.chat` lets a test make things happen: a message arriving, someone
  * typing. What the page was asked to do is written to `body[data-did]`.
@@ -210,6 +213,19 @@ function withReactions(list: Message[]): Message[] {
     const found = on.find(([words]) => message.body.startsWith(words));
     return found ? { ...message, reactions: found[1] } : message;
   });
+}
+/** `?gone` (#650): who has no card, and why. */
+const GONE = new Set(query.has("gone") ? ["u-gone"] : []);
+if (query.has("gone")) ALL["r-general"] = withGone(ALL["r-general"] ?? []);
+
+function withGone(list: Message[]): Message[] {
+  const last = list.at(-1);
+  if (!last) return list;
+  const base: Message = { ...last, reply_to: null, reactions: [], attachments: [], edited_at: null, deleted_at: null, pinned_at: null };
+  const removed: Message = { ...base, id: `${last.id}g1`, author_id: "u-removed", body: "see you around", created_at: last.created_at + 60_000 };
+  const deleted: Message = { ...base, id: `${last.id}g2`, author_id: "u-gone", body: "taking a break from everything, bye all", created_at: last.created_at + 120_000 };
+  const answer: Message = { ...base, id: `${last.id}g3`, author_id: people.sam.id, body: "take care", reply_to: deleted.id, created_at: last.created_at + 180_000 };
+  return [...list, removed, deleted, answer];
 }
 if (query.has("joins")) {
   ALL["r-general"] = withJoins(ALL["r-general"] ?? [], RAID);
@@ -560,6 +576,7 @@ function Fixture() {
               takenOut: query.has("takenout") && myVoice !== id,
             },
       people: everyone,
+      gone: GONE,
       // The server's own emoji (#359); `?noemoji` has none.
       customEmoji: query.has("noemoji") ? [] : customEmoji,
       serverName: SERVER_NAME,

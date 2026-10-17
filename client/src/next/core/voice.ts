@@ -52,7 +52,7 @@ export function voiceModel(state: GatewayState, speaking: ReadonlySet<string>, t
   if (mine === null || me === null) return null;
   const room = state.rooms.find((held) => held.id === mine.roomId);
   const dm = state.dms.find((held) => held.id === mine.roomId);
-  const where = room ? `#${room.name}` : dm ? dmLabel(dm, state.users, me.id) : "a room";
+  const where = room ? `#${room.name}` : dm ? dmLabel(dm, state.users, me.id, new Set(state.deletedUsers)) : "a room";
   const peers = voicePeersIn(state, mine.roomId);
   const ids = new Set(peers.map((peer) => peer.user_id));
   ids.add(me.id);

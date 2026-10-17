@@ -27,6 +27,8 @@ export interface ViewServer extends ScopeServer {
   /** Who you are there, for naming DMs by who else is in them. */
   me: UserId | null;
   users: readonly User[];
+  /** Deleted accounts there (#650): what they left says "Deleted account". Left out: none. */
+  gone?: ReadonlySet<string>;
   /** Its rooms and the DMs you're in. */
   rooms: readonly Room[];
   /**

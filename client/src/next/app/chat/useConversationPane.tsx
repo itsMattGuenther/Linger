@@ -244,6 +244,8 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
   const messages = stream?.messages ?? NO_MESSAGES;
   const pending = useMemo(() => stream?.pending.map((one) => one.message) ?? NO_MESSAGES, [stream?.pending]);
   const people = useMemo(() => (state ? new Map(state.users.map((user) => [user.id, user])) : NO_PEOPLE), [state?.users]);
+  // Deleted accounts (#650), the same set until the list changes, as `blocked` is.
+  const gone = useMemo(() => new Set(state?.deletedUsers ?? []), [state?.deletedUsers]);
   // The same set until the list changes, so the conversation and its rows,
   // which are drawn again only for what changed, aren't drawn again for it (#511).
   const blocked = useMemo(() => new Set(state?.blocked ?? []), [state?.blocked]);
@@ -334,7 +336,7 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
     const header: ChatPane["header"] = dm
       ? {
           kind: "dm",
-          label: dmLabel(room, state.users, state.me?.id ?? null),
+          label: dmLabel(room, state.users, state.me?.id ?? null, gone),
           people: others,
           knock: single
             ? {
@@ -379,6 +381,7 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
         takenOut: state.voiceTakenOut === room.id && state.myVoice?.roomId !== room.id,
       },
       people,
+      gone,
       customEmoji: state.emoji,
       serverName: serverTag(active.server).name,
       me: state.me,

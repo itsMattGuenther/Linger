@@ -661,7 +661,9 @@ macOS runners, or a friend's Mac.
   App Store, review, and store listings. **Needs T-1605 first:** both stores
   require report and block. Apple's guideline 1.2 also asks for a way to
   filter objectionable material and for published contact details, and both
-  stores want terms of use; what those mean for a self-hosted app among
+  stores want terms of use. **Both require deleting your account in the app,
+  too:** built 2026-10-17 (#650, SPEC §4.19), with a page on the website for
+  Google's form; what those mean for a self-hosted app among
   friends is settled here, with Matt. Follow current vendor docs, not memory —
   this changes every year.
   *Accept:* somebody who has never met you installs it from a store.

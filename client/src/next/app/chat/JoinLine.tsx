@@ -13,6 +13,7 @@
 import { memo, useRef, useState } from "react";
 import type { Message } from "../../../generated/Message";
 import type { User } from "../../../generated/User";
+import { nameless } from "../../../lib/gone";
 import { clockTime, fullTime, isoTime } from "../../../lib/time";
 import { IconButton, Marker, Name, VoiceGlyph } from "../../kit";
 import { markerFor } from "../markers";
@@ -25,7 +26,16 @@ const NAMED = 3;
 /** Dots shown before the people mark takes over. */
 const DOTS = 16;
 
-export const JoinLine = memo(function JoinLine({ messages, people }: { messages: readonly Message[]; people: ReadonlyMap<string, User> }) {
+export const JoinLine = memo(function JoinLine({
+  messages,
+  people,
+  gone,
+}: {
+  messages: readonly Message[];
+  people: ReadonlyMap<string, User>;
+  /** Deleted accounts (#650): a line saying one joined voice names it so. */
+  gone?: ReadonlySet<string>;
+}) {
   const [everyone, setEveryone] = useState(false);
   const opener = useRef<HTMLElement | null>(null);
   const first = messages[0];
@@ -38,7 +48,7 @@ export const JoinLine = memo(function JoinLine({ messages, people }: { messages:
 
   const names = named.map((id, at) => {
     const person = people.get(id);
-    const name = person ? <Name person={person} size="inline" dim /> : "someone";
+    const name = person ? <Name person={person} size="inline" dim /> : nameless(id, gone);
     const joiner = at === 0 ? null : at === named.length - 1 && rest.length === 0 ? " and " : ", ";
     return (
       <span key={id}>

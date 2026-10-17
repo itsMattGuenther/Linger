@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { nameless } from "../../../lib/gone";
 import type { CustomEmoji } from "../../../generated/CustomEmoji";
 import type { Message } from "../../../generated/Message";
 import type { ReactionGroup } from "../../../generated/ReactionGroup";
@@ -56,6 +57,7 @@ export function ReactionPills({
   groups,
   meId,
   people,
+  gone,
   kit,
   onToggle,
   onAdd,
@@ -63,6 +65,8 @@ export function ReactionPills({
   groups: readonly ReactionGroup[];
   meId: string | null;
   people: ReadonlyMap<string, User>;
+  /** Deleted accounts (#650), named as such. */
+  gone?: ReadonlySet<string>;
   kit: ReactionKit;
   onToggle: (key: string, on: boolean) => void;
   /** Open the picker beside this box; left out at six. */
@@ -72,7 +76,7 @@ export function ReactionPills({
   return (
     <div className="nx-reactions" role="group" aria-label="Reactions">
       {groups.map((group) => (
-        <Pill key={group.key} group={group} meId={meId} people={people} kit={kit} onToggle={onToggle} />
+        <Pill key={group.key} group={group} meId={meId} people={people} gone={gone} kit={kit} onToggle={onToggle} />
       ))}
       {onAdd ? (
         <button
@@ -96,17 +100,19 @@ function Pill({
   group,
   meId,
   people,
+  gone,
   kit,
   onToggle,
 }: {
   group: ReactionGroup;
   meId: string | null;
   people: ReadonlyMap<string, User>;
+  gone: ReadonlySet<string> | undefined;
   kit: ReactionKit;
   onToggle: (key: string, on: boolean) => void;
 }) {
   const mine = meId !== null && group.user_ids.includes(meId);
-  const names = group.user_ids.map((id) => (id === meId ? "You" : (people.get(id)?.display_name ?? "Somebody")));
+  const names = group.user_ids.map((id) => (id === meId ? "You" : (people.get(id)?.display_name ?? nameless(id, gone, "Somebody"))));
   const id = customIdOf(group.key);
   const words = reactedWords(names, id === null ? null : (kit.byId.get(id)?.name ?? null));
   const tip = useTooltip(words);

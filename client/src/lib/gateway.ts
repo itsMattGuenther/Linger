@@ -156,6 +156,20 @@ export interface GatewayState {
   /** Who the server says we are. Null until the first `ready`. */
   me: User | null;
   users: User[];
+  /**
+   * Every account deleted on this server (#650, SPEC §4.19), from `ready` and
+   * `user.remove`. None is in `users`: what they left behind is drawn as
+   * "Deleted account" (`lib/people`) rather than the "someone" a removed
+   * member's messages get. Empty on a server from before.
+   */
+  deletedUsers: UserId[];
+  /**
+   * Whether this server can delete an account (#650): false on one from
+   * before (0.5.0 and older), whose `ready` doesn't list deleted accounts.
+   * Settings says it needs an update rather than offering a delete it would
+   * refuse.
+   */
+  accountDeletion: boolean;
   /** The server's rooms — the same list for everybody. */
   rooms: Room[];
   /**
@@ -378,6 +392,8 @@ const EMPTY: GatewayState = {
   status: { kind: "offline" },
   me: null,
   users: [],
+  deletedUsers: [],
+  accountDeletion: false,
   rooms: [],
   dms: [],
   presence: [],
@@ -728,6 +744,8 @@ export function apply(current: GatewayState, frame: ServerFrame): GatewayState {
         ...current,
         me: frame.d.user,
         users: frame.d.users,
+        deletedUsers: frame.d.deleted_users ?? [],
+        accountDeletion: Array.isArray(frame.d.deleted_users),
         rooms: frame.d.rooms,
         dms: frame.d.dms,
         presence: frame.d.presence,
@@ -816,17 +834,25 @@ export function apply(current: GatewayState, frame: ServerFrame): GatewayState {
       };
     }
     case "user.remove": {
-      // The host removed them (T-413). The roster is built by mapping over
-      // `users`, so dropping them here is the whole of the card going away.
-      // Their presence goes too: an entry for somebody nobody can draw is a
-      // row of state that outlives the person it describes.
-      const { user_id } = frame.d;
-      if (!current.users.some((u) => u.id === user_id)) return current;
+      // The host removed them (T-413), or the account was deleted (#650).
+      // The roster is built by mapping over `users`, so dropping them here is
+      // the whole of the card going away. Their presence goes too: an entry
+      // for somebody nobody can draw is a row of state that outlives the
+      // person it describes.
+      const { user_id, deleted } = frame.d;
+      // Somebody the host had removed can be deleted too, and isn't listed:
+      // only the label changes.
+      const deletedUsers =
+        deleted === true && !current.deletedUsers.includes(user_id) ? [...current.deletedUsers, user_id] : current.deletedUsers;
+      if (!current.users.some((u) => u.id === user_id)) {
+        return deletedUsers === current.deletedUsers ? current : { ...current, deletedUsers };
+      }
       const offlineAt = { ...current.offlineAt };
       delete offlineAt[user_id];
       return {
         ...current,
         users: current.users.filter((u) => u.id !== user_id),
+        deletedUsers,
         presence: current.presence.filter((p) => p.user_id !== user_id),
         offlineAt,
       };

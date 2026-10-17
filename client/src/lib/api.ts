@@ -12,6 +12,8 @@ import type { Attachment } from "../generated/Attachment";
 import type { AttachmentId } from "../generated/AttachmentId";
 import type { AuthResponse } from "../generated/AuthResponse";
 import type { ChangePasswordRequest } from "../generated/ChangePasswordRequest";
+import type { DeleteAccountRequest } from "../generated/DeleteAccountRequest";
+import type { DeleteRemovedRequest } from "../generated/DeleteRemovedRequest";
 import type { CreateEmojiRequest } from "../generated/CreateEmojiRequest";
 import type { CreateInviteRequest } from "../generated/CreateInviteRequest";
 import type { CustomEmoji } from "../generated/CustomEmoji";
@@ -733,6 +735,16 @@ export class AuthedApi {
     );
   }
 
+  /**
+   * Delete your own account on this server (#650, SPEC §4.19): for good, at
+   * once, after the password. `everything` takes what you wrote with it. The
+   * server ends every sign-in this account had, so the caller signs out of
+   * the server straight after.
+   */
+  deleteAccount(request: DeleteAccountRequest): Promise<void> {
+    return this.#withAuth((accessToken) => requestVoid(this.baseUrl, "POST", "/me/delete", { accessToken, body: request }));
+  }
+
   serverInfo(signal?: AbortSignal): Promise<ServerInfo> {
     return this.get<ServerInfo>("/server", signal);
   }
@@ -825,6 +837,17 @@ export class AuthedApi {
     return this.#withAuth((accessToken) =>
       requestVoid(this.baseUrl, "POST", `/users/${encodeURIComponent(id)}/restore`, {
         accessToken,
+      }),
+    );
+  }
+
+  /** The host deletes the account of somebody they removed (#650): the host
+   *  only, and it can't be undone. */
+  deleteRemovedUser(id: UserId, request: DeleteRemovedRequest): Promise<void> {
+    return this.#withAuth((accessToken) =>
+      requestVoid(this.baseUrl, "POST", `/users/${encodeURIComponent(id)}/delete`, {
+        accessToken,
+        body: request,
       }),
     );
   }

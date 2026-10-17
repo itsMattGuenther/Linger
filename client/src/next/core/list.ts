@@ -112,6 +112,7 @@ export interface PeopleGroups {
 export function listModel(state: GatewayState, now: number): ListModel {
   const meId = state.me?.id ?? null;
   const users = state.users;
+  const gone = new Set(state.deletedUsers);
 
   const rooms = state.rooms
     .filter((room) => room.archived_at === null)
@@ -137,7 +138,7 @@ export function listModel(state: GatewayState, now: number): ListModel {
   const groups = orderDms(groupDms, (room: Room) => hasNewActivity(state, room.id), state.newest).map(
     (room): DmRow => ({
       id: room.id,
-      label: dmLabel(room, users, meId),
+      label: dmLabel(room, users, meId, gone),
       people: peopleIn(room, users, meId).map((user) => ({ user, state: stateOf(user.id) })),
       memberIds: room.member_ids ?? [],
       fresh: hasNewActivity(state, room.id),

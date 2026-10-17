@@ -57,7 +57,7 @@ export function tabModel(tab: TabKey, state: GatewayState, showing: boolean, tal
   const dm = room.kind === "dm";
   const others = dm ? dmPeople(state, room) : [];
   const [only] = others;
-  const title = dm ? dmLabel(room, state.users, state.me?.id ?? null) : room.name;
+  const title = dm ? dmLabel(room, state.users, state.me?.id ?? null, new Set(state.deletedUsers)) : room.name;
   // A group somebody left is a group however few are left in it (#565): no lead.
   const single = others.length === 1 && only && room.someone_left !== true ? only : null;
   return {

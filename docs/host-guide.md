@@ -274,6 +274,7 @@ controls are in Settings, under **Hosting**:
   messages stay), and let them back in. Removals are reversible; that is the
   point. What they were still uploading, and files they uploaded but never
   sent, are deleted when they're removed, and don't come back with them.
+  Somebody removed can also have their account **deleted**, below.
 - **Server**: its name and color. The name is what everybody's list shows and
   what an invite link tells a stranger; the color is the server's stripe in
   everybody's list. You also see which version it runs, when it last backed
@@ -306,6 +307,18 @@ you, take you out of voice, delete your messages or revoke your invites. Their
 card says "co-host". To stop it, choose **Jules stops being a co-host** on the
 same menu. Only you see the server's version, since updating the server is
 still yours to do.
+
+**Somebody asks you to delete their account.** Anybody still on the server can
+delete their own, in **Settings → Account & App → Delete Your Account**
+([how it works](user-guide.md#deleting-your-account)). Somebody you removed
+can't sign in to do that, and somebody without the app can't either, so it's
+yours: remove them first if they're still a member, then in **Hosting → People
+→ Removed** press **Delete account** beside them. Tick **Also delete everything
+they wrote** if they asked for that too, then **Yes, delete it**. It can't be
+undone: their name, status, sign-ins and settings go at once, and what they
+wrote either goes or stays as "Deleted account". Their username stays taken, and
+reports about them stay with you. Only you can do this, not a co-host. Your own
+account can't be deleted: to close the server, shut it down and delete its data.
 
 Two things worth knowing. There is **no way to hand the host role itself to
 somebody else**, on purpose. And there are no permissions to configure beyond

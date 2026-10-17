@@ -35,6 +35,7 @@ export function useViewServers(apis: ReadonlyMap<string, AuthedApi>): MediaServe
           accent: info?.accent ?? null,
           me: state.me?.id ?? null,
           users: state.users,
+          gone: new Set(state.deletedUsers),
           rooms: [...state.rooms, ...state.dms],
           blocked: new Set(state.blocked),
           expiryDays: info?.fileExpiryDays,

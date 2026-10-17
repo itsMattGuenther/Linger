@@ -324,6 +324,13 @@ function Fixture() {
               },
               openGuide: () => note("autostart-guide"),
             },
+        // Deleting your account (#650): the host is told why not, `?member`
+        // gets the button, and `?oldserver` is a server from before it.
+        deleteAccount: {
+          host: !query.has("member"),
+          outdated: OLD_SERVER,
+          run: (password, everything) => saving(`delete-account:${password.length}:${everything}`, "That password doesn't match."),
+        },
         signOut: () => note("signout"),
         severalServers: several,
       }}
@@ -483,6 +490,12 @@ function Fixture() {
                     setRemoved((held) => held.filter((person) => person.id !== id));
                     if (back) setMembers((held) => [...held, back]);
                   }
+                  return problem;
+                },
+                // The host deletes a removed person's account (#650).
+                deleteRemoved: async (id, everything) => {
+                  const problem = await saving(`delete-account-of:${id}:${everything}`);
+                  if (problem === null) setRemoved((held) => held.filter((person) => person.id !== id));
                   return problem;
                 },
                 // A sign-in link for somebody who forgot their password (#581).

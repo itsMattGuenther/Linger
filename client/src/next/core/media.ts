@@ -120,7 +120,7 @@ function faceOf(item: MediaItem): Face {
  */
 export function tileLine(item: MediaItem, names: Directory, serverName: string | null): TileLine {
   const who = names.person(item.author_id);
-  const whoName = who?.display_name ?? "someone";
+  const whoName = who?.display_name ?? names.nameless(item.author_id);
   const where = item.room_id === null ? undefined : names.where(item.room_id);
   const file = item.attachment;
   const title = itemLabel(item);

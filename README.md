@@ -136,6 +136,11 @@ GPS, stripped from every image, and the tags, location included, from every
 video and sound file; and no code that could read a window title
 ([decision](docs/decisions.md), 2026-08-28).
 
+Anybody can **delete their account** on a server from inside the app, and
+choose whether what they wrote goes with it ([user
+guide](docs/user-guide.md#deleting-your-account)). Their username stays taken,
+so nobody new can pass as them.
+
 ## 📦 Installing the app
 
 You need an invite link from your host. The [user guide](docs/user-guide.md)

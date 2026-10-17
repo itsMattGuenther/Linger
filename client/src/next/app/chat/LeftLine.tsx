@@ -7,11 +7,21 @@
 import { memo } from "react";
 import type { Message } from "../../../generated/Message";
 import type { User } from "../../../generated/User";
+import { nameless } from "../../../lib/gone";
 import { clockTime, fullTime } from "../../../lib/time";
 import { Icon, Name } from "../../kit";
 import "./QuietLine.css";
 
-export const LeftLine = memo(function LeftLine({ message, person }: { message: Message; person: User | undefined }) {
+export const LeftLine = memo(function LeftLine({
+  message,
+  person,
+  gone,
+}: {
+  message: Message;
+  person: User | undefined;
+  /** Deleted accounts (#650): one leaves its group DMs as it goes. */
+  gone?: ReadonlySet<string>;
+}) {
   return (
     <div className="nx-quiet" data-left="">
       <p className="nx-quiet-words">
@@ -19,7 +29,7 @@ export const LeftLine = memo(function LeftLine({ message, person }: { message: M
           <Icon name="leave" size="sm" />
         </span>
         <span className="nx-quiet-text">
-          {person ? <Name person={person} size="inline" dim /> : "someone"} left
+          {person ? <Name person={person} size="inline" dim /> : nameless(message.author_id, gone)} left
         </span>
       </p>
       <time className="nx-msg-time" dateTime={new Date(message.created_at).toISOString()} title={fullTime(message.created_at)}>

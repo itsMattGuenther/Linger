@@ -14,6 +14,7 @@ import type { MessageId } from "../generated/MessageId";
 import type { Room } from "../generated/Room";
 import type { User } from "../generated/User";
 import type { UserId } from "../generated/UserId";
+import { DELETED_ACCOUNT } from "./gone";
 
 /** Everybody in a DM except you, in the order the server listed them. */
 export function others(room: Room, meId: UserId | null): UserId[] {
@@ -60,9 +61,15 @@ export function peopleIn(room: Room, users: User[], meId: UserId | null): User[]
  * it. Three or more get commas and a count for the rest, which is the point at
  * which a list stops being a name and starts being a list.
  */
-export function dmLabel(room: Room, users: User[], meId: UserId | null): string {
+export function dmLabel(room: Room, users: User[], meId: UserId | null, gone?: ReadonlySet<string>): string {
   const names = peopleIn(room, users, meId).map((person) => person.display_name);
   const [first, second, third] = names;
+  // A friend who deleted their account (#650): the DM stays yours, and says
+  // who it was with. The server names them in `deleted_member_ids`; before
+  // the next `ready`, they're still among the members and in `gone`.
+  if (first === undefined && ((room.deleted_member_ids?.length ?? 0) > 0 || others(room, meId).some((id) => gone?.has(id) === true))) {
+    return DELETED_ACCOUNT;
+  }
   if (first === undefined) {
     // Everybody else has left the server, or the client has not caught up.
     // A DM you are alone in is still yours and still has what was said in it.
@@ -88,9 +95,10 @@ export function conversationLabel(
   room: Room | undefined,
   users: User[],
   meId: UserId | null,
+  gone?: ReadonlySet<string>,
 ): string | undefined {
   if (room === undefined) return undefined;
-  return room.kind === "dm" ? dmLabel(room, users, meId) : `#${room.slug}`;
+  return room.kind === "dm" ? dmLabel(room, users, meId, gone) : `#${room.slug}`;
 }
 
 /**
