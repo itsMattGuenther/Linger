@@ -254,7 +254,7 @@ function DeleteAccount({
                 Download your copy
               </Button>
             ) : (
-              <Button variant="quiet" busy={copy.kind === "working"} disabled={working} onClick={archive.start}>
+              <Button busy={copy.kind === "working"} disabled={working} onClick={archive.start}>
                 Download your copy first
               </Button>
             )}

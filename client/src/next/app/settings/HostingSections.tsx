@@ -261,8 +261,8 @@ function EditRoom({ room, update, onDone }: { room: Room; update: HostRoomsProps
 
 /**
  * A yes-or-no asked in place: the question, then the two answers. Escape is
- * "no". `children` go above the words, inside it, so Escape works from them
- * too: a box that changes what "yes" does (#650).
+ * "no". `children` go on a line of their own under the words, inside it, so
+ * Escape works from them too: a box that changes what "yes" does (#650).
  */
 function Question({
   words,
@@ -288,8 +288,8 @@ function Question({
   const onKeyDown = useBackOut(onNo, () => null);
   return (
     <div className="nx-set-question" role="group" aria-label={words} onKeyDown={onKeyDown}>
-      {children}
       <p className="nx-set-question-words">{words}</p>
+      {children ? <div className="nx-set-question-more">{children}</div> : null}
       <div className="nx-set-buttons" ref={first}>
         <Button size="sm" disabled={busy} onClick={onNo}>
           {no}
@@ -820,7 +820,6 @@ export function PeopleSection({
                         <span data-do="delete">
                           <Button
                             size="sm"
-                            variant="quiet"
                             disabled={backBusy}
                             onClick={() => {
                               setEverything(false);

@@ -602,9 +602,12 @@
 
 .nx-set-item-buttons {
   display: flex;
-  flex: none;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: var(--space-1);
+  max-width: 100%;
   margin-left: auto;
 }
 
@@ -704,6 +707,12 @@
   color: var(--text-secondary);
   font-size: var(--text-control);
   line-height: var(--leading-body);
+}
+
+/* What changes the answer, a box say (#650): a line of its own, between the
+   words and the buttons. */
+.nx-set-question-more {
+  flex: 1 1 100%;
 }
 
 /* Servers, each a card in your order. */
