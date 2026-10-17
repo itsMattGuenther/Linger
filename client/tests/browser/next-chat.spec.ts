@@ -445,7 +445,7 @@ test.describe("the keyboard", () => {
   test("Up in an empty box edits your last message; Enter saves it", async ({ page }) => {
     await box(page).click();
     await page.keyboard.press("ArrowUp");
-    const edit = page.getByRole("textbox", { name: /Edit/ });
+    const edit = page.getByRole("combobox", { name: /Edit/ });
     await expect(edit).toBeFocused();
     // The edit box is taller than the line it replaces; the end stays in view.
     await expect(message(page, "Putting it on now")).toBeInViewport({ ratio: 1 });
@@ -464,7 +464,7 @@ test.describe("the keyboard", () => {
   test("words ending in a character that turns text around leave “edited” the right way round", async ({ page }) => {
     await box(page).click();
     await page.keyboard.press("ArrowUp");
-    const edit = page.getByRole("textbox", { name: /Edit/ });
+    const edit = page.getByRole("combobox", { name: /Edit/ });
     await edit.fill("Count me in.\u{202E}");
     await page.keyboard.press("Enter");
     const row = message(page, /^Matt\s*Count me in\./);

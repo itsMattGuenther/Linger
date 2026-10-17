@@ -161,6 +161,71 @@ test.describe("shortcodes in the box", () => {
   });
 });
 
+// #666: the edit box had none of this, so `:smiley:` stayed words in an edit.
+test.describe("shortcodes in an edit", () => {
+  const MINE = "m000014";
+  const row = (page: Page) => page.locator(`[data-message="${MINE}"]`);
+  const edit = (page: Page) => row(page).getByRole("combobox", { name: "Edit this message" });
+  const saves = async (page: Page) => (await did(page)).filter((line) => line.startsWith("save:"));
+
+  /** Up in the empty message box edits your last message; this one starts it over. */
+  async function editLast(page: Page, words: string) {
+    await chat(page);
+    await box(page).click();
+    await page.keyboard.press("ArrowUp");
+    await expect(edit(page)).toBeFocused();
+    await edit(page).fill(words);
+  }
+
+  test("a finished :smiley: becomes 😃 as it's typed, and the message is saved with it", async ({ page }) => {
+    await editLast(page, "Count me in");
+    await edit(page).pressSequentially(" :smiley:");
+    await expect(edit(page)).toHaveValue("Count me in 😃");
+    await edit(page).press("Enter");
+    await expect(edit(page)).toHaveCount(0);
+    expect(await saves(page)).toEqual([`save:${MINE}:Count me in 😃`]);
+    await expect(row(page).locator(".nx-text")).toHaveText(/^Count me in 😃/);
+  });
+
+  test("a colon and two letters offers emoji, the server's own first; Enter puts one in without saving, and the message draws it", async ({ page }) => {
+    await editLast(page, "Count me in ");
+    await edit(page).pressSequentially(":part");
+    const list = page.getByRole("listbox", { name: "Emoji" });
+    await expect(list.getByRole("option").first()).toHaveAccessibleName("party_parrot, this server's emoji");
+    await expect(edit(page)).toHaveAttribute("aria-expanded", "true");
+    await edit(page).press("Enter");
+    await expect(edit(page)).toHaveValue("Count me in :party_parrot: ");
+    await expect(list).toHaveCount(0);
+    expect(await saves(page)).toEqual([]);
+
+    await edit(page).press("Enter");
+    await expect(edit(page)).toHaveCount(0);
+    expect(await saves(page)).toEqual([`save:${MINE}:Count me in :party_parrot:`]);
+    await expect(row(page).locator(".nx-text").getByRole("img", { name: ":party_parrot:" })).toBeVisible();
+  });
+
+  test("Escape closes the list and keeps editing; a second Escape gives the edit up", async ({ page }) => {
+    await editLast(page, "Count me in ");
+    await edit(page).pressSequentially(":smi");
+    await expect(page.getByRole("listbox", { name: "Emoji" })).toBeVisible();
+    await edit(page).press("Escape");
+    await expect(page.getByRole("listbox", { name: "Emoji" })).toHaveCount(0);
+    await expect(edit(page)).toBeFocused();
+    await expect(edit(page)).toHaveValue("Count me in :smi");
+    await edit(page).press("Escape");
+    await expect(edit(page)).toHaveCount(0);
+    expect(await saves(page)).toEqual([]);
+  });
+
+  test("a :name: still left as typed, as a pasted one is, is saved as its emoji; a server's own and code stay as typed", async ({ page }) => {
+    await editLast(page, "Count me in :thumbsup: :party_parrot: `:fire:`");
+    await expect(edit(page)).toHaveValue("Count me in :thumbsup: :party_parrot: `:fire:`");
+    await edit(page).press("Enter");
+    await expect(edit(page)).toHaveCount(0);
+    expect(await saves(page)).toEqual([`save:${MINE}:Count me in 👍 :party_parrot: \`:fire:\``]);
+  });
+});
+
 test.describe("in messages", () => {
   test("a server's own emoji is drawn as its picture, named for a screen reader, and one it doesn't have stays words", async ({ page }) => {
     await chat(page);

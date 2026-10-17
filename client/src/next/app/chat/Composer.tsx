@@ -7,8 +7,8 @@ import type { MessageId } from "../../../generated/MessageId";
 import type { User } from "../../../generated/User";
 import { useAutoGrow } from "../../../lib/autoGrow";
 import { insertGlyph } from "../../../lib/composerEmoji";
-import { emojiIndex as loadedEmoji, loadEmoji, onEmojiLoaded, withTone } from "../../../lib/emoji";
-import { rememberEmoji, skinTone } from "../../../lib/emoji/recent";
+import { loadEmoji, onEmojiLoaded } from "../../../lib/emoji";
+import { rememberEmoji } from "../../../lib/emoji/recent";
 import { completeShortcode, convertShortcodes, putShortcode } from "../../../lib/emoji/shortcodes";
 import { type MentionPerson, type MentionTyping, putMention } from "../../core/chat/mentions";
 import { MAX_MOTD_CHARS, motdCommand, typingMotd } from "../../core/chat/motd";
@@ -23,7 +23,7 @@ import "./Composer.css";
 import type { DraftFile } from "../../core/chat/drafts";
 import { useFitsOneLine } from "./useFitsOneLine";
 import { useEmojiIndex } from "./useEmojiIndex";
-import { useEmojiShortcodes } from "./useEmojiShortcodes";
+import { shortcodeGlyph, useEmojiShortcodes } from "./useEmojiShortcodes";
 import { useMentions } from "./useMentions";
 import type { VoiceMessageControls } from "./useVoiceMessages";
 import { VoiceMessagePanel } from "./VoiceMessagePanel";
@@ -299,14 +299,7 @@ export const Composer = memo(function Composer({
   // The emoji list, once there's a `:` that might be a shortcode or the
   // picker is open: a finished `:smiley:` needs it to become 😃.
   useEmojiIndex(emoji || draft.includes(":"));
-  const glyphOf = (name: string): string | null => {
-    // A server's own emoji by that name wins on its server: it stays `:name:`.
-    if (customEmoji.some((one) => one.name === name)) return null;
-    // The list as it is now, not as it was when the box last drew: it can
-    // arrive between two keys.
-    const found = loadedEmoji()?.byShortcode.get(name);
-    return found ? withTone(found, skinTone()) : null;
-  };
+  const glyphOf = (name: string) => shortcodeGlyph(name, (own) => customEmoji.some((one) => one.name === own));
 
   // Shortcodes finished before the list had loaded become emoji the moment
   // it arrives. The box itself says what's typed, since a key can be in it

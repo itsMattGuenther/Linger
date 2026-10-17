@@ -1,6 +1,6 @@
 import { type KeyboardEvent, type ReactNode, type RefObject, useEffect, useId, useLayoutEffect, useMemo, useState } from "react";
 import type { CustomEmoji } from "../../../generated/CustomEmoji";
-import { searchEmoji, shortcodeOf, type UnicodeEmoji, withTone } from "../../../lib/emoji";
+import { emojiIndex, searchEmoji, shortcodeOf, type UnicodeEmoji, withTone } from "../../../lib/emoji";
 import { skinTone } from "../../../lib/emoji/recent";
 import { sameShortcode, type ShortcodeTyping, shortcodeAt } from "../../../lib/emoji/shortcodes";
 import { supportedVersion } from "../../../lib/emoji/support";
@@ -12,6 +12,18 @@ const SHOWN = 8;
 
 /** What choosing one puts in: a Unicode emoji, or a server's own as `:name:`. */
 export type ShortcodePick = { glyph: string } | { custom: CustomEmoji };
+
+/**
+ * The emoji a finished `:name:` becomes in a box that's being typed in, in
+ * the skin tone chosen, or null. A server's own emoji by that name wins on
+ * its server: it stays `:name:`. The list is read as it is now, not as it was
+ * when the box last drew: it can arrive between two keys.
+ */
+export function shortcodeGlyph(name: string, ownEmoji: (name: string) => boolean): string | null {
+  if (ownEmoji(name)) return null;
+  const found = emojiIndex()?.byShortcode.get(name);
+  return found ? withTone(found, skinTone()) : null;
+}
 
 /**
  * The emoji the message box offers after a `:` and two characters (#359),

@@ -417,7 +417,7 @@ test.describe("changing a message", () => {
     await row(page, MINE).hover();
     await row(page, MINE).getByRole("button", { name: /^Actions for/ }).click();
     await page.getByRole("menuitem", { name: "Edit" }).click();
-    const edit = row(page, MINE).getByRole("textbox", { name: "Edit this message" });
+    const edit = row(page, MINE).getByRole("combobox", { name: "Edit this message" });
     await expect(edit).toBeFocused();
     return edit;
   }
@@ -429,7 +429,7 @@ test.describe("changing a message", () => {
     expect(await edit.evaluate((node: HTMLTextAreaElement) => [node.selectionStart, node.selectionEnd])).toEqual([length, length]);
     await edit.pressSequentially(" Maybe 10?");
     await edit.press("Escape");
-    await expect(row(page, MINE).getByRole("textbox", { name: "Edit this message" })).toHaveCount(0);
+    await expect(row(page, MINE).getByRole("combobox", { name: "Edit this message" })).toHaveCount(0);
     await expect(row(page, MINE)).toContainText("Count me in. Let's put the details in #weekend-plans when we know.");
     await expect(row(page, MINE)).not.toContainText("Maybe 10?");
     expect((await did(page)).filter((line) => line.startsWith("PATCH"))).toEqual([]);

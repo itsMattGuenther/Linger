@@ -1105,10 +1105,11 @@ People wanted the emoji they're used to from Discord, and the picker had 66.
   a skin tone chosen once, all kept on this computer. They are drawn by the
   computer's own emoji font, and one that font is too old to draw is left out
   rather than offered as an empty box.
-- **Shortcodes.** A colon and two characters in the message box offer emoji by
-  name: Discord's names (`:smiley:`, `:thumbsup:`, `:slight_smile:`), and
-  GitHub's and Slack's too. A finished `:smiley:` becomes 😃 as it's typed, so
-  a message holds the emoji itself.
+- **Shortcodes.** A colon and two characters in the message box, or in a
+  message being edited (#666), offer emoji by name: Discord's names
+  (`:smiley:`, `:thumbsup:`, `:slight_smile:`), and GitHub's and Slack's too. A
+  finished `:smiley:` becomes 😃 as it's typed, and one still left as typed
+  when an edit is saved goes as its emoji, so a message holds the emoji itself.
 - **A server's own emoji.** The host or a co-host adds pictures (PNG, GIF,
   WebP or JPEG; up to 200; an animated GIF keeps moving), each named from its
   file and renamed if wanted, and everyone on the server can put them in a
