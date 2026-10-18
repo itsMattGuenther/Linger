@@ -104,9 +104,10 @@ Before anything ships, all four of these:
      somewhere offline: a password manager attachment, an encrypted USB stick
      in a different building. Not a cloud drive that syncs from this machine,
      and not only this machine.
-  2. Add two repository secrets on GitHub. From the repository, with gh:
-       base64 -w0 "$key" | gh secret set ANDROID_RELEASE_KEYSTORE
-       gh secret set ANDROID_RELEASE_KEYSTORE_PASSWORD < "$password"
+  2. Add two secrets to the `release` environment on GitHub, never to the
+     repository. From the repository, with gh:
+       base64 -w0 "$key" | gh secret set ANDROID_RELEASE_KEYSTORE --env release
+       gh secret set ANDROID_RELEASE_KEYSTORE_PASSWORD --env release < "$password"
   3. Commit $fingerprint_file.
   4. Run the release workflow by hand (Actions -> release -> Run workflow):
      its preflight checks the secrets against that fingerprint.

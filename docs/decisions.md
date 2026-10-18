@@ -1510,3 +1510,23 @@ account" the wire.
 - **One change from the issue:** it suggested removing blocks both ways. Blocks the
   person made go; blocks *of* them stay, because whoever blocked them chose not to see
   what they wrote, and with the box off what they wrote is still there.
+
+## Decided — the signing keys live in a `release` environment
+
+**Matt, 2026-10-18 (#652).** Nothing had gone wrong. A repository secret can be read by
+a workflow run from any branch, and a branch can carry its own copy of a workflow, so
+every branch push ran with the keys that every installed copy of Linger trusts within
+reach. A mistake, a confused agent or a stolen login shouldn't be able to reach them.
+
+- **Every signing key is a secret of the `release` environment**, never of the
+  repository: the update key and its password, the Android key and its password, and the
+  Arch packages key. A Windows certificate goes there when it arrives.
+- **Only a `v*` tag or `main` may use the environment**, and only the four jobs that sign
+  name it (`preflight`, `bundle`, `android`, Arch `publish`). `main` is there for the
+  manual preflight and Arch runs; changing it already needs a reviewed pull request.
+- **Only a repository admin can create, move or delete a `v*` tag** (the "Release tags"
+  ruleset). The issue didn't ask for this, but without it anybody who can push could tag
+  a branch whose edited workflow then reaches the keys.
+- **No required reviewer.** It wouldn't stop a stolen login or an agent using Matt's
+  token, since either could approve as Matt, and a release would wait for three or four
+  clicks.

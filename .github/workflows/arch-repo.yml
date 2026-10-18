@@ -9,8 +9,9 @@ name: arch repo
 #
 # It repackages the release's .deb for Arch (packaging/arch/), signs the
 # package and the repository database with the Linger packages key
-# (packaging/arch/linger.asc; the secret half is ARCH_SIGNING_KEY), and uploads
-# both to the `arch` release, which is the repository pacman reads:
+# (packaging/arch/linger.asc; the secret half is ARCH_SIGNING_KEY, a secret of
+# the `release` environment, which only a `v*` tag or `main` may use: #652),
+# and uploads both to the `arch` release, which is the repository pacman reads:
 #
 #   [linger]
 #   Server = https://github.com/itsMattGuenther/Linger/releases/download/arch
@@ -48,6 +49,7 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (startsWith(github.event.release.tag_name, 'v') && !github.event.release.prerelease)
+    environment: release
     runs-on: ubuntu-latest
     container: archlinux:base-devel
     timeout-minutes: 20

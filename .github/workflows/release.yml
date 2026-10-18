@@ -21,6 +21,11 @@ name: release
 # Running it from the Actions tab (workflow_dispatch) does the checks and stops:
 # it proves the signing secrets are right, and the tests pass, without cutting a
 # release. Only a tag builds anything.
+#
+# The signing keys are secrets of the `release` environment, not of the
+# repository (#652). Only a `v*` tag or `main` may use that environment, so a
+# workflow run from any other branch, which can carry its own copy of this file,
+# never has them within reach. The jobs that sign say `environment: release`.
 on:
   push:
     tags: ["v*"]
@@ -42,6 +47,7 @@ jobs:
 
   preflight:
     name: the tag and the key agree with the tree
+    environment: release
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -83,6 +89,7 @@ jobs:
     needs: [preflight, tests]
     # A manual run is a check, not a release. Only a tag builds and publishes.
     if: github.ref_type == 'tag'
+    environment: release
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
@@ -352,6 +359,7 @@ jobs:
     needs: [preflight, tests, bundle]
     # Only a tag builds, and only once the draft exists to add to.
     if: github.ref_type == 'tag'
+    environment: release
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

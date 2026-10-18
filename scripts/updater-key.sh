@@ -102,8 +102,8 @@ Before anything ships, all four of these:
      different building. Not a cloud drive that syncs from this machine, and
      not only this machine.
   2. Back up the password the same way, separately.
-  3. Add two repository secrets on GitHub
-     (Settings -> Secrets and variables -> Actions):
+  3. Add two secrets to the `release` environment on GitHub
+     (Settings -> Environments -> release), never to the repository:
        TAURI_SIGNING_PRIVATE_KEY           the contents of $key
        TAURI_SIGNING_PRIVATE_KEY_PASSWORD  the password you just chose
   4. Commit the public key in $conf.

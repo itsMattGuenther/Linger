@@ -392,7 +392,7 @@ over a release (or the other way round): uninstall first, which signs you out.
   `~/.local/share/linger/android-release.jks` with its password beside it,
   writes the key's public fingerprint to
   `client/src-tauri/android-release-cert.sha256` (committed), and prints the
-  backups to make and the two GitHub secrets to set
+  backups to make and the two secrets to set in the `release` environment
   (`ANDROID_RELEASE_KEYSTORE`, `ANDROID_RELEASE_KEYSTORE_PASSWORD`). It never
   replaces a key, or a committed fingerprint for a different one.
 - The release workflow's `android` job runs `scripts/android-signing.sh`:

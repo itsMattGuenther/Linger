@@ -25,7 +25,7 @@ conf="${1:-client/src-tauri/tauri.conf.json}"
 if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
   echo "FAIL: TAURI_SIGNING_PRIVATE_KEY is not set."
   echo "      Run scripts/updater-key.sh, then:"
-  echo "        gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.local/share/linger/updater.key"
+  echo "        gh secret set TAURI_SIGNING_PRIVATE_KEY --env release < ~/.local/share/linger/updater.key"
   exit 1
 fi
 

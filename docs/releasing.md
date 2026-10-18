@@ -17,12 +17,22 @@ scripts/updater-key.sh
 
 It writes the public half into `client/src-tauri/tauri.conf.json` (commit that)
 and prints what to do with the private half — back it up offline, then add it and
-its password as repository secrets:
+its password as secrets of the `release` environment:
 
 ```bash
-gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.local/share/linger/updater.key
-gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD   # prompts; paste the password
+gh secret set TAURI_SIGNING_PRIVATE_KEY --env release < ~/.local/share/linger/updater.key
+gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --env release   # prompts; paste the password
 ```
+
+**Every signing key is a secret of the `release` environment, never of the
+repository** (#652): the update key and its password, the Android key and its
+password, and the Arch packages key. A repository secret can be read by a
+workflow run from any branch, and a branch can carry its own copy of a
+workflow. The environment (Settings → Environments → `release`) may only be
+used from a `v*` tag or from `main`, and only the jobs that sign name it:
+`preflight`, `bundle` and `android` in `release.yml`, and `publish` in
+`arch-repo.yml`. A new signing key, such as a Windows certificate, goes there
+too, and so does `environment: release` on the job that uses it.
 
 **Losing that key means you can never ship an update to an installed copy
 again**, short of reinstalling every machine by hand. It is generated once and

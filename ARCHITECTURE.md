@@ -643,6 +643,11 @@ E2EE launders a false promise, which is worse than an honest limitation.
    key did not sign. The repository only changes when a release is published
    (`.github/workflows/arch-repo.yml`), and its `arch` release stays a
    pre-release so the updater's `releases/latest` can never point at it.
+   **Every signing key is a secret of the `release` environment** (#652): the
+   update key, the Android key and the Arch key, with their passwords. Only a
+   `v*` tag or `main` may use that environment, and only the jobs that sign
+   name it, so a workflow run from any other branch never has a key within
+   reach (`docs/releasing.md`).
 9. **No telemetry.** Not opt-in, not anonymous, not crash reporting. None.
 
 ### User content is hostile

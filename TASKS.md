@@ -737,7 +737,7 @@ somebody buys the certificates, not before.*
   **Blocked on money, not on effort** — a Windows OV certificate (a few hundred
   a year) and an Apple Developer Program membership ($99/year). Do not start
   without both; there is nothing to test against.
-  Windows: certificate into a repository secret, signing wired into the bundler,
+  Windows: certificate into a `release` environment secret (#652), signing wired into the bundler,
   the workflow refusing to publish an unsigned installer. macOS: Developer ID
   signing plus `notarytool` and a stapled ticket, then uncomment the two macOS
   entries in `release.yml` — **in the same pass, never before**. Follow current

@@ -104,7 +104,7 @@ somebody else's computer can replace itself with a newer one.
    itself, and come back as 0.1.1.
 
 **Done when:** step 9 works. If it does not, the thing to look at first is
-whether the signing key in the repository secrets is the mate of the public key
+whether the signing key in the `release` environment's secrets is the mate of the public key
 in `tauri.conf.json` — run the *release* workflow manually from the Actions tab
 and it checks exactly that, without releasing anything.
 
