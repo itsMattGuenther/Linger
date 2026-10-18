@@ -14,7 +14,7 @@
 <a href="docs/development.md"><img alt="Built with Rust, Tauri and React" src="https://img.shields.io/badge/built%20with-Rust%20%C2%B7%20Tauri%20%C2%B7%20React-2e3b54?labelColor=131a28"></a>
 </p>
 
-<p><strong><a href="https://linger-site.netlify.app">Website</a></strong> · <a href="https://github.com/itsMattGuenther/Linger/releases/latest">Download</a> · <a href="docs/user-guide.md">User guide</a> · <a href="docs/host-guide.md">Host guide</a></p>
+<p><strong><a href="https://linger.im">Website</a></strong> · <a href="https://github.com/itsMattGuenther/Linger/releases/latest">Download</a> · <a href="docs/user-guide.md">User guide</a> · <a href="docs/host-guide.md">Host guide</a></p>
 </div>
 
 # Linger

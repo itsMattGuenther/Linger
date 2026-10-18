@@ -105,7 +105,7 @@ newest release's tag (#507), and they go with that tag's image. So check the
 tag's `image` run went green first; until it does, `latest` is still the
 previous server, and a new server would get files ahead of it.
 
-**5. The website.** The site ([linger-site.netlify.app](https://linger-site.netlify.app),
+**5. The website.** The site ([linger.im](https://linger.im),
 built from the private `itsMattGuenther/linger-site` repo) shows the version,
 the downloads and pictures of the app, and keeps those current itself: once a
 day it looks for a new release, and opens a pull request with the new
@@ -137,9 +137,9 @@ site's README says how to build it and retake a picture locally.
   the app has visibly moved on from it, say so to Matt; it's re-recorded by
   hand from the hype kit.
 
-Push any changes to that branch, look through Netlify's deploy preview at
-desktop width and at phone width, and leave the merge to Matt: merging is what
-publishes it.
+Push any changes to that branch, look through the preview Cloudflare links on
+it at desktop width and at phone width, and leave the merge to Matt: merging is
+what publishes it.
 
 ## The Arch and Omarchy package
 
