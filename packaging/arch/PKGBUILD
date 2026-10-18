@@ -14,7 +14,7 @@ pkgver=0.0.0
 pkgrel=1
 pkgdesc='A small place for friends to hang out'
 arch=('x86_64')
-url='https://github.com/itsMattGuenther/Linger'
+url='https://linger.im'
 license=('AGPL-3.0-only')
 depends=(
   'alsa-lib'
