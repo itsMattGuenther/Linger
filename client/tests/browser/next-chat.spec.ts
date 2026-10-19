@@ -547,6 +547,28 @@ test.describe("the message box", () => {
     await expect.poll(async () => (await shape()).height).toBe(one.height);
   });
 
+  // #672: on Linux (WebKitGTK) an empty box showed a sideways scroll bar
+  // under its hint. What's typed wraps, so the box scrolls up and down only,
+  // whatever goes in it, and so does the box that edits a message.
+  test("the box and the edit box never scroll sideways, whatever is in them", async ({ page }) => {
+    const sideways = (field: Locator) =>
+      field.evaluate((node: HTMLTextAreaElement) => ({ overflow: getComputedStyle(node).overflowX, wider: node.scrollWidth - node.clientWidth }));
+    const long = ["", "x".repeat(400), `https://example.com/${"a".repeat(300)}`, `a${" ".repeat(300)}b`, "word ".repeat(200)];
+    for (const words of long) {
+      await box(page).fill(words);
+      expect(await sideways(box(page))).toEqual({ overflow: "hidden", wider: 0 });
+    }
+    await box(page).fill("");
+    await box(page).press("ArrowUp");
+    const edit = page.getByRole("combobox", { name: /Edit/ });
+    await expect(edit).toBeVisible();
+    for (const words of long) {
+      await edit.fill(words);
+      expect(await sideways(edit)).toEqual({ overflow: "hidden", wider: 0 });
+    }
+    await edit.press("Escape");
+  });
+
   // #478: on Windows (WebView2, Chromium) the box's hint could be selected
   // like words. Selecting the whole window is the sure way to show it.
   test("selecting the whole window leaves the box and its hint as they were, and skips the prompt", async ({ page }) => {

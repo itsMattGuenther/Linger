@@ -15,7 +15,10 @@
   font-size: var(--text-body);
   line-height: var(--line-body);
   resize: none;
+  /* Up and down only, as the message box (#672). */
+  overflow-x: hidden;
   overflow-y: auto;
+  overflow-wrap: anywhere;
 }
 
 .nx-edit-box:focus-visible {

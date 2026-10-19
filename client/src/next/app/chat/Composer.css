@@ -57,7 +57,12 @@
   font-size: var(--text-body);
   line-height: var(--line-body);
   resize: none;
+  /* Up and down only. What's typed wraps, so nothing needs the box to
+     scroll sideways, and on Linux WebKitGTK showed a sideways scroll bar
+     under an empty box's hint anyway (#672). */
+  overflow-x: hidden;
   overflow-y: auto;
+  overflow-wrap: anywhere;
 }
 
 /* The buttons go together: under the typing area, when they go (#512). */
