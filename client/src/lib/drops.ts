@@ -1,7 +1,10 @@
 /**
  * Files dropped on the window (COMP-11). Tauri's own drop handling is off
  * (`dragDropEnabled: false`, `disable_drag_drop_handler`), because on Windows
- * it keeps drops from ever reaching the page. With it off, a file dropped
+ * it keeps drops from ever reaching the page. On Linux a window with a
+ * message box takes them through Tauri instead, since WebKitGTK hands the
+ * page a drop with no files (#673, `shellDrops.ts`); the shell keeps those
+ * from opening in place of the app, and this refuses the rest. With it off, a file dropped
  * anywhere that isn't a drop zone would make the WebView open the file in
  * place of the app, so the page refuses those itself. A drop zone (the
  * message box) accepts by cancelling `dragover` first, and this leaves it be.

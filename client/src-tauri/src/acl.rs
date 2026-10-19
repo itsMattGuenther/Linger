@@ -240,6 +240,30 @@ fn only_the_chat_windows_and_the_list_window_read_the_clipboard() {
 }
 
 #[test]
+fn only_the_windows_with_a_message_box_read_dropped_files() {
+    // A dropped file goes to the message box it was dropped on (#673); the
+    // shell hands over only what was dropped on the asking window.
+    // Settings, Search and Media have no box to drop into.
+    for (file, windows, commands) in granted() {
+        if !commands.contains("dropped_files") && !commands.contains("dropped_file") {
+            continue;
+        }
+        assert!(
+            windows
+                .iter()
+                .all(|window| window == "main" || window == "chat-*"),
+            "{file} grants reading dropped files to {windows:?}"
+        );
+    }
+    let chats: BTreeSet<String> = granted()
+        .into_iter()
+        .filter(|(_, windows, _)| windows.iter().any(|window| window == "chat-*"))
+        .flat_map(|(_, _, commands)| commands)
+        .collect();
+    assert!(chats.contains("dropped_files") && chats.contains("dropped_file"));
+}
+
+#[test]
 fn only_the_chat_windows_and_the_list_window_record_a_voice_message() {
     // The microphone is recorded only from a message box (#401): Settings,
     // Search and Media have none, and never get the recorder.

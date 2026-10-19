@@ -43,6 +43,8 @@ const COMMANDS: &[&str] = &[
     "autostart_state",
     "autostart_set",
     "clipboard_image",
+    "dropped_files",
+    "dropped_file",
     "phone_sound_mode",
     "phone_buzz",
     "phone_call_bar",

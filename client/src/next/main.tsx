@@ -13,6 +13,7 @@ import { followAppearance } from "./core/appearance";
 import { followInputMode } from "./core/inputMode";
 import { followKeyboard, followTextSize, onPhone } from "./core/phone";
 import { refuseStrayDrops } from "../lib/drops";
+import { hearShellDrops, takeDropsFromTheShell } from "../lib/shellDrops";
 import { voiceInThePage } from "../lib/ipc";
 import { followMediaKeys } from "../lib/mediaKeys";
 import { setNoNotifications } from "../lib/notify";
@@ -63,6 +64,10 @@ unlockAudioOnGesture(window);
 // A file dropped anywhere but a drop zone is refused, not opened in place of
 // the window (lib/drops.ts).
 refuseStrayDrops(window);
+// On Linux the shell takes a drop, since WebKitGTK hides its files from the
+// page, and the message box it landed on asks for them (#673). Elsewhere the
+// shell never sends one, and this hears nothing.
+if (isTauri() && !onPhone()) takeDropsFromTheShell(window, hearShellDrops, (command, args) => invoke(command, args));
 
 // The desktop's play and pause (media keys, MPRIS on Linux, the media
 // controls on Windows) resume only what they paused, and never start a song

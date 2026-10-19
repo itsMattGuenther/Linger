@@ -481,6 +481,57 @@ test.describe("the message box", () => {
     await expect.poll(async () => (await did(page)).filter((line) => line === "POST /uploads as token-1")).toHaveLength(10);
   });
 
+  // #673: on Linux WebKitGTK hands the page a drop with no files, so the
+  // shell takes it (src-tauri/src/dropped.rs) and the box it landed on asks
+  // for them. The page still sees the drag go over it, with no files in it.
+  test("on Linux, a drop the shell took goes to the box it landed on, with its files (#673)", async ({ page }) => {
+    await open(page);
+    const dragOver = (selector: string) =>
+      page.locator(selector).first().evaluate((node) => {
+        node.dispatchEvent(new DragEvent("dragover", { dataTransfer: new DataTransfer(), bubbles: true, cancelable: true }));
+      });
+    const listed = page.getByRole("list", { name: "Files for this message" });
+    const asked = async () => (await page.evaluate(() => document.body.dataset.did ?? "")).split("|").filter((line) => line.startsWith("dropped_file"));
+
+    // Over the box, then dropped: the picture and the text file attach, and
+    // the folder says why it didn't.
+    await dragOver(".nx-composer");
+    await page.evaluate(() =>
+      window.parity?.shellDrop(
+        [
+          { name: "porch.png", bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3] },
+          { name: "Photos", problem: "folder" },
+          { name: "notes.txt", bytes: [104, 105] },
+        ],
+        { x: 5, y: 5 },
+      ),
+    );
+    await expect(listed).toContainText("porch.png");
+    await expect(listed).toContainText("notes.txt");
+    await expect(page.getByText("Photos is a folder. Drop the files in it instead.")).toBeVisible();
+    expect(await asked()).toEqual(["dropped_files", "dropped_file:0", "dropped_file:2"]);
+
+    // Over the conversation instead: nothing is asked for or attached.
+    await dragOver("[role='log']");
+    await page.evaluate(() => window.parity?.shellDrop([{ name: "elsewhere.png", bytes: [1, 2, 3] }], { x: 5, y: 5 }));
+    await page.waitForTimeout(300);
+    await expect(listed).not.toContainText("elsewhere.png");
+    expect(await asked()).toHaveLength(3);
+
+    // No drag seen, as when the engine sent none: where the drop landed says
+    // which box. Too big says so, and nothing else is read.
+    await page.waitForTimeout(1100);
+    const middle = await page.locator(".nx-composer-input").boundingBox();
+    if (!middle) throw new Error("no box");
+    await page.evaluate(
+      (at) => window.parity?.shellDrop([{ name: "film.mov", problem: "too_big" }, { name: "late.txt", bytes: [111, 107] }], at),
+      { x: middle.x + middle.width / 2, y: middle.y + middle.height / 2 },
+    );
+    await expect(listed).toContainText("late.txt");
+    await expect(page.getByText("film.mov is too big to send. A file can be 500 MB at most.")).toBeVisible();
+    expect(page.url()).toContain("/tests/fixtures/next-chat-parity.html");
+  });
+
   test("a file dropped on the box or pasted into it is shared, and the drop never leaves the page (COMP-11)", async ({ page }) => {
     await open(page);
     const dropped = await page.locator(".nx-composer").evaluate((form) => {

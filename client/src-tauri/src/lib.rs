@@ -20,6 +20,8 @@ pub mod cue;
 pub mod deep_link;
 #[cfg(target_os = "linux")]
 pub mod desktop_entry;
+#[cfg(desktop)]
+mod dropped;
 pub mod gateway;
 pub mod graphics;
 #[cfg(desktop)]
@@ -344,6 +346,7 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
         .manage(std::sync::Arc::new(sounds::Sounds::default()))
         .manage(clip::Clips::default())
         .manage(talk_key::TalkKeyWatch::default())
+        .manage(dropped::Dropped::default())
         // The window is built here, not from the config, so it can leave the
         // title bar off on Hyprland (#130). See `window.rs`.
         .setup(|app| {
@@ -390,6 +393,8 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
             autostart::autostart_state,
             autostart::autostart_set,
             clipboard::clipboard_image,
+            dropped::dropped_files,
+            dropped::dropped_file,
             clip::clip_start,
             clip::clip_stop,
             clip::clip_cancel

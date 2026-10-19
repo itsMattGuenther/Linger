@@ -42,11 +42,32 @@ pub fn create(app: &App) -> tauri::Result<()> {
         std::env::var_os("XDG_CURRENT_DESKTOP").as_deref(),
     );
     for config in &app.config().app.windows {
-        WebviewWindowBuilder::from_config(app, config)?
+        // The list holds the message box beside it (#337): on Linux its
+        // dropped files come through the shell (`dropped.rs`, #673).
+        let mut config = config.clone();
+        config.drag_drop_enabled = crate::dropped::THROUGH_THE_SHELL;
+        WebviewWindowBuilder::from_config(app, &config)?
             .decorations(config.decorations && decorated)
             .build()?;
     }
     Ok(())
+}
+
+/// Who takes a file dropped on a window. The page, everywhere but Linux: Tauri's
+/// own drop handling is off, since on Windows it kept drops from the page
+/// (COMP-11, lib/drops.ts). On Linux WebKitGTK hides dropped files from the
+/// page, so a window with a message box takes them through Tauri there and the
+/// page asks for them (`dropped.rs`, #673). A window without one leaves them to
+/// the page, which refuses them.
+fn with_drops<'a, R: tauri::Runtime, M: Manager<R>>(
+    builder: WebviewWindowBuilder<'a, R, M>,
+    message_box: bool,
+) -> WebviewWindowBuilder<'a, R, M> {
+    if message_box && crate::dropped::THROUGH_THE_SHELL {
+        builder
+    } else {
+        builder.disable_drag_drop_handler()
+    }
 }
 
 /// The owner window's label. Only it may open the Buddy list client's other
@@ -223,16 +244,17 @@ pub async fn next_open_conversation(
         }
         return Ok(());
     }
-    WebviewWindowBuilder::new(&app, label, WebviewUrl::App(url.into()))
-        // Files dropped on the page reach it on Windows too (COMP-11, lib/drops.ts).
-        .disable_drag_drop_handler()
-        .title("Linger")
-        .inner_size(width, height)
-        .min_inner_size(360.0, 360.0)
-        .decorations(false)
-        .build()
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    with_drops(
+        WebviewWindowBuilder::new(&app, label, WebviewUrl::App(url.into())),
+        true,
+    )
+    .title("Linger")
+    .inner_size(width, height)
+    .min_inner_size(360.0, 360.0)
+    .decorations(false)
+    .build()
+    .map(|_| ())
+    .map_err(|e| e.to_string())
 }
 
 /// Open the Settings window, on a section if one is named, or bring it
@@ -255,16 +277,17 @@ pub async fn next_open_settings(
             .emit_to(SETTINGS, "next:section", section)
             .map_err(|e| e.to_string());
     }
-    WebviewWindowBuilder::new(&app, SETTINGS, WebviewUrl::App(url.into()))
-        // Files dropped on the page reach it on Windows too (COMP-11, lib/drops.ts).
-        .disable_drag_drop_handler()
-        .title("Linger Settings")
-        .inner_size(720.0, 640.0)
-        .min_inner_size(560.0, 480.0)
-        .decorations(false)
-        .build()
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    with_drops(
+        WebviewWindowBuilder::new(&app, SETTINGS, WebviewUrl::App(url.into())),
+        false,
+    )
+    .title("Linger Settings")
+    .inner_size(720.0, 640.0)
+    .min_inner_size(560.0, 480.0)
+    .decorations(false)
+    .build()
+    .map(|_| ())
+    .map_err(|e| e.to_string())
 }
 
 /// Open Search or Media (`which`), or bring it forward and tell it so
@@ -288,16 +311,17 @@ pub async fn next_open_tool(
             .map_err(|e| e.to_string());
     }
     let url = format!("next.html?window={label}");
-    WebviewWindowBuilder::new(&app, label, WebviewUrl::App(url.into()))
-        // Files dropped on the page reach it on Windows too (COMP-11, lib/drops.ts).
-        .disable_drag_drop_handler()
-        .title(title)
-        .inner_size(width, height)
-        .min_inner_size(360.0, 420.0)
-        .decorations(false)
-        .build()
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    with_drops(
+        WebviewWindowBuilder::new(&app, label, WebviewUrl::App(url.into())),
+        false,
+    )
+    .title(title)
+    .inner_size(width, height)
+    .min_inner_size(360.0, 420.0)
+    .decorations(false)
+    .build()
+    .map(|_| ())
+    .map_err(|e| e.to_string())
 }
 
 /// Search's and Media's windows: label, title and size. Media is wide for its
@@ -383,6 +407,15 @@ pub fn page_seen(app: &AppHandle, label: &str, seen: bool) {
 /// counting a window that no longer exists towards you being here
 /// (docs/design/architecture.md, "Windows and their roles").
 pub fn on_event(window: &tauri::Window, event: &tauri::WindowEvent) {
+    // Files dropped on a window with a message box, on Linux: kept for its
+    // page to ask for (`dropped.rs`, #673).
+    if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
+        window.app_handle().state::<crate::dropped::Dropped>().note(
+            window.label(),
+            paths.clone(),
+            std::time::Instant::now(),
+        );
+    }
     // Closing the list keeps Linger in the tray, or quits it and every
     // window with it (tray.rs).
     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -571,20 +604,37 @@ mod tests {
     }
 
     /// Tauri's own drop handling keeps dropped files from the page on
-    /// Windows (COMP-11), so every window turns it off and the page refuses
-    /// stray drops itself (`lib/drops.ts`).
+    /// Windows (COMP-11), so every window decides with `with_drops`: off,
+    /// and the page refuses stray drops itself (`lib/drops.ts`), except on
+    /// Linux for a window with a message box, whose page asks for its drops
+    /// (`dropped.rs`, #673). The config's windows are off, and `create`
+    /// turns the list's on for Linux.
     #[test]
-    fn every_window_leaves_dropped_files_to_the_page() {
+    fn every_window_says_who_takes_dropped_files() {
         let source = include_str!("window.rs");
+        let tests = source.find("#[cfg(test)]").expect("tests");
+        // Without spaces or line breaks, so how rustfmt wraps a call doesn't matter.
+        let source: String = source[..tests].split_whitespace().collect();
         let built = source.matches("WebviewWindowBuilder::new(").count();
-        let off = source.matches(".disable_drag_drop_handler()").count();
+        let decided = source
+            .matches("with_drops(WebviewWindowBuilder::new(")
+            .count();
         assert!(built >= 3);
-        assert_eq!(off, built, "a window built here keeps Tauri's drop handler");
+        assert_eq!(
+            decided, built,
+            "a window built here doesn't say who takes drops"
+        );
+        assert!(source.contains("config.drag_drop_enabled=crate::dropped::THROUGH_THE_SHELL;"));
         let config: serde_json::Value =
             serde_json::from_str(include_str!("../tauri.conf.json")).expect("tauri.conf.json");
         for window in config["app"]["windows"].as_array().expect("windows") {
             assert_eq!(window["dragDropEnabled"], serde_json::Value::Bool(false));
         }
+    }
+
+    #[test]
+    fn only_linux_takes_drops_through_the_shell() {
+        assert_eq!(crate::dropped::THROUGH_THE_SHELL, cfg!(target_os = "linux"));
     }
     use super::{
         at_message, attention_target, conversation_label, conversation_size, conversation_url,

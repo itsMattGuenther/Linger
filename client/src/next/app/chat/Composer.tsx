@@ -9,6 +9,7 @@ import { useAutoGrow } from "../../../lib/autoGrow";
 import { insertGlyph } from "../../../lib/composerEmoji";
 import { loadEmoji, onEmojiLoaded } from "../../../lib/emoji";
 import { rememberEmoji } from "../../../lib/emoji/recent";
+import { dropZone } from "../../../lib/shellDrops";
 import { completeShortcode, convertShortcodes, putShortcode } from "../../../lib/emoji/shortcodes";
 import { type MentionPerson, type MentionTyping, putMention } from "../../core/chat/mentions";
 import { MAX_MOTD_CHARS, motdCommand, typingMotd } from "../../core/chat/motd";
@@ -468,6 +469,13 @@ export const Composer = memo(function Composer({
     if (taking.length > 0) onAttach(taking);
   };
 
+  // On Linux the shell takes a drop and the page asks for its files
+  // (lib/shellDrops.ts, #673): this box is where they go when it lands here.
+  const form = useRef<HTMLFormElement | null>(null);
+  const takeDrop = useRef({ attach, say: (words: string) => say(words) });
+  takeDrop.current = { attach, say: (words: string) => say(words) };
+  useEffect(() => (form.current ? dropZone(form.current, () => takeDrop.current) : undefined), []);
+
   // A paste's words, put in where the engine would have put them: at the
   // caret, over any selection, cut to the box's length, and one step for
   // Undo of its own, not merged into the typing before or after.
@@ -548,6 +556,7 @@ export const Composer = memo(function Composer({
 
   return (
     <form
+      ref={form}
       className="nx-composer"
       onSubmit={(event: FormEvent) => {
         event.preventDefault();

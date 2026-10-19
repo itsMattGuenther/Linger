@@ -23,6 +23,11 @@
  * clipboard (`clipboard_image`, which the Linux app's box asks, #276); null
  * takes it off. Each time the box asks is written down as `clipboard`.
  *
+ * `window.parity.shellDrop(dropped, at)` is a drop the Linux shell took
+ * (#673, src/lib/shellDrops.ts): what `dropped_files` lists and
+ * `dropped_file` hands back, then the shell's `tauri://drag-drop` at `at`.
+ * Each ask is written down as `dropped_files` or `dropped_file:<index>`.
+ *
  * Voice messages (#401): the shell's recorder (`clip_start`, `clip_stop`,
  * `clip_cancel`) hands back `next/voice-clip.bin`, one second of a tone that
  * the real recorder made (src-tauri/src/clip.rs). `window.parity.clip` acts
@@ -46,6 +51,8 @@ import { createRoot } from "react-dom/client";
 import type { Attachment } from "../../src/generated/Attachment";
 import type { Message } from "../../src/generated/Message";
 import { serverState } from "../../src/lib/gateway";
+import { invoke } from "@tauri-apps/api/core";
+import { hearShellDrops, takeDropsFromTheShell } from "../../src/lib/shellDrops";
 import { ChatWindow } from "../../src/next/app/chat/ChatWindow";
 import "../../src/next/styles/app.css";
 import { fakeDesktop, json, refuse, type Unnumbered } from "./next/desktop";
@@ -72,6 +79,8 @@ const recordingLoaded = fetch("/tests/fixtures/next/voice-clip.bin")
   });
 /** What the desktop shell would find on the clipboard: a picture's bytes, or nothing. */
 let shellClipboard: Uint8Array | null = null;
+/** The last drop the shell took (#673): each thing's name and bytes, or why it can't be sent. */
+let shellDropped: { name: string; bytes?: number[]; problem?: "folder" | "too_big" | "unreadable" }[] = [];
 let release: () => void = () => undefined;
 const parts = new Promise<void>((settle) => {
   release = settle;
@@ -123,6 +132,17 @@ const desktop = fakeDesktop({
     clip_cancel: () => {
       desktop.note("clip_cancel");
       return null;
+    },
+    dropped_files: () => {
+      desktop.note("dropped_files");
+      return shellDropped.map((one) => ({ name: one.name, size: one.bytes?.length ?? 0, problem: one.problem ?? null }));
+    },
+    dropped_file: (args) => {
+      desktop.note(`dropped_file:${String(args.index)}`);
+      const one = shellDropped[Number(args.index)];
+      if (!one?.bytes) throw "that can't be sent";
+      // Raw bytes, as the shell answers (tauri::ipc::Response).
+      return Uint8Array.from(one.bytes).buffer;
     },
     clipboard_image: () => {
       desktop.note("clipboard");
@@ -284,6 +304,8 @@ declare global {
         /** What it hands back when stopped, as `clip_stop` answers: the lookahead, then each packet by its length. */
         hands: (bytes: number[]) => void;
       };
+      /** A drop the Linux shell took (#673), landing at `at` in the page's pixels. */
+      shellDrop: (dropped: { name: string; bytes?: number[]; problem?: "folder" | "too_big" | "unreadable" }[], at: { x: number; y: number }) => void;
       /** From now on, every history read waits to be answered. */
       holdReads: () => void;
       /** How many history reads are on their way, held or not. */
@@ -317,6 +339,10 @@ window.parity = {
       recorded = Uint8Array.from(bytes);
     },
   },
+  shellDrop: (dropped, at) => {
+    shellDropped = dropped;
+    desktop.deliver("tauri://drag-drop", { paths: dropped.map((one) => `/home/sam/${one.name}`), position: at });
+  },
   holdReads: () => {
     holdingReads = true;
   },
@@ -331,6 +357,9 @@ window.parity = {
     return answering.length;
   },
 };
+
+// As main.tsx: the shell's drops, on Linux, go to the box they land on (#673).
+takeDropsFromTheShell(window, hearShellDrops, (command, args) => invoke(command, args));
 
 const root = document.getElementById("root");
 if (!root) throw new Error("missing #root");
