@@ -58,6 +58,12 @@ produces a green release that no installed copy will accept.
   host section says that, plus only what's unusual about this release: a new
   setting, a change to `compose.yaml`, or a database change worth a backup
   somewhere else first.
+- Say whether anything stops working with an older app or server (PROTOCOL §9,
+  "Which apps and servers work together"). Before 1.0, a change works both ways
+  wherever it can. From 1.0, a break may only leave behind versions outside the window
+  (12 months or the two releases before, whichever reaches further back), and the
+  release *before* it says it's coming. At 1.0 itself, the window starts: say so in
+  its notes.
 - Point the README's release-notes line and `docs/testing-strategy.md` at the
   new notes, and record the release in `TASKS.md`.
 

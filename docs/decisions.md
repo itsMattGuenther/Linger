@@ -1567,3 +1567,29 @@ allow, and "if it sounds bad, the people they're talking to will say so". On
   the call does. "Never a notification" (SPEC §4.15) is about alerts that pull you
   back into the app; this is the opposite, the way out of a call you're in. The iPhone
   needs no bar: it shows its own call indicator.
+
+## Decided — how far back apps and servers work together
+
+**Matt, 2026-10-19 (#315).** Parked on 2026-09-28 while the design settled. It came back
+with the phone apps, which spread versions out: an Android app installed from a release
+never updates itself, a store holds each update for review, a TestFlight build stops
+after 90 days, and hosts update when they get to it. PROTOCOL §9, "Which apps and
+servers work together", has the rules.
+
+- **Before 1.0, the habit stays the rule**: every change works both ways wherever it
+  can. Nothing older is promised in writing while things still change weekly.
+- **From 1.0, a window: 12 months or two releases, whichever reaches further back**,
+  both ways. Matt's worry was that a time-only window (6 months was the first
+  suggestion) is too short once releases slow down: with one release a year, the last
+  one would already be outside it. Counting releases too fixes that. For comparison,
+  self-hosted chat tends to promise about a year (Mattermost's apps work with servers
+  back to its most recently retired long-term release; Rocket.Chat supports a release
+  for 6 months, 12 for long-term ones), and Matrix servers list what they support for
+  the apps to check.
+- **Ask what the server can do, never its version**, as `voice` and account deletion
+  already do.
+- **A break leaves behind only versions outside the window, is said a release ahead,
+  and is told in plain words** to whoever meets it. The everyone-sees-it message gets
+  built with the first real break, not before.
+- **One version number for the app and the server.** Releasing them apart (Matt's
+  question on #315, 2026-10-05) would give each its own number and double every rule.

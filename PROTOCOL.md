@@ -2014,5 +2014,37 @@ The path carries the major version. Within v1, additive changes only: new option
 fields, new `op` values, new error codes. Clients must ignore unknown fields and unknown
 `op` values rather than erroring.
 
-Any breaking change means `/api/v2` and a client that speaks both during a transition
-window.
+A break of the wire as a whole, such as an endpoint renamed or a field that means
+something else, means `/api/v2` and a client that speaks both during a transition window.
+A narrower break, one thing an older app or server can't do (the mesh voice before
+0.4.1 was one, #306), follows the rules below.
+
+### Which apps and servers work together
+
+**Decided by Matt, 2026-10-19 (#315).** An app and the server it talks to are on
+different releases most of the time. Hosts update their servers when they get to it,
+an Android app installed from a release never updates itself, and an app store holds
+every update for review.
+
+- **Before 1.0, every change works both ways wherever it can**: a new app with an older
+  server, and an older app with a new server, as it has from the start. Nothing older is
+  promised in writing while the design is still settling.
+- **From 1.0, a promise.** An app works with every server released in the 12 months
+  before it or the two releases before it, whichever reaches further back, and a server
+  works with every app from the same window. A slow year still covers the last release,
+  and a busy month still covers a year.
+- **The app asks the server what it can do, not which version it is.** A feature that
+  needs the server is announced by the server, in `GET /server` or `ready`, the way
+  `voice` (#306) and the list of deleted accounts (#650) are. An app that doesn't find
+  it hides the feature or says the server needs an update, and never tries it and
+  fails. `version` above is for telling a host their server is behind (#314), never for
+  turning a feature on.
+- **A break is rare, chosen, and said ahead.** Something that can't work both ways may
+  only leave behind versions outside the window, and the release before it says so in
+  its notes (`docs/releasing.md`). Anybody whose app meets it is told in plain words, the
+  server needs an update and to ask the host, or this app needs one, rather than a
+  feature quietly not working.
+- **One version number for the app and the server.** One release is a new app and a new
+  server, from the same tag, and its notes say when something new needs the server
+  updated. Releasing them apart would give each its own number, and every rule above
+  would have to be written out for both.
