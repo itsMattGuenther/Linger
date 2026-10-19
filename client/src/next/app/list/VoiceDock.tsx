@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import type { User } from "../../../generated/User";
 import { volumeLabel } from "../../../lib/voice";
+import { onPhone } from "../../core/phone";
 import { Chip, IconButton, MarkerCrowd, Name, VoiceGlyph } from "../../kit";
 import { markerFor } from "../markers";
 import { useTalkSeats } from "../useTalkSeats";
@@ -80,6 +81,8 @@ export interface VoiceDockProps {
  * that light while they talk and open everyone by name.
  */
 export function VoiceDock({ where, people, muted, deafened, line, server, onGoToRoom, onMute, onDeafen, onLeave, onVolume, onTakeOut }: VoiceDockProps) {
+  // A thumb's size on the phone (#429), a pointer's elsewhere.
+  const controlSize = onPhone() ? "lg" : "sm";
   // Whose volume is open, and the chip (or crowd) it opened from.
   const [volumeOf, setVolumeOf] = useState<{ id: string } | null>(null);
   const opener = useRef<HTMLButtonElement | null>(null);
@@ -150,7 +153,7 @@ export function VoiceDock({ where, people, muted, deafened, line, server, onGoTo
         <VoiceGlyph speaking={anyone} mine />
         <span className="nx-voice-label">In voice</span>
         <span className="nx-voice-where">{where}</span>
-        <IconButton icon="go" label={`Go to ${where}`} size="sm" onClick={onGoToRoom} />
+        <IconButton icon="go" label={`Go to ${where}`} size={controlSize} onClick={onGoToRoom} />
       </div>
       {server ? (
         <p className="nx-voice-server" style={serverColor(server.accent)}>
@@ -224,15 +227,15 @@ export function VoiceDock({ where, people, muted, deafened, line, server, onGoTo
       {/* Symbols, as in the room's chat window (#216): each word is the button's name and tooltip (#230).
           Mute shows with push-to-talk too: it's a choice of its own, which the key can't undo (#232). */}
       <div className="nx-voice-controls" role="group" aria-label="Your voice">
-        <IconButton icon={muted ? "micOff" : "mic"} label={muted ? "Muted" : "Mute"} size="sm" pressed={muted} onClick={() => onMute(!muted)} />
+        <IconButton icon={muted ? "micOff" : "mic"} label={muted ? "Muted" : "Mute"} size={controlSize} pressed={muted} onClick={() => onMute(!muted)} />
         <IconButton
           icon={deafened ? "headOff" : "head"}
           label={deafened ? "Deafened" : "Deafen"}
-          size="sm"
+          size={controlSize}
           pressed={deafened}
           onClick={() => onDeafen(!deafened)}
         />
-        <IconButton icon="leave" label="Leave voice" size="sm" onClick={onLeave} />
+        <IconButton icon="leave" label="Leave voice" size={controlSize} onClick={onLeave} />
       </div>
     </section>
   );

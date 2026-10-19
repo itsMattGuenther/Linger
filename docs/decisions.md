@@ -691,7 +691,8 @@ eGGnogSC's proposal on #253 over his own brainstorm of 2026-09-26, which had a
   work is weeks of real-phone testing (AGENTS "Where you will be wrong": audio
   devices), and of the rare times friends talk from a phone on Discord, Matt
   says "it sounds awful and it's not pleasant for anybody". It comes back if
-  people using the phone app ask.
+  people using the phone app ask. *Reversed 2026-10-19: voice rooms on the phone,
+  below.*
 - **No mobile branch.** Phone work lands on `main` in ordinary short branches,
   with desktop-only code (tray, updater, keyring, voice) switched off for phone
   builds. Nothing ships to a phone until a phone build is added to the release
@@ -1530,3 +1531,39 @@ reach. A mistake, a confused agent or a stolen login shouldn't be able to reach 
 - **No required reviewer.** It wouldn't stop a stolen login or an agent using Matt's
   token, since either could approve as Matt, and a release would wait for three or four
   clicks.
+
+## Decided — voice rooms on the phone, and the call bar
+
+**Matt, 2026-10-19 (#429).** The phone app started text only (2026-10-02, above), and
+voice was to come back if people asked. Matt decided to build it before the store
+listings: anybody on a phone can join voice with any microphone, as other chat apps
+allow, and "if it sounds bad, the people they're talking to will say so". On
+2026-10-10 he had wanted headset microphones only; on 2026-10-12 he dropped that.
+
+- **Open phone voice, no headset rule.** The phone's own microphone or a headset's,
+  whichever the phone uses.
+- **It runs in the page, not in Rust.** The phone's web engine has WebRTC with the
+  phone's own echo cancelling, noise suppression and level control, which is what made
+  a phone on speaker the problem in the first place. `lib/pageVoice.ts` does what the
+  desktop engine does, by the same rules (PROTOCOL "Voice forwarding"), and raises the
+  same events, so the screens and the store don't know which engine they talk to. The
+  server doesn't change, and nothing goes through Apple or Google.
+- **The screens are the computer's, sized for a thumb**, from a mockup Matt approved
+  the same day: Join in the room's voice line; Mute, Deafen and Leave there and in the
+  list's voice bar, 44 px; and one line under the title of every other screen saying
+  where your voice is, with the same controls, because on the phone a conversation
+  covers the list and its voice bar. In another room that line stands in for the
+  room's own, so the phone never offers to move voice there: leave, then join.
+- **Speaker by default, no push-to-talk, 100% at most.** Sound comes out of the
+  speaker, or a headset when one is connected, with no button to switch. Mute is how
+  a phone goes quiet. The web engine's player goes no louder than as sent, so a
+  person's volume tops out at 100% on a phone.
+- **The call bar: the one notification the phone app shows** (option B on #429).
+  Android stops a background app's microphone and network within seconds unless a
+  foreground service holds it up, and a foreground service must show a notification.
+  Without it, locking the phone would end the call (option A). Matt chose to ship both
+  together, so the first phone voice friends get keeps going in a pocket. The bar is
+  silent, never pops up, says only where the call is, has Mute and Leave, and goes when
+  the call does. "Never a notification" (SPEC §4.15) is about alerts that pull you
+  back into the app; this is the opposite, the way out of a call you're in. The iPhone
+  needs no bar: it shows its own call indicator.

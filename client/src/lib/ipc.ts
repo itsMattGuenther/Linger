@@ -15,11 +15,14 @@
  * remembered, and the app says so.
  */
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
+import type { ClientFrame } from "../generated/ClientFrame";
 import type { IceServer } from "../generated/IceServer";
 import type { RoomId } from "../generated/RoomId";
 import type { ServerFrame } from "../generated/ServerFrame";
 import type { VoiceControls } from "../generated/VoiceControls";
+import { PageVoice, type PageVoiceEvent, type PageVoiceWorld } from "./pageVoice";
 
 export interface StoredSession {
   /** Origin of the server, e.g. `https://linger.example`. No trailing slash. */
@@ -58,11 +61,62 @@ export async function forgetSession(baseUrl: string): Promise<SessionWrite> {
 
 // --- voice (SPEC §4.14, T-1402) --------------------------------------------
 //
-// Audio lives in the Tauri core, not in this page (ARCHITECTURE §2). So the
-// frontend's whole part in voice is saying "join", saying "leave", and handing
-// the core the two frames that are its business — the peer connections, the
-// negotiation, the microphone and the speakers all happen on the other side
-// of these three calls.
+// On a computer, audio lives in the Tauri core, not in this page
+// (ARCHITECTURE §2). So the frontend's whole part in voice is saying "join",
+// saying "leave", and handing the core the two frames that are its business —
+// the peer connections, the negotiation, the microphone and the speakers all
+// happen on the other side of these three calls.
+//
+// The phone has no voice in its core: its web engine does it (#429,
+// `pageVoice.ts`). There the same calls go to the page's own engine, which
+// raises the same events, so nothing above this file knows the difference.
+
+/** The phone's voice engine, once `voiceInThePage` has put it in place. */
+let inPage: PageVoice | null = null;
+
+/** Where the page's engine raises its events, beside the core's. */
+const pageVoiceEvents = new EventTarget();
+
+/**
+ * Voice runs in this page from now on (the phone app, #429): every voice
+ * call below goes to `pageVoice.ts` instead of the core. `world` is for the
+ * tests; the app uses the browser's own.
+ */
+export function voiceInThePage(world?: PageVoiceWorld): PageVoice {
+  if (inPage !== null) return inPage;
+  const engine = new PageVoice(
+    {
+      send: (server: string, frame: ClientFrame) => invoke("gateway_send", { baseUrl: server, frame }),
+      emit: (event, payload) => void pageVoiceEvents.dispatchEvent(new CustomEvent(event, { detail: payload })),
+    },
+    world,
+  );
+  inPage = engine;
+  // The gateway resumed its session: in a call, the network under it
+  // changed, and the call starts its connection afresh (#656). The core
+  // tells its own engine; on the phone it tells the page.
+  if (isTauri()) void listen<{ server: string }>("gateway:resumed", (event) => engine.gatewayResumed(event.payload.server));
+  return engine;
+}
+
+/** Whether voice runs in this page: the phone app (#429). */
+export function voiceIsInThePage(): boolean {
+  return inPage !== null;
+}
+
+/**
+ * Hear one of voice's events, from whichever engine raises it: the core's on
+ * a computer, the page's on the phone.
+ */
+export async function listenVoice<T>(event: PageVoiceEvent, handler: (event: { payload: T }) => void): Promise<UnlistenFn> {
+  const here = (raised: Event) => handler({ payload: (raised as CustomEvent<T>).detail });
+  pageVoiceEvents.addEventListener(event, here);
+  const core = await listen<T>(event, handler);
+  return () => {
+    pageVoiceEvents.removeEventListener(event, here);
+    core();
+  };
+}
 
 /**
  * Which microphone and speakers to use, by the names `voiceDevices` gave.
@@ -87,6 +141,7 @@ export async function voiceJoin(
   devices: VoiceDeviceChoice,
   ice: IceServer[],
 ): Promise<void> {
+  if (inPage !== null) return inPage.join(baseUrl, sessionId, roomId, ice);
   if (!isTauri()) throw new Error("Voice only works in the desktop app.");
   await invoke("voice_join", {
     baseUrl,
@@ -99,12 +154,14 @@ export async function voiceJoin(
 }
 
 export async function voiceLeave(baseUrl: string): Promise<void> {
+  if (inPage !== null) return inPage.leave(baseUrl);
   if (!isTauri()) return;
   await invoke("voice_leave", { baseUrl });
 }
 
 /** Mute and deafen: stop or resume sending the microphone, and tell the room. Yours alone (SPEC §4.14). */
 export async function voiceControls(baseUrl: string, controls: VoiceControls): Promise<void> {
+  if (inPage !== null) return inPage.setControls(baseUrl, controls);
   if (!isTauri()) return;
   await invoke("voice_controls", { baseUrl, controls });
 }
@@ -115,7 +172,8 @@ export async function voiceControls(baseUrl: string, controls: VoiceControls): P
  * so not holding the key never shows as muted (#232).
  */
 export async function voicePushToTalk(baseUrl: string, closed: boolean): Promise<void> {
-  if (!isTauri()) return;
+  // The phone has no talk key: its microphone is open, and Mute closes it.
+  if (inPage !== null || !isTauri()) return;
   await invoke("voice_push_to_talk", { baseUrl, closed });
 }
 
@@ -126,7 +184,8 @@ export async function voicePushToTalk(baseUrl: string, closed: boolean): Promise
  * join opens what Settings saved.
  */
 export async function voiceChooseDevices(devices: VoiceDeviceChoice): Promise<void> {
-  if (!isTauri()) return;
+  // The phone picks its own: the earpiece, the speaker or a headset.
+  if (inPage !== null || !isTauri()) return;
   await invoke("voice_choose_devices", { input: devices.input, output: devices.output });
 }
 
@@ -158,7 +217,7 @@ export type TalkKeyReach =
  * window asks while you're in voice with push-to-talk on, and only then.
  */
 export async function watchTalkKey(key: string | null): Promise<void> {
-  if (!isTauri()) return;
+  if (inPage !== null || !isTauri()) return;
   await invoke("voice_talk_key", { key });
 }
 
@@ -171,6 +230,7 @@ export async function talkKeyReach(key: string): Promise<TalkKeyReach | null> {
 
 /** How loud one peer (a session id) plays for you: 1 is as sent, 2 is the ceiling. */
 export async function voiceVolume(baseUrl: string, peer: string, volume: number): Promise<void> {
+  if (inPage !== null) return inPage.setVolume(baseUrl, peer, volume);
   if (!isTauri()) return;
   await invoke("voice_volume", { baseUrl, peer, volume });
 }
@@ -188,7 +248,7 @@ export interface VoiceDeviceList {
  * desktop app, where there is no core to ask and no voice to pick for.
  */
 export async function voiceDevices(): Promise<VoiceDeviceList | null> {
-  if (!isTauri()) return null;
+  if (inPage !== null || !isTauri()) return null;
   return invoke<VoiceDeviceList>("voice_devices");
 }
 
@@ -200,6 +260,10 @@ export async function voiceDevices(): Promise<VoiceDeviceList | null> {
  * knows which server is which and what state it is in.
  */
 export async function voiceFrame(baseUrl: string, frame: ServerFrame): Promise<void> {
+  if (inPage !== null) {
+    if (frame.op === "voice.offer") await inPage.offer(baseUrl, frame.d.sdp, frame.d.tracks, frame.d.bitrate ?? null);
+    return;
+  }
   if (!isTauri()) return;
   await invoke("voice_frame", { baseUrl, frame });
 }

@@ -518,8 +518,9 @@ Rules for this milestone:
 until the desktop app was finished and lived with; the release checks closed on
 2026-09-25 and friends have used it since. **T-1601 is decided and written into
 SPEC §4.15:** a phone app for iPhone and Android from the same Tauri 2 code, no
-push and no notifications, no `mobile` presence, uploads yes, and text only for
-now. The reasons are in [`docs/decisions.md`](docs/decisions.md).
+push and no notifications, no `mobile` presence, uploads yes, and text only at
+first: voice rooms came on 2026-10-19 (T-1606, #429). The reasons are in
+[`docs/decisions.md`](docs/decisions.md).
 
 *Check: sign in, read a room, send a message and a photo, from a phone.*
 
@@ -710,6 +711,37 @@ macOS runners, or a friend's Mac.
   *Accept:* a report reaches the host and only the host; a blocked person's
   messages, DMs and knocks never reach the person who blocked them, on either
   app.
+
+- 🟡 **T-1606 · Voice rooms on the phone** — effort: **high** (#429)
+  *Decided by Matt 2026-10-19 (`docs/decisions.md`, "Voice rooms on the
+  phone, and the call bar"); SPEC §4.15.* Anybody on a phone joins voice
+  with any microphone. **Built on `feat/429-phone-voice`:** voice runs in the
+  page on the phone (`lib/pageVoice.ts`), on the web engine's WebRTC with the
+  phone's echo cancelling; `ipc.ts` sends the same voice calls there when
+  `voiceInThePage` has put it in place (main.tsx, on the phone), and it
+  raises the same events, so the store and screens are the computer's. It
+  follows the desktop engine's rules: the server's offer answered on one
+  connection, the microphone's m-line the one `tracks` doesn't name, a new
+  username fragment answered on a new connection, the same restart rules
+  (`lib/voiceRestarts.ts`, the desktop's tests ported), the same talking
+  level, and Opus asked not to send silence (`usedtx`). The screens: the
+  room's voice line and the list's voice bar with thumb-sized controls, and
+  `InVoiceLine` on every other screen. The call bar (`phone_call.rs`,
+  `VoiceCallService.kt`): a microphone foreground service with one silent
+  notification while in voice, whose Mute and Leave reach the page
+  (`linger:callbar`); the list keeps the voice server's connection open in
+  the background. `next-phone-voice-room.spec.ts` proves the call against a
+  real WebRTC connection standing in for the server (join, hear, be heard,
+  mute, silence, a dropped connection started afresh, leave), and
+  `next-phone.spec.ts` the screens. **Still to do:** the emulator against a
+  real server; then **Matt's Pixel** on his server, with a computer in the
+  room: speaker and earpiece, a Bluetooth headset, locked for ten minutes,
+  Wi-Fi to mobile data mid-call, and how it sounds to the people on
+  computers. Then the iPhone, with the rest of the iPhone app (WebKit runs
+  the same page engine). Google Play asks for a foreground-service
+  declaration for the call bar, with a short video of it.
+  *Accept:* on a real phone, in a room with people on computers, both ways
+  sound right, and the call survives the phone locked and a network change.
 
 ---
 

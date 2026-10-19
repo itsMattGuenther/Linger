@@ -141,7 +141,7 @@ export function useVoiceMessages(
         put(conversation, { kind: "recording", since: Date.now(), levels: [] });
       },
       (error: unknown) =>
-        put(conversation, { kind: "ready", problem: startProblemWords(voiceStartProblem(error instanceof Error ? error.message : String(error), onWindows(), devices)) }),
+        put(conversation, { kind: "ready", problem: startProblemWords(voiceStartProblem(error instanceof Error ? error.message : String(error), onWindows(), devices, onPhone())) }),
     );
   }, [paneId, put]);
 

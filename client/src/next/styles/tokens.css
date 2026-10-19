@@ -425,7 +425,8 @@
   --text-emoji-cell: 28px;
   --emoji-cell-art: 32px;
   --pane-head: calc(40px * var(--text-scale));
-  --voice-strip: calc(40px * var(--text-scale));
+  /* Holds a thumb's controls (#429): mute, deafen and leave. */
+  --voice-strip: max(52px, calc(40px * var(--text-scale)));
   --menu-w: calc(200px * var(--text-scale));
   --picker-w: calc(280px * var(--text-scale));
   --settings-label: calc(104px * var(--text-scale));

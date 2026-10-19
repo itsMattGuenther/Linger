@@ -129,3 +129,29 @@
   align-items: center;
   gap: var(--space-1);
 }
+
+/* Where your voice is, on the phone's other screens (#429): it goes back there. */
+.nx-strip-where {
+  flex: 1;
+  align-self: stretch;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nx-strip-where b {
+  font-weight: 600;
+}
+
+/* A thumb's size on the phone (#429), as its rows are (styles/tokens.css). */
+:root[data-shell="phone"] .nx-strip-controls .k-icon-button {
+  width: var(--row-1);
+  height: var(--row-1);
+}

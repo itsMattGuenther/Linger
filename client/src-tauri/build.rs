@@ -4,8 +4,8 @@
 /// keyring, the connections or voice, which are the list window's alone
 /// (docs/design/architecture.md). Every command in either `generate_handler!`
 /// in `src/lib.rs`, the desktop's or the phone's, must be listed here;
-/// `src/acl.rs` tests that. `phone_sound_mode` and `phone_buzz` are the
-/// phone's alone (`capabilities/phone.json`).
+/// `src/acl.rs` tests that. `phone_sound_mode`, `phone_buzz` and
+/// `phone_call_bar` are the phone's alone (`capabilities/phone.json`).
 const COMMANDS: &[&str] = &[
     "sessions_load",
     "session_save",
@@ -45,6 +45,7 @@ const COMMANDS: &[&str] = &[
     "clipboard_image",
     "phone_sound_mode",
     "phone_buzz",
+    "phone_call_bar",
     "phone_text_scale",
     "clip_start",
     "clip_stop",

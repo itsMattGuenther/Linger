@@ -26,6 +26,9 @@ pub mod graphics;
 mod notifications;
 pub mod packaging;
 // The phone's sounds: only the phone app registers them. Tests read them here too.
+// The phone's call bar (#429): voice runs in its page, and this holds it up.
+#[cfg(any(mobile, test))]
+mod phone_call;
 #[cfg(any(mobile, test))]
 mod phone_sound;
 #[cfg(any(mobile, test))]
@@ -184,11 +187,16 @@ impl gateway::Events for WindowEvents {
     }
 
     /// Straight to this server's voice, not through the window: a call
-    /// whose network changed starts its connection afresh (#656). The phone
-    /// has no voice (SPEC §4.15).
+    /// whose network changed starts its connection afresh (#656). On the
+    /// phone voice is the page's (#429), so the page is told.
     fn resumed(&self) {
         #[cfg(desktop)]
         voice_commands::gateway_resumed(&self.app, &self.server);
+        #[cfg(mobile)]
+        let _ = self.app.emit(
+            "gateway:resumed",
+            serde_json::json!({ "server": self.server }),
+        );
     }
 }
 
@@ -419,6 +427,7 @@ fn phone_app() -> tauri::Builder<tauri::Wry> {
             app_version,
             deep_link::link_offered,
             graphics::graphics_started,
+            phone_call::phone_call_bar,
             phone_sound::phone_sound_mode,
             phone_sound::phone_buzz,
             phone_sound::sound_play,

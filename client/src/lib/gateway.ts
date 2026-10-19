@@ -52,6 +52,7 @@ import type { UserId } from "../generated/UserId";
 import { considerFrame } from "./notify";
 import {
   type VoiceDeviceChoice,
+  listenVoice,
   voiceFrame,
   voiceJoin,
   voiceLeave,
@@ -1324,11 +1325,11 @@ async function attachListeners(): Promise<void> {
         }
       }
     }),
-    // The core's own voice events (T-1402, T-1404): nothing on the wire,
-    // everything about this machine's seat. Folded into `myVoice` and
+    // The core's own voice events (T-1402, T-1404), or the page's on the
+    // phone (#429): nothing on the wire, everything about this machine's seat. Folded into `myVoice` and
     // ignored when we are not in voice, which is where a late event from a
     // call that just ended lands.
-    listen<{ server: string; peer: string; state: string }>("voice:peer", (event) => {
+    listenVoice<{ server: string; peer: string; state: string }>("voice:peer", (event) => {
       const { server, peer, state } = event.payload;
       const current = stateOf(server);
       if (current.myVoice === null) return;
@@ -1337,19 +1338,19 @@ async function attachListeners(): Promise<void> {
         myVoice: { ...current.myVoice, peers: { ...current.myVoice.peers, [peer]: state } },
       });
     }),
-    listen<{ server: string; state: string }>("voice:audio", (event) => {
+    listenVoice<{ server: string; state: string }>("voice:audio", (event) => {
       const { server, state } = event.payload;
       const current = stateOf(server);
       if (current.myVoice === null) return;
       publish(server, { ...current, myVoice: { ...current.myVoice, audio: state } });
     }),
-    listen<{ server: string; refused: RefusedMicrophone | null }>("voice:microphone", (event) => {
+    listenVoice<{ server: string; refused: RefusedMicrophone | null }>("voice:microphone", (event) => {
       const { server, refused } = event.payload;
       const current = stateOf(server);
       if (current.myVoice === null) return;
       publish(server, { ...current, myVoice: { ...current.myVoice, refused } });
     }),
-    listen<{ server: string; peer: string | null; speaking: boolean }>(
+    listenVoice<{ server: string; peer: string | null; speaking: boolean }>(
       "voice:speaking",
       (event) => {
         const { server, peer, speaking } = event.payload;

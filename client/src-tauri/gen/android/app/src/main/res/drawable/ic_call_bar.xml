@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The call bar's icon (#429, VoiceCallService): the voice glyph's three
+     bars (kit/VoiceGlyph.tsx), white, as Android draws a notification's
+     small icon in one color. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path android:fillColor="#FFFFFFFF" android:pathData="M5,9h3v11H5z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M10.5,4h3v16h-3z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M16,12h3v8h-3z" />
+</vector>

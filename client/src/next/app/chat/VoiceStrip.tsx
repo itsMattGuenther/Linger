@@ -5,6 +5,7 @@ import { startProblemWords, type StartProblem } from "../../../lib/voice";
 import { QUIET_MOVE_WORDS, VOICE_ACTION_WORDS, type VoiceStrip as Strip } from "../../core/chat/voice";
 import { verbFor } from "../../core/chat/words";
 import { copyText } from "../../core/copy";
+import { onPhone } from "../../core/phone";
 import { Button, Chip, IconButton, markerOf, Name, Popover, VoiceGlyph } from "../../kit";
 import { useTalkSeats } from "../useTalkSeats";
 import "./VoiceStrip.css";
@@ -185,23 +186,13 @@ export const VoiceStrip = memo(function VoiceStrip({
       )}
       {fix}
       {strip.kind === "mine" && controls ? (
-        <div className="nx-strip-controls" role="group" aria-label="Your voice">
-          <IconButton
-            icon={controls.muted ? "micOff" : "mic"}
-            label={controls.muted ? "Muted" : "Mute"}
-            size="sm"
-            pressed={controls.muted}
-            onClick={press(() => controls.onMute(!controls.muted), false)}
-          />
-          <IconButton
-            icon={controls.deafened ? "headOff" : "head"}
-            label={controls.deafened ? "Deafened" : "Deafen"}
-            size="sm"
-            pressed={controls.deafened}
-            onClick={press(() => controls.onDeafen(!controls.deafened), false)}
-          />
-          <IconButton icon="leave" label="Leave voice" size="sm" onClick={press(controls.onLeave, true)} />
-        </div>
+        <YourControls
+          muted={controls.muted}
+          deafened={controls.deafened}
+          onMute={press(() => controls.onMute(!controls.muted), false)}
+          onDeafen={press(() => controls.onDeafen(!controls.deafened), false)}
+          onLeave={press(controls.onLeave, true)}
+        />
       ) : strip.kind === "mine" ? (
         <span className="nx-strip-here">You're in voice here</span>
       ) : (
@@ -209,6 +200,62 @@ export const VoiceStrip = memo(function VoiceStrip({
           {VOICE_ACTION_WORDS[strip.action]}
         </Button>
       )}
+    </div>
+  );
+});
+
+/**
+ * Mute, Deafen and Leave, as symbols: each word is the button's name and
+ * tooltip (#230). On the phone they're a thumb's size (#429).
+ */
+function YourControls({ muted, deafened, onMute, onDeafen, onLeave }: { muted: boolean; deafened: boolean; onMute: (event: MouseEvent<HTMLButtonElement>) => void; onDeafen: (event: MouseEvent<HTMLButtonElement>) => void; onLeave: (event: MouseEvent<HTMLButtonElement>) => void }) {
+  const size = onPhone() ? "lg" : "sm";
+  return (
+    <div className="nx-strip-controls" role="group" aria-label="Your voice">
+      <IconButton icon={muted ? "micOff" : "mic"} label={muted ? "Muted" : "Mute"} size={size} pressed={muted} onClick={onMute} />
+      <IconButton icon={deafened ? "headOff" : "head"} label={deafened ? "Deafened" : "Deafen"} size={size} pressed={deafened} onClick={onDeafen} />
+      <IconButton icon="leave" label="Leave voice" size={size} onClick={onLeave} />
+    </div>
+  );
+}
+
+/** Voice you're in somewhere else, on the phone (#429): where, and your controls. */
+export interface InVoice {
+  /** "#general", or a DM's people. */
+  where: string;
+  /** Somebody in your call is talking. */
+  talking: boolean;
+  muted: boolean;
+  deafened: boolean;
+  onGo: () => void;
+  onMute: (muted: boolean) => void;
+  onDeafen: (deafened: boolean) => void;
+  onLeave: () => void;
+}
+
+/**
+ * Your voice, on every other screen of the phone (#429). A conversation, Media
+ * or Search covers the list there, and with it the voice bar, so this line
+ * takes the voice line's place under the title: an open microphone is never
+ * out of sight. Its words go back to the room you're in voice in. In another
+ * room it stands in for that room's own line, so the phone never offers to
+ * move voice here: leave, then join.
+ */
+export const InVoiceLine = memo(function InVoiceLine({ voice }: { voice: InVoice }) {
+  return (
+    <div className="nx-strip" data-kind="mine" role="group" aria-label="Your voice call">
+      <VoiceGlyph speaking={voice.talking} mine />
+      <button type="button" className="nx-strip-where" onClick={voice.onGo}>
+        {voice.where.startsWith("#") ? "In voice in " : "In voice with "}
+        <b>{voice.where}</b>
+      </button>
+      <YourControls
+        muted={voice.muted}
+        deafened={voice.deafened}
+        onMute={() => voice.onMute(!voice.muted)}
+        onDeafen={() => voice.onDeafen(!voice.deafened)}
+        onLeave={voice.onLeave}
+      />
     </div>
   );
 });

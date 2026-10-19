@@ -359,8 +359,7 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
       id: paneId,
       header,
       motd: motdNow ? { motd: motdNow, folded, onFold: onFoldMotd } : null,
-      // The phone is text only for now (SPEC §4.15): no voice line to join from.
-      voice: onPhone() ? null : {
+      voice: {
         strip: friendsFirst(state, voiceStrip(paneId, voiceHere(state, room.id), state.me?.id ?? null, voiceTab, infos[active.server]?.voice !== false)),
         onJoin,
         onPickDevice,
@@ -373,7 +372,7 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
         failed:
           state.voiceFailed?.roomId === room.id
             ? {
-                ...voiceStartProblem(state.voiceFailed.problem, onWindows(), state.voiceFailed.devices),
+                ...voiceStartProblem(state.voiceFailed.problem, onWindows(), state.voiceFailed.devices, onPhone()),
                 detail: state.voiceFailed.problem,
               }
             : undefined,

@@ -124,3 +124,10 @@
 .nx-voice-server-name {
   unicode-bidi: isolate;
 }
+
+/* A thumb's size on the phone (#429), as its rows are (styles/tokens.css). */
+:root[data-shell="phone"] .nx-voice-controls .k-icon-button,
+:root[data-shell="phone"] .nx-voice-head .k-icon-button {
+  width: var(--row-1);
+  height: var(--row-1);
+}

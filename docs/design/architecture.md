@@ -496,11 +496,22 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
 - **No desktop furniture.** No notifications at all (`setNoNotifications`
   in `lib/notify.ts`, set at startup: no banner, nothing asking for
   attention; in-app sounds still play), no close button on the list (the
-  phone closes apps), no pop-out, no voice line (voice messages, yes: the page
-  records them itself, `app/chat/recorders.ts`), and Settings has no Windows or
+  phone closes apps), no pop-out, and Settings has no Windows or
   Notifications, no microphones, no updates and no Interface size: it zooms
   the window, which the phone can't, and the phone's own display and text
-  size do that job.
+  size do that job. Voice messages record in the page
+  (`app/chat/recorders.ts`).
+- **Voice rooms run in the page** (#429, `lib/pageVoice.ts`): `main.tsx`
+  calls `voiceInThePage`, and from then on `ipc.ts` sends every voice call
+  there instead of the core, which has no voice on a phone. Its events are
+  the core's, so the store and the screens are the computer's. Its controls
+  are thumb-sized, and since a conversation, Media or Search covers the list
+  and its voice bar, every other screen gets `InVoiceLine` under its title
+  (`chat/VoiceStrip.tsx`, through `SidePane`'s `inVoice`). The call bar
+  (`src-tauri/src/phone_call.rs`, `VoiceCallService.kt`) is the one
+  notification: the list window shows and redraws it, its Mute and Leave
+  come back as a `linger:callbar` event, and while in voice the list keeps
+  that server's connection open in the background.
 - **In the background, and without a network.** Thirty seconds after the
   app goes into the background its connections close, so it shows offline,
   and they open again when it's back (`watchBackground`,

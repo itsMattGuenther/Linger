@@ -92,6 +92,9 @@ import { customEmoji, SERVER, SERVER_NAME, evening, messages, people } from "./n
 import { collections, fakeMedia, fakeSearch } from "./next/finds";
 import type { MediaKind } from "../../src/generated/MediaKind";
 import { GUILD, guild, LISBON, lisbon, serverInfo } from "./next/servers";
+import { voiceInThePage } from "../../src/lib/ipc";
+import { browserWorld } from "../../src/lib/pageVoice";
+import { FakeSfu, fakeMicrophone, realAudio, type Received } from "./next/sfu";
 
 const query = new URLSearchParams(location.search);
 const did: string[] = [];
@@ -285,6 +288,7 @@ mockIPC((cmd, args) => {
       return null;
     case "gateway_send":
       note(`send ${String(a.baseUrl)}:${JSON.stringify(a.frame)}`);
+      voiceSignal(String(a.baseUrl), a.frame as { op: string; d?: { sdp?: string } });
       return true;
     case "plugin:window|minimize":
       note("minimize");
@@ -342,6 +346,8 @@ mockIPC((cmd, args) => {
     case "voice_push_to_talk":
     // The shell watching for the talk key with any app in front, or stopping (#500).
     case "voice_talk_key":
+    // The phone's call bar, shown, redrawn or taken away (#429).
+    case "phone_call_bar":
       note(`${cmd}:${JSON.stringify(a)}`);
       return null;
     default:
@@ -378,6 +384,8 @@ declare global {
       refuseNext: () => void;
       /** The voice engine hears somebody start or stop talking (`peer` null for you). */
       speaking: (server: string, peer: string | null, speaking: boolean) => void;
+      /** With `?sfu`, the server's voice forwarding as the phone's engine meets it (#429). */
+      sfu?: { received: () => Promise<Received>; drop: () => void; state: () => string };
       /**
        * The session starts over (#453): the server's read positions move
        * first, as reading on another device would, then a fresh `ready`
@@ -419,6 +427,11 @@ window.core = {
     refusing = true;
   },
   speaking: (server, peer, speaking) => deliver("voice:speaking", { server, peer, speaking }),
+  sfu: {
+    received: async () => (await sfu?.received()) ?? { packets: 0, level: 0 },
+    drop: () => sfu?.drop(),
+    state: () => sfu?.state ?? "none",
+  },
   restart: (server, read) => {
     const state = states[server];
     if (!state) return;
@@ -826,6 +839,49 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
 
 // The phone marks its page the way main.tsx does, so its styles apply here too.
 if (query.get("shell") === "phone") document.documentElement.dataset.shell = "phone";
+
+// --- the phone's voice (#429) ----------------------------------------------
+//
+// On the phone, voice runs in the page (src/lib/pageVoice.ts), as main.tsx
+// sets it up. Its microphone here is a tone made in the page (`?micquiet`:
+// silence), so no browser needs a microphone of its own. With `?sfu` the
+// server's voice forwarding is a real connection in the page
+// (next/sfu.ts): Eli's tone is loud, Jules's silent, and the phone's
+// answers, restarts and leave go to it.
+const micAudio = query.get("shell") === "phone" ? realAudio() : null;
+if (micAudio) {
+  voiceInThePage({
+    ...browserWorld(),
+    getMicrophone: async () => {
+      await micAudio.resume().catch(() => undefined);
+      return fakeMicrophone(micAudio, query.has("micquiet") ? 0 : 0.5);
+    },
+  });
+}
+const sfu = query.has("sfu")
+  ? new FakeSfu(
+      (frame) => window.core?.frame(SERVER, frame as Omit<ServerFrame, "s">),
+      [
+        { session: "s-eli", loudness: 0.5 },
+        { session: "s-jules", loudness: 0 },
+      ],
+      query.has("bitrate") ? Number(query.get("bitrate")) : null,
+    )
+  : null;
+let sfuJoined = false;
+/** The phone's voice frames, as the server's forwarding takes them. */
+function voiceSignal(server: string, frame: { op: string; d?: { sdp?: string } }) {
+  if (!sfu || server !== SERVER) return;
+  if (frame.op === "voice.join" && !sfuJoined) {
+    sfuJoined = true;
+    void sfu.offer();
+  } else if (frame.op === "voice.answer" && frame.d?.sdp) void sfu.answer(frame.d.sdp);
+  else if (frame.op === "voice.restart" && sfuJoined) void sfu.offer();
+  else if (frame.op === "voice.leave") {
+    sfuJoined = false;
+    sfu.close();
+  }
+}
 
 const root = document.getElementById("root");
 if (!root) throw new Error("missing #root");

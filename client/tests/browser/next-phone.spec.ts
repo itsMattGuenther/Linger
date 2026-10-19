@@ -449,3 +449,109 @@ test("a group is left from its screen's ⋯, the menu and the question rising fr
   await expect(group).toHaveCount(0);
   expect((await did(page)).filter((line) => line.startsWith("leave "))).toEqual(["leave d-eli-sam"]);
 });
+
+// Voice rooms on the phone (#429): voice runs in the page there
+// (lib/pageVoice.ts; next-phone-voice-room.spec.ts proves the call itself).
+// Here, what the screens show. The fixture's microphone is a quiet tone made
+// in the page, and no server offers a connection, so a join is the screens'
+// alone.
+
+/** In voice in #general, from its own voice line. */
+async function inVoice(page: Page) {
+  await phone(page);
+  await room(page, "general").click();
+  await page.getByRole("group", { name: "Voice in this conversation" }).getByRole("button", { name: "Join" }).click();
+  await expect(page.getByRole("group", { name: "Your voice" }).first()).toBeVisible();
+}
+
+/** The height of each control in a group, by name. */
+async function heights(page: Page, group: string): Promise<number[]> {
+  return page
+    .getByRole("group", { name: group })
+    .first()
+    .getByRole("button")
+    .evaluateAll((buttons) => buttons.map((button) => button.getBoundingClientRect().height));
+}
+
+test("voice: Mute, Deafen and Leave are a thumb's size, in the room and on the list", async ({ page }) => {
+  await open(page, "?micquiet&one&shell=phone");
+  await settled(page);
+  await room(page, "general").click();
+  await page.getByRole("group", { name: "Voice in this conversation" }).getByRole("button", { name: "Join" }).click();
+  const here = await heights(page, "Your voice");
+  expect(here).toHaveLength(3);
+  for (const height of here) expect(height).toBeGreaterThanOrEqual(44);
+  expect(await sticksOut(page)).toEqual([]);
+
+  await back(page).click();
+  const bar = page.getByRole("region", { name: "In voice in #general" });
+  await expect(bar).toBeVisible();
+  for (const height of await bar.getByRole("group", { name: "Your voice" }).getByRole("button").evaluateAll((buttons) => buttons.map((button) => button.getBoundingClientRect().height))) {
+    expect(height).toBeGreaterThanOrEqual(44);
+  }
+  expect(await sticksOut(page)).toEqual([]);
+});
+
+test("voice: every other screen says where your voice is, with your controls, and goes back there", async ({ page }) => {
+  await inVoice(page);
+  await back(page).click();
+
+  // Another room: your voice in its line's place, never "Talk here instead".
+  await room(page, "weekend-plans").click();
+  const line = screen(page).getByRole("group", { name: "Your voice call" });
+  await expect(line).toContainText("In voice in #general");
+  await expect(screen(page).getByRole("button", { name: "Talk here instead" })).toHaveCount(0);
+  for (const height of await heights(page, "Your voice")) expect(height).toBeGreaterThanOrEqual(44);
+  expect(await sticksOut(page)).toEqual([]);
+
+  // Mute from here mutes the call: the room is told, and every line says so.
+  await line.getByRole("button", { name: "Mute" }).click();
+  await expect(line.getByRole("button", { name: "Muted" })).toBeVisible();
+  await expect.poll(async () => (await did(page)).some((entry) => entry.includes('"op":"voice.join"') && entry.includes('"muted":true'))).toBe(true);
+
+  // Its words go back to the room you're in voice in, over this one.
+  await line.getByRole("button", { name: /In voice in #general/ }).click();
+  await expect(title(page)).toContainText("general");
+  await expect(screen(page).getByRole("group", { name: "Your voice call" })).toHaveCount(0);
+  await expect(screen(page).getByRole("group", { name: "Voice in this conversation" }).getByRole("button", { name: "Muted" })).toBeVisible();
+  await back(page).click();
+  await expect(title(page)).toContainText("weekend-plans");
+
+  // Search too, under its title.
+  await back(page).click();
+  await page.getByRole("button", { name: "Search" }).click();
+  await expect(screen(page).getByRole("group", { name: "Your voice call" })).toContainText("In voice in #general");
+  expect(await sticksOut(page)).toEqual([]);
+
+  // Leave from here: the line goes, and the list's bar with it.
+  await screen(page).getByRole("group", { name: "Your voice call" }).getByRole("button", { name: "Leave voice" }).click();
+  await expect(screen(page).getByRole("group", { name: "Your voice call" })).toHaveCount(0);
+  await expect.poll(async () => (await did(page)).some((entry) => entry.includes('"op":"voice.leave"'))).toBe(true);
+});
+
+test("voice: nobody plays louder than as sent on a phone, and it says this phone", async ({ page }) => {
+  await inVoice(page);
+  await back(page).click();
+  await page.getByRole("region", { name: "In voice in #general" }).getByRole("button", { name: /Eli/ }).click();
+  const slider = page.getByRole("slider", { name: "How loud Eli is for you" });
+  await expect(slider).toHaveAttribute("max", "1");
+  await expect(page.getByText("Only for you, on this phone.")).toBeVisible();
+});
+
+test("voice: the call bar shows while in voice, follows mute, and its buttons work (#429)", async ({ page }) => {
+  await inVoice(page);
+  const bars = async () => (await did(page)).filter((line) => line.startsWith("phone_call_bar:"));
+  await expect.poll(async () => (await bars()).at(-1)).toBe('phone_call_bar:{"bar":{"where":"#general","muted":false,"deafened":false}}');
+
+  // Mute pressed on the bar, outside the app: the room is told, the bar redrawn.
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("linger:callbar", { detail: "mute" })));
+  await expect.poll(async () => (await bars()).at(-1)).toBe('phone_call_bar:{"bar":{"where":"#general","muted":true,"deafened":false}}');
+  await expect(page.getByRole("group", { name: "Voice in this conversation" }).getByRole("button", { name: "Muted" })).toBeVisible();
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("linger:callbar", { detail: "unmute" })));
+  await expect.poll(async () => (await bars()).at(-1)).toBe('phone_call_bar:{"bar":{"where":"#general","muted":false,"deafened":false}}');
+
+  // Leave on the bar: out of voice, and the bar goes.
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("linger:callbar", { detail: "leave" })));
+  await expect.poll(async () => (await bars()).at(-1)).toBe('phone_call_bar:{"bar":null}');
+  await expect(page.getByRole("group", { name: "Voice in this conversation" }).getByRole("button", { name: "Join" })).toBeVisible();
+});

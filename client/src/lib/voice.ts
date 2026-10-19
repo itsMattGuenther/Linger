@@ -152,11 +152,12 @@ export const PICK_A_DEVICE = "Pick yours in Settings";
  * the default fails: it could quietly pick a webcam's microphone or the
  * wrong speakers.
  */
-export function voiceStartProblem(problem: string, windows: boolean, asked: VoiceDeviceChoice): StartProblem {
+export function voiceStartProblem(problem: string, windows: boolean, asked: VoiceDeviceChoice, phone = false): StartProblem {
   const speakers = /^the speakers wouldn't open/i.test(problem);
   const device = speakers ? "speakers" : "microphone";
   const only = (line: string): StartProblem => ({ line, fix: null });
-  if (/no input device/i.test(problem)) return only("No microphone found. Plug one in, or pick one in Settings.");
+  // A phone picks its own microphone: there's nothing to pick in Settings (#429).
+  if (/no input device/i.test(problem)) return only(phone ? "No microphone found." : "No microphone found. Plug one in, or pick one in Settings.");
   if (/no output device/i.test(problem)) return only("No speakers found. Plug some in, or pick them in Settings.");
   if (/denied|access|permission/i.test(problem)) {
     return only(

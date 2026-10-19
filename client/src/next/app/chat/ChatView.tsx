@@ -19,7 +19,7 @@ import type { MessageActions } from "./MessageRow";
 import { MotdStrip } from "./MotdStrip";
 import { PaneHeader, type PaneHeaderProps } from "./PaneHeader";
 import { Typing, type TypingNow } from "./Typing";
-import { type StripControls, type StripProblem, VoiceStrip } from "./VoiceStrip";
+import { type InVoice, InVoiceLine, type StripControls, type StripProblem, VoiceStrip } from "./VoiceStrip";
 import "./ChatView.css";
 
 /** What the window supplies about the showing conversation's history. */
@@ -128,6 +128,11 @@ export interface ChatViewProps {
    * own window holds its header.
    */
   stack?: { onBack: () => void };
+  /**
+   * On the phone, the voice you're in (#429): its line shows on every screen
+   * but the room it's in, where the room's own line has your controls.
+   */
+  inVoice?: InVoice;
   /** The showing conversation, or null when no tab is open. */
   pane: ChatPane | null;
   /**
@@ -157,7 +162,7 @@ function titleOf(header: PaneHeaderProps): string {
  * else arrives as props and leaves as callbacks, so the same view serves the
  * real window and the fixture page.
  */
-export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, onPopOut, onCloseWindow, leading, focused = true, single, stack, pane, others = [] }: ChatViewProps) {
+export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, onPopOut, onCloseWindow, leading, focused = true, single, stack, inVoice, pane, others = [] }: ChatViewProps) {
   const [replies, setReplies] = useState<ReadonlyMap<string, Message>>(new Map());
   const [editing, setEditing] = useState<{ tab: string; id: MessageId } | null>(null);
   const [viewing, setViewing] = useState<Attachment | null>(null);
@@ -271,7 +276,11 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
                 onOpenLink={actions.openLink}
               />
             ) : null}
-            {pane.voice ? <VoiceStrip strip={pane.voice.strip} people={pane.people} meId={meId} speaking={pane.speaking} mics={pane.voice.mics} onJoin={pane.voice.onJoin} onPickDevice={pane.voice.onPickDevice} controls={pane.voice.controls} failed={pane.voice.failed} takenOut={pane.voice.takenOut} /> : null}
+            {inVoice && pane.voice?.strip.kind !== "mine" ? (
+              <InVoiceLine voice={inVoice} />
+            ) : pane.voice ? (
+              <VoiceStrip strip={pane.voice.strip} people={pane.people} meId={meId} speaking={pane.speaking} mics={pane.voice.mics} onJoin={pane.voice.onJoin} onPickDevice={pane.voice.onPickDevice} controls={pane.voice.controls} failed={pane.voice.failed} takenOut={pane.voice.takenOut} />
+            ) : null}
             <Conversation
               key={pane.id}
               id={pane.id}
@@ -309,6 +318,7 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
       ) : other ? null : (
         <p className="nx-chat-none">Nothing open. Pick a room or a person in the list.</p>
       )}
+      {other && inVoice ? <InVoiceLine voice={inVoice} /> : null}
       {others.map((one) => (
         <section key={one.id} className="nx-pane nx-pane-other" id={`nx-pane-${one.id}`} role={alone ? "region" : "tabpanel"} aria-label={one.label} hidden={one !== other}>
           <PaneBoundary what={`${one.label} couldn't be shown.`}>{one.body}</PaneBoundary>

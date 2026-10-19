@@ -13,6 +13,7 @@ import { followAppearance } from "./core/appearance";
 import { followInputMode } from "./core/inputMode";
 import { followKeyboard, followTextSize, onPhone } from "./core/phone";
 import { refuseStrayDrops } from "../lib/drops";
+import { voiceInThePage } from "../lib/ipc";
 import { followMediaKeys } from "../lib/mediaKeys";
 import { setNoNotifications } from "../lib/notify";
 import { type DeviceSound, followDeviceSound, unlockAudioOnGesture } from "../lib/sound";
@@ -44,6 +45,9 @@ if (onPhone()) {
     );
   }
   if (window.visualViewport) followKeyboard(window.visualViewport, () => window.innerHeight, document.documentElement);
+  // Voice runs in the page on a phone, on the web engine's own WebRTC, with
+  // the phone's echo cancelling (#429, lib/pageVoice.ts).
+  voiceInThePage();
 }
 
 // The focus ring is for the keyboard: it follows how you last used the

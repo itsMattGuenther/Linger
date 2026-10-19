@@ -91,6 +91,8 @@ This is not an attempt to build a better platform. It's an attempt to not need o
   run lets in friends whose network blocks it.
   Joining leaves a small grey line in the chat, so people reading it know the
   talk moved to voice; it never rings anybody. Voice rooms are never recorded.
+  The Android app joins voice too (after 0.5.0), and a locked phone stays in
+  the call.
 - **Voice messages**: record a clip in the message box, hear it back, then
   send it or throw it away. Up to five minutes.
 - **Every emoji**, found by name: type `:smiley:` as on Discord. A server's

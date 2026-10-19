@@ -11,6 +11,7 @@ import { closeTab, isPreview, isTool, keepTab, keyOf, moveTab, openTab, previewT
 import { IconButton, type TabItem } from "../../kit";
 import { MediaPanel, type OpenFound, SearchPanel } from "../tools/panels";
 import { ChatView } from "./ChatView";
+import type { InVoice } from "./VoiceStrip";
 import { draftStore, useConversationPane } from "./useConversationPane";
 
 /** A conversation to show, and the message to go to in it, if one was named. */
@@ -64,6 +65,8 @@ export interface SidePaneProps {
    * this takes the top one off, as the phone's own Back does.
    */
   onBack?: () => void;
+  /** On the phone, the voice you're in, for every screen but its room's (#429). */
+  inVoice?: InVoice;
 }
 
 /**
@@ -73,7 +76,7 @@ export interface SidePaneProps {
  * it counts towards where you are, and holds back the chime for what you're
  * looking at, only while it's there to be seen.
  */
-export const SidePane = memo(function SidePane({ apis, intend, tabs, setTabs, first, bind, show, searchAsk, onPopOutTool, voiceControl, onFold, onClose, onBack }: SidePaneProps) {
+export const SidePane = memo(function SidePane({ apis, intend, tabs, setTabs, first, bind, show, searchAsk, onPopOutTool, voiceControl, onFold, onClose, onBack, inVoice }: SidePaneProps) {
   const tabsNow = useRef(tabs);
   tabsNow.current = tabs;
   const findTab = useCallback((id: string): SideTab | undefined => tabsNow.current.open.find((tab) => keyOf(tab) === id), []);
@@ -221,6 +224,7 @@ export const SidePane = memo(function SidePane({ apis, intend, tabs, setTabs, fi
         onPopOut={onPhone() ? undefined : popOut}
         leading={<IconButton icon="fold" label="Fold back to your list" onClick={onFold} />}
         stack={onBack ? { onBack } : undefined}
+        inVoice={inVoice}
         onCloseWindow={onClose}
         pane={view.pane}
         others={tabs.open.filter(isTool).map((open) =>

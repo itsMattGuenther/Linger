@@ -95,6 +95,7 @@ import { type ArrivalCard, type KnockCard, KnockCards } from "./KnockCards";
 import { loadDmAlerts } from "../../core/dmAlerts";
 import { arrivalsBetween, CARD_EVERY_MS, cardsHushed, CHIME_EVERY_MS, due, loadArrivalCards, whereAll, type WhereAll } from "../../core/arrivals";
 import { loadSoundPrefs, playSound } from "../../../lib/sound";
+import type { InVoice } from "../chat/VoiceStrip";
 import { VoiceDock, type VoiceDockProps } from "./VoiceDock";
 import { ApiError, PublicApi, TransportError } from "../../../lib/api";
 import type { User } from "../../../generated/User";
@@ -882,6 +883,25 @@ function Servers({
     return { ...dock, server: { name: info?.name ?? hostOf(voiceServer), accent: info?.accent_key ?? null, seats: seatsWords(inVoice) } };
   }, [voiceState, voiceServer, several, infos, talkKey]);
 
+  // On the phone a conversation, Media or Search covers the list and its
+  // voice bar, so your voice comes with them, as a line under the title (#429).
+  const inVoice = useMemo<InVoice | undefined>(
+    () =>
+      onPhone() && voice
+        ? {
+            where: voice.where,
+            talking: voice.people.some((person) => person.speaking),
+            muted: voice.muted,
+            deafened: voice.deafened,
+            onGo: voice.onGoToRoom,
+            onMute: voice.onMute,
+            onDeafen: voice.onDeafen,
+            onLeave: voice.onLeave,
+          }
+        : undefined,
+    [voice],
+  );
+
   // The list gone to the tray (#400): the first time ever on this computer,
   // a notification says where Linger went, and that you're still in voice.
   const voicePlace = useRef<VoicePlace | null>(null);
@@ -902,6 +922,35 @@ function Servers({
     const where = inVoice ? { deafened: trayDeafened, pushToTalk: trayPushToTalk, place: trayPlace } : {};
     void invoke("next_tray_voice", { inVoice, muted: trayMuted, ...where }).catch(() => undefined);
   }, [voiceServer, trayMuted, trayDeafened, trayPushToTalk, trayPlace]);
+  // The phone's call bar (#429): while in voice, the one notification it
+  // shows, which keeps the call going with the phone locked
+  // (src-tauri/src/phone_call.rs). Gone when the call is.
+  const barPlace = onPhone() && voice ? voice.where : null;
+  const barMuted = voice?.muted ?? false;
+  const barDeafened = voice?.deafened ?? false;
+  useEffect(() => {
+    if (!isTauri() || !onPhone()) return;
+    const bar = barPlace === null ? null : { where: barPlace, muted: barMuted, deafened: barDeafened };
+    void invoke("phone_call_bar", { bar }).catch(() => undefined);
+  }, [barPlace, barMuted, barDeafened]);
+  // Its Mute, Unmute and Leave, pressed from outside the app (MainActivity),
+  // do what the voice bar's own buttons do.
+  const barVoice = useRef(voice);
+  barVoice.current = voice;
+  useEffect(() => {
+    if (!onPhone()) return;
+    const pressed = (event: Event) => {
+      const now = barVoice.current;
+      if (!now || !(event instanceof CustomEvent)) return;
+      if (event.detail === "mute") now.onMute(true);
+      else if (event.detail === "unmute" && now.deafened) now.onDeafen(false);
+      else if (event.detail === "unmute") now.onMute(false);
+      else if (event.detail === "leave") now.onLeave();
+    };
+    window.addEventListener("linger:callbar", pressed);
+    return () => window.removeEventListener("linger:callbar", pressed);
+  }, []);
+
   useEffect(() => {
     if (!isTauri()) return;
     let stop: (() => void) | null = null;
@@ -1121,7 +1170,9 @@ function Servers({
   return (
     <>
       {signedIn.map((session) => (
-        <ServerLink key={session.baseUrl} session={session} onInfo={onInfo} again={infoAsks[session.baseUrl] ?? 0} paused={backgrounded || offline} />
+        // A while in the background, the phone's connections close, but not
+        // the one carrying a call: the call bar holds the app up (#429).
+        <ServerLink key={session.baseUrl} session={session} onInfo={onInfo} again={infoAsks[session.baseUrl] ?? 0} paused={(backgrounded && session.baseUrl !== voiceServer) || offline} />
       ))}
       <div className="nx-app" data-side={unfolded ? layout : "folded"} style={{ "--list-width": `${shown.list}px` } as CSSProperties}>
         <div className="nx-app-list">
@@ -1185,6 +1236,7 @@ function Servers({
             onFold={fold}
             onClose={closeList}
             onBack={onPhone() ? goBack : undefined}
+            inVoice={inVoice}
           />
         ) : null}
       </div>

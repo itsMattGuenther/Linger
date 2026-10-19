@@ -8,13 +8,21 @@
     <!-- A chime with the phone on vibrate buzzes instead (lib/sound.ts,
          src-tauri/src/ringer.rs). No prompt: a normal permission. -->
     <uses-permission android:name="android.permission.VIBRATE" />
-    <!-- Voice messages (#401): the web view records one with the page's own
-         microphone (app/chat/recorders.ts). Android asks the person the first
-         time they press Record, and never before; nothing else uses it, and
-         voice rooms stay off the phone (SPEC §4.15). The web view's own
-         client asks for both when a page asks for a microphone. -->
+    <!-- Voice messages (#401) and voice rooms (#429): the web view records
+         with the page's own microphone (app/chat/recorders.ts,
+         lib/pageVoice.ts). Android asks the person the first time they press
+         Record or Join, and never before. The web view's own client asks for
+         both when a page asks for a microphone. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- The call bar (#429, VoiceCallService): while in voice, a foreground
+         service keeps the call going with the phone locked, which Android
+         allows only with its one notification showing. Android 13 and later
+         ask before it may show (POST_NOTIFICATIONS); it is the only
+         notification Linger ever shows (SPEC §4.15). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- AndroidTV support -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
@@ -60,6 +68,14 @@
             </intent-filter>
             <!-- DEEP LINK PLUGIN. AUTO-GENERATED. DO NOT REMOVE. -->
         </activity>
+
+        <!-- The call bar (#429): runs only while in voice, and goes when
+             the app is swiped away, since the call lived in its page. -->
+        <service
+            android:name=".VoiceCallService"
+            android:exported="false"
+            android:foregroundServiceType="microphone"
+            android:stopWithTask="true" />
 
         <provider
           android:name="androidx.core.content.FileProvider"

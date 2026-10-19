@@ -996,8 +996,8 @@ most one room at a time, for the same reason you are in one room at a time.
 **Decided by Matt on 2026-10-02 (T-1601, #253).** Linger gets a phone app for iPhone
 and Android, built from the same Tauri 2 code as the desktop app: the same gateway
 client in Rust, the same screens laid out for a phone. It is not a phone-friendly
-website. It is for seeing who is around and answering them, not a full port, and it
-starts **text only**.
+website. It is for seeing who is around and answering them, not a full port. It
+started **text only**, and voice rooms came to it on 2026-10-19 (#429, below).
 
 **Nothing wakes it, and it raises no notifications.** The only way to wake a closed
 phone app is a push through Apple's or Google's push service. Sending one needs keys
@@ -1007,7 +1007,15 @@ README's privacy promise stands as written: nothing new leaves the server. The p
 app raises no notification, open or closed: no banners, nothing on the lock screen,
 and no badge on its icon, which would be an unread count (§4.2). Mentions and DMs are
 marked inside the app as on desktop and are there when you open it. Opening it
-catches up the way a desktop app does after a reconnect.
+catches up the way a desktop app does after a reconnect. **The one exception is the
+call bar** (#429): while you're in voice, Android shows one silent, ongoing line,
+"In voice in #general", with Mute and Leave. Android ends a background app's
+microphone and network within seconds unless the app keeps a foreground service, and
+a foreground service must show a notification, so the bar is what keeps a call going
+with the phone locked or in a pocket. It never makes a sound or pops up, it says
+nothing about messages or people, and it goes when the call does. Android 13 and
+later ask once before it may show; the call keeps going without it. The iPhone shows
+its own call indicator and needs nothing of Linger's.
 
 **Its sounds follow the phone** (Matt, 2026-10-03). While the app is open, its chimes
 play as they do on desktop, under the same switches, and then the phone has its say:
@@ -1061,14 +1069,27 @@ PROTOCOL §5 has the details.
 
 **Voice messages, yes** (#401): a clip recorded on the phone is the same kind of file
 as one recorded on a computer, and plays on both. Android asks for the microphone the
-first time Record is pressed, never before, and the app uses it for nothing else.
+first time Record or Join is pressed, never before, and the app uses it for nothing
+else.
 
-**What it does not do, yet: voice rooms.** Phone voice would not pass through Apple or
-Google, since it goes to the host's server as desktop voice does. It is left out
-because a phone on speaker needs echo cancelling, which the desktop app does not
-have, and phone voice elsewhere is rarely pleasant for anyone. It comes back only if
-the people using the phone app ask for it. Ringing a closed phone into a voice room
-would need push, so that stays out either way (§4.14).
+**Voice rooms, yes** (Matt, 2026-10-19, #429): anybody on a phone can join a room's
+voice with the phone's own microphone, or a headset's, as on a computer (§4.14). Phone
+voice goes to the host's server as desktop voice does, never through Apple or Google,
+and the server doesn't change. It was left out at first because a phone on speaker
+needs echo cancelling; the phone's own web engine has it, with noise suppression
+and level control, so phone voice runs there (`lib/pageVoice.ts`) rather than in
+the app's Rust. The screens are the computer's, sized for a thumb: Join in a room's
+voice line, your Mute, Deafen and Leave there and in the voice bar at the bottom of
+the list, and, since a conversation, Media or Search covers the list, one line under
+the title of every other screen saying where your voice is ("In voice in #general"),
+with the same three controls, so an open microphone is never out of sight. In another
+room that line stands in for the room's own, so the phone never offers to move your
+voice: leave, then join. Sound comes out of the speaker, or a headset when one is
+connected, and there is no push-to-talk: Mute is how a phone goes quiet. Nobody plays
+louder than as sent on a phone (the web engine's player goes no further), so its
+per-person volume tops out at 100%. A locked phone stays in the call (the call bar,
+above). Ringing a closed phone into a voice room would need push, so that stays out
+(§4.14).
 
 ### 4.16 A co-host
 
@@ -1350,7 +1371,7 @@ says what replaced it: a status somebody typed.
 - DMs and group DMs (§4.13)
 - Search (§4.12)
 - Knock (§4.9)
-- A phone app for iPhone and Android, text first, with no push (§4.15)
+- A phone app for iPhone and Android, with voice rooms (#429) and no push (§4.15)
 - Every emoji, shortcodes, and a server's own emoji (§4.17, #359)
 - Polls, asked with `/poll` by the host or a co-host (§4.18, #474)
 
