@@ -33,7 +33,7 @@ people who already know each other, not a stadium of fifty thousand strangers.
 <img src="docs/screenshots/buddy-list.webp" width="800px" alt="The buddy list with a conversation open beside it, in one window">
 </div>
 
-**Status: 0.5.0, testing with friends.** It works day to day; voice across
+**Status: 0.5.1, testing with friends.** It works day to day; voice across
 different networks and some desktop setups still need checks on real
 computers. [SPEC.md](SPEC.md) is the full product description.
 
@@ -91,7 +91,7 @@ This is not an attempt to build a better platform. It's an attempt to not need o
   run lets in friends whose network blocks it.
   Joining leaves a small grey line in the chat, so people reading it know the
   talk moved to voice; it never rings anybody. Voice rooms are never recorded.
-  The Android app joins voice too (after 0.5.0), and a locked phone stays in
+  The Android app joins voice too (from 0.5.1), and a locked phone stays in
   the call.
 - **Voice messages**: record a clip in the message box, hear it back, then
   send it or throw it away. Up to five minutes.

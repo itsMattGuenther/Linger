@@ -2901,7 +2901,7 @@ dependencies = [
 
 [[package]]
 name = "linger-client"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "android-native-keyring-store",
  "ashpd",
@@ -2942,7 +2942,7 @@ dependencies = [
 
 [[package]]
 name = "linger-core"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -2953,7 +2953,7 @@ dependencies = [
 
 [[package]]
 name = "linger-sfu"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "str0m",
  "tracing",

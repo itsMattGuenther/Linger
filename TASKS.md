@@ -26,6 +26,17 @@ default.
 
 ## How to run a task
 
+**0.5.1 release — prepared 2026-10-19, voice on the phone and account deletion.**
+The Android app joins voice rooms, and a locked phone stays in the call through
+the call bar (#429); anybody can delete their own account from either app (#650,
+migration 0025); reading on one device clears your others (#647); two devices
+are shown as one (#653) and a short drop isn't offline (#654); voice comes back
+in seconds after a network change (#656) and rebuilds lost packets (#655);
+videos and sound files lose their tags (#651) and portrait videos their sideways
+size (#658); Linux: no stuck sign-in after a long sleep (#646), file drops
+attach again (#673), no sideways scroll bar (#672); emoji shortcodes in edits
+(#666). The installers link to linger.im. Notes in `docs/releases/0.5.1.md`.
+
 **0.5.0 release — 2026-10-11, the audit and a big batch.** Reactions are back,
 pills with any emoji, six a message (#485, #573); polls with `/poll` (#474); a
 quiet "joined voice" line (#473); leaving a group DM (#565); push-to-talk with a
