@@ -658,9 +658,20 @@ macOS runners, or a friend's Mac.
   them out. Matt's Pixel did exactly that on 2026-10-08, with a test build
   left on it. So when setting up Play App Signing, upload the existing
   release key (`android-release.jks`, its fingerprint in
-  `android-release-cert.sha256`) as the app signing key, and use a separate
-  upload key for the bundles. Follow Play's current steps; the choice can't
-  be undone for people who already have the app.
+  `android-release-cert.sha256`) as the app signing key. Follow Play's
+  current steps; the choice can't be undone for people who already have the
+  app. **No separate upload key** (2026-10-20): the bundles are signed with
+  the release key too. The GitHub `.apk` keeps that key in the `release`
+  environment anyway, so an upload key beside it would guard nothing. Play
+  can still add one later.
+  **Started 2026-10-20 (#253):** Matt's Play developer account is verified
+  (developer name Matt Guenther) and the app is created, package
+  `io.github.itsmattguenther.linger`. `.github/workflows/play.yml` builds a
+  release's signed bundle from its tag, and once wraps the key for Play App
+  Signing with Google's `pepk` inside the run (docs/releasing.md, "Google
+  Play"). Next: the first bundle on internal testing to set the key, the
+  store listing and App content forms, then a closed test with 12 testers for
+  14 days, then "Apply for production".
   Android first, on Google Play, with Matt paying the $25; Apple only after it
   has worked well there. The listing's privacy answers ("Data safety") must
   say the app uses the microphone only to record a voice message the person

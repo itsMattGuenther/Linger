@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Tests for `scripts/android-signing.sh verify`: it reads the signer from
-# whatever apksigner prints, and lets an APK through only when every signer is
-# the release key. A stand-in apksigner prints what real ones have printed, so
-# this runs anywhere, with no Android SDK.
+# Tests for `scripts/android-signing.sh verify` and `verify-bundle`: they read
+# the signer from whatever apksigner (or, for a bundle, jarsigner and keytool)
+# prints, and let an APK or bundle through only when every signer is the
+# release key. Stand-ins print what real ones have printed, so this runs
+# anywhere, with no Android SDK or Java.
 #
 # 0.4.8's and 0.4.9's release runs refused rightly signed APKs because the
 # runner's apksigner said "V2 Signer: certificate SHA-256 digest: …" and the
@@ -65,6 +66,53 @@ refuses "apksigner rejects the APK" "DOES NOT VERIFY" 1
 
 rm -f "$apk"
 refuses "no APK" "Signer #1 certificate SHA-256 digest: $key"
+
+# `verify-bundle`, for Google Play's .aab: stand-in jarsigner and keytool
+# print what JDK 21's print, with $JARSIGNER_SAYS and $KEYTOOL_SAYS.
+mkdir -p "$scratch/bin"
+cat > "$scratch/bin/jarsigner" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$JARSIGNER_SAYS"
+SH
+cat > "$scratch/bin/keytool" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$KEYTOOL_SAYS"
+SH
+chmod +x "$scratch/bin/jarsigner" "$scratch/bin/keytool"
+aab="$scratch/app.aab"
+: > "$aab"
+
+verified="
+jar verified.
+
+Warning:
+This jar contains entries whose signer certificate is self-signed."
+colons() { printf '%s' "$1" | tr 'a-f' 'A-F' | sed 's/../&:/g; s/:$//'; }
+signer() {
+  printf 'Signer #%s:\n\nCertificate #1:\nOwner: CN=Linger, O=Linger\nCertificate fingerprints:\n\t SHA1: 26:7B:D6:A2:AC:BB:D3:18:F6:54:D8:A6:45:6D:04:B7:45:1F:3A:C5\n\t SHA256: %s\nSignature algorithm name: SHA384withRSA\n' "$1" "$(colons "$2")"
+}
+run_bundle() {
+  PATH="$scratch/bin:$PATH" JARSIGNER_SAYS="$1" KEYTOOL_SAYS="$2" \
+    scripts/android-signing.sh verify-bundle "$aab" >/dev/null 2>&1
+}
+bundle_passes() {
+  if run_bundle "$2" "$3"; then echo "ok: $1"; else echo "FAIL: $1 (refused)"; failures=$((failures + 1)); fi
+}
+bundle_refuses() {
+  if run_bundle "$2" "$3"; then echo "FAIL: $1 (let through)"; failures=$((failures + 1)); else echo "ok: $1"; fi
+}
+
+bundle_passes "a bundle signed with the release key" "$verified" "$(signer 1 "$key")"
+bundle_refuses "a bundle signed with another key" "$verified" "$(signer 1 "$other")"
+bundle_refuses "the release key and another" "$verified" "$(signer 1 "$key")
+$(signer 2 "$other")"
+bundle_refuses "an unsigned bundle (jarsigner still exits 0)" "
+no manifest.
+
+jar is unsigned." "Not a signed jar file"
+bundle_refuses "verified, but no certificate to read" "$verified" "Not a signed jar file"
+rm -f "$aab"
+bundle_refuses "no bundle" "$verified" "$(signer 1 "$key")"
 
 if [ "$failures" -gt 0 ]; then
   echo "$failures android-signing check(s) failed" >&2

@@ -401,6 +401,10 @@ over a release (or the other way round): uninstall first, which signs you out.
   then `verify` on the built `.apk` before adding it to the draft as
   `Linger_<version>_android-arm64.apk`. `scripts/android-signing-test.sh`
   (CI's rules job) feeds `verify` what real apksigners print.
+- Google Play's bundle (`.aab`) is signed with the same key, by
+  `.github/workflows/play.yml`, and checked with
+  `scripts/android-signing.sh verify-bundle`. Play signs what it ships with
+  this key too (docs/releasing.md, "Google Play").
 - If that job fails once the desktop draft is up, build the `.apk` from the
   tagged commit with the key (below), check it with
   `scripts/android-signing.sh verify`, and add it to the draft with

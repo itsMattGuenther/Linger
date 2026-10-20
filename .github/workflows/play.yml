@@ -1,0 +1,159 @@
+name: play
+
+# Google Play's copy of a release (T-1604, #253). Play takes an Android App
+# Bundle (`.aab`), not the `.apk` on the GitHub release: it makes each phone's
+# own `.apk` from the bundle and signs that with the app signing key. That key
+# is ours, the one every `.apk` on GitHub is signed with, or Play's copy won't
+# install over the one people already have. The bundle is signed with it too:
+# with no separate upload key, Play takes only bundles signed with the app
+# signing key.
+#
+# Run it from the Actions tab, on `main`, naming a published release's tag:
+#
+#   - it builds the bundle from that tag, signed with the release key, checks
+#     the signature against client/src-tauri/android-release-cert.sha256, and
+#     keeps it as the run's `play-bundle` artifact, to upload in Play Console
+#   - given `encryption_key` (once, when Play App Signing is first set up),
+#     it also wraps the release key with Google's own tool (pepk), encrypted
+#     to the public key Play Console shows under "Export and upload a key from
+#     Java keystore", as the `play-key` artifact. Only Google can open it, and
+#     the key itself never leaves the runner.
+#
+# Manual, and from `main` only: it reaches the `release` environment's key,
+# which only `main` and `v*` tags may use (#652), and builds a tag, which only
+# admins can push. docs/releasing.md, "Google Play", has the steps.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The release to build, such as v0.5.1"
+        required: true
+      encryption_key:
+        description: "Only when setting up Play App Signing: the text of Play Console's encryption public key (.pem)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  # Google's key-wrapping tool, as Play Console links it. Pinned: it handles the
+  # release key, so a changed copy stops the run rather than runs.
+  PEPK_URL: https://www.gstatic.com/play-apps-publisher-rapid/signing-tool/prod/pepk.jar
+  PEPK_SHA256: aaccc0774b240aa5304bdad2a49865e92f229ca73209ecb6eaafe75dc858e24e
+
+jobs:
+  bundle:
+    name: the bundle for Google Play
+    if: github.ref == 'refs/heads/main'
+    environment: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: the tag is a release's
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::'$TAG' isn't a release tag like v0.5.1"; exit 1; }
+      # The release, as tagged, is what's built.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+      # The checks come from `main`, as this workflow does: a tag from before
+      # Google Play has no `verify-bundle`.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: .play-checks
+          sparse-checkout: |
+            scripts/android-signing.sh
+            client/src-tauri/android-release-cert.sha256
+          sparse-checkout-cone-mode: false
+      - name: versions match the tag
+        env:
+          TAG: ${{ inputs.tag }}
+        run: scripts/version-check.sh "$TAG"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - run: corepack enable
+      - name: install frontend deps
+        working-directory: client
+        run: pnpm install --frozen-lockfile
+      # Java 21: the Gradle in gen/android can't run on 25.
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master, 2026-10-09
+        with:
+          toolchain: stable
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: client/src-tauri
+      # The runner has the Android SDK and an NDK already.
+      - name: point Tauri at the NDK
+        run: echo "NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+      - name: the release key, for Gradle
+        env:
+          ANDROID_RELEASE_KEYSTORE: ${{ secrets.ANDROID_RELEASE_KEYSTORE }}
+          ANDROID_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+        run: scripts/android-signing.sh setup
+      # 64-bit phones only, as the `.apk` on GitHub.
+      - name: build the bundle
+        working-directory: client
+        run: pnpm tauri android build --target aarch64 --aab
+      - name: signed with the release key
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          mapfile -t found < <(find client/src-tauri/gen/android/app/build/outputs/bundle -name '*.aab')
+          [ "${#found[@]}" -eq 1 ] || { echo "::error::expected one bundle, found ${#found[@]}: ${found[*]}"; exit 1; }
+          .play-checks/scripts/android-signing.sh verify-bundle "$PWD/${found[0]}"
+          mkdir -p "$RUNNER_TEMP/play-bundle"
+          cp "${found[0]}" "$RUNNER_TEMP/play-bundle/Linger_${TAG#v}.aab"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: play-bundle
+          path: ${{ runner.temp }}/play-bundle/
+          retention-days: 7
+      - name: the release key, wrapped for Google Play
+        if: inputs.encryption_key != ''
+        env:
+          ENCRYPTION_KEY: ${{ inputs.encryption_key }}
+          ANDROID_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          # Pasted whole or as one line, the key's text is put back into a
+          # .pem, and must read as a public key.
+          body="$(printf '%s' "$ENCRYPTION_KEY" | sed 's/-----[A-Z ]*-----//g' | tr -d '[:space:]')"
+          {
+            echo '-----BEGIN PUBLIC KEY-----'
+            printf '%s\n' "$body" | fold -w 64
+            echo '-----END PUBLIC KEY-----'
+          } > "$RUNNER_TEMP/google-play.pem"
+          openssl pkey -pubin -in "$RUNNER_TEMP/google-play.pem" -noout ||
+            { echo "::error::encryption_key isn't a public key: paste the whole text of Play Console's .pem"; exit 1; }
+          curl -fsSL -o "$RUNNER_TEMP/pepk.jar" "$PEPK_URL"
+          echo "$PEPK_SHA256  $RUNNER_TEMP/pepk.jar" | sha256sum -c - ||
+            { echo "::error::Google's pepk.jar has changed: check the new one and update PEPK_SHA256"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/play-key"
+          # `setup` left the key here; its alias is android-signing.sh's.
+          java -jar "$RUNNER_TEMP/pepk.jar" \
+            --keystore="$RUNNER_TEMP/linger-android-release.jks" \
+            --alias=linger \
+            --keystore-pass="$ANDROID_RELEASE_KEYSTORE_PASSWORD" \
+            --output="$RUNNER_TEMP/play-key/linger-play-key.zip" \
+            --include-cert \
+            --rsa-aes-encryption \
+            --encryption-key-path="$RUNNER_TEMP/google-play.pem" < /dev/null
+          unzip -l "$RUNNER_TEMP/play-key/linger-play-key.zip"
+      # Encrypted to Google, so it's safe where anybody could fetch it, and it
+      # still goes after a day: Play needs it once.
+      - if: inputs.encryption_key != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: play-key
+          path: ${{ runner.temp }}/play-key/
+          retention-days: 1

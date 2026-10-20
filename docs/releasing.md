@@ -30,8 +30,8 @@ password, and the Arch packages key. A repository secret can be read by a
 workflow run from any branch, and a branch can carry its own copy of a
 workflow. The environment (Settings → Environments → `release`) may only be
 used from a `v*` tag or from `main`, and only the jobs that sign name it:
-`preflight`, `bundle` and `android` in `release.yml`, and `publish` in
-`arch-repo.yml`. A new signing key, such as a Windows certificate, goes there
+`preflight`, `bundle` and `android` in `release.yml`, `bundle` in `play.yml`,
+and `publish` in `arch-repo.yml`. A new signing key, such as a Windows certificate, goes there
 too, and so does `environment: release` on the job that uses it.
 
 **Losing that key means you can never ship an update to an installed copy
@@ -172,6 +172,48 @@ touching the real repository, run the workflow from the Actions tab (or
 `gh workflow run arch-repo.yml -f version=0.3.6 -f repository=arch-test`), then
 delete the test release. `packaging/arch/build-repo.sh` does the same build
 locally, given a signing key.
+
+## Google Play
+
+Google Play takes an Android App Bundle (`.aab`), not the release's `.apk`,
+and makes each phone's own copy from it. `.github/workflows/play.yml` builds
+the bundle from a release's tag, signed with the same release key as the
+`.apk`, and checks the signature (`scripts/android-signing.sh verify-bundle`).
+It runs only by hand, from `main`.
+
+**Per release**, once it's published:
+
+```bash
+gh workflow run play.yml -f tag=v0.5.1
+gh run list --workflow play.yml --limit 1        # wait for it to go green
+gh run download <run id> -n play-bundle          # Linger_0.5.1.aab
+```
+
+In Play Console, open the track (Test and release → Testing → Closed testing,
+or Production once it's open), **Create new release**, upload the `.aab`, and
+paste the release's highlights as its notes.
+
+**Once, when Play App Signing is first set up**, Play must be given our key
+rather than make its own. If it made its own, Play's copy wouldn't install
+over the `.apk` people already have from GitHub, and they'd have to uninstall,
+which signs them out (TASKS T-1604). On the first release's page, choose
+**Use a different key**, then **Export and upload a key from Java keystore**,
+and download the encryption public key it offers. Then run the workflow with
+that key's text as well:
+
+```bash
+gh workflow run play.yml -f tag=v0.5.1 -f encryption_key="$(cat encryption_public_key.pem)"
+gh run download <run id> -n play-key             # linger-play-key.zip
+```
+
+Upload `linger-play-key.zip` where the page asks for it. Google's own tool
+(`pepk`) wraps the key inside the run, encrypted so that only Google can open
+it, so the key never leaves GitHub. There's no separate upload key: the
+GitHub `.apk` needs this key in the `release` environment anyway, so a second
+key there would add a secret to keep without guarding anything. Play then
+takes only bundles signed with this key. Play Console's App integrity page
+shows the app signing key's SHA-256 fingerprint, and it must match
+`client/src-tauri/android-release-cert.sha256`.
 
 ## Worth knowing
 

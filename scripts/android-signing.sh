@@ -13,6 +13,11 @@
 #                 $RUNNER_TEMP (or a temp dir) and gen/android/keystore.properties,
 #                 which build.gradle.kts reads and git ignores
 #   verify APK    the built APK is signed with that key and nothing else
+#   verify-bundle AAB
+#                 the same for an Android App Bundle, Google Play's upload
+#                 (.github/workflows/play.yml). Play signs what it ships with
+#                 this key too, so the bundle is signed with it as well, and
+#                 Play refuses one signed with anything else.
 #
 # Secrets, from the environment:
 #   ANDROID_RELEASE_KEYSTORE           the key file, base64
@@ -58,6 +63,16 @@ decode_and_check() {
   actual="$(printf '%s\n' "$listed" | sed -n 's/^[[:space:]]*SHA256: //p' | tr -d ':' | tr 'A-F' 'a-f')"
   [ "$actual" = "$(expected)" ] ||
     fail "the key in the secrets is not the one every release is signed with ($actual, expected $(expected)). A release signed with it would not install over Linger on anybody's phone."
+}
+
+jarsigner_bin() {
+  if command -v jarsigner >/dev/null 2>&1; then
+    echo jarsigner
+  elif [ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/jarsigner" ]; then
+    echo "$JAVA_HOME/bin/jarsigner"
+  else
+    fail "jarsigner not found: it comes with Java"
+  fi
 }
 
 apksigner_bin() {
@@ -107,8 +122,27 @@ case "${1:-}" in
     fi
     echo "$apk is signed with the release key"
     ;;
+  verify-bundle)
+    aab="${2:-}"
+    [ -f "$aab" ] || fail "no bundle at '$aab'"
+    # A bundle is signed the way a jar is. jarsigner exits 0 on an unsigned
+    # one too ("jar is unsigned."), so only its "jar verified." counts.
+    checked="$("$(jarsigner_bin)" -verify "$aab" 2>&1)" || fail "jarsigner rejected $aab: $checked"
+    printf '%s\n' "$checked" | grep -qx '[[:space:]]*jar verified\.[[:space:]]*' || {
+      printf '%s\n' "$checked" >&2
+      fail "$aab is not signed"
+    }
+    printed="$("$(keytool_bin)" -printcert -jarfile "$aab" 2>&1)" || fail "keytool couldn't read $aab: $printed"
+    signers="$(printf '%s\n' "$printed" | sed -n 's/^[[:space:]]*SHA256: *//p' | tr -d ': \r' | tr 'A-F' 'a-f' | sort -u)"
+    if [ "$signers" != "$(expected)" ]; then
+      echo "keytool said:" >&2
+      printf '%s\n' "$printed" >&2
+      fail "$aab is signed by '$signers', not only by the release key $(expected)"
+    fi
+    echo "$aab is signed with the release key"
+    ;;
   *)
-    echo "usage: scripts/android-signing.sh check | setup | verify APK" >&2
+    echo "usage: scripts/android-signing.sh check | setup | verify APK | verify-bundle AAB" >&2
     exit 2
     ;;
 esac
