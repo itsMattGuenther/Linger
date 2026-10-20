@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The iPhone app's additions to its Info.plist (SPEC §4.15). `tauri ios build`
+  merges this file over gen/apple's own, so it outlasts regenerating the Xcode
+  project. The words under each permission are what the iPhone shows when it
+  asks.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Linger uses the microphone only when you record a voice message or join a voice room.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Linger uses the camera only when you take a photo or video to share.</string>
+	<!--
+	  Only standard, exempt encryption: HTTPS to the server, and the voice
+	  encryption WebRTC has built in. Saying so here means App Store Connect
+	  doesn't ask about export compliance on every upload.
+	-->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+</dict>
+</plist>
