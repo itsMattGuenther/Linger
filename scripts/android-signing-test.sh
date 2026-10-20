@@ -68,15 +68,16 @@ rm -f "$apk"
 refuses "no APK" "Signer #1 certificate SHA-256 digest: $key"
 
 # `verify-bundle`, for Google Play's .aab: stand-in jarsigner and keytool
-# print what JDK 21's print, with $JARSIGNER_SAYS and $KEYTOOL_SAYS.
+# print what JDK 21's print, from the files $JARSIGNER_SAYS and $KEYTOOL_SAYS (a
+# real bundle's jarsigner output is more than an environment variable holds).
 mkdir -p "$scratch/bin"
 cat > "$scratch/bin/jarsigner" <<'SH'
 #!/usr/bin/env bash
-printf '%s\n' "$JARSIGNER_SAYS"
+cat "$JARSIGNER_SAYS"
 SH
 cat > "$scratch/bin/keytool" <<'SH'
 #!/usr/bin/env bash
-printf '%s\n' "$KEYTOOL_SAYS"
+cat "$KEYTOOL_SAYS"
 SH
 chmod +x "$scratch/bin/jarsigner" "$scratch/bin/keytool"
 aab="$scratch/app.aab"
@@ -92,7 +93,9 @@ signer() {
   printf 'Signer #%s:\n\nCertificate #1:\nOwner: CN=Linger, O=Linger\nCertificate fingerprints:\n\t SHA1: 26:7B:D6:A2:AC:BB:D3:18:F6:54:D8:A6:45:6D:04:B7:45:1F:3A:C5\n\t SHA256: %s\nSignature algorithm name: SHA384withRSA\n' "$1" "$(colons "$2")"
 }
 run_bundle() {
-  PATH="$scratch/bin:$PATH" JARSIGNER_SAYS="$1" KEYTOOL_SAYS="$2" \
+  printf '%s\n' "$1" > "$scratch/jarsigner-says"
+  printf '%s\n' "$2" > "$scratch/keytool-says"
+  PATH="$scratch/bin:$PATH" JARSIGNER_SAYS="$scratch/jarsigner-says" KEYTOOL_SAYS="$scratch/keytool-says" \
     scripts/android-signing.sh verify-bundle "$aab" >/dev/null 2>&1
 }
 bundle_passes() {
@@ -103,6 +106,14 @@ bundle_refuses() {
 }
 
 bundle_passes "a bundle signed with the release key" "$verified" "$(signer 1 "$key")"
+# A real bundle's jarsigner says "jar verified." and then a warning for each of
+# a few thousand entries. Read through a pipe, the check stopped at the first
+# line and the rest hit a closed pipe, which failed it: play.yml's first run,
+# on 0.5.1, refused a rightly signed bundle.
+warnings="$(for n in $(seq 4000); do echo "- Entry base/root/META-INF/entry-$n.version is signed in JarFile but is not signed in JarInputStream"; done)"
+bundle_passes "a real bundle's thousands of warnings" "$verified
+This JAR file contains internal inconsistencies that may result in different contents when reading via JarFile and JarInputStream:
+$warnings" "$(signer 1 "$key")"
 bundle_refuses "a bundle signed with another key" "$verified" "$(signer 1 "$other")"
 bundle_refuses "the release key and another" "$verified" "$(signer 1 "$key")
 $(signer 2 "$other")"

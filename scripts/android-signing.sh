@@ -126,9 +126,11 @@ case "${1:-}" in
     aab="${2:-}"
     [ -f "$aab" ] || fail "no bundle at '$aab'"
     # A bundle is signed the way a jar is. jarsigner exits 0 on an unsigned
-    # one too ("jar is unsigned."), so only its "jar verified." counts.
+    # one too ("jar is unsigned."), so only its "jar verified." counts. Not
+    # through a pipe: grep -q stops at that line, the thousands of warnings
+    # after it hit a closed pipe, and pipefail called the bundle unsigned.
     checked="$("$(jarsigner_bin)" -verify "$aab" 2>&1)" || fail "jarsigner rejected $aab: $checked"
-    printf '%s\n' "$checked" | grep -qx '[[:space:]]*jar verified\.[[:space:]]*' || {
+    grep -qx '[[:space:]]*jar verified\.[[:space:]]*' <<< "$checked" || {
       printf '%s\n' "$checked" >&2
       fail "$aab is not signed"
     }
