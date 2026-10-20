@@ -1,9 +1,8 @@
 name: ios-try
 
 # One-off, never merged: builds the iPhone app on a Mac, unsigned, from this
-# branch, so ios.yml's first real run on main isn't its first build. Also
-# regenerates the Xcode project from project.yml and shows any difference from
-# the committed one. No secrets.
+# branch, so ios.yml's first real run on main isn't its first build, and shows
+# what the build changes in the committed Xcode project. No secrets.
 on:
   push:
     branches: [feat/253-iphone]
@@ -45,18 +44,9 @@ jobs:
         run: |
           set -euo pipefail
           git status --short
+          git diff -- client/src-tauri/gen/apple/linger-client_iOS client/src-tauri/gen/apple/linger-client.xcodeproj
           found="$(find client/src-tauri/gen/apple/build -name '*.ipa')"
           echo "$found"
           ls -l $found
           unzip -p "$found" 'Payload/*.app/Info.plist' > "$RUNNER_TEMP/Info.plist"
           plutil -p "$RUNNER_TEMP/Info.plist"
-      # After the build, which makes Externals/ and assets/, as XcodeGen
-      # needs; in place, since project.yml's paths are relative to it.
-      - name: the Xcode project, made again from project.yml
-        if: always()
-        run: |
-          brew install xcodegen >/dev/null
-          cd client/src-tauri/gen/apple
-          mkdir -p Externals assets
-          xcodegen generate --spec project.yml --quiet
-          git diff --exit-code -- linger-client.xcodeproj && echo "the same as committed" || true
