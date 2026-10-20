@@ -1593,3 +1593,18 @@ servers work together", has the rules.
   built with the first real break, not before.
 - **One version number for the app and the server.** Releasing them apart (Matt's
   question on #315, 2026-10-05) would give each its own number and double every rule.
+
+---
+
+## Decided — a Ko-fi link in the README
+
+**Matt, 2026-10-20.** A "Support on Ko-fi" badge sits with the others at the top
+of the README, linking to https://ko-fi.com/mattguenther. Tips go to Matt, for
+what it costs to get Linger out (Apple's $99 a year, the Google Play sign-up,
+the website, test servers), and buy nothing.
+
+This isn't the payment surface SPEC §2 and hard rule 13 rule out. Nothing in
+Linger is for sale, nothing is held back for people who tip, and the app never
+shows or links to it. A tip link outside the app, from the person who makes it,
+doesn't change what the app is. Putting one *inside* the app would, and that's
+a separate question for Matt.

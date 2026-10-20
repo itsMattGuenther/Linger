@@ -12,6 +12,7 @@
 <a href="#-running-a-server"><img alt="Self-hosted" src="https://img.shields.io/badge/self--hosted-f3b55c"></a>
 <a href="#-privacy"><img alt="Zero telemetry" src="https://img.shields.io/badge/zero%20telemetry-7cc98f"></a>
 <a href="docs/development.md"><img alt="Built with Rust, Tauri and React" src="https://img.shields.io/badge/built%20with-Rust%20%C2%B7%20Tauri%20%C2%B7%20React-2e3b54?labelColor=131a28"></a>
+<a href="https://ko-fi.com/mattguenther"><img alt="Support on Ko-fi" src="https://img.shields.io/badge/support-Ko--fi-2e3b54?labelColor=131a28&logo=kofi&logoColor=white"></a>
 </p>
 
 <p><strong><a href="https://linger.im">Website</a></strong> · <a href="https://github.com/itsMattGuenther/Linger/releases/latest">Download</a> · <a href="docs/user-guide.md">User guide</a> · <a href="docs/host-guide.md">Host guide</a></p>
