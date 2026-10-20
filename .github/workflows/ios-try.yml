@@ -36,13 +36,6 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: client/src-tauri
-      - name: the Xcode project, made again from project.yml
-        run: |
-          brew install xcodegen >/dev/null
-          scratch="$(mktemp -d)"
-          cp -R client/src-tauri/gen/apple "$scratch/apple"
-          (cd "$scratch/apple" && xcodegen generate --spec project.yml --quiet)
-          diff -u client/src-tauri/gen/apple/linger-client.xcodeproj/project.pbxproj "$scratch/apple/linger-client.xcodeproj/project.pbxproj" && echo "the same"  || true
       - name: build, unsigned
         working-directory: client
         run: |
@@ -57,3 +50,13 @@ jobs:
           ls -l $found
           unzip -p "$found" 'Payload/*.app/Info.plist' > "$RUNNER_TEMP/Info.plist"
           plutil -p "$RUNNER_TEMP/Info.plist"
+      # After the build, which makes Externals/ and assets/, as XcodeGen
+      # needs; in place, since project.yml's paths are relative to it.
+      - name: the Xcode project, made again from project.yml
+        if: always()
+        run: |
+          brew install xcodegen >/dev/null
+          cd client/src-tauri/gen/apple
+          mkdir -p Externals assets
+          xcodegen generate --spec project.yml --quiet
+          git diff --exit-code -- linger-client.xcodeproj && echo "the same as committed" || true

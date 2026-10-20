@@ -31,7 +31,7 @@ workflow run from any branch, and a branch can carry its own copy of a
 workflow. The environment (Settings → Environments → `release`) may only be
 used from a `v*` tag or from `main`, and only the jobs that sign name it:
 `preflight`, `bundle` and `android` in `release.yml`, `bundle` in `play.yml`,
-and `publish` in `arch-repo.yml`. A new signing key, such as a Windows certificate, goes there
+`iphone` in `ios.yml`, and `publish` in `arch-repo.yml`. A new signing key, such as a Windows certificate, goes there
 too, and so does `environment: release` on the job that uses it.
 
 **Losing that key means you can never ship an update to an installed copy
@@ -214,6 +214,34 @@ key there would add a secret to keep without guarding anything. Play then
 takes only bundles signed with this key. Play Console's App integrity page
 shows the app signing key's SHA-256 fingerprint, and it must match
 `client/src-tauri/android-release-cert.sha256`.
+
+## The iPhone
+
+Only a Mac builds for the iPhone, so `.github/workflows/ios.yml` builds it on
+GitHub's, signs it, and sends it to TestFlight. It runs only by hand, from
+`main`:
+
+```bash
+gh workflow run ios.yml -f ref=v0.5.2        # or -f ref=main for a test build
+gh run list --workflow ios.yml --limit 1     # wait for it to go green
+```
+
+App Store Connect takes a few minutes to process the build. It then shows
+under TestFlight, ready to give to testers, and on the app's page, ready to
+submit for review.
+
+- **Signing is automatic.** Xcode makes the distribution certificate and
+  profile, and keeps them in the Apple account, through the App Store Connect
+  API key: `APPLE_API_KEY_P8` (the `.p8` file's text), `APPLE_API_KEY_ID` and
+  `APPLE_API_ISSUER`, in the `release` environment. It's a team key with
+  Admin access, which Tauri requires for automatic signing. Matt keeps the
+  `.p8` backed up: Apple lets you download it only once.
+- **Each upload needs a new build number** for its version. The run's number
+  and attempt ("7.1") are the build number, so running it again is always
+  accepted. The version people see stays the release's.
+- **The encryption question** is answered in `client/src-tauri/Info.ios.plist`
+  (`ITSAppUsesNonExemptEncryption`: only standard, exempt encryption), so it
+  isn't asked on each upload.
 
 ## Worth knowing
 

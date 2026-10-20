@@ -97,9 +97,9 @@ jobs:
         working-directory: client
         run: pnpm tauri android build --debug --target aarch64 --apk
 
-  # The iPhone needs a Mac and its Xcode project isn't made yet, so this only
-  # proves the Rust half builds for iOS: the phone-only code paths compile
-  # and nothing desktop-only leaks into them.
+  # Proves the Rust half builds for iOS: the phone-only code paths compile
+  # and nothing desktop-only leaks into them. The whole app, signed, is
+  # ios.yml's, by hand, since it uses the release key.
   shell-ios:
     name: phone app's Rust builds for iOS
     runs-on: macos-latest

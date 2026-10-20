@@ -336,7 +336,15 @@ project Tauri generated is `client/src-tauri/gen/android`; the phone
 identifier, `io.github.itsmattguenther.linger`, is in
 `tauri.android.conf.json` and `tauri.ios.conf.json`.
 
-Android builds on Linux. iPhone builds need a Mac and aren't set up yet.
+Android builds on Linux. iPhone builds need a Mac. Nobody on the project has
+one, so they run on GitHub's (`ios.yml`, docs/releasing.md, "The iPhone"). The
+Xcode project, `client/src-tauri/gen/apple`, came from `tauri ios init` on one
+of those Macs and is committed. Its `project.yml` is what XcodeGen makes the
+`.xcodeproj` from, so a change goes in both, or in `project.yml` and a fresh
+`xcodegen generate` on a Mac. The iPhone's Info.plist additions (the
+microphone and camera wording, the encryption answer) are in
+`client/src-tauri/Info.ios.plist`, which `tauri ios build` merges in.
+`scripts/app-icons.mjs` writes the iPhone's icons too.
 
 1. Install [Android Studio](https://developer.android.com/studio) (Arch: `yay
    -S android-studio`) and run its setup once (Standard). Then, in **SDK

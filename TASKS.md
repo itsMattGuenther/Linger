@@ -672,6 +672,19 @@ macOS runners, or a friend's Mac.
   Play"). Next: the first bundle on internal testing to set the key, the
   store listing and App content forms, then a closed test with 12 testers for
   14 days, then "Apply for production".
+  **The iPhone, started 2026-10-20 (#253):** Matt's Apple Developer Program
+  membership is active, and the App Store Connect API key (Admin) is in the
+  `release` environment. `gen/apple` is `tauri ios init`'s, from GitHub's
+  Mac, iPhone only. `ios.yml` builds on `main`, signs automatically through
+  the key, and uploads to TestFlight (docs/releasing.md, "The iPhone").
+  `Info.ios.plist` has the microphone and camera wording and the encryption
+  answer. **Before the App Store, not before a first TestFlight build:**
+  keeping the app out of iCloud backups, as the privacy page says. Files
+  need "don't back up" set on them. The Keychain entry (the `keyring` crate's
+  default) may be restorable to another phone, so it needs a
+  this-device-only setting. Also **voice with the phone locked**: there's no
+  background audio mode yet, so locking may end a call. Check it on a real
+  iPhone first, with Matt's friend.
   Android first, on Google Play, with Matt paying the $25; Apple only after it
   has worked well there. The listing's privacy answers ("Data safety") must
   say the app uses the microphone only to record a voice message the person
