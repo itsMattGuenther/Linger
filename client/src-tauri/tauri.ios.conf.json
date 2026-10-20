@@ -1,6 +1,11 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "identifier": "io.github.itsmattguenther.linger",
+  "bundle": {
+    "iOS": {
+      "developmentTeam": "SFTT38V54H"
+    }
+  },
   "app": {
     "windows": [
       {

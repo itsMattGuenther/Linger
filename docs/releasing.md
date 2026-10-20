@@ -235,7 +235,9 @@ submit for review.
   API key: `APPLE_API_KEY_P8` (the `.p8` file's text), `APPLE_API_KEY_ID` and
   `APPLE_API_ISSUER`, in the `release` environment. It's a team key with
   Admin access, which Tauri requires for automatic signing. Matt keeps the
-  `.p8` backed up: Apple lets you download it only once.
+  `.p8` backed up: Apple lets you download it only once. The team it signs
+  for, `SFTT38V54H`, is in `tauri.ios.conf.json`. A Team ID isn't a secret:
+  it's in every app the team signs.
 - **Each upload needs a new build number** for its version. The run's number
   and attempt ("7.1") are the build number, so running it again is always
   accepted. The version people see stays the release's.
