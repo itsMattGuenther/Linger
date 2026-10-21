@@ -28,7 +28,9 @@ current installers are for 64-bit Intel/AMD computers (`x64`, `x86_64` and
 
 You do **not** need `.sig`, `latest.json`, or the source-code ZIP/tar files.
 The `.msi` is an alternative Windows installer, not an extra required download.
-There are no macOS or ARM desktop installers yet, and no iPhone app.
+There are no macOS or ARM desktop installers yet. The iPhone app is only in
+testing, through Apple's TestFlight for invited testers, and isn't in the
+App Store yet.
 
 ### Windows
 
@@ -124,9 +126,17 @@ reopen it. Then go to [Getting in](#getting-in).
 
 The phone app is on the release page from 0.4.8, until it's in the Play
 Store. It's for seeing who's around and answering them: rooms, DMs, your
-status, media, search, pictures and voice messages. It doesn't join voice
-rooms, and it never shows a notification, open or closed (when you open it,
-it catches up).
+status, media, search, pictures and voice messages. From 0.5.1 it joins voice
+rooms too, with the phone's own microphone or a headset's. The first time you
+press **Join**, Android asks whether Linger may use the microphone, unless
+you already let it for a voice message.
+
+It never shows a notification about messages or people, open or closed (when
+you open it, it catches up). The one thing it shows is while you're in voice:
+a silent line, *In voice in #general*, with **Mute** and **Leave**, which is
+what keeps the call going with the phone locked or in your pocket. It never
+makes a sound, and it goes when you leave. Android 13 and later ask once
+whether it may show; if you say no, the call still works.
 
 1. On the phone, open the
    [latest release](https://github.com/itsMattGuenther/Linger/releases/latest)
