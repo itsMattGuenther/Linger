@@ -4,6 +4,14 @@ The approved artwork is `assets/logo/Linger Pixel Porch Icon Set FINAL.png`.
 Do not replace it or stretch it to a square. `scripts/app-icons.mjs` pads it
 transparently and generates the desktop formats with the pinned Tauri CLI.
 
+The iPhone's icons come from `assets/logo/Linger Pixel Porch Icon Square.png`
+instead (#691), because the iPhone cuts every icon to a rounded square. It is
+the round artwork, pixel for pixel, inside the round frame; the frame is gone,
+and the corners carry on the wall, siding, steps and floor with pixels copied
+from the artwork itself, so it has no colors of its own. The script refuses a
+square file that isn't square or has see-through pixels, and `--check`
+compares the 18 iPhone icons with it pixel by pixel.
+
 ## Finding, 2026-09-17
 
 The published **v0.1.0** packages were built on September 5 at `35bffe53`.

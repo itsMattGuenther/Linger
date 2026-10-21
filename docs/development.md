@@ -301,7 +301,14 @@ source, run `node scripts/app-icons.mjs` from the repository root after
 padding to make the source square, without cropping or stretching the artwork.
 The same script writes the phone app's Android launcher icons into
 `client/src-tauri/gen/android/app/src/main/res`: the artwork over the window's
-color (`--night-2`), which Android cuts to the phone's own icon shape.
+color (`--night-2`), which Android cuts to the phone's own icon shape. The
+iPhone's icons come from a
+[square version](<../assets/logo/Linger Pixel Porch Icon Square.png>) of the
+same scene (#691): the iPhone cuts every icon to its own rounded square, and the
+round picture would sit inside it as a circle. The square is the round picture
+with its frame taken off and the scene carried on into the corners; edit it as
+artwork, don't remake it by cropping the round one, which cuts off the lamp, the
+plant pot and the cat.
 Use `node scripts/app-icons.mjs --check` to verify the committed files without
 changing them. The [desktop icon audit](app-icon-checks.md) explains the
 package checks and remaining visual checks. Packaging changes run an unsigned
@@ -344,7 +351,8 @@ of those Macs and is committed. Its `project.yml` is what XcodeGen makes the
 `xcodegen generate` on a Mac. The iPhone's Info.plist additions (the
 microphone and camera wording, the encryption answer) are in
 `client/src-tauri/Info.ios.plist`, which `tauri ios build` merges in.
-`scripts/app-icons.mjs` writes the iPhone's icons too.
+`scripts/app-icons.mjs` writes the iPhone's icons too, from the square version
+of the porch artwork ("Icons and Windows packaging" above).
 
 1. Install [Android Studio](https://developer.android.com/studio) (Arch: `yay
    -S android-studio`) and run its setup once (Standard). Then, in **SDK

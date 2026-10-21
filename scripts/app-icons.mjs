@@ -1,15 +1,19 @@
 #!/usr/bin/env node
 // Package the approved porch artwork using the project's pinned Tauri CLI.
 //
-// The source is slightly rectangular. An SVG container adds transparent padding
-// at integer pixel coordinates, preserving the original PNG without cropping or
-// stretching it. Tauri handles platform formats and size conversion.
+// Two sources. The round porch is the desktop and Android icon. The iPhone cuts
+// every icon to its own rounded square, so its icons come from the square
+// version: the same scene with the round frame taken off and carried on into
+// the corners (#691). The round source is slightly rectangular; an SVG
+// container adds transparent padding at integer pixel coordinates, preserving
+// the original PNG without cropping or stretching it. Tauri handles platform
+// formats and size conversion.
 //
 // Usage: node scripts/app-icons.mjs [--check]
 //   --check verifies the committed icons without changing them.
 
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,13 +22,14 @@ import { deflateSync, inflateSync } from "node:zlib";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SOURCE = join(ROOT, "assets/logo/Linger Pixel Porch Icon Set FINAL.png");
+const IPHONE_SOURCE = join(ROOT, "assets/logo/Linger Pixel Porch Icon Square.png");
 const ICONS = join(ROOT, "client/src-tauri/icons");
 const DESKTOP_ICONS = ["32x32.png", "128x128.png", "128x128@2x.png", "icon.png", "icon.ico", "icon.icns"];
 // The phone app's launcher icons (SPEC §4.15), into the Android project. An
 // Android icon is the artwork over a background the phone cuts to its own
 // shape; the background is the window's color (--night-2, styles/tokens.css),
 // not Tauri's white, so the dark porch doesn't sit in a white disc. The
-// iPhone's icons sit on the same background.
+// iPhone's square art covers its whole icon, so its background never shows.
 const ANDROID_RES = join(ROOT, "client/src-tauri/gen/android/app/src/main/res");
 const PHONE_BACKGROUND = "#131a28";
 const ANDROID_ICONS = [
@@ -34,9 +39,10 @@ const ANDROID_ICONS = [
   "mipmap-anydpi-v26/ic_launcher.xml",
   "values/ic_launcher_background.xml",
 ];
-// The iPhone's, into its Xcode project. The App Store refuses an icon with an
-// alpha channel, even one with nothing see-through in it, and Tauri writes
-// them with one, so each is laid over the background and written without.
+// The iPhone's, into its Xcode project, from the square art. The App Store
+// refuses an icon with an alpha channel, even one with nothing see-through in
+// it, and Tauri writes them with one, so each is laid over the background and
+// written without.
 const IOS_ICONS_DIR = join(ROOT, "client/src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset");
 const IOS_ICONS = [
   ...["20x20", "29x29", "40x40"].flatMap((size) => ["@1x", "@2x", "@2x-1", "@3x"].map((scale) => `AppIcon-${size}${scale}.png`)),
@@ -168,20 +174,22 @@ function same(a, b) {
   return left.length === right.length && left.every((chunk, i) => chunk.equals(right[i]));
 }
 
-const { values } = parseArgs({ options: { check: { type: "boolean", default: false } } });
-const data = readFileSync(SOURCE);
-if (!data.subarray(0, 8).equals(Buffer.from("\x89PNG\r\n\x1a\n", "latin1")) || data.toString("latin1", 12, 16) !== "IHDR") {
-  console.error("The approved artwork must be a PNG.");
-  process.exit(1);
-}
-const width = data.readUInt32BE(16);
-const height = data.readUInt32BE(20);
-const side = Math.max(width, height);
-const x = Math.floor((side - width) / 2);
-const y = Math.floor((side - height) / 2);
-
-const work = mkdtempSync(join(tmpdir(), "linger-icons-"));
-try {
+/**
+ * Every platform's icons from one PNG, into `output`. Tauri is given the PNG
+ * inside an SVG the size of its longer side, so a source that isn't quite
+ * square is padded, never stretched.
+ */
+function tauriIcons(source, work, output) {
+  const data = readFileSync(source);
+  if (!data.subarray(0, 8).equals(PNG_SIGNATURE) || data.toString("latin1", 12, 16) !== "IHDR") {
+    throw new Error(`The approved artwork must be a PNG: ${source}`);
+  }
+  const width = data.readUInt32BE(16);
+  const height = data.readUInt32BE(20);
+  const side = Math.max(width, height);
+  const x = Math.floor((side - width) / 2);
+  const y = Math.floor((side - height) / 2);
+  mkdirSync(work, { recursive: true });
   writeFileSync(
     join(work, "porch.svg"),
     `<svg xmlns="http://www.w3.org/2000/svg" ` +
@@ -192,28 +200,49 @@ try {
   );
   const manifest = join(work, "icon.json");
   writeFileSync(manifest, `{"default": "porch.svg", "bg_color": "${PHONE_BACKGROUND}"}\n`);
-  const output = join(work, "icons");
   execFileSync(process.execPath, [join(ROOT, "client/node_modules/@tauri-apps/cli/tauri.js"), "icon", manifest, "--output", output], {
     cwd: join(ROOT, "client"),
     stdio: "inherit",
   });
-  // Mobile and store-specific assets are not part of the desktop bundle.
+}
+
+const { values } = parseArgs({ options: { check: { type: "boolean", default: false } } });
+const work = mkdtempSync(join(tmpdir(), "linger-icons-"));
+try {
+  // The square art has to be a square with nothing see-through in it: padded
+  // or see-through, the iPhone would show the background around it again.
+  const square = readPng(IPHONE_SOURCE);
+  const opaque = square.channels === 3 || square.pixels.every((value, i) => i % 4 !== 3 || value === 255);
+  if (square.width !== square.height || !opaque) throw new Error(`The iPhone's artwork must be square and opaque: ${IPHONE_SOURCE}`);
+  const output = join(work, "round", "icons");
+  tauriIcons(SOURCE, join(work, "round"), output);
+  const iphone = join(work, "square", "icons");
+  tauriIcons(IPHONE_SOURCE, join(work, "square"), iphone);
+  // Mobile and store-specific assets are not part of the desktop bundle. An
+  // icon that is already right is left alone: the ICNS chunks come out in a
+  // new order every run.
+  const stale = (made, committed) => !existsSync(committed) || !same(made, committed);
   for (const name of DESKTOP_ICONS) {
-    if (!values.check) copyFileSync(join(output, name), join(ICONS, name));
-    else if (!same(join(output, name), join(ICONS, name))) throw new Error(`Icon differs from the approved artwork: ${name}`);
+    const made = join(output, name);
+    const committed = join(ICONS, name);
+    if (values.check) {
+      if (!same(made, committed)) throw new Error(`Icon differs from the approved artwork: ${name}`);
+    } else if (stale(made, committed)) copyFileSync(made, committed);
   }
   for (const name of ANDROID_ICONS) {
-    if (!values.check) {
-      mkdirSync(dirname(join(ANDROID_RES, name)), { recursive: true });
-      copyFileSync(join(output, "android", name), join(ANDROID_RES, name));
-    } else if (!same(join(output, "android", name), join(ANDROID_RES, name))) {
-      throw new Error(`Android icon differs from the approved artwork: ${name}`);
+    const made = join(output, "android", name);
+    const committed = join(ANDROID_RES, name);
+    if (values.check) {
+      if (!same(made, committed)) throw new Error(`Android icon differs from the approved artwork: ${name}`);
+    } else if (stale(made, committed)) {
+      mkdirSync(dirname(committed), { recursive: true });
+      copyFileSync(made, committed);
     }
   }
   // Compared by their pixels: zlib versions may pack the same picture
   // differently.
   for (const name of IOS_ICONS) {
-    const made = readPng(join(output, "ios", name));
+    const made = readPng(join(iphone, "ios", name));
     const flat = overBackground(made, PHONE_BACKGROUND);
     if (!values.check) {
       writeFileSync(join(IOS_ICONS_DIR, name), rgbPng(made.width, made.height, flat));
@@ -231,6 +260,7 @@ try {
 }
 if (!process.exitCode) {
   console.log(
-    `${values.check ? "Verified" : "Updated"} ${DESKTOP_ICONS.length} desktop, ${ANDROID_ICONS.length} Android and ${IOS_ICONS.length} iPhone icons from Linger Pixel Porch Icon Set FINAL.png.`,
+    `${values.check ? "Verified" : "Updated"} ${DESKTOP_ICONS.length} desktop and ${ANDROID_ICONS.length} Android icons from Linger Pixel Porch Icon Set FINAL.png, ` +
+      `and ${IOS_ICONS.length} iPhone icons from Linger Pixel Porch Icon Square.png.`,
   );
 }
