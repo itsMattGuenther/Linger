@@ -31,8 +31,8 @@ export interface VoiceMessageControls {
  * hear back and send or discard. Closing the window throws it away.
  *
  * Undefined where there's no recorder: outside the apps, and on a phone whose
- * web view can't record (no microphone, or no Opus encoder), which then
- * offers no microphone button.
+ * web view can't record (no microphone, or no Opus encoder, as on an iPhone
+ * before iOS 26), which then offers no microphone button.
  */
 export function useVoiceMessages(
   paneId: string | null,
@@ -44,8 +44,22 @@ export function useVoiceMessages(
   clipsNow.current = clips;
   /** The conversation being recorded in, if any. */
   const recordingIn = useRef<string | null>(null);
-  /** Which recorder this app has, if any: decided once, as the app doesn't change. */
-  const [kind] = useState<"shell" | "page" | null>(() => (!isTauri() ? null : onPhone() ? (canRecordInPage() ? "page" : null) : "shell"));
+  /**
+   * Which recorder this app has, if any: decided once, as the app doesn't
+   * change. A phone's web view takes a moment to say whether it can make
+   * Opus, so its microphone button comes once it has.
+   */
+  const [kind, setKind] = useState<"shell" | "page" | null>(() => (!isTauri() || onPhone() ? null : "shell"));
+  useEffect(() => {
+    if (!isTauri() || !onPhone()) return;
+    let gone = false;
+    void canRecordInPage().then((can) => {
+      if (can && !gone) setKind("page");
+    });
+    return () => {
+      gone = true;
+    };
+  }, []);
   const recorder = useRef<Recorder | null>(null);
 
   const put = useCallback((conversation: string, next: VoiceMessage | null) => {

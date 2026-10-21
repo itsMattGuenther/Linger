@@ -1068,9 +1068,10 @@ never a count.
 PROTOCOL §5 has the details.
 
 **Voice messages, yes** (#401): a clip recorded on the phone is the same kind of file
-as one recorded on a computer, and plays on both. Android asks for the microphone the
+as one recorded on a computer, and plays on both. The phone asks for the microphone the
 first time Record or Join is pressed, never before, and the app uses it for nothing
-else.
+else. An iPhone records one from iOS 26, the first whose web engine can make Opus
+(#687); an older one shows no microphone button, rather than one that can't work.
 
 **Voice rooms, yes** (Matt, 2026-10-19, #429): anybody on a phone can join a room's
 voice with the phone's own microphone, or a headset's, as on a computer (§4.14). Phone

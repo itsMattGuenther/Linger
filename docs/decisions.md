@@ -781,7 +781,11 @@ it, on the desktop and, later, the phone. Discord offers it only on phones.
   by WebCodecs as Opus at the same 64 kbit/s, into the same file writer. The
   shell has no audio code on a phone, and the web view already asks Android
   for the microphone when a page wants it. The app asks for `RECORD_AUDIO`
-  only then: the first time Record is pressed.
+  only then: the first time Record is pressed. The iPhone's web view (WebKit)
+  has no track processor for sound, so there an audio worklet reads the
+  microphone (`app/chat/micWorklet.ts`, #687), and WebCodecs hands it to
+  Apple's own Opus encoder, from iOS 26. An older iPhone offers no
+  microphone button rather than a WebAssembly encoder in the bundle.
 - **Five minutes at most**, about 2.4 MB at 64 kbit/s, Discord's default for
   a voice (Matt, 2026-10-03, up from 32: a message is heard again, so it gets
   more bits than a live call; voice rooms stay at the encoder's own rate). It

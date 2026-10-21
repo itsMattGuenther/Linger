@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { readClip } from "../../../lib/webm";
 import { tauriBus } from "../../core/bus";
+import MIC_WORKLET from "./micWorklet.ts?worker&url";
 
 /**
  * What records a voice message (#401), on each app. Both hand back the same
@@ -12,8 +13,11 @@ import { tauriBus } from "../../core/bus";
  *   the microphone voice opens, in the device's own format (#398).
  * - **The phone:** the page records, with the web view's own microphone and
  *   its WebCodecs encoder. The shell has no audio code on a phone (SPEC
- *   §4.15), and Android asks the person for the microphone the first time,
- *   through the web view.
+ *   §4.15), and the phone asks the person for the microphone the first time,
+ *   through the web view. Android's (Chromium) hands the page the sound
+ *   through a track processor; the iPhone's (WebKit) has one for video only,
+ *   so there an audio worklet reads it (`micWorklet.ts`, #687). Both feed
+ *   the same encoder, which on the iPhone is Apple's own Opus, from iOS 26.
  */
 
 /** A recording: its packets, in order, and how many samples the decoder drops at the start. */
@@ -47,6 +51,16 @@ const LONGEST_PACKETS = 15_000;
 const BITS_PER_SECOND = 64_000;
 /** libopus's lookahead at 48 kHz, for an encoder that doesn't say its own. */
 const USUAL_PRE_SKIP = 312;
+/**
+ * The rate the worklet's sound is read at: Opus's own, and the only one of
+ * the usual ones Apple's Opus encoder takes (an iPhone's microphone may be
+ * at 44.1 kHz, which the engine turns into this).
+ */
+const WORKLET_RATE = 48_000;
+/** The worklet's processor, by the name `micWorklet.ts` gives it. */
+const WORKLET_NAME = "linger-mic";
+/** How long a phone gets to start its sound once the microphone is given. */
+const START_WAIT_MS = 3_000;
 /** How often the lines hear how loud you are, as on the desktop. */
 const LEVEL_EVERY_MS = 40;
 
@@ -92,9 +106,17 @@ function trackProcessor(): TrackProcessorClass | null {
   return typeof found === "function" ? (found as TrackProcessorClass) : null;
 }
 
-/** Whether this engine can record in the page: a microphone, a way to read it, and an Opus encoder. */
-export function canRecordInPage(): boolean {
-  return typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia !== undefined && typeof AudioEncoder !== "undefined" && trackProcessor() !== null;
+/**
+ * Whether this engine can record in the page: a microphone, a way to read it
+ * (Chromium's track processor, or an audio worklet), and an encoder that
+ * makes Opus. The last only the encoder can answer, and it takes a moment.
+ */
+export async function canRecordInPage(): Promise<boolean> {
+  if (typeof navigator === "undefined" || navigator.mediaDevices?.getUserMedia === undefined) return false;
+  if (typeof AudioEncoder === "undefined" || typeof AudioData === "undefined") return false;
+  if (trackProcessor() === null && typeof AudioWorkletNode === "undefined") return false;
+  const asked = await AudioEncoder.isConfigSupported({ codec: "opus", sampleRate: WORKLET_RATE, numberOfChannels: 1, bitrate: BITS_PER_SECOND }).catch(() => null);
+  return asked?.supported === true;
 }
 
 /** A refusal from the web view, in the words `voiceStartProblem` reads. */
@@ -137,9 +159,27 @@ function preSkipOf(description: AllowSharedBufferSource | undefined): number | n
   return (bytes[10] ?? 0) | ((bytes[11] ?? 0) << 8);
 }
 
+/** Wait for `work`, or give up after `ms`; true when it finished in time. */
+function within(work: Promise<unknown>, ms: number): Promise<boolean> {
+  return new Promise((done) => {
+    const timer = setTimeout(() => done(false), ms);
+    void work.then(
+      () => {
+        clearTimeout(timer);
+        done(true);
+      },
+      () => {
+        clearTimeout(timer);
+        done(false);
+      },
+    );
+  });
+}
+
 /** The phone's recorder: the web view's microphone, encoded as Opus by WebCodecs. */
 export function pageRecorder(events: RecorderEvents): Recorder {
   let stream: MediaStream | null = null;
+  let context: AudioContext | null = null;
   let encoder: AudioEncoder | null = null;
   let reading: Promise<void> | null = null;
   let packets: Uint8Array[] = [];
@@ -152,8 +192,44 @@ export function pageRecorder(events: RecorderEvents): Recorder {
     stopped = true;
     for (const track of stream?.getTracks() ?? []) track.stop();
     stream = null;
+    void context?.close().catch(() => undefined);
+    context = null;
   };
 
+  /** One stretch of sound, as one channel: encoded, and heard for the lines. `timestamp` is in microseconds. */
+  const encode = (samples: Float32Array<ArrayBuffer>, rate: number, timestamp: number) => {
+    if (encoder === null) {
+      encoder = new AudioEncoder({
+        output: (chunk, meta) => {
+          const found = preSkipOf(meta?.decoderConfig?.description);
+          if (found !== null) preSkip = found;
+          const packet = new Uint8Array(chunk.byteLength);
+          chunk.copyTo(packet);
+          packets.push(packet);
+          if (packets.length === LONGEST_PACKETS && !stopped) {
+            release();
+            events.ended("full");
+          }
+        },
+        error: () => {
+          if (!stopped) events.ended("lost");
+        },
+      });
+      encoder.configure({ codec: "opus", sampleRate: rate, numberOfChannels: 1, bitrate: BITS_PER_SECOND, opus: { frameDuration: 20_000 } });
+    }
+    const single = new AudioData({ format: "f32", sampleRate: rate, numberOfFrames: samples.length, numberOfChannels: 1, timestamp, data: samples });
+    encoder.encode(single);
+    single.close();
+    loudest = Math.max(loudest, loudness(samples));
+    const now = performance.now();
+    if (now - heardAt >= LEVEL_EVERY_MS) {
+      events.level(loudest);
+      loudest = 0;
+      heardAt = now;
+    }
+  };
+
+  // Chromium's way: the track processor's stream of the microphone's sound.
   const read = async (reader: ReadableStreamDefaultReader<AudioData>) => {
     for (;;) {
       const next = await reader.read().catch(() => ({ done: true, value: undefined }) as const);
@@ -167,38 +243,38 @@ export function pageRecorder(events: RecorderEvents): Recorder {
         data.close();
         continue;
       }
-      if (encoder === null) {
-        encoder = new AudioEncoder({
-          output: (chunk, meta) => {
-            const found = preSkipOf(meta?.decoderConfig?.description);
-            if (found !== null) preSkip = found;
-            const packet = new Uint8Array(chunk.byteLength);
-            chunk.copyTo(packet);
-            packets.push(packet);
-            if (packets.length === LONGEST_PACKETS && !stopped) {
-              release();
-              events.ended("full");
-            }
-          },
-          error: () => {
-            if (!stopped) events.ended("lost");
-          },
-        });
-        encoder.configure({ codec: "opus", sampleRate: data.sampleRate, numberOfChannels: 1, bitrate: BITS_PER_SECOND, opus: { frameDuration: 20_000 } });
-      }
       const samples = mono(data);
-      const single = new AudioData({ format: "f32", sampleRate: data.sampleRate, numberOfFrames: data.numberOfFrames, numberOfChannels: 1, timestamp: data.timestamp, data: samples });
+      const { sampleRate, timestamp } = data;
       data.close();
-      encoder.encode(single);
-      single.close();
-      loudest = Math.max(loudest, loudness(samples));
-      const now = performance.now();
-      if (now - heardAt >= LEVEL_EVERY_MS) {
-        events.level(loudest);
-        loudest = 0;
-        heardAt = now;
-      }
+      encode(samples, sampleRate, timestamp);
     }
+  };
+
+  // WebKit's way (#687): the worklet's 20 ms at a time, timed by how much
+  // has come, from the microphone's sound in an audio graph of its own.
+  const listen = async (microphone: MediaStream, track: MediaStreamTrack, sound: AudioContext, waking: Promise<void>) => {
+    await sound.audioWorklet.addModule(MIC_WORKLET);
+    const node = new AudioWorkletNode(sound, WORKLET_NAME);
+    let frames = 0;
+    node.port.onmessage = (event: MessageEvent<unknown>) => {
+      if (stopped || !(event.data instanceof Float32Array)) return;
+      // Copied, as the encoder takes only sound in a buffer of its own.
+      const samples = new Float32Array(event.data);
+      encode(samples, sound.sampleRate, Math.round((frames / sound.sampleRate) * 1_000_000));
+      frames += samples.length;
+    };
+    sound.createMediaStreamSource(microphone).connect(node);
+    // An engine works out only what leads to the speaker, so the worklet
+    // goes there too. It sends nothing on, so nothing is heard.
+    node.connect(sound.destination);
+    track.addEventListener("ended", () => {
+      if (!stopped) events.ended("lost");
+    });
+    // Asked to start in the tap; asked again now the microphone is open,
+    // which some engines wait for. One that still won't would record
+    // nothing, so that's said instead.
+    const started = await within(waking.catch(() => undefined).then(() => sound.resume()), START_WAIT_MS);
+    if (!started || sound.state !== "running") throw new Error("the microphone wouldn't start");
   };
 
   return {
@@ -208,21 +284,39 @@ export function pageRecorder(events: RecorderEvents): Recorder {
       stopped = false;
       encoder = null;
       const Processor = trackProcessor();
-      if (Processor === null) throw new Error("Voice messages need a newer phone.");
+      // Made and started now, in the tap that pressed Record, before
+      // anything is waited for: the iPhone lets a page start sound only
+      // from a tap.
+      const sound = Processor === null ? new AudioContext({ sampleRate: WORKLET_RATE }) : null;
+      const waking = sound?.resume() ?? Promise.resolve();
+      context = sound;
       try {
         // A phone's own clean-up for a voice: its echo cancelling, noise
         // suppression and level, which a speakerphone mic needs.
         stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
       } catch (error: unknown) {
+        release();
         throw new Error(inWords(error));
       }
       const [track] = stream.getAudioTracks();
-      if (!track) throw new Error("no input device available");
-      reading = read(new Processor({ track }).readable.getReader());
+      if (!track) {
+        release();
+        throw new Error("no input device available");
+      }
+      if (Processor !== null) reading = read(new Processor({ track }).readable.getReader());
+      else if (sound !== null) {
+        try {
+          await listen(stream, track, sound, waking);
+        } catch (error: unknown) {
+          release();
+          throw new Error(inWords(error));
+        }
+      }
     },
     stop: async () => {
       release();
       await reading;
+      reading = null;
       const held = encoder as AudioEncoder | null;
       if (held !== null && held.state === "configured") await held.flush().catch(() => undefined);
       held?.close();

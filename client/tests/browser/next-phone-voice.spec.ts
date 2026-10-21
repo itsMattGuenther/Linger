@@ -2,10 +2,13 @@ import { expect, type Page, test } from "@playwright/test";
 
 // Voice messages on the phone (#401, SPEC §4.15): the page records, with the
 // web view's own microphone and its WebCodecs Opus encoder
-// (app/chat/recorders.ts), into the same WebM file the desktop makes. The
-// phone's engine is Android's web view, which is Chromium; Chromium stands in
-// a fake microphone playing a tone. The panel itself, sending, and a voice
-// message in the conversation are next-chat-parity.spec.ts's.
+// (app/chat/recorders.ts), into the same WebM file the desktop makes.
+// Android's web view is Chromium, and reads the microphone with a track
+// processor; the iPhone's is WebKit, which has none for sound, so there an
+// audio worklet reads it (#687). Chromium stands in a fake microphone playing
+// a tone, and goes the iPhone's way when its track processor is taken away.
+// The panel itself, sending, and a voice message in the conversation are
+// next-chat-parity.spec.ts's.
 
 // Chromium only, and skipped before a browser starts: WebKit won't start at
 // all with Chromium's fake-microphone switches below.
@@ -38,8 +41,8 @@ async function inGeneral(page: Page) {
 
 const panel = (page: Page) => page.getByRole("group", { name: "Voice message for #general" });
 
-test("records from the phone's own microphone, lines moving, and plays back as the same kind of file", async ({ page }) => {
-  await inGeneral(page);
+/** Record about a second and a half of the tone, stop, and check the file it made. */
+async function recordAndHear(page: Page) {
   await page.getByRole("button", { name: "Record a voice message" }).click();
   await panel(page).getByRole("button", { name: "Record" }).click();
   await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible();
@@ -66,6 +69,37 @@ test("records from the phone's own microphone, lines moving, and plays back as t
   expect(heard.webm).toBe(true);
   expect(heard.seconds).toBeGreaterThan(1.2);
   expect(heard.seconds).toBeLessThan(6);
+}
+
+test("records from the phone's own microphone, lines moving, and plays back as the same kind of file", async ({ page }) => {
+  await inGeneral(page);
+  await recordAndHear(page);
+});
+
+test("with no track processor for sound, as on an iPhone, an audio worklet reads the microphone into the same file (#687)", async ({ page }) => {
+  await page.addInitScript(() => {
+    Reflect.deleteProperty(window, "MediaStreamTrackProcessor");
+    // Which worklet the page loads, so the test knows which way it went.
+    const add = AudioWorklet.prototype.addModule;
+    AudioWorklet.prototype.addModule = function (url, options) {
+      document.body.dataset.worklet = String(url);
+      return add.call(this, url, options);
+    };
+  });
+  await inGeneral(page);
+  await recordAndHear(page);
+  expect(await page.evaluate(() => document.body.dataset.worklet ?? "")).toContain("micWorklet");
+});
+
+test("a web view whose encoder can't make Opus, as an iPhone's before iOS 26, offers no microphone button", async ({ page }) => {
+  await page.addInitScript(() => {
+    AudioEncoder.isConfigSupported = (config) => Promise.resolve({ supported: false, config });
+  });
+  await inGeneral(page);
+  await expect(page.getByRole("button", { name: "Emoji", exact: true })).toBeVisible();
+  // Given the moment the encoder takes to answer.
+  await page.waitForTimeout(500);
+  await expect(page.getByRole("button", { name: "Record a voice message" })).toHaveCount(0);
 });
 
 test("a phone that won't give the microphone says so in words, and Record can be tried again", async ({ page }) => {
@@ -74,10 +108,7 @@ test("a phone that won't give the microphone says so in words, and Record can be
     navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException("Permission denied", "NotAllowedError"));
   });
   await inGeneral(page);
-  const mic = page.getByRole("button", { name: "Record a voice message" });
-  // An engine that can't record in the page at all offers no button.
-  if ((await mic.count()) === 0) return;
-  await mic.click();
+  await page.getByRole("button", { name: "Record a voice message" }).click();
   await panel(page).getByRole("button", { name: "Record" }).click();
   await expect(panel(page).getByRole("alert")).toHaveText("Linger isn't allowed to use the microphone.");
   await expect(panel(page).getByRole("button", { name: "Record" })).toBeEnabled();

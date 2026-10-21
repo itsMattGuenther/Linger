@@ -40,7 +40,14 @@ export function hearSounds(note: (what: string) => void): Heard {
     return found?.cue ?? "unknown";
   };
 
+  const Real = window.AudioContext;
   class Device {
+    constructor(options?: AudioContextOptions) {
+      // Asked for a rate, it's the voice message recorder reading the
+      // microphone on an iPhone (app/chat/recorders.ts, #687), not a sound
+      // being played: that gets a real one. The player asks for none.
+      if (options?.sampleRate !== undefined) return new Real(options) as unknown as Device;
+    }
     state: AudioContextState = "suspended";
     readonly sampleRate = RATE;
     readonly destination = {};

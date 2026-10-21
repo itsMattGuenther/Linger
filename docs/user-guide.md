@@ -635,8 +635,10 @@ while recording, it stops, and the clip waits in the one you recorded it in.
 A voice message shows in the conversation with a microphone, a play button
 and its length, and everyone can play it, whatever they're on, phone or
 computer. On the phone it works the same way. The first time you press
-**Record** there, Android asks whether Linger may use the microphone. It
-uses it for voice messages and nothing else.
+**Record** there, the phone asks whether Linger may use the microphone. It
+uses it for voice messages and nothing else. An iPhone needs iOS 26 or later
+to record one; on an older iPhone there's no microphone button, and voice
+messages from other people still play.
 
 ## Talking
 
