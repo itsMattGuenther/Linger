@@ -1036,7 +1036,10 @@ on connecting.
 from the phone's camera has where it was taken stripped like any other (§4.10). One screen shows at a
 time, as phone chat apps do (Matt, 2026-10-03): the list is home, and a conversation,
 Media or Search opens over it with a way back. It has no Interface size of its own:
-the phone's display size and text size settings do that job.
+the phone's display size and text size settings do that job (on Android; an iPhone's
+Text Size doesn't reach Linger yet, #690). It doesn't zoom with two fingers as a web
+page does, either (#689): a zoomed screen is only wider than the phone and drags
+sideways, and an iPhone would zoom in by itself on the message box.
 
 **Phone backups leave Linger out.** A phone backs its apps up to Apple's or Google's
 cloud by default. The phone app opts out, so what it keeps (your list of servers and

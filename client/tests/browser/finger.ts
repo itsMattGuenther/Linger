@@ -17,6 +17,28 @@ export async function finger(page: Page) {
   };
 }
 
+/**
+ * Two fingers put down side by side at `at` and spread apart, as a pinch to
+ * zoom in is (#689). Through the same DevTools protocol as `finger`, so it's
+ * Chromium's own touch input; the page needs `hasTouch` and `isMobile`, or a
+ * desktop page never zooms to a pinch anyway.
+ */
+export async function spread(page: Page, at: { x: number; y: number }) {
+  const cdp = await page.context().newCDPSession(page);
+  const send = (type: "touchStart" | "touchMove" | "touchEnd", apart: number | null) =>
+    cdp.send("Input.dispatchTouchEvent", {
+      type,
+      touchPoints: apart === null ? [] : [{ x: at.x - apart, y: at.y, id: 0 }, { x: at.x + apart, y: at.y, id: 1 }],
+    });
+  await send("touchStart", 20);
+  for (let apart = 30; apart <= 120; apart += 10) {
+    await send("touchMove", apart);
+    await page.waitForTimeout(16);
+  }
+  await send("touchEnd", null);
+  await cdp.detach();
+}
+
 /** Where a finger goes to press something: its middle. */
 export async function middle(of: Locator): Promise<{ x: number; y: number }> {
   const box = await of.boundingBox();

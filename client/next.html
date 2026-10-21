@@ -2,7 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- The phone app never zooms (#689, SPEC §4.15): its text grows with the
+         phone's text size instead. The limit also stops an iPhone zooming in
+         on a text box under 16px when it gets the cursor, which left the
+         conversation shifted sideways (#688). Desktop engines ignore it. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <title>Linger</title>
     <!-- The Buddy list client (M15, docs/design/architecture.md). Every one of
          its windows loads this page; the window's role comes from the URL.

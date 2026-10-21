@@ -534,6 +534,20 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   and cut names in half. Icons and marks keep their size, as in Android's own
   apps, and `next-phone.spec.ts` checks every screen at twice the size for
   words cut off or reaching past the edge.
+- **No zoom** (#689). `next.html`'s viewport has `maximum-scale=1,
+  user-scalable=no`, and MainActivity turns the web view's own zoom off
+  (`setSupportZoom(false)`), so two fingers zoom nothing. A zoomed screen is
+  wider than the phone and drags sideways. The page itself can't: the
+  phone's `body` is `position: fixed` to the visible part of the screen, so
+  nothing in it makes the page wider. The same limit stops an iPhone
+  zooming in on a text box under 16px (the message box is 14.5px) when it
+  gets the cursor, and not always zooming back out, which left the
+  conversation shifted left after typing (#688). iOS's web view honours the
+  viewport's limits unless told to ignore them (`ignoresViewportScaleLimits`),
+  and nothing tells it to. A picture opened from a message
+  (`chat/ImageViewer.tsx`) fills the screen as far as it fits and has no
+  zoom of its own. `next-phone.spec.ts` checks the viewport, a two-finger
+  pinch, and every main screen at 320 wide.
 - **The phone's bars.** The page is drawn under the phone's status bar and
   gesture bar; `styles/phone.css` pads it by the safe areas the phone reports,
   and `--window-height`, the whole window on a computer, is what's left

@@ -138,6 +138,10 @@ what keeps the call going with the phone locked or in your pocket. It never
 makes a sound, and it goes when you leave. Android 13 and later ask once
 whether it may show; if you say no, the call still works.
 
+It doesn't zoom with two fingers, as a web page does. To make its words
+bigger, turn up your phone's **Font size** (in Android's Settings, under
+Display): Linger follows it, up to twice the usual size.
+
 1. On the phone, open the
    [latest release](https://github.com/itsMattGuenther/Linger/releases/latest)
    in Chrome, scroll to **Assets** (tap it if it's folded up), and tap the file

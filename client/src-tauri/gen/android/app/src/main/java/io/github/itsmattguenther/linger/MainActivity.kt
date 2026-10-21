@@ -46,10 +46,13 @@ class MainActivity : TauriActivity() {
   // Linger sizes its own text, lines and rows by the phone's Font size
   // (src-tauri/src/phone_text.rs, core/phone.ts). Left on, the web view would
   // enlarge fonts and line spacing by itself and nothing around them, and cut
-  // the words in half.
+  // the words in half. Pinch and double-tap zoom are off too (#689): a zoomed
+  // screen is wider than the phone and drags sideways. next.html's viewport
+  // says the same; this holds whatever the web view makes of the viewport.
   override fun onWebViewCreate(webView: WebView) {
     super.onWebViewCreate(webView)
     webView.settings.textZoom = 100
+    webView.settings.setSupportZoom(false)
     this.webView = webView
   }
 
