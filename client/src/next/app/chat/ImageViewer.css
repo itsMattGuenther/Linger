@@ -9,6 +9,10 @@
   gap: var(--space-3);
   padding: var(--space-8) var(--space-6) var(--space-6);
   background: var(--black-a70);
+  /* Fingers zoom the picture, not the page (core/zoom.ts, #689), and a
+     zoomed one is cut off at the window's edges. */
+  overflow: hidden;
+  touch-action: none;
 }
 
 .nx-viewer-close {
@@ -23,6 +27,12 @@
   max-height: 100%;
   object-fit: contain;
   border-radius: var(--radius-md);
+  transform-origin: 0 0;
+}
+
+/* A double tap, or a pinch let go of, glides to where it ends; a finger is followed at once. */
+.nx-viewer-image-glide {
+  transition: transform var(--duration-base) var(--ease-out);
 }
 
 .nx-viewer-failed {

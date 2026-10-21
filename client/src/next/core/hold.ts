@@ -33,7 +33,7 @@ export interface HoldTimers {
   clear: (id: number) => void;
 }
 
-const PAGE_TIMERS: HoldTimers = {
+export const PAGE_TIMERS: HoldTimers = {
   set: (run, ms) => window.setTimeout(run, ms),
   clear: (id) => window.clearTimeout(id),
 };

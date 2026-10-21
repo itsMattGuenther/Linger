@@ -1039,7 +1039,9 @@ Media or Search opens over it with a way back. It has no Interface size of its o
 the phone's display size and text size settings do that job (on Android; an iPhone's
 Text Size doesn't reach Linger yet, #690). It doesn't zoom with two fingers as a web
 page does, either (#689): a zoomed screen is only wider than the phone and drags
-sideways, and an iPhone would zoom in by itself on the message box.
+sideways, and an iPhone would zoom in by itself on the message box. A photo
+opened from a message zooms on its own instead, as a phone's photo viewer does:
+pinched, dragged, and double-tapped in and out.
 
 **Phone backups leave Linger out.** A phone backs its apps up to Apple's or Google's
 cloud by default. The phone app opts out, so what it keeps (your list of servers and

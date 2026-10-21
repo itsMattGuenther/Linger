@@ -545,9 +545,10 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   conversation shifted left after typing (#688). iOS's web view honours the
   viewport's limits unless told to ignore them (`ignoresViewportScaleLimits`),
   and nothing tells it to. A picture opened from a message
-  (`chat/ImageViewer.tsx`) fills the screen as far as it fits and has no
-  zoom of its own. `next-phone.spec.ts` checks the viewport, a two-finger
-  pinch, and every main screen at 320 wide.
+  (`chat/ImageViewer.tsx`) zooms itself instead (`core/zoom.ts`): pinched,
+  dragged, and double-tapped in and out, the viewer's `touch-action: none`
+  keeping the fingers its own. `next-phone.spec.ts` checks the viewport, a
+  two-finger pinch, the photo's own zoom, and every main screen at 320 wide.
 - **The phone's bars.** The page is drawn under the phone's status bar and
   gesture bar; `styles/phone.css` pads it by the safe areas the phone reports,
   and `--window-height`, the whole window on a computer, is what's left

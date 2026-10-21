@@ -35,3 +35,11 @@
 :root[data-shell="phone"] .nx-viewer-close {
   top: calc(env(safe-area-inset-top) + var(--space-3));
 }
+
+/* Fingers on that picture zoom it (core/zoom.ts, #689). One held still
+   before it drags brings up no image menu and lifts no copy of the picture
+   to drag away, either of which would take the finger. */
+:root[data-shell="phone"] .nx-viewer-image {
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
+}

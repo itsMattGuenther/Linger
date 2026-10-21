@@ -774,6 +774,14 @@ not a sliver; the viewer shows all of it. A message that is nothing but one
 link shows only its link card. Files that aren't pictures, video or sound are
 a card with a Download button.
 
+In the viewer, fingers zoom a picture (`core/zoom.ts`, #689), since the
+phone's page never zooms: two pinch it up to four times the size it opened
+at, around the point between them; one drags it about once it's bigger than
+the window, never leaving a gap at an edge it's wider than; a double tap
+zooms in two and a half times where it lands, or back out. A tap closes the
+viewer only while the picture isn't zoomed, once 300 ms have passed with no
+second tap; a mouse click closes it at once, as it always has.
+
 **Reactions** (#485, SPEC §4.8, `app/chat/Reactions.tsx`). A pill per emoji
 just under what a message shows: `--control-sm` tall, `--radius-pill`, the
 emoji and then its count in the UI face at `--text-meta`, tabular. Other
@@ -1079,6 +1087,7 @@ it catches, and nowhere else (AGENTS.md hard rule 4).
 | A reaction pill held on a touch screen lists who left it, by name, over the pill, and adds nothing; it isn't the message's sheet; Escape gives the focus back to the pill and a tap elsewhere closes it; a tap still adds yours and takes it back; a finger that moves opens nothing (#573) | `next-reactions.spec.ts` › held on a phone; `core/hold.test.ts` |
 | A message held with a finger on the phone opens its sheet while the finger is down, with no long-press from the web view, as on an iPhone; a tap or a scroll opens nothing; the click the lifted finger leaves behind chooses nothing from the sheet, and the next tap does; a pill held is still who left it, not the sheet (#686) | `next-phone.spec.ts` › held with a finger, on an iPhone too; `core/hold.test.ts` |
 | The phone app never zooms: its page's viewport forbids it (`maximum-scale=1`, `user-scalable=no`), which also stops an iPhone zooming in on the message box, and two fingers spread apart change nothing (#689, #688); at 320 wide nothing reaches past the edge or scrolls sideways on the list, a room with a long unbreakable word, the message box with words typed, voice in the room and on the list, a DM, Media, Search or any section of Settings (#688) | `next-phone.spec.ts` › the phone's page never zooms; on a phone 320 wide, the narrowest |
+| A photo in the viewer zooms under fingers and the page doesn't: two fingers pinch it, up to four times, around the point between them; one drags a zoomed one, leaving no gap at its edges; a double tap zooms in where it lands and the next back out; a tap closes it only while it isn't zoomed, and not when it's the first of two; a pinch let go of near where it began goes back (#689) | `next-phone.spec.ts` › a photo opened from a message zooms under your fingers; `core/zoom.test.ts` |
 | An option list floats below its opener in one-line rows, names on one edge, about six before it scrolls; the pointer moves the one highlight; a press keeps the focus where it was; high contrast outlines the highlighted row | `kit.spec.ts` › an option list floats below its opener; in high contrast |
 | Where a menu or list floats: below, above when there's no room, the side with more when neither fits, always inside the window | `kit/place.test.ts` |
 | The message box's `@` list: who it offers and in what order, the keys, Enter never sending, an input method left alone, the combobox and listbox, and mentions read by name | `core/chat/mentions.test.ts`, `next-chat-parity.spec.ts` › mentioning somebody by the name you know |
