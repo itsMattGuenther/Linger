@@ -15,6 +15,7 @@ import { Attachments } from "./Attachments";
 import { EditBox } from "./EditBox";
 import { LinkCard } from "./LinkCard";
 import { PollCard, type PollActions } from "./PollCard";
+import { startHold } from "../../core/hold";
 import { onPhone } from "../../core/phone";
 import { FloatingForm, ReportForm } from "./ReportBlock";
 import { type CustomEmojiByName, type MentionLookup, MessageText } from "./MessageText";
@@ -205,6 +206,23 @@ export const MessageRow = memo(function MessageRow({
   // hovering for the ··· button, and holding can't select its words, so
   // Copy text is one of them.
   const phone = onPhone();
+  const holdable = phone && !deleted && !editing && !pending;
+  const self = useRef<HTMLDivElement | null>(null);
+  const openHere = () => {
+    const box = self.current?.getBoundingClientRect();
+    if (box) setMenu({ anchor: { top: box.top, left: box.left, right: box.right, bottom: box.bottom }, confirming: false });
+  };
+  // Held the way a reaction pill is (#573): the iPhone's web view sends no
+  // long-press of its own (`contextmenu`) for a finger, so the hold is
+  // timed here (#686). Android's, which does come, is the same hold.
+  const [press] = useState(() => startHold(() => openHere()));
+  // Forgotten when the row goes, and when it can't be held any more.
+  useEffect(() => () => press.stop(), [press, holdable]);
+  // A finger on the message itself: not on a pill, which is held for who
+  // left it, nor on what floats from the message (its sheet, the picker,
+  // the report form), drawn elsewhere on the page but still its children.
+  const heldHere = (target: EventTarget): boolean =>
+    target instanceof Element && self.current?.contains(target) === true && target.closest(".nx-react-pill") === null;
   const words = message.body.trim();
   const items: MenuItem[] = menu?.confirming
     ? [
@@ -293,13 +311,47 @@ export const MessageRow = memo(function MessageRow({
 
   return (
     <div
+      ref={self}
       className="nx-msg"
+      onPointerDown={
+        holdable
+          ? (event) => {
+              // Any other press, a mouse's included, starts afresh: the
+              // click after it is somebody's tap.
+              if (event.pointerType === "mouse" || !heldHere(event.target)) press.stop();
+              else press.down(event.pointerId, event.clientX, event.clientY);
+            }
+          : undefined
+      }
+      onPointerMove={holdable ? (event) => press.move(event.pointerId, event.clientX, event.clientY) : undefined}
+      onPointerUp={holdable ? (event) => press.end(event.pointerId) : undefined}
+      // The browser took the finger over to scroll the conversation.
+      onPointerCancel={holdable ? (event) => press.end(event.pointerId) : undefined}
+      // The mouse-down and click a web view makes up as a held finger lifts
+      // (Chromium's does, an iPhone's may) land where it was, on the sheet
+      // that rose under it by then: not a tap on one of its actions. One
+      // from the keyboard (no presses, `detail` 0) always is a tap.
+      onMouseDownCapture={
+        holdable
+          ? (event) => {
+              if (press.afterHold()) event.preventDefault();
+            }
+          : undefined
+      }
+      onClickCapture={
+        holdable
+          ? (event) => {
+              if (event.detail === 0 || !press.takeClick()) return;
+              event.preventDefault();
+              event.stopPropagation();
+            }
+          : undefined
+      }
       onContextMenu={
-        phone && !deleted && !editing && !pending
+        holdable
           ? (event) => {
               event.preventDefault();
-              const box = event.currentTarget.getBoundingClientRect();
-              setMenu({ anchor: { top: box.top, left: box.left, right: box.right, bottom: box.bottom }, confirming: false });
+              if (!press.now() && heldHere(event.target)) openHere();
             }
           : undefined
       }

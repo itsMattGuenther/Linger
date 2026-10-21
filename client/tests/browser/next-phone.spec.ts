@@ -1,4 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
+import { finger, middle, noLongPress } from "./finger";
+import { still } from "./still";
 
 // The phone app (SPEC §4.15): the same list window, opened as the phone's one
 // window (`?shell=phone`, core/phone.ts), at a phone's size. Nothing on it may
@@ -426,6 +428,106 @@ test("holding a message reacts with one of six, or any emoji from the picker at 
   const box = await picker.boundingBox();
   const view = page.viewportSize();
   expect(box && view && box.y + box.height).toBeGreaterThan((view?.height ?? 0) - 40);
+});
+
+// Held with a real finger (#686). The tests above hand the message the
+// long-press Android's web view sends; an iPhone's sends none, so these take
+// it away (finger.ts) and the hold is the page's own, timed as a reaction
+// pill's is (#573).
+test.describe("held with a finger, on an iPhone too", () => {
+  test.use({ hasTouch: true });
+  test.skip(({ browserName }) => browserName !== "chromium", "Only Chromium lets a test hold a finger down");
+
+  const message = (page: Page, words: string) => page.locator(".nx-msg", { hasText: words }).last();
+
+  async function inGeneral(page: Page) {
+    await open(page, "?one&guest&shell=phone");
+    await settled(page);
+    await room(page, "general").click();
+    await expect(page.getByRole("log")).toContainText("Putting it on now.");
+    await noLongPress(page);
+  }
+
+  test("holding a message opens its actions while the finger is down; a tap or a scroll opens nothing", async ({ page }) => {
+    await inGeneral(page);
+    const words = message(page, "No plans, no agenda").locator(".nx-text");
+    const sheet = page.getByRole("menu");
+    const touch = await finger(page);
+    await still(words);
+
+    await touch.down(await middle(words));
+    await expect(sheet).toBeVisible();
+    await touch.up();
+    await expect(sheet.locator(".k-menu-head")).toHaveText(/^Eli: No plans, no agenda/);
+    await expect(sheet.locator("[data-kit='MenuItem']")).toHaveText(["Reply", "Copy text", "Pin", "Report to host…"]);
+    // A tap on the dimmed page closes it.
+    await page.locator(".k-menu-scrim").tap();
+    await expect(sheet).toHaveCount(0);
+
+    // A tap is a tap.
+    await words.tap();
+    await page.waitForTimeout(800);
+    await expect(sheet).toHaveCount(0);
+
+    // Down on the message and away up the screen, for longer than a hold.
+    const at = await middle(words);
+    await touch.down(at);
+    for (let step = 1; step <= 6; step += 1) await touch.move({ x: at.x, y: at.y - step * 8 });
+    await page.waitForTimeout(800);
+    await touch.up();
+    await expect(sheet).toHaveCount(0);
+  });
+
+  // As the finger lifts from a hold, Chromium sends a click where it was, as
+  // an iPhone may, and by then the sheet has risen under it.
+  test("the click a hold leaves behind chooses nothing from the sheet that rose under the finger", async ({ page }) => {
+    await inGeneral(page);
+    const sheet = page.getByRole("menu");
+    const items = sheet.locator("[data-kit='MenuItem']");
+    const touch = await finger(page);
+
+    // The last message, low on the screen, where the sheet's actions rise.
+    const last = message(page, "Putting it on now.").locator(".nx-text");
+    await still(last);
+    const at = await middle(last);
+    await touch.down(at);
+    await expect(sheet).toBeVisible();
+    const under = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest("[role='menuitem']")?.textContent ?? null, at);
+    expect(under, "an action of the sheet's is under the finger").not.toBeNull();
+    await touch.up();
+    await page.waitForTimeout(300);
+    await expect(sheet).toBeVisible();
+    await expect(items).toHaveText(["Reply", "Copy text", "Pin", "Report to host…"]);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+
+    // The next tap is a tap.
+    await sheet.getByRole("menuitem", { name: "Reply" }).tap();
+    await expect(sheet).toHaveCount(0);
+    await expect(screen(page)).toContainText("Replying to Eli");
+  });
+
+  test("holding a reaction pill lists who left it, and isn't holding its message", async ({ page }) => {
+    await inGeneral(page);
+    const row = message(page, "No plans, no agenda");
+    await row.dispatchEvent("contextmenu");
+    // Taken away by noLongPress: the sheet comes only from a finger now.
+    await expect(page.getByRole("menu")).toHaveCount(0);
+    const touch = await finger(page);
+    await touch.down(await middle(row.locator(".nx-text")));
+    await expect(page.getByRole("menu")).toBeVisible();
+    await touch.up();
+    await page.getByRole("menu").getByRole("group", { name: "React" }).getByRole("menuitem", { name: "❤️" }).tap();
+    const pill = row.locator(".nx-react-pill:not(.nx-react-add)").first();
+    await expect(pill.locator(".nx-react-count")).toHaveText("1");
+    // The conversation moves up to make room for it.
+    await still(pill);
+
+    await touch.down(await middle(pill));
+    await expect(page.getByRole("dialog", { name: "Everyone who reacted with ❤️" })).toBeVisible();
+    await touch.up();
+    await expect(page.getByRole("menu")).toHaveCount(0);
+    await expect(pill).toHaveAttribute("aria-pressed", "true");
+  });
 });
 
 test("a group is left from its screen's ⋯, the menu and the question rising from the bottom, and the list comes back without it (#565)", async ({ page }) => {

@@ -1,4 +1,5 @@
-import { expect, type Locator, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
+import { finger, middle } from "./finger";
 
 // Reactions in the real list window, with a conversation beside it
 // (tests/fixtures/next-list-window.tsx), wired end to end (#485, SPEC §4.8):
@@ -133,30 +134,11 @@ test("on a server from before them, there's no way to react: it would refuse", a
 // Held on a phone (#573): there's no pointer to hover a pill with, so holding
 // one lists everybody who left it, by name, as Discord does. A tap still adds
 // yours, and a finger that moves is scrolling the conversation. The finger is
-// Chromium's own touch input, held down and moved through the DevTools
-// protocol, which only Chromium has; the phone's engine is Chromium too
-// (Android's WebView).
+// Chromium's own touch input (finger.ts), which only Chromium has; the
+// phone's engine is Chromium too (Android's WebView).
 test.describe("held on a phone", () => {
   test.use({ viewport: { width: 411, height: 914 }, hasTouch: true });
   test.skip(({ browserName }) => browserName !== "chromium", "Only Chromium lets a test hold a finger down, and the phone's engine is Chromium");
-
-  /** A finger on the screen. */
-  async function finger(page: Page) {
-    const cdp = await page.context().newCDPSession(page);
-    const send = (type: "touchStart" | "touchMove" | "touchEnd", at?: { x: number; y: number }) =>
-      cdp.send("Input.dispatchTouchEvent", { type, touchPoints: at ? [at] : [] });
-    return {
-      down: (at: { x: number; y: number }) => send("touchStart", at),
-      move: (at: { x: number; y: number }) => send("touchMove", at),
-      up: () => send("touchEnd"),
-    };
-  }
-
-  async function middle(of: Locator): Promise<{ x: number; y: number }> {
-    const box = await of.boundingBox();
-    if (!box) throw new Error("not on the screen");
-    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-  }
 
   const who = (page: Page) => page.getByRole("dialog", { name: "Everyone who reacted with 😂" });
   const reacted = async (page: Page, since: number) => (await did(page)).slice(since).filter((line) => line.startsWith("react "));

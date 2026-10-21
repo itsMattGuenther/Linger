@@ -514,8 +514,12 @@ message's Reply, Edit and Delete.
   the screen, full width over a dimmed scrim (`--scrim`), with an optional
   `head` line saying what they're for ("Eli: No plans, no agenda…"). A
   message is held for them, since a phone has no hover for its ···, and Copy
-  text is one of them, since holding can't select its words. A tap on the
-  scrim, or Back, closes it.
+  text is one of them, since holding can't select its words. The hold is
+  the page's own, timed as a reaction pill's is (`core/hold.ts`), because
+  the iPhone's web view sends no long-press for a finger; Android's, which
+  does, is the same hold (#686). The click a lifted finger leaves behind
+  lands on the risen sheet and is swallowed, so it chooses nothing. A tap
+  on the scrim, or Back, closes it.
 
 ### OptionList
 
@@ -1073,6 +1077,7 @@ it catches, and nowhere else (AGENTS.md hard rule 4).
 | On Windows every window's title bar has minimize just before close, and it minimizes that window; on Linux there's none (#386) | `window-buttons.spec.ts`, `core/windowControls.test.ts` |
 | Menus open on their first item, move and wrap with the arrows, confirm in place, and close on Escape, Tab or a click elsewhere; items are 32px | `kit.spec.ts` › a menu opens on its first item |
 | A reaction pill held on a touch screen lists who left it, by name, over the pill, and adds nothing; it isn't the message's sheet; Escape gives the focus back to the pill and a tap elsewhere closes it; a tap still adds yours and takes it back; a finger that moves opens nothing (#573) | `next-reactions.spec.ts` › held on a phone; `core/hold.test.ts` |
+| A message held with a finger on the phone opens its sheet while the finger is down, with no long-press from the web view, as on an iPhone; a tap or a scroll opens nothing; the click the lifted finger leaves behind chooses nothing from the sheet, and the next tap does; a pill held is still who left it, not the sheet (#686) | `next-phone.spec.ts` › held with a finger, on an iPhone too; `core/hold.test.ts` |
 | An option list floats below its opener in one-line rows, names on one edge, about six before it scrolls; the pointer moves the one highlight; a press keeps the focus where it was; high contrast outlines the highlighted row | `kit.spec.ts` › an option list floats below its opener; in high contrast |
 | Where a menu or list floats: below, above when there's no room, the side with more when neither fits, always inside the window | `kit/place.test.ts` |
 | The message box's `@` list: who it offers and in what order, the keys, Enter never sending, an input method left alone, the combobox and listbox, and mentions read by name | `core/chat/mentions.test.ts`, `next-chat-parity.spec.ts` › mentioning somebody by the name you know |
