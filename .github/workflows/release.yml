@@ -274,6 +274,13 @@ jobs:
           scripts/appimage-wayland-check.sh client/src-tauri/target/release/bundle/appimage/*.AppImage
           python3 scripts/linux-audio-check.py package-check/deb/usr/bin/linger-client --output package-check/audio-deb
           python3 scripts/linux-audio-check.py package-check/rpm/usr/bin/linger-client --output package-check/audio-rpm
+      - name: The AppImage's metainfo for app catalogs
+        # As in the PR package check: appstreamcli only after the build.
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get install -y appstream
+          scripts/appimage-appstream-check.sh client/src-tauri/target/release/bundle/appimage/*.AppImage
       - name: The Buddy list starts in the signed Linux packages
         # The PR package check runs this on debug builds; this is the build
         # people install. Windows gets the same from windows-icon-check.ps1.

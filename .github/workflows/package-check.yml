@@ -128,6 +128,15 @@ jobs:
           scripts/appimage-wayland-check.sh client/src-tauri/target/debug/bundle/appimage/*.AppImage
           python scripts/linux-audio-check.py package-check/deb/usr/bin/linger-client --output package-check/audio-deb
           python scripts/linux-audio-check.py package-check/rpm/usr/bin/linger-client --output package-check/audio-rpm
+      - name: The AppImage's metainfo for app catalogs
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          # appstreamcli is installed only now, after the build, so the check
+          # is what validates the metainfo, offline: this branch's screenshots
+          # aren't on main yet.
+          sudo apt-get install -y appstream
+          scripts/appimage-appstream-check.sh client/src-tauri/target/debug/bundle/appimage/*.AppImage
       - name: The Buddy list starts in the packaged Linux app
         if: runner.os == 'Linux'
         shell: bash

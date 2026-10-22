@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+What Linux app catalogs show for Linger: its AppStream metainfo, put into
+the AppImage by tauri.conf.json (bundle > linux > appimage > files). The
+AppImage catalog (appimage.github.io) takes its page's picture from the
+default screenshot here, rather than the one its test takes of an app with
+no server to connect to. It reads `.appdata.xml` files for the summary and
+description too, hence that name rather than `.metainfo.xml`.
+
+The screenshots are PNG copies of the website's, in docs/screenshots/, and
+must stay at those addresses: a catalog links to them, it doesn't copy them.
+docs/releasing.md (step 5) says when to refresh them, and
+scripts/appimage-appstream-check.sh checks this file and that they're there.
+-->
+<component type="desktop-application">
+  <id>im.linger.Linger</id>
+  <name>Linger</name>
+  <summary>A small, self-hosted place for a group of friends to hang out</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-only</project_license>
+  <developer id="im.linger">
+    <name>Matt Guenther</name>
+  </developer>
+  <description>
+    <p>
+      One person runs a Linger server, and their friends install the app and
+      connect to it. It has text rooms, voice rooms, direct messages, file
+      sharing, and a buddy list that shows who's around.
+    </p>
+    <p>
+      It's built for people who already know each other. Everything stays on
+      the computer of whoever runs the server, and there are no ads, no paid
+      tier and no telemetry.
+    </p>
+  </description>
+  <launchable type="desktop-id">Linger.desktop</launchable>
+  <url type="homepage">https://linger.im</url>
+  <url type="bugtracker">https://github.com/itsMattGuenther/Linger/issues</url>
+  <url type="help">https://github.com/itsMattGuenther/Linger/blob/main/docs/user-guide.md</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>The buddy list with a room open beside it</caption>
+      <image type="source" width="2240" height="1640">https://raw.githubusercontent.com/itsMattGuenther/Linger/main/docs/screenshots/desktop-room.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>In voice in a room, with who's talking in the room and the list</caption>
+      <image type="source" width="2240" height="1640">https://raw.githubusercontent.com/itsMattGuenther/Linger/main/docs/screenshots/desktop-voice.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Reactions and a poll</caption>
+      <image type="source" width="2240" height="1640">https://raw.githubusercontent.com/itsMattGuenther/Linger/main/docs/screenshots/desktop-polls.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Media: everything people shared, with who shared it and where</caption>
+      <image type="source" width="2240" height="1640">https://raw.githubusercontent.com/itsMattGuenther/Linger/main/docs/screenshots/desktop-media.png</image>
+    </screenshot>
+  </screenshots>
+  <content_rating type="oars-1.1">
+    <content_attribute id="social-chat">intense</content_attribute>
+    <content_attribute id="social-audio">intense</content_attribute>
+  </content_rating>
+</component>

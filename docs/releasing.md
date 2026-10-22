@@ -131,6 +131,15 @@ site's README says how to build it and retake a picture locally.
   Fix the scene, then run the job again with `-f retake=true`.
 - **Pictures that changed a lot.** Re-read their captions and alt text in
   `site/index.html`; they may describe the old screen.
+- **The app catalogs' pictures.** Linux app catalogs show four of these
+  pictures, as PNG copies in this repo's `docs/screenshots/desktop-*.png`,
+  named in `client/src-tauri/linux/im.linger.Linger.appdata.xml` with their
+  captions (the AppImage catalog's page shows `desktop-room.png`). When `hero`,
+  `voice`, `polls` or `media` changed a lot, copy them over from the site's
+  checkout, keeping the names, and re-read the captions:
+  `ffmpeg -i site/shots/hero.webp -compression_level 9 -pred mixed desktop-room.png`
+  (`voice`, `polls` and `media` keep their own names after `desktop-`).
+  A catalog links to them on main, so never rename or delete one.
 - **What's new.** Read the release notes with one question: would somebody
   deciding whether to try Linger want to see this? A new kind of thing (the
   phone app, voice messages, co-hosts) gets a line on the page, and, if it has

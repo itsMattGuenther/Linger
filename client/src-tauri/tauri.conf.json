@@ -57,7 +57,10 @@
     "createUpdaterArtifacts": true,
     "linux": {
       "appimage": {
-        "bundleMediaFramework": true
+        "bundleMediaFramework": true,
+        "files": {
+          "/usr/share/metainfo/im.linger.Linger.appdata.xml": "linux/im.linger.Linger.appdata.xml"
+        }
       },
       "deb": {
         "desktopTemplate": "linux/linger.desktop.hbs",

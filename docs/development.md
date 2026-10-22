@@ -109,7 +109,11 @@ and grows by about 45 MB (`scripts/appimage-ffmpeg-check.sh` catches it). Run
 `LINUXDEPLOY_EXCLUDED_LIBRARIES='libwayland-*'`: Tauri 2.11's own linuxdeploy
 copies Ubuntu 22.04's libwayland into the AppImage, and on a newer Mesa (an AMD
 or Intel GPU on Arch or Omarchy) the window then stays empty (#479;
-`scripts/appimage-wayland-check.sh` catches it). See
+`scripts/appimage-wayland-check.sh` catches it). The AppImage carries
+Linger's AppStream metainfo (`src-tauri/linux/im.linger.Linger.appdata.xml`),
+which Linux app catalogs read for its summary and screenshots;
+`scripts/appimage-appstream-check.sh` checks it's there, valid, and that the
+screenshots it names are in `docs/screenshots/`. See
 [packaged audio checks](packaged-audio-checks.md)
 for runtime and chime-onset tests. These checks also need Node and installed
 client dependencies (`cd client && pnpm install --frozen-lockfile`): the probe

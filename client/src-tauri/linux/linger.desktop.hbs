@@ -4,13 +4,18 @@ https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.11.4/crates/tauri-bundler/
 Local change (#607): Exec passes on the link a `linger://` click hands
 Linger (%u), and MimeType ends in a semicolon as the spec asks. The .deb,
 the .rpm and the AppImage all take their menu entry from this file.
+Local change: Categories and Comment are written out, the same as the Arch
+package's (packaging/arch/linger.desktop). Tauri fills them from
+bundle.category, which gives one category, and bundle.shortDescription,
+which falls back to the Cargo description, a developer's note. An empty
+Categories fails `appstreamcli validate-tree`, and so the AppImage
+catalog's test, once the AppImage carries its metainfo
+(im.linger.Linger.appdata.xml).
 Keep it in sync when updating the Tauri CLI.
 --}}
 [Desktop Entry]
-Categories={{categories}}
-{{#if comment}}
-Comment={{comment}}
-{{/if}}
+Categories=Network;InstantMessaging;
+Comment=A small place for friends to hang out
 Exec={{exec}} %u
 StartupWMClass={{exec}}
 Icon={{icon}}
