@@ -145,10 +145,14 @@ function watchSwipes(): () => void {
       if (swipe.move(touch.identifier, touch.clientX, touch.clientY, event.timeStamp) && event.cancelable) event.preventDefault();
     }
   };
+  // What a finger landed on is forgotten as it lifts, so an engine that sends
+  // the next finger's touch before its pointer can't be handed an old one.
   const lifted = (event: TouchEvent) => {
+    landed = null;
     for (const touch of event.changedTouches) swipe.up(touch.identifier, event.timeStamp);
   };
   const taken = (event: TouchEvent) => {
+    landed = null;
     for (const touch of event.changedTouches) swipe.cancel(touch.identifier);
   };
   const quiet = { capture: true, passive: true };
