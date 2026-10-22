@@ -989,7 +989,9 @@ replaces an unread count.
 above the box. At the end, new messages follow, and anything that grows
 (an edit box, the reply line, a card arriving) keeps the end in view. Read
 further up, and arrivals and older history loading above leave what you're
-reading exactly where it is.
+reading exactly where it is. A glide on a phone slows to a stop without a
+skip, into older history loading as it goes (#698); on an iPhone, older
+history that arrives mid-glide goes in once the conversation is still.
 
 ## Settings
 
@@ -1107,6 +1109,7 @@ it catches, and nowhere else (AGENTS.md hard rule 4).
 | The conversation never moves a reader: arrivals and older history leave the view still; at the end it follows; the reply line and edit box keep the end in view | `next-chat.spec.ts` › reading and arriving, the row menu, the keyboard |
 | A shared video and a shared audio file fetch nothing until they're played (#381) | `next-chat-parity.spec.ts` › fetches nothing until it's played, then loads |
 | A shared audio file's player: every part named, a 32px line of kit-sized controls on the card's edges, the volume and mute reaching the element, the last level kept but never silence, a seek by keys asking for a later byte range, End reaching the end without a failed load, and a failed load said on the same line | `next-chat-parity.spec.ts` › a shared audio file (#247); `core/audioPlayer.test.ts` |
+| A glide in a long conversation slows to a stop without a skip (#698): in every frame as painted the words move exactly as far as the glide scrolls and nothing else moves them, toward older messages into a page of them loading as it goes and into one loaded before, as Android and as an iPhone; older history is measured before anybody scrolls up to it; on an iPhone, older history arriving while the conversation moves waits until it's still, one page only, and goes in without moving what's read; taken hold of while it lands, or just as it follows a new message down, it stays where it was put when older history goes in | `next-phone-glide.spec.ts` |
 | 5,000 messages draw fewer than 80 rows | `next-chat.spec.ts` › 5,000 messages draw only what is near the view |
 | A long message folds: past twenty lines its words are drawn twenty lines tall, fading out, with Show all, and all of it stays in the page; Show all and Show less draw it whole and fold it again, with no row overlapping the next; a long paragraph folds too, and twenty lines or fewer never do; unfolded, it stays unfolded after its row is scrolled away and back; Show all is reachable by keyboard | `next-chat-parity.spec.ts` › a long message folds |
 | A `NavList` moves with the arrows, Home and End, with one item in the tab order | `kit.spec.ts` › a list of places moves with the arrow keys |

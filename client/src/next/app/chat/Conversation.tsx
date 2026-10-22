@@ -1,6 +1,7 @@
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { defaultRangeExtractor, type Range, useVirtualizer, type Virtualizer } from "@tanstack/react-virtual";
 import type { CustomEmoji } from "../../../generated/CustomEmoji";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import type { LinkPreview } from "../../../generated/LinkPreview";
 import type { Message } from "../../../generated/Message";
 import type { MessageId } from "../../../generated/MessageId";
@@ -14,7 +15,7 @@ import { Button, Icon } from "../../kit";
 import { JoinLine } from "./JoinLine";
 import { LeftLine } from "./LeftLine";
 import { PollClosedLine } from "./PollClosedLine";
-import { onPhone } from "../../core/phone";
+import { onIPhone, onPhone } from "../../core/phone";
 import { type MessageActions, MessageRow } from "./MessageRow";
 import type { CustomEmojiByName, MentionLookup } from "./MessageText";
 import "./Conversation.css";
@@ -41,6 +42,16 @@ const FOLLOW_STILL_FRAMES = 3;
 const FOLLOW_MAX_FRAMES = 30;
 /** How long a message you jumped to stays marked. */
 const FLASH_MS = 1600;
+/** Rows drawn beyond either edge of the screen. */
+const OVERSCAN = 12;
+/** How far above the screen rows are measured ahead of a glide: a page of history and its dividers (#698). */
+const MEASURE_AHEAD = 150;
+/**
+ * On an iPhone, how long after a finger lifts the conversation still counts
+ * as moving: the virtualizer holds its corrections back for 150 ms after
+ * one lifts, and as long after the last scroll (#698).
+ */
+const LIFT_MS = 200;
 
 export interface ConversationProps {
   /** The conversation's id. A new id starts over: landing, jumps, marks. */
@@ -105,7 +116,38 @@ export interface ConversationProps {
  */
 export const Conversation = memo(function Conversation(props: ConversationProps) {
   const { id, messages, pending, atStart, atEnd, leftOff, land, people, me, now } = props;
-  const rows = useMemo(() => chatRows(messages, pending, { atStart, leftOff }), [messages, pending, atStart, leftOff]);
+  const scroller = useRef<HTMLDivElement | null>(null);
+  // The virtualizer as of the last render: whether something is scrolling
+  // the conversation, and which rows it has measured.
+  const measures = useRef<Pick<Virtualizer<HTMLDivElement, Element>, "isScrolling" | "itemSizeCache" | "range"> | null>(null);
+  const finger = useRef({ down: false, lifted: Number.NEGATIVE_INFINITY });
+  const [woken, wake] = useReducer((count: number) => count + 1, 0);
+
+  // On an iPhone, the page can't move the scroll position while the
+  // conversation is moving: WebKit stops the glide dead. So the virtualizer
+  // holds back every correction until it's still, and what changed above
+  // the reader meanwhile moved what they were reading. A page of older
+  // history arriving mid-glide threw the view a whole page, further with
+  // each page (#698). There, older history waits out of sight until the
+  // conversation is still, and goes in then, corrected as it arrives.
+  const holdOlder = onIPhone();
+  /** Nothing is scrolling the conversation, and on an iPhone no finger is on it or has only just left it. */
+  const still = useCallback(
+    () => !(measures.current?.isScrolling ?? false) && (!holdOlder || (!finger.current.down && performance.now() - finger.current.lifted >= LIFT_MS)),
+    [holdOlder],
+  );
+  const oldestShown = useRef<MessageId | null>(null);
+  const holdFrom =
+    holdOlder && oldestShown.current !== null && messages[0]?.id !== oldestShown.current && !still()
+      ? Math.max(0, messages.findIndex((message) => message.id === oldestShown.current))
+      : 0;
+  const listed = useMemo(() => (holdFrom === 0 ? messages : messages.slice(holdFrom)), [messages, holdFrom]);
+  oldestShown.current = listed[0]?.id ?? null;
+  const holding = holdFrom > 0;
+  const holdingNow = useRef(holding);
+  holdingNow.current = holding;
+
+  const rows = useMemo(() => chatRows(listed, pending, { atStart: atStart && !holding, leftOff }), [listed, pending, atStart, holding, leftOff]);
   const rowsNow = useRef(rows);
   rowsNow.current = rows;
   const indexOf = useMemo(() => rowIndex(rows), [rows]);
@@ -124,7 +166,39 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
 
   const emojiByName = useMemo<CustomEmojiByName>(() => new Map((props.customEmoji ?? []).map((one) => [one.name, one])), [props.customEmoji]);
 
-  const scroller = useRef<HTMLDivElement | null>(null);
+  // Rows above the screen are measured while the conversation is still,
+  // not when a glide reaches them (#698). A row's real height moves what's
+  // under it, which the virtualizer makes up for by correcting the scroll
+  // position: unseen at rest, but in the middle of a glide an iPhone holds
+  // the correction back until it stops, and the glide ended in a jump. So
+  // once it's still, rows above that have never been drawn are drawn,
+  // out of sight, to be measured, and go again before the frame is painted
+  // ("Measuring ahead", below, says when).
+  const [aheadToo, setAheadToo] = useState(false);
+  /** Rows above `top` and near it that have never been drawn. */
+  const unmeasuredAbove = useCallback((top: number) => {
+    const sizes = measures.current?.itemSizeCache;
+    const unmeasured: number[] = [];
+    for (let index = Math.max(0, top - MEASURE_AHEAD); sizes && index < top; index += 1) {
+      const key = rowsNow.current[index]?.key;
+      if (key !== undefined && !sizes.has(key)) unmeasured.push(index);
+    }
+    return unmeasured;
+  }, []);
+  const rangeExtractor = useCallback(
+    (range: Range) => {
+      const near = defaultRangeExtractor(range);
+      const top = near[0];
+      return aheadToo && top !== undefined ? [...unmeasuredAbove(top), ...near] : near;
+    },
+    [aheadToo, unmeasuredAbove],
+  );
+  // Drawn only to be measured, which they were as they were drawn: gone
+  // again before the frame is painted.
+  useLayoutEffect(() => {
+    if (aheadToo) setAheadToo(false);
+  }, [aheadToo]);
+
   // Follow what arrives at the bottom only while the room holds its newest
   // messages, and held them at the last render too. Reading forwards out of
   // history adds a page at a time at the bottom; followed, each page moved
@@ -140,14 +214,65 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
     getScrollElement: () => scroller.current,
     estimateSize: () => ESTIMATE_PX,
     getItemKey: (index) => rows[index]?.key ?? index,
-    overscan: 12,
+    overscan: OVERSCAN,
     anchorTo: "end",
     followOnAppend: atEnd && heldNewest.current,
     // React 19 refuses a synchronous flush from inside the commit that
     // measured a row; the landing and follow loops re-aim each frame anyway.
     useFlushSync: false,
+    // The virtualizer places the rows and sizes their box itself, in the
+    // same moment it corrects the scroll for a row above that turned out
+    // taller than its estimate. Left to React's next render, the correction
+    // was painted a frame before the rows moved: everything jumped back by
+    // the difference and forward again, which a glide shows as a skip once
+    // it has slowed down (#698).
+    directDomUpdates: true,
+    directDomUpdatesMode: "position",
+    rangeExtractor,
   });
+  measures.current = virtualizer;
   useResizeAnchor(scroller, virtualizer, id, rows.length, atEnd);
+
+  // A finger on the conversation, for `still`: on an iPhone the virtualizer
+  // holds corrections back while one is down and for a moment after, and
+  // history held meanwhile goes in once it has been off long enough.
+  useEffect(() => {
+    const element = scroller.current;
+    if (!element || !holdOlder) return;
+    let timer = 0;
+    const down = () => {
+      finger.current = { down: true, lifted: finger.current.lifted };
+      window.clearTimeout(timer);
+    };
+    const up = () => {
+      finger.current = { down: false, lifted: performance.now() };
+      window.clearTimeout(timer);
+      timer = window.setTimeout(wake, LIFT_MS + 16);
+    };
+    element.addEventListener("touchstart", down, { passive: true });
+    element.addEventListener("touchend", up, { passive: true });
+    element.addEventListener("touchcancel", up, { passive: true });
+    return () => {
+      window.clearTimeout(timer);
+      element.removeEventListener("touchstart", down);
+      element.removeEventListener("touchend", up);
+      element.removeEventListener("touchcancel", up);
+    };
+  }, [holdOlder]);
+
+  // Somebody taking hold of the conversation ends any aiming at a row the
+  // page left behind (`stopAiming`); the follow below stops its own the
+  // same way.
+  useEffect(() => {
+    const element = scroller.current;
+    if (!element) return;
+    const hold = () => stopAiming(virtualizer);
+    const kinds = ["touchstart", "wheel", "pointerdown", "keydown"] as const;
+    for (const kind of kinds) element.addEventListener(kind, hold, { passive: true });
+    return () => {
+      for (const kind of kinds) element.removeEventListener(kind, hold);
+    };
+  }, [virtualizer]);
 
   // Landing: once per conversation, on the line or the bottom. Rows are
   // estimates until drawn, so aim every frame until the target holds still.
@@ -180,6 +305,7 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
       frames += 1;
       if ((there && stable >= JUMP_STILL_FRAMES && (!toLine || frames >= JUMP_MIN_FRAMES)) || frames >= JUMP_MAX_FRAMES) {
         landing.current.done = true;
+        stopAiming(virtualizer);
         setLanded((count) => count + 1);
         return;
       }
@@ -188,6 +314,23 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
     frame = requestAnimationFrame(step);
     return () => cancelAnimationFrame(frame);
   }, [id, rows.length, land.ready, land.at, atEnd, virtualizer, props.goTo]);
+
+  // Measuring ahead (above), and when: once nothing scrolls the
+  // conversation, in a frame, after its scroll events, so the virtualizer
+  // corrects from where the conversation really is, and synchronously, so
+  // nothing can scroll it between the rows being drawn and measured. A render
+  // left to run later could land between somebody's scroll and its event, and
+  // the correction put the view back where it had been.
+  const scrolling = virtualizer.isScrolling;
+  useEffect(() => {
+    if (scrolling) return;
+    const frame = requestAnimationFrame(() => {
+      const range = measures.current?.range;
+      if (!range || !landing.current.done || jumping.current || !still()) return;
+      if (unmeasuredAbove(Math.max(0, range.startIndex - OVERSCAN)).length > 0) flushSync(() => setAheadToo(true));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [rows, scrolling, landed, woken, still, unmeasuredAbove]);
 
   // Follow a new last message down, only when the bottom is where you were.
   // Keyed on the last row, so history loading above never triggers it.
@@ -258,6 +401,14 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
   // virtualizer means to do this itself, but it scrolls before the list has
   // grown and the browser clamps the scroll to the old height.
   const rowsBox = useRef<HTMLDivElement | null>(null);
+  const { containerRef } = virtualizer;
+  const rowsRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      rowsBox.current = node;
+      containerRef(node);
+    },
+    [containerRef],
+  );
   const atEndNow = useRef(atEnd);
   atEndNow.current = atEnd;
   const drawn = rows.length > 0;
@@ -303,7 +454,10 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
   useEffect(() => () => window.clearTimeout(trimTimer.current), [id]);
   const { onNearStart, onNearEnd, onLetGo } = props;
   const letGo = useCallback(() => {
-    if (!landing.current.done || jumping.current) return;
+    // Letting go above moves the rows the way a page arriving does, so it
+    // waits for the same stillness (above): on an iPhone, a finger off it too.
+    // The next scroll that stops tries again.
+    if (!landing.current.done || jumping.current || !still()) return;
     const range = virtualizer.range;
     if (!range) return;
     let first: MessageId | null = null;
@@ -320,14 +474,16 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
       last = row.message.id;
     }
     if (first !== null && last !== null) onLetGo(first, last);
-  }, [virtualizer, onLetGo]);
+  }, [virtualizer, onLetGo, still]);
 
   // Near an edge of what's held: ask for more. Checked on every scroll, and
   // once when landing ends, since someone may have scrolled while it ran.
+  // Not for older while a page of it is waiting to go in (above): each would
+  // be the next page, and the next, without anybody having reached them.
   const checkEdges = useCallback(() => {
     const element = scroller.current;
     if (!element || !landing.current.done || jumping.current) return;
-    if (element.scrollTop <= BACKFILL_MARGIN_PX && !atStart) onNearStart();
+    if (element.scrollTop <= BACKFILL_MARGIN_PX && !atStart && !holdingNow.current) onNearStart();
     const below = element.scrollHeight - element.scrollTop - element.clientHeight;
     if (below <= BACKFILL_MARGIN_PX && !atEnd) onNearEnd();
   }, [atStart, atEnd, onNearStart, onNearEnd]);
@@ -421,19 +577,14 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
         {rows.length === 0 ? (
           <p className="nx-conv-empty">{land.ready && atStart ? props.empty : ""}</p>
         ) : (
-          <div ref={rowsBox} className="nx-conv-rows" style={{ height: virtualizer.getTotalSize() }}>
+          // Its height and the rows' places are the virtualizer's to write
+          // (directDomUpdates, above).
+          <div ref={rowsRef} className="nx-conv-rows">
             {items.map((item) => {
               const row = rows[item.index];
               if (!row) return null;
               return (
-                <div
-                  key={item.key}
-                  className="nx-conv-row"
-                  data-index={item.index}
-                  data-key={item.key}
-                  ref={virtualizer.measureElement}
-                  style={{ transform: `translateY(${item.start}px)` }}
-                >
+                <div key={item.key} className="nx-conv-row" data-index={item.index} data-key={item.key} ref={virtualizer.measureElement}>
                   <RowView
                     row={row}
                     people={people}
@@ -579,6 +730,19 @@ const RowView = memo(function RowView({
     }
   }
 }, sameRowView);
+
+/**
+ * Stop the virtualizer aiming at a row it was sent to (`scrollToIndex`). It
+ * keeps at it for up to five seconds whatever the reader does meanwhile, and
+ * when that row moved, a page going in above or a row above measured, it
+ * pulled the view back to it (#698): the landing's last row, a page later,
+ * was 600px up a page of older history. It has no way to stop but this: its
+ * public ways all write a scroll position, which at the bottom is the
+ * scroller's padding short, and at a touch could undo a frame of a glide.
+ */
+function stopAiming(virtualizer: object) {
+  if ("scrollState" in virtualizer) (virtualizer as { scrollState: unknown }).scrollState = null;
+}
 
 /**
  * A message from somebody you blocked (PROTOCOL §5, SPEC §4.15): one grey

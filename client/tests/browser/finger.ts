@@ -18,6 +18,24 @@ export async function finger(page: Page) {
 }
 
 /**
+ * A finger flicked from `from`, `by` pixels down (up when negative), and let
+ * go fast enough to leave the page gliding on, as a thumb does (#698). Each
+ * touch is stamped a frame (16 ms) after the last, whenever it gets there:
+ * Chromium judges a finger's speed by those stamps, and the protocol's own
+ * pace is far too slow to glide. Chromium only, like `finger`.
+ */
+export async function flick(page: Page, from: { x: number; y: number }, by: number) {
+  const cdp = await page.context().newCDPSession(page);
+  let at = Date.now() / 1000;
+  const send = (type: "touchStart" | "touchMove" | "touchEnd", point?: { x: number; y: number }) =>
+    cdp.send("Input.dispatchTouchEvent", { type, touchPoints: point ? [point] : [], timestamp: (at += 0.016) });
+  await send("touchStart", from);
+  for (let step = 1; step <= 4; step += 1) await send("touchMove", { x: from.x, y: from.y + (by * step) / 4 });
+  await send("touchEnd");
+  await cdp.detach();
+}
+
+/**
  * Two fingers put down side by side at `at` and spread apart, as a pinch to
  * zoom in is (#689). Through the same DevTools protocol as `finger`, so it's
  * Chromium's own touch input; the page needs `hasTouch` and `isMobile`, or a

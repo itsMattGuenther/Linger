@@ -509,6 +509,29 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   far enough over. Let go past a third of the screen's width, or flicked,
   the screen slides the rest of the way off and Back runs; short of that
   it slides back into place.
+- **A glide in a conversation** (#698). A row's height is an estimate
+  (`ESTIMATE_PX`) until it's drawn, and a row above the reader drawn at its
+  real height moves what's below it, which the virtualizer makes up for by
+  moving the scroll position. `Conversation.tsx` keeps that out of a glide
+  three ways. The virtualizer writes the rows' places and their box's height
+  itself (`directDomUpdates`), in the same callback as its correction, so
+  both are painted in one frame; left to React's next render, the correction
+  was painted a frame early, a jump back and forward again. Once the
+  conversation is still, rows within `MEASURE_AHEAD` above the screen that
+  have never been drawn are drawn once and measured, in a frame and
+  synchronously (`flushSync`) so no scroll can land between, and a later
+  glide meets only rows of known height. And on an iPhone, where WebKit stops
+  a glide the page moves the scroll position in and the virtualizer so holds
+  every correction until the scroll stops, older history that arrives while
+  the conversation moves (a scroll, or a finger on it or just off it,
+  `LIFT_MS`) waits out of sight and goes in once it's still; letting go of
+  history (#173) waits the same way. Separately, a hand taking hold of the
+  conversation (touch, wheel, pointer or key) and the landing finishing end
+  the virtualizer's own aim at a row it was sent to (`stopAiming`): it kept
+  at it for seconds, whatever the reader did, and pulled the view to that
+  row when a page went in above. `next-phone-glide.spec.ts` makes real
+  glides in Chromium, as Android and as an iPhone by its user agent, and
+  reads every frame as painted; Playwright's WebKit makes no glides.
 - **Sounds follow the phone.** A chime asks the phone's ringer first
   (`followDeviceSound` in `lib/sound.ts`, `src-tauri/src/phone_sound.rs`):
   on vibrate it buzzes, on silent or Do Not Disturb nothing happens. Android
