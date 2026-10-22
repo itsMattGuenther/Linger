@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { followKeyboard, isPhone, type Online, type Showing, textScale, thisDevice, type Visible, watchBackground, watchNetwork } from "./phone";
+import { followKeyboard, isIPhone, isPhone, type Online, type Showing, textScale, thisDevice, type Visible, watchBackground, watchNetwork } from "./phone";
 import { windowRole } from "./role";
 
 describe("the phone app", () => {
@@ -18,6 +18,17 @@ describe("the phone app", () => {
   it("calls the device what it is", () => {
     expect(thisDevice(true)).toBe("this phone");
     expect(thisDevice(false)).toBe("this computer");
+  });
+
+  it("knows an iPhone's engine from Android's, so only an iPhone swipes back in the page (#697)", () => {
+    // An iPhone's web view, and an iPad asking for a computer's page.
+    expect(isIPhone("Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148", 5)).toBe(true);
+    expect(isIPhone("Mozilla/5.0 (iPad; CPU OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148", 5)).toBe(true);
+    expect(isIPhone("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)", 5)).toBe(true);
+    // Android's web view has a Back of its own; a Mac has no touch screen.
+    expect(isIPhone("Mozilla/5.0 (Linux; Android 16; Pixel 9 Pro Build/BP2A.250605.031; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/141.0.0.0 Mobile Safari/537.36", 5)).toBe(false);
+    expect(isIPhone("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)", 0)).toBe(false);
+    expect(isIPhone("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 Edg/141.0.0.0", 10)).toBe(false);
   });
 });
 

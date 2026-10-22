@@ -666,9 +666,11 @@ function Servers({
   phoneSettingsOpen.current = phoneSettings !== null;
   // On the phone, Back takes the top screen off: a conversation, Media or
   // Search, and the last one off is the list again (SPEC §4.15). Settings,
-  // drawn over everything, handles its own.
+  // drawn over everything, handles its own. An iPhone's swipe back slides
+  // the top screen off with the finger (#697).
   const goBack = useCallback(() => setTabs((held) => backTab(held)), []);
-  useBackButton(unfolded && phoneSettings === null, goBack);
+  const app = useRef<HTMLDivElement | null>(null);
+  useBackButton(unfolded && phoneSettings === null, goBack, { slide: () => app.current?.querySelector<HTMLElement>(":scope > .nx-side") ?? null });
   const sectionAsked = useRef(new Set<(key: string | null) => void>());
   useEffect(() => {
     if (!onPhone()) return;
@@ -1174,7 +1176,14 @@ function Servers({
         // the one carrying a call: the call bar holds the app up (#429).
         <ServerLink key={session.baseUrl} session={session} onInfo={onInfo} again={infoAsks[session.baseUrl] ?? 0} paused={(backgrounded && session.baseUrl !== voiceServer) || offline} />
       ))}
-      <div className="nx-app" data-side={unfolded ? layout : "folded"} style={{ "--list-width": `${shown.list}px` } as CSSProperties}>
+      <div
+        ref={app}
+        className="nx-app"
+        data-side={unfolded ? layout : "folded"}
+        // What Back from the top screen shows, which an iPhone's swipe back shows under it as it goes (#697).
+        data-under={onPhone() && tabs.open.length === 1 ? "list" : undefined}
+        style={{ "--list-width": `${shown.list}px` } as CSSProperties}
+      >
         <div className="nx-app-list">
           {adding ? (
             <SignInView

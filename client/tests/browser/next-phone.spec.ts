@@ -41,6 +41,31 @@ const title = (page: Page) => screen(page).locator(".k-titlebar");
 const back = (page: Page) => screen(page).getByRole("button", { name: "Back", exact: true });
 const room = (page: Page, name: string) => page.getByRole("list", { name: "Rooms" }).getByRole("button", { name: new RegExp(`^#${name}\\b`) });
 
+/** What an iPhone's web view says it is (core/phone.ts, `isIPhone`): the page swipes back itself (#697). */
+const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
+/** What Android's says: Back is the phone's own. */
+const ANDROID = "Mozilla/5.0 (Linux; Android 16; Pixel 9 Pro Build/BP2A.250605.031; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/141.0.0.0 Mobile Safari/537.36";
+
+/**
+ * A finger from `from` to `to`, 10 pixels at a time, slowly enough never to
+ * be a flick (core/edgeSwipe.ts), and lifted unless `lift` is false.
+ * Chromium only (finger.ts).
+ */
+async function drag(page: Page, from: { x: number; y: number }, to: { x: number; y: number }, lift = true) {
+  const touch = await finger(page);
+  await touch.down(from);
+  const steps = Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) / 10);
+  for (let step = 1; step <= steps; step += 1) {
+    await touch.move({ x: from.x + ((to.x - from.x) * step) / steps, y: from.y + ((to.y - from.y) * step) / steps });
+    await page.waitForTimeout(40);
+  }
+  if (lift) await touch.up();
+  return touch;
+}
+
+/** How far right of its place something is drawn, by its transform: an iPhone's swipe back moves the screen (#697). */
+const over = (of: Locator) => of.evaluate((element) => new DOMMatrix(getComputedStyle(element).transform).m41);
+
 /**
  * What reaches past the right edge of the screen: a page that scrolls
  * sideways, or anything drawn wider than the phone, words cut off at the
@@ -416,6 +441,34 @@ test.describe("a photo opened from a message zooms under your fingers (#689)", (
     await expect(viewer).toHaveCount(0);
     expect(await pageScale(page)).toBe(1);
   });
+
+  // An iPhone's swipe back closes a photo as Back does, the conversation
+  // under it, but a finger on a zoomed one is the photo's own.
+  test.describe("on an iPhone (#697)", () => {
+    test.use({ userAgent: IPHONE });
+    test.skip(({ browserName }) => browserName !== "chromium", "Only Chromium lets a test put a finger down and move it");
+
+    test("zoomed, a finger from the left edge drags the photo; not zoomed, it slides the photo off and closes it", async ({ page }) => {
+      const { viewer, picture, opened } = await openPhoto(page);
+      const center = { x: opened.x + opened.width / 2, y: opened.y + opened.height / 2 };
+      await spread(page, center);
+      await expect.poll(() => zoomedBy(picture, opened)).toBeCloseTo(4, 1);
+      const zoomed = await picture.boundingBox();
+
+      await drag(page, { x: 4, y: center.y }, { x: 204, y: center.y });
+      await expect.poll(async () => (await picture.boundingBox())?.x).toBeCloseTo((zoomed?.x ?? 0) + 200, 0);
+      await expect(viewer).toBeVisible();
+      expect(await over(viewer)).toBe(0);
+
+      await doubleTap(page, center);
+      await expect.poll(() => zoomedBy(picture, opened)).toBeCloseTo(1, 2);
+      const touch = await drag(page, { x: 4, y: center.y }, { x: 204, y: center.y }, false);
+      await expect.poll(() => over(viewer)).toBeCloseTo(200, 0);
+      await touch.up();
+      await expect(viewer).toHaveCount(0);
+      await expect(screen(page)).toBeVisible();
+    });
+  });
 });
 
 // The narrowest phones are 320 wide (#688). Nothing on the main screens may
@@ -728,6 +781,176 @@ test.describe("held with a finger, on an iPhone too", () => {
     await touch.up();
     await expect(page.getByRole("menu")).toHaveCount(0);
     await expect(pill).toHaveAttribute("aria-pressed", "true");
+  });
+});
+
+// An iPhone has no Back of its own, so the page goes back with a finger
+// swiped in from the left edge, as an iPhone's apps do (#697). Chromium is the
+// only engine a test can move a finger in (finger.ts), so these are its, with
+// the iPhone's web view named by its user agent.
+test.describe("on an iPhone, a swipe in from the left edge goes back (#697)", () => {
+  test.use({ isMobile: true, hasTouch: true, userAgent: IPHONE });
+  test.skip(({ browserName }) => browserName !== "chromium", "Only Chromium lets a test put a finger down and move it");
+
+  const side = (page: Page) => page.locator(".nx-side");
+  /**
+   * Which screen a person sees at (x, y): the first under it, through
+   * anything see-through on top, or "covered" when something without one
+   * paints over it.
+   */
+  const shown = (page: Page, x: number, y: number) =>
+    page.evaluate(
+      ({ x, y }) => {
+        for (const element of document.elementsFromPoint(x, y)) {
+          const screen = element.closest("[data-screen]");
+          if (screen) return screen.getAttribute("data-screen");
+          const paint = getComputedStyle(element).backgroundColor;
+          if (paint !== "transparent" && paint !== "rgba(0, 0, 0, 0)") return "covered";
+        }
+        return null;
+      },
+      { x, y },
+    );
+
+  async function inGeneral(page: Page, query = "") {
+    await open(page, `?one${query}&shell=phone`);
+    await settled(page);
+    await room(page, "general").click();
+    await expect(page.getByRole("log")).toContainText("Putting it on now.");
+    await still(page.getByRole("log"));
+  }
+
+  test("past a third of the way, the room goes back to the list, following the finger with the list under it", async ({ page }) => {
+    await inGeneral(page);
+    // Android's Back isn't listened for: the swipe is the iPhone's only way.
+    expect(await page.evaluate(() => window.core?.back())).toBe(false);
+
+    const touch = await drag(page, { x: 4, y: 500 }, { x: 204, y: 500 }, false);
+    await expect.poll(() => over(side(page))).toBeCloseTo(200, 0);
+    // The list is under it, there to see where the room has moved off.
+    expect(await shown(page, 100, 500)).toBe("list");
+    expect(await shown(page, 300, 500)).toBe("chat");
+    await touch.up();
+    await expect(screen(page)).toHaveCount(0);
+    await expect(list(page)).toBeVisible();
+    await expect(page.locator("[data-swipe]")).toHaveCount(0);
+  });
+
+  test("let go short of a third, the room slides back into place and stays", async ({ page }) => {
+    await inGeneral(page);
+    const touch = await drag(page, { x: 4, y: 500 }, { x: 84, y: 500 }, false);
+    await expect.poll(() => over(side(page))).toBeCloseTo(80, 0);
+    await touch.up();
+    await expect.poll(() => over(side(page))).toBe(0);
+    await expect(page.locator("[data-swipe]")).toHaveCount(0);
+    await expect(screen(page)).toBeVisible();
+    await expect(list(page)).toBeHidden();
+  });
+
+  test("a finger starting away from the edge moves nothing and goes nowhere", async ({ page }) => {
+    await inGeneral(page);
+    const touch = await drag(page, { x: 60, y: 500 }, { x: 330, y: 500 }, false);
+    await expect(page.locator("[data-swipe]")).toHaveCount(0);
+    expect(await over(side(page))).toBe(0);
+    await touch.up();
+    await page.waitForTimeout(400);
+    await expect(screen(page)).toBeVisible();
+    await expect(list(page)).toBeHidden();
+  });
+
+  test("a finger from the edge going up or down scrolls the conversation, and goes nowhere", async ({ page }) => {
+    await inGeneral(page, "&many=200");
+    const log = page.getByRole("log");
+    const top = () => log.evaluate((element) => element.scrollTop);
+    const before = await top();
+    await drag(page, { x: 6, y: 300 }, { x: 10, y: 700 });
+    await expect.poll(top).toBeLessThan(before - 200);
+    await expect(page.locator("[data-swipe]")).toHaveCount(0);
+    await expect(screen(page)).toBeVisible();
+    await expect(list(page)).toBeHidden();
+  });
+
+  test("a message held at the edge opens its actions, and moving on after doesn't go back", async ({ page }) => {
+    await inGeneral(page, "&guest");
+    await noLongPress(page);
+    const words = page.locator(".nx-msg", { hasText: "No plans, no agenda" }).last().locator(".nx-text");
+    const box = await words.boundingBox();
+    if (!box) throw new Error("the message isn't on the screen");
+    const at = { x: 6, y: box.y + box.height / 2 };
+    const touch = await finger(page);
+    await touch.down(at);
+    await expect(page.getByRole("menu")).toBeVisible();
+    for (let step = 1; step <= 20; step += 1) {
+      await touch.move({ x: at.x + step * 10, y: at.y });
+      await page.waitForTimeout(16);
+    }
+    await touch.up();
+    await page.waitForTimeout(400);
+    await expect(page.getByRole("menu")).toBeVisible();
+    await expect(screen(page)).toBeVisible();
+    await expect(page.locator("[data-swipe]")).toHaveCount(0);
+  });
+
+  test("screens over screens go back one at a time: a search hit to Search, then Search to the list", async ({ page }) => {
+    await phone(page);
+    await list(page).getByRole("button", { name: "Search", exact: true }).click();
+    await page.getByRole("textbox", { name: "Search", exact: true }).fill("moon");
+    await page.locator(".nx-hit-main").first().click();
+    await expect(title(page)).toContainText("general");
+    await still(page.getByRole("log"));
+
+    await drag(page, { x: 4, y: 500 }, { x: 204, y: 500 });
+    await expect(title(page)).toHaveText("Search");
+    await expect.poll(() => over(side(page))).toBe(0);
+    await drag(page, { x: 4, y: 500 }, { x: 204, y: 500 });
+    await expect(list(page)).toBeVisible();
+    await expect(screen(page)).toHaveCount(0);
+  });
+
+  test("Settings goes back the same way: a section to the sections, the sections to the list under them", async ({ page }) => {
+    await phone(page);
+    await list(page).getByRole("button", { name: "Settings", exact: true }).click();
+    const settings = page.locator(".nx-phone-over [data-screen='settings']");
+    const sections = settings.getByRole("navigation", { name: "Settings" });
+    await sections.getByText("Appearance").click();
+    await expect(settings.locator(".nx-set-title")).toHaveText("Appearance");
+
+    await drag(page, { x: 4, y: 500 }, { x: 204, y: 500 });
+    await expect(sections).toBeVisible();
+    await expect.poll(() => over(settings)).toBe(0);
+
+    const touch = await drag(page, { x: 4, y: 500 }, { x: 204, y: 500 }, false);
+    await expect.poll(() => over(settings)).toBeCloseTo(200, 0);
+    expect(await shown(page, 100, 500)).toBe("list");
+    await touch.up();
+    await expect(page.locator(".nx-phone-over")).toHaveCount(0);
+    await expect(list(page)).toBeVisible();
+  });
+});
+
+// Android's own Back is the button and the swipe in from the edge both, and
+// reaches the page as Back (useBackButton.ts). A swipe of the page's own as
+// well would go back twice.
+test.describe("on Android, the swipe in from the edge is Android's Back (#697)", () => {
+  test.use({ isMobile: true, hasTouch: true, userAgent: ANDROID });
+  test.skip(({ browserName }) => browserName !== "chromium", "Only Chromium lets a test put a finger down and move it");
+
+  test("the page adds no swipe of its own, so Back goes back one screen", async ({ page }) => {
+    await phone(page);
+    await list(page).getByRole("button", { name: "Search", exact: true }).click();
+    await page.getByRole("textbox", { name: "Search", exact: true }).fill("moon");
+    await page.locator(".nx-hit-main").first().click();
+    await expect(title(page)).toContainText("general");
+
+    const touch = await drag(page, { x: 4, y: 500 }, { x: 304, y: 500 }, false);
+    await expect(page.locator("[data-swipe]")).toHaveCount(0);
+    await touch.up();
+    await page.waitForTimeout(400);
+    await expect(title(page)).toContainText("general");
+
+    // Android's Back, as its shell hands it over: one screen, to Search.
+    expect(await page.evaluate(() => window.core?.back())).toBe(true);
+    await expect(title(page)).toHaveText("Search");
   });
 });
 

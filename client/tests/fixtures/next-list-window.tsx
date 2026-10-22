@@ -209,6 +209,11 @@ const deliver = (event: string, payload: unknown) => {
   for (const id of listeners.get(event) ?? []) internals.runCallback(id, { event, id, payload });
 };
 const seq: Record<string, number> = {};
+/**
+ * Android's Back, as the shell's app plugin hands it to the page
+ * (`onBackButtonPress`): the channel listening, and how many it has been sent.
+ */
+let backListener: { id: number; sent: number } | null = null;
 
 (window as unknown as { isTauri: boolean }).isTauri = true;
 /** The `linger://` link the shell is holding for the window (#607), as it would hand it over. */
@@ -238,6 +243,12 @@ mockIPC((cmd, args) => {
       else note(`to ${target}:${String(a.event)}:${JSON.stringify(a.payload)}`);
       return null;
     }
+    case "plugin:app|register_listener":
+      if (a.event === "back-button") backListener = { id: Number((a.handler as { id?: unknown }).id), sent: 0 };
+      return null;
+    case "plugin:app|remove_listener":
+      if (a.event === "back-button" && backListener?.id === Number(a.channelId)) backListener = null;
+      return null;
     case "sessions_load":
       if (query.has("nokeyring")) return { kind: "unavailable", reason: NO_KEYRING };
       if (query.has("signedout")) return { kind: "empty" };
@@ -370,6 +381,8 @@ declare global {
       talkKey: (edge: string) => void;
       /** The desktop shell passes on a clicked banner's target. */
       banner: (target: unknown) => void;
+      /** Android's Back, pressed or swiped, as the shell hands it over; false when nothing is listening, and Android would leave the app. */
+      back: () => boolean;
       /** The desktop shell hid the list into the tray, its close button pressed (#400). */
       hidden: () => void;
       /** The desktop shell was handed a `linger://` link, read as the link a person would paste (#607). */
@@ -413,6 +426,13 @@ window.core = {
   tray: (action) => deliver("next:tray", action),
   talkKey: (edge) => deliver("next:talkkey", edge),
   banner: (target) => deliver("next:banner", target),
+  back: () => {
+    if (backListener === null) return false;
+    const internals = (window as unknown as { __TAURI_INTERNALS__: Internals }).__TAURI_INTERNALS__;
+    internals.runCallback(backListener.id, { index: backListener.sent, message: null });
+    backListener.sent += 1;
+    return true;
+  },
   hidden: () => deliver("next:hidden", null),
   link: (link) => {
     opened = link;

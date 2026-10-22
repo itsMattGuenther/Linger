@@ -102,10 +102,16 @@ export function SettingsView(props: SettingsViewProps) {
     setStack("section");
   };
   // Android's Back: from a section to the list of them, and from there out.
-  useBackButton(phone, () => {
-    if (stack === "section") setStack("index");
-    else props.onClose?.();
-  });
+  // An iPhone's swipe back slides Settings off with the finger (#697).
+  const root = useRef<HTMLDivElement | null>(null);
+  useBackButton(
+    phone,
+    () => {
+      if (stack === "section") setStack("index");
+      else props.onClose?.();
+    },
+    { slide: () => root.current },
+  );
   const main = useRef<HTMLDivElement | null>(null);
 
   // A section starts at its top, not where the last one was scrolled to.
@@ -118,7 +124,7 @@ export function SettingsView(props: SettingsViewProps) {
   );
 
   return (
-    <div className="nx-set" data-screen="settings" data-stack={phone ? stack : undefined}>
+    <div ref={root} className="nx-set" data-screen="settings" data-stack={phone ? stack : undefined}>
       <TitleBar
         leading={
           // On the phone Settings is a screen over the list, left by Back

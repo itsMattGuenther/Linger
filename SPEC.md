@@ -1035,9 +1035,15 @@ on connecting.
 **What it does:** rooms, DMs, statuses, media, search, and uploads. A photo or video
 from the phone's camera has where it was taken stripped like any other (§4.10). One screen shows at a
 time, as phone chat apps do (Matt, 2026-10-03): the list is home, and a conversation,
-Media or Search opens over it with a way back. It has no Interface size of its own:
-the phone's display size and text size settings do that job (on Android; an iPhone's
-Text Size doesn't reach Linger yet, #690). It doesn't zoom with two fingers as a web
+Media or Search opens over it with a way back. Back goes back the phone's way, from
+anything open to what's under it: on Android, with the phone's own Back, its button
+and its swipe in from the screen's edge; on an iPhone, which has no Back of its own,
+with a finger swiped in from the left edge, as in an iPhone's own apps (#697). The
+screen being left follows the finger, with what's under it showing, and goes back
+when let go far enough over or flicked, or slides back into place. Only the iPhone's
+page does that swipe itself: on Android it would go back twice. It has no Interface
+size of its own: the phone's display size and text size settings do that job (on
+Android; an iPhone's Text Size doesn't reach Linger yet, #690). It doesn't zoom with two fingers as a web
 page does, either (#689): a zoomed screen is only wider than the phone and drags
 sideways, and an iPhone would zoom in by itself on the message box. A photo
 opened from a message zooms on its own instead, as a phone's photo viewer does:

@@ -15,6 +15,24 @@ export function onPhone(): boolean {
   return isPhone(window.location.search);
 }
 
+/**
+ * Whether the engine is an iPhone's (WebKit on iOS), from its user agent,
+ * which names the device; `touchPoints` is the engine's
+ * `navigator.maxTouchPoints`. An iPad asking for a computer's page names a
+ * Mac instead, and gives itself away by its touch screen, which no Mac has.
+ * An iPhone has no Back of its own, so the page goes back with a swipe in
+ * from the left edge itself (#697); Android's Back is the phone's, and a
+ * swipe of the page's own there would go back twice.
+ */
+export function isIPhone(userAgent: string, touchPoints: number): boolean {
+  return /\b(?:iPhone|iPad|iPod)\b/.test(userAgent) || (/\bMacintosh\b/.test(userAgent) && touchPoints > 1);
+}
+
+/** The phone app, on an iPhone. */
+export function onIPhone(): boolean {
+  return onPhone() && isIPhone(navigator.userAgent, navigator.maxTouchPoints);
+}
+
 /** What the device is called where a sentence names it. */
 export function thisDevice(phone: boolean): string {
   return phone ? "this phone" : "this computer";

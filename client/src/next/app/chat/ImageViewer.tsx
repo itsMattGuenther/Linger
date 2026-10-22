@@ -50,7 +50,10 @@ function draw(image: HTMLImageElement | null, view: View, glide: boolean) {
  */
 export function ImageViewer({ file, url, onClose }: { file: Attachment; url: string; onClose: () => void }) {
   const close = useRef<HTMLDivElement | null>(null);
+  const viewer = useRef<HTMLDivElement | null>(null);
   const picture = useRef<HTMLImageElement | null>(null);
+  // Bigger than it opened: a finger on it is the picture's, never a swipe back.
+  const zoomed = useRef(false);
   const name = fileNameToShow(file.filename);
   // The original that can't be loaded says so, not the engine's broken-picture icon (#512).
   const [failed, setFailed] = useState(false);
@@ -59,14 +62,19 @@ export function ImageViewer({ file, url, onClose }: { file: Attachment; url: str
   const [zoom] = useState(() =>
     startZoom(
       () => laidOut(picture.current),
-      (view, glide) => draw(picture.current, view, glide),
+      (view, glide) => {
+        zoomed.current = view.scale > 1;
+        draw(picture.current, view, glide);
+      },
       () => closeNow.current(),
     ),
   );
   // The last press came from a finger, so its click was the zoom's to deal with.
   const touched = useRef(false);
-  // Android's Back closes the picture first (SPEC §4.15).
-  useBackButton(true, onClose);
+  // Android's Back closes the picture first (SPEC §4.15). An iPhone's
+  // swipe back slides it off with the finger, the conversation under it,
+  // unless it's zoomed, when the finger drags it about instead (#697).
+  useBackButton(true, onClose, { slide: () => viewer.current, now: () => !zoomed.current });
   useEffect(() => {
     const opener = document.activeElement;
     close.current?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
@@ -90,6 +98,7 @@ export function ImageViewer({ file, url, onClose }: { file: Attachment; url: str
 
   return createPortal(
     <div
+      ref={viewer}
       className="nx-viewer"
       role="dialog"
       aria-modal="true"

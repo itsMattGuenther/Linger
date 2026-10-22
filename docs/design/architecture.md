@@ -487,6 +487,28 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   then out. With nothing open, nobody listens, and Android does what it does
   with Back: leaves the app. Its back gesture, a swipe in from the screen's
   edge, is the same Back.
+- **The iPhone's swipe back** (#697). An iPhone has no Back: its apps go
+  back with a finger swiped in from the left edge, each doing it itself, so
+  on an iPhone (`onIPhone` in `core/phone.ts`, from the engine's user
+  agent) `useBackButton` watches for that finger instead of listening for
+  Android's Back, and the same newest handler answers it. Never both: on
+  Android the page's own swipe would be a second Back. `core/edgeSwipe.ts`
+  tells a swipe from a scroll, a hold or a pinch: a finger landing within
+  20px of the edge that moves more right than up or down before it's held
+  long enough to be a hold. Until it's decided the page scrolls as usual;
+  after, the touchmoves are cancelled, so the conversation doesn't scroll
+  with it. A finger landing in a text field, or on a zoomed photo, is
+  theirs. Each handler says what moves (`Swipe`, `[data-swipe]` and
+  `--swipe-x` in `styles/phone.css`): a conversation, Media or Search
+  straight over the list slides off with the list drawn under it (the list
+  is only hidden there, `data-under`); one over another screen, and a
+  Settings section, slide off over the plain window, since the screen
+  under them isn't drawn while they show; Settings' sections slide off
+  over whatever they cover; the photo viewer slides off over the
+  conversation. A card or a sheet doesn't move, and goes back when let go
+  far enough over. Let go past a third of the screen's width, or flicked,
+  the screen slides the rest of the way off and Back runs; short of that
+  it slides back into place.
 - **Sounds follow the phone.** A chime asks the phone's ringer first
   (`followDeviceSound` in `lib/sound.ts`, `src-tauri/src/phone_sound.rs`):
   on vibrate it buzzes, on silent or Do Not Disturb nothing happens. Android

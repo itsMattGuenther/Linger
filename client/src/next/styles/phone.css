@@ -30,6 +30,18 @@
   padding-bottom: 0;
 }
 
+/* An iPhone goes back with a finger swiped in from the left edge (#697,
+   app/useBackButton.ts). The screen being left follows the finger
+   (`--swipe-x`), over what it goes back to, then slides off, or back into
+   place when let go too soon. Under reduced motion it gets there at once. */
+:root[data-shell="phone"] [data-swipe] {
+  transform: translateX(var(--swipe-x, 0));
+}
+
+:root[data-shell="phone"] :is([data-swipe="off"], [data-swipe="home"]) {
+  transition: transform var(--duration-slow) var(--ease-out);
+}
+
 /* A picture opened over everything keeps its close button clear of the
    phone's status bar. */
 :root[data-shell="phone"] .nx-viewer-close {

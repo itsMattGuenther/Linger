@@ -66,3 +66,30 @@
   z-index: var(--z-popover);
   background: var(--surface-window);
 }
+
+/* An iPhone's swipe back (#697, styles/phone.css): the screen being left
+   follows the finger with an edge to tell it from what's under it. Under a
+   conversation, Media or Search straight over the list is the list, drawn
+   while it moves; under one over another screen, which isn't drawn, the
+   window. Under Settings' sections is whatever Settings covers; under one
+   section, the window. */
+.nx-side[data-swipe],
+.nx-set[data-swipe] {
+  position: relative;
+  background: var(--surface-window);
+  box-shadow: -1px 0 0 var(--hairline-strong);
+}
+
+.nx-app[data-side="over"]:has(> .nx-side[data-swipe]) {
+  position: relative;
+}
+
+.nx-app[data-side="over"][data-under="list"]:has(> .nx-side[data-swipe]) .nx-app-list {
+  display: flex;
+  position: absolute;
+  inset: 0;
+}
+
+.nx-phone-over:has(> .nx-set[data-stack="index"][data-swipe]) {
+  background: transparent;
+}
