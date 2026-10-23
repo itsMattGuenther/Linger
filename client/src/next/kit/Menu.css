@@ -48,6 +48,17 @@
   color: var(--text-danger);
 }
 
+/* Can't be chosen now, and says why in its words: half strength, as a
+   disabled row is, and no hover look. */
+.k-menu-item[aria-disabled="true"] {
+  opacity: 0.5;
+}
+
+.k-menu-item[aria-disabled="true"]:hover {
+  background: none;
+  color: var(--text-secondary);
+}
+
 .k-menu-icon {
   display: grid;
   place-items: center;

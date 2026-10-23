@@ -396,7 +396,8 @@ Windows doesn't let an app put its own icon in sight, but you can: open
 Several servers? Each is a section of the list with its own rooms and
 people. Click its name to fold it, and use its **⋯** for **Quiet** (no sounds
 or arrival cards from it, though somebody naming you still gets a banner) and
-to move it up or down.
+to move it up or down. On the phone, hold its name for the same choices; a
+tap folds it.
 
 The list may also show a line at its foot, only while it's true: a server it
 can't reach, a computer that can't remember your sign-in, or a new version of
@@ -868,14 +869,16 @@ set of people is a different conversation.
 
 **Leaving a group.** Done with a group conversation? Hover its row under
 **Rooms**, or look at the top right of the conversation, and press **⋯**, then
-**Leave this group…**. It says what happens before it does anything. The group
+**Leave this group…**. On the phone, hold its row instead, and **Leave this
+group…** rises from the bottom; a tap on the row opens it, as always. Linger
+says what happens before it does anything. The group
 goes from your list on every device you use, and nobody can add you back,
 though anybody in it can start a new one with you. The others see a small grey
 line saying you left, and keep what you said. If you're the last one in it, it's
 deleted for good, so export first if you want a copy. A conversation with one
 person isn't left this way: it's their row in your list.
 
-**Knocking.** On their card, or the small button when you hover their row, **Knock** is a tap on the shoulder: the other
+**Knocking.** On their card, or the small button when you hover their row (on the phone, hold their row for their card and **Knock**), **Knock** is a tap on the shoulder: the other
 person's list rocks side to side and a small card says who knocked, for eight
 seconds, then it's gone. Knocking again starts their card over; it doesn't add a
 second one. Their row in your list gives a little shake. That

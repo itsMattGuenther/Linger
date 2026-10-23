@@ -31,4 +31,5 @@ export { TabStrip, type TabItem, type TabLead, type TabStripProps } from "./Tabs
 export { TextField, type TextFieldProps } from "./TextField";
 export { TitleBar, type TitleBarProps } from "./TitleBar";
 export { TooltipBubble, useTooltip } from "./Tooltip";
+export { useHold, type HoldProps } from "./useHold";
 export { VoiceGlyph } from "./VoiceGlyph";

@@ -173,10 +173,17 @@
   color: var(--text-away);
 }
 
-/* Actions sit at the end of the row and appear on hover or keyboard focus,
-   and stay while one's menu is open, so what it opened isn't left pointing
-   at nothing (#565). While they show, the text column gives them room
-   instead of running under them, and the note steps aside. */
+/* Actions sit at the end of the row and appear on keyboard focus, and stay
+   while one's menu is open, so what it opened isn't left pointing at nothing
+   (#565). Where the pointer can hover, they appear on hover too, and stay
+   while the row has focus at all. While they show, the text column gives
+   them room instead of running under them, and the note steps aside.
+
+   A finger's tap never shows them (#704). An iPhone takes a tap whose hover
+   shows something to press as a hover only, with no click, so a person's
+   row or a group's opened on the second tap; rooms, which have no actions,
+   opened on the first. A tap's focus isn't keyboard focus, so it shows
+   nothing either. The phone holds a row for them instead (`hold`). */
 .k-row-actions {
   position: absolute;
   top: 0;
@@ -187,8 +194,30 @@
   gap: var(--space-1);
 }
 
-.k-row:is(:hover, :focus-within, :has(.k-row-actions [aria-expanded="true"])) .k-row-actions {
+.k-row:has(:focus-visible, .k-row-actions [aria-expanded="true"]) .k-row-actions {
   display: flex;
+}
+
+@media (hover: hover) {
+  .k-row:is(:hover, :focus-within) .k-row-actions {
+    display: flex;
+  }
+
+  .k-row[data-actions]:is(:hover, :focus-within) .k-row-text {
+    padding-right: var(--row-reserve);
+  }
+
+  .k-row[data-actions]:is(:hover, :focus-within) :is(.k-row-note, .k-row-end) {
+    display: none;
+  }
+}
+
+/* Held for its actions on the phone: holding it selects no words and brings
+   up no menu of the phone's own. */
+.k-row[data-holdable="yes"] .k-row-main {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .k-row[data-actions="1"] {
@@ -203,11 +232,11 @@
   --row-reserve: calc(3 * var(--control-md) + 2 * var(--space-1) + var(--space-2));
 }
 
-.k-row[data-actions]:is(:hover, :focus-within, :has(.k-row-actions [aria-expanded="true"])) .k-row-text {
+.k-row[data-actions]:has(:focus-visible, .k-row-actions [aria-expanded="true"]) .k-row-text {
   padding-right: var(--row-reserve);
 }
 
-.k-row[data-actions]:is(:hover, :focus-within, :has(.k-row-actions [aria-expanded="true"])) .k-row-note {
+.k-row[data-actions]:has(:focus-visible, .k-row-actions [aria-expanded="true"]) :is(.k-row-note, .k-row-end) {
   display: none;
 }
 
@@ -221,10 +250,6 @@
 
 .k-row-note + .k-row-end {
   margin-left: var(--space-2);
-}
-
-.k-row[data-actions]:is(:hover, :focus-within, :has(.k-row-actions [aria-expanded="true"])) .k-row-end {
-  display: none;
 }
 
 /* High contrast: a selected row's wash (or a highlighted option's) is

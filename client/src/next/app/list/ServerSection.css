@@ -174,9 +174,34 @@
   background: var(--surface-hover);
 }
 
-.nx-srv-head:is(:hover, :focus-within) .nx-srv-menu,
+.nx-srv-head:has(:focus-visible) .nx-srv-menu,
 .nx-srv-menu[data-open="yes"] {
   opacity: 1;
+}
+
+/* On hover only where the pointer can hover (#704): an iPhone takes a tap
+   whose hover shows something to press as a hover only, so folding a server
+   took two taps. Without hover, it shows for the keyboard, and is out of a
+   finger's way while it's out of sight: a tap there folds. The phone holds
+   the header for its menu instead. */
+@media (hover: hover) {
+  .nx-srv-head:is(:hover, :focus-within) .nx-srv-menu {
+    opacity: 1;
+  }
+}
+
+@media (hover: none) {
+  .nx-srv-head:not(:has(:focus-visible)) .nx-srv-menu:not([data-open="yes"]) {
+    pointer-events: none;
+  }
+}
+
+/* Held for its menu on the phone: holding selects no words and brings up no
+   menu of the phone's own. */
+.nx-srv-head[data-holdable="yes"] .nx-srv-toggle {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* Under the name: an icon where the mark is, then one line that gives way with an ellipsis. */

@@ -2,9 +2,11 @@ import { type CSSProperties, memo, useRef, useState } from "react";
 import type { User } from "../../../generated/User";
 import type { ListModel } from "../../core/list";
 import { type FoldedLine, foldedText, type OpenLine, openText, type ServerHeader } from "../../core/servers";
+import { onPhone } from "../../core/phone";
 import { lineProblem } from "../../core/you";
-import { Icon, IconButton, MarkerCluster, Menu, type MenuAnchor, type MenuItem, Name, TextField, VoiceGlyph } from "../../kit";
+import { Icon, IconButton, MarkerCluster, Menu, type MenuAnchor, type MenuCloseReason, type MenuItem, Name, TextField, useHold, VoiceGlyph } from "../../kit";
 import { markerFor } from "../markers";
+import { boxOf, HeldSheet } from "./HeldSheet";
 import { ServerBody, type ServerBodyActions } from "./ServerBody";
 import "./ServerSection.css";
 
@@ -66,15 +68,43 @@ export const ServerSection = memo(function ServerSection({
 }) {
   const { id, name, header, quiet } = listing;
   const bodyId = `nx-srv-${index}-body`;
-  const [menu, setMenu] = useState<MenuAnchor | null>(null);
+  // Where it was opened from, and whether that was its header held on the
+  // phone (#704) rather than its ⋯.
+  const [menu, setMenu] = useState<{ anchor: MenuAnchor; held: boolean } | null>(null);
   // The menu's button, for focus to come back to when the menu closes.
   const menuSlot = useRef<HTMLSpanElement | null>(null);
+  const toggleButton = useRef<HTMLButtonElement | null>(null);
   const backToMenuButton = () => menuSlot.current?.querySelector("button")?.focus();
+  const backFrom = (held: boolean) => (held ? toggleButton.current?.focus() : backToMenuButton());
 
   const items: MenuItem[] = [];
   if (onQuiet) items.push({ id: "quiet", label: "Quiet", icon: "quiet", checked: quiet, onSelect: () => onQuiet(id, !quiet) });
   if (onMove && !first) items.push({ id: "up", label: "Move up", icon: "up", onSelect: () => onMove(id, -1) });
   if (onMove && !last) items.push({ id: "down", label: "Move down", icon: "down", onSelect: () => onMove(id, 1) });
+
+  // On the phone the header is held for what its ⋯ has, which shows only
+  // where there's hover or a keyboard (#704); a tap still folds it.
+  const phone = onPhone();
+  const holder = useHold(
+    () => {
+      if (toggleButton.current) setMenu({ anchor: boxOf(toggleButton.current), held: true });
+    },
+    (target) => toggleButton.current?.contains(target) ?? false,
+    phone && items.length > 0,
+  );
+  const closeMenu = (reason: MenuCloseReason | "select") => {
+    const held = menu?.held ?? false;
+    setMenu(null);
+    // A choice made with a finger on the phone leaves the focus alone.
+    if (reason === "escape" || reason === "tab" || (reason === "select" && !phone)) backFrom(held);
+  };
+  const menuItems = items.map((item) => ({
+    ...item,
+    onSelect: () => {
+      item.onSelect();
+      closeMenu("select");
+    },
+  }));
 
   // Folded over a DM you haven't read, the header is lit (#291) and says so.
   const lit = folded && header.lit;
@@ -89,8 +119,9 @@ export const ServerSection = memo(function ServerSection({
       style={serverColor(listing.accent)}
     >
       <div className="nx-srv-top">
-      <div className="nx-srv-head">
+      <div className="nx-srv-head" data-holdable={holder ? "yes" : undefined} {...holder}>
         <button
+          ref={toggleButton}
           type="button"
           className="nx-srv-toggle"
           data-lit={lit ? "yes" : undefined}
@@ -120,18 +151,24 @@ export const ServerSection = memo(function ServerSection({
           </span>
         </button>
         {items.length > 0 ? (
-          <span ref={menuSlot} className="nx-srv-menu" data-open={menu ? "yes" : undefined}>
+          // Open from a held header, the sheet isn't the ⋯'s, so it stays out of sight.
+          <span ref={menuSlot} className="nx-srv-menu" data-open={menu && !menu.held ? "yes" : undefined}>
             <IconButton
               icon="more"
               label={`${name} options`}
               size="sm"
-              expanded={menu !== null}
-              onClick={(event) => {
-                const box = event.currentTarget.getBoundingClientRect();
-                setMenu({ top: box.top, left: box.left, right: box.right, bottom: box.bottom });
-              }}
+              expanded={menu !== null && !menu.held}
+              onClick={(event) => setMenu({ anchor: boxOf(event.currentTarget), held: false })}
             />
           </span>
+        ) : null}
+        {/* Inside the header, so the click a held finger leaves behind on its sheet is caught there. */}
+        {menu ? (
+          phone ? (
+            <HeldSheet label={`${name} options`} head={name} items={menuItems} anchor={menu.anchor} onClose={closeMenu} />
+          ) : (
+            <Menu label={`${name} options`} items={menuItems} anchor={menu.anchor} onClose={closeMenu} />
+          )
         ) : null}
       </div>
 
@@ -173,24 +210,6 @@ export const ServerSection = memo(function ServerSection({
         </div>
       )}
 
-      {menu ? (
-        <Menu
-          label={`${name} options`}
-          items={items.map((item) => ({
-            ...item,
-            onSelect: () => {
-              item.onSelect();
-              setMenu(null);
-              backToMenuButton();
-            },
-          }))}
-          anchor={menu}
-          onClose={(reason) => {
-            setMenu(null);
-            if (reason !== "outside") backToMenuButton();
-          }}
-        />
-      ) : null}
     </section>
   );
 });

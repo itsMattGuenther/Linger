@@ -65,6 +65,53 @@ export async function middle(of: Locator): Promise<{ x: number; y: number }> {
 }
 
 /**
+ * Make the page an iPhone's as far as a tap goes (#704). WebKit on an iPhone
+ * moves the hover to where a finger tapped before it sends the tap's click,
+ * and when that hover brings something you could press into sight that
+ * wasn't (shown from `display: none`, `visibility: hidden` or `opacity: 0`),
+ * it takes the tap as a hover only: no click, until a second tap. No engine
+ * a test can run does that, so this does it in the page: it notes what could
+ * be pressed and was in sight as a finger lands, and swallows the tap's click
+ * if anything that could be pressed has come into sight by then. The click
+ * comes after the tap's focus too, so this is stricter than an iPhone.
+ * `hoverOnly` says what came into sight, each time it happened.
+ */
+export async function iPhoneTaps(page: Page) {
+  await page.evaluate(() => {
+    const PRESSABLE = "button, a[href], input, select, textarea, [role='button'], [role='menuitem']";
+    const inSight = (element: Element) => {
+      if (element.getClientRects().length === 0 || getComputedStyle(element).visibility !== "visible") return false;
+      for (let up: Element | null = element; up; up = up.parentElement) if (Number(getComputedStyle(up).opacity) === 0) return false;
+      return true;
+    };
+    const pressable = () => [...document.querySelectorAll(PRESSABLE)].filter(inSight);
+    const said: string[] = [];
+    Object.assign(window, { hoverOnly: said });
+    let landed: Set<Element> | null = null;
+    document.addEventListener("touchstart", () => (landed = new Set(pressable())), { capture: true });
+    window.addEventListener(
+      "click",
+      (event) => {
+        const before = landed;
+        landed = null;
+        if (before === null) return;
+        const appeared = pressable().filter((element) => !before.has(element));
+        if (appeared.length === 0) return;
+        said.push(appeared.map((element) => element.getAttribute("aria-label") ?? element.textContent?.trim() ?? element.tagName).join(", "));
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      },
+      { capture: true },
+    );
+  });
+}
+
+/** What `iPhoneTaps` took as a hover only: what each such tap brought into sight. */
+export async function hoverOnly(page: Page): Promise<string[]> {
+  return page.evaluate(() => ("hoverOnly" in window && Array.isArray(window.hoverOnly) ? window.hoverOnly.map(String) : []));
+}
+
+/**
  * Make the page an iPhone's as far as holding goes: its web view never sends
  * the long-press (`contextmenu`) Android's does for a finger (#686), so
  * anything held there has to be timed by the page.

@@ -16,6 +16,13 @@ export interface MenuItem {
    * plain action.
    */
   checked?: boolean;
+  /**
+   * Why it can't be chosen right now: "Can't knock while Jules is offline."
+   * It looks disabled and says why in place of its label, since a sheet has
+   * no hover to say it on (#704). The keyboard still reaches it, and
+   * choosing it does nothing.
+   */
+  unavailable?: string;
   onSelect: () => void;
 }
 
@@ -84,14 +91,19 @@ export function Menu({
     if (placed) box.current?.querySelector<HTMLElement>(ITEMS)?.focus();
   }, [itemKey, placed]);
 
+  // A sheet's scrim takes the tap that closes it instead (below): closed as
+  // the finger lands, the scrim would be gone by the tap's click, which would
+  // land on whatever was under it, a row in the list opened by mistake (#704).
+  const isSheet = sheet !== undefined;
   useEffect(() => {
+    if (isSheet) return;
     const onPointer = (event: PointerEvent) => {
       if (event.target instanceof Node && box.current?.contains(event.target)) return;
       onClose("outside");
     };
     document.addEventListener("pointerdown", onPointer, true);
     return () => document.removeEventListener("pointerdown", onPointer, true);
-  }, [onClose]);
+  }, [onClose, isSheet]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const all = [...(box.current?.querySelectorAll<HTMLElement>(ITEMS) ?? [])];
@@ -140,19 +152,20 @@ export function Menu({
           type="button"
           role={item.checked === undefined ? "menuitem" : "menuitemcheckbox"}
           aria-checked={item.checked}
+          aria-disabled={item.unavailable ? true : undefined}
           className="k-menu-item"
           data-kit="MenuItem"
           data-kit-control=""
           data-tone={item.tone}
           tabIndex={-1}
           onClick={() => {
-            item.onSelect();
+            if (!item.unavailable) item.onSelect();
           }}
         >
           <span className="k-menu-icon" aria-hidden="true">
             {item.icon ? <Icon name={item.icon} size="md" /> : null}
           </span>
-          <span className="k-menu-text">{item.label}</span>
+          <span className="k-menu-text">{item.unavailable ?? item.label}</span>
           {item.checked ? (
             <span className="k-menu-tick" aria-hidden="true">
               <Icon name="check" size="sm" />
@@ -165,7 +178,7 @@ export function Menu({
   return createPortal(
     sheet ? (
       <>
-        <div className="k-menu-scrim" aria-hidden="true" />
+        <div className="k-menu-scrim" aria-hidden="true" onClick={() => onClose("outside")} />
         {menu}
       </>
     ) : (

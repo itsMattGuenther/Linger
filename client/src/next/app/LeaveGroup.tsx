@@ -3,6 +3,8 @@
  * Leave in it, and one calm question that says what happens before it does.
  * The same on the group's row in the list and in its conversation's header,
  * and on the phone, where the menu and the question rise from the bottom.
+ * There the group's row is held for it too (#704), with the same item
+ * (`leaveItem`) and the same question (`LeaveQuestion`).
  *
  * Nothing here changes the list. Once the server has taken you out it tells
  * every window and device you have (`dm.remove`), and the row, a tab and a
@@ -10,10 +12,40 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { onPhone } from "../core/phone";
-import { Button, IconButton, Menu, type MenuAnchor } from "../kit";
+import { Button, IconButton, Menu, type MenuAnchor, type MenuItem } from "../kit";
 import { FloatingForm } from "./chat/ReportBlock";
 import "./chat/ReportBlock.css";
 import "./LeaveGroup.css";
+
+/** The menu's one item, wherever it's offered. */
+export function leaveItem(onSelect: () => void): MenuItem {
+  return { id: "leave", label: "Leave this group…", icon: "leave", tone: "danger", onSelect };
+}
+
+/**
+ * The question, floating by what it came from, or risen from the bottom on
+ * the phone. `onClose` says whether focus should go back to what opened it:
+ * not once the group is on its way out.
+ */
+export function LeaveQuestion({
+  anchor,
+  label,
+  last,
+  onLeave,
+  onClose,
+}: {
+  anchor: MenuAnchor;
+  label: string;
+  last: boolean;
+  onLeave: () => Promise<string | null>;
+  onClose: (refocus: boolean) => void;
+}) {
+  return (
+    <FloatingForm anchor={anchor} label={`Leave ${label}`} onClose={() => onClose(true)}>
+      <LeaveForm label={label} last={last} onLeave={onLeave} onLeft={() => onClose(false)} onDone={() => onClose(true)} />
+    </FloatingForm>
+  );
+}
 
 export interface LeaveGroupProps {
   /** The group, named as the list names it: "Callie and Dave". */
@@ -49,16 +81,10 @@ export function LeaveGroup({ label, last, onLeave, size = "sm" }: LeaveGroupProp
         <Menu
           label={more}
           items={[
-            {
-              id: "leave",
-              label: "Leave this group…",
-              icon: "leave",
-              tone: "danger",
-              onSelect: () => {
-                setAsking(menu);
-                setMenu(null);
-              },
-            },
+            leaveItem(() => {
+              setAsking(menu);
+              setMenu(null);
+            }),
           ]}
           anchor={menu}
           onClose={(reason) => {
@@ -69,25 +95,16 @@ export function LeaveGroup({ label, last, onLeave, size = "sm" }: LeaveGroupProp
         />
       ) : null}
       {asking ? (
-        <FloatingForm
+        <LeaveQuestion
           anchor={asking}
-          label={`Leave ${label}`}
-          onClose={() => {
+          label={label}
+          last={last}
+          onLeave={onLeave}
+          onClose={(refocus) => {
             setAsking(null);
-            backToTrigger();
+            if (refocus) backToTrigger();
           }}
-        >
-          <LeaveForm
-            label={label}
-            last={last}
-            onLeave={onLeave}
-            onLeft={() => setAsking(null)}
-            onDone={() => {
-              setAsking(null);
-              backToTrigger();
-            }}
-          />
-        </FloatingForm>
+        />
       ) : null}
     </span>
   );

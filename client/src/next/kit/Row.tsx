@@ -1,7 +1,8 @@
-import { type FocusEvent, type MouseEvent, type ReactNode, useRef, useState } from "react";
+import { type FocusEvent, type MouseEvent, type PointerEvent, type ReactNode, useRef, useState } from "react";
 import { Icon, type IconName } from "./Icon";
 import { GroupMarker, HashMark, Marker, MarkerSlot, type MarkerPerson } from "./Marker";
 import { TooltipBubble } from "./Tooltip";
+import { useHold } from "./useHold";
 import "./Row.css";
 
 /** What sits in a row's lead column. */
@@ -43,10 +44,22 @@ export interface RowProps {
   /** Small marks at the end of the first line, like who's in a room. */
   end?: ReactNode;
   /**
-   * Up to three `IconButton`s (size sm or md) shown on hover and keyboard
-   * focus. The row's text makes room for them; they never cover it.
+   * Up to three `IconButton`s (size sm or md) shown on hover, where the
+   * pointer can hover, and on keyboard focus. The row's text makes room for
+   * them; they never cover it. A finger's tap never shows them: an iPhone
+   * takes a tap that shows something to press as a hover only, and the row
+   * didn't open until a second tap (#704). The phone holds the row for
+   * them instead (`hold`).
    */
   actions?: ReactNode[];
+  /**
+   * Held with a finger, on the phone (SPEC §4.15, #704): `onHold` raises
+   * the row's actions some other way, a `Menu` sheet, which the caller hands
+   * back as `raised` while it's up. Drawn inside the row, it's where the
+   * click a lifted finger leaves behind is caught, so that click chooses
+   * nothing. A tap still activates the row.
+   */
+  hold?: { onHold: (button: HTMLButtonElement) => void; raised?: ReactNode };
   /** Something new here: the title goes bold. Weight only, never a count. */
   fresh?: boolean;
   /**
@@ -133,6 +146,7 @@ export function Row({
   trailing,
   end,
   actions,
+  hold,
   fresh = false,
   lit = false,
   selected = false,
@@ -146,6 +160,14 @@ export function Row({
   const count = Math.min(actions?.length ?? 0, 3);
   const detailNode = useRef<HTMLSpanElement | null>(null);
   const [tipAt, setTipAt] = useState<HTMLElement | null>(null);
+  const main = useRef<HTMLButtonElement | null>(null);
+  const holder = useHold(
+    () => {
+      if (main.current) hold?.onHold(main.current);
+    },
+    (target) => main.current?.contains(target) ?? false,
+    hold !== undefined && !disabled && option === undefined,
+  );
   // The second line, cut short where it shows, or not shown at all in a
   // one-line row: either way the tooltip is the way to read it.
   const cut = () => {
@@ -156,8 +178,10 @@ export function Row({
   const tip =
     detailTip && detail
       ? {
-          onPointerEnter: (event: MouseEvent<HTMLButtonElement>) => {
-            if (cut()) setTipAt(event.currentTarget);
+          // A finger is "over" the row only while it's down, which is a
+          // tap or a hold, not a look (#704).
+          onPointerEnter: (event: PointerEvent<HTMLButtonElement>) => {
+            if (event.pointerType !== "touch" && cut()) setTipAt(event.currentTarget);
           },
           onPointerLeave: () => setTipAt(null),
           onFocus: (event: FocusEvent<HTMLButtonElement>) => {
@@ -212,8 +236,11 @@ export function Row({
       data-lit={lit ? "yes" : undefined}
       data-selected={selected ? "yes" : undefined}
       data-knocked={knocked ? "yes" : undefined}
+      data-holdable={holder ? "yes" : undefined}
+      {...holder}
     >
       <button
+        ref={main}
         type="button"
         className="k-row-main"
         aria-label={label}
@@ -228,6 +255,7 @@ export function Row({
       </button>
       {count > 0 ? <span className="k-row-actions">{actions?.slice(0, 3)}</span> : null}
       {tipAt ? <TooltipBubble anchor={tipAt}>{detail}</TooltipBubble> : null}
+      {hold?.raised ?? null}
     </li>
   );
 }

@@ -5,7 +5,7 @@ import type { User } from "../../../generated/User";
 import { hostsHere } from "../../../lib/host";
 import { type DmRow, type ListModel, type PersonRow, type RoomRow, splitPeople, splitRooms } from "../../core/list";
 import { onPhone } from "../../core/phone";
-import { Button, IconButton, MarkerCluster, Name, Row, RowList, SectionLabel, VoiceGlyph } from "../../kit";
+import { Button, IconButton, MarkerCluster, type MenuAnchor, Name, Row, RowList, SectionLabel, VoiceGlyph } from "../../kit";
 import { markerFor } from "../markers";
 import { useOneLine } from "../useOneLine";
 import { useTheirTime } from "../useTheirTime";
@@ -13,7 +13,8 @@ import "./ListView.css";
 import { NewDmPicker } from "./NewDmPicker";
 import { knockOfflineLine, type KnockResult } from "../../core/knock";
 import { PersonCard } from "./PersonCard";
-import { LeaveGroup } from "../LeaveGroup";
+import { LeaveGroup, LeaveQuestion, leaveItem } from "../LeaveGroup";
+import { boxOf, HeldSheet } from "./HeldSheet";
 
 /** How long a knocked row rests before it can knock again (SPEC §4.9). */
 const KNOCKED_MS = 3_000;
@@ -97,7 +98,8 @@ export function ServerBody({
   const [folded, setFolded] = useState<ReadonlySet<Fold>>(() => new Set<Fold>(["offline", "more", "others"]));
   // One line per person, a choice in Settings → Appearance (#197). The
   // phone's rows are sized for a thumb, so it keeps two.
-  const oneLine = useOneLine() && !onPhone();
+  const phone = onPhone();
+  const oneLine = useOneLine() && !phone;
   // The host or a co-host (#424): the ways from an empty place to Hosting.
   const host = hostsHere(model.me?.user);
   const toggle = useCallback(
@@ -206,6 +208,7 @@ export function ServerBody({
       selected={card?.row.user.id === row.user.id || (showing !== null && row.dm === showing)}
       knocked={knocked.has(row.user.id)}
       hands={hands}
+      holdable={phone}
     />
   );
 
@@ -220,7 +223,14 @@ export function ServerBody({
   const leaveDm = useCallback((id: RoomId) => leaveDmNow.current?.(id) ?? Promise.resolve(null), []);
   // A group DM: a small private room, drawn with the rooms (#351).
   const groupRow = (dm: DmRow) => (
-    <GroupItem key={dm.id} dm={dm} selected={dm.id === showing} onOpen={onOpenDm ? openDm : undefined} onLeave={onLeaveDm ? leaveDm : undefined} />
+    <GroupItem
+      key={dm.id}
+      dm={dm}
+      selected={dm.id === showing}
+      holdable={phone}
+      onOpen={onOpenDm ? openDm : undefined}
+      onLeave={onLeaveDm ? leaveDm : undefined}
+    />
   );
   const rooms = splitRooms(model.rooms);
   const roomRow = (room: RoomRow) => (
@@ -390,6 +400,7 @@ const PersonItem = memo(function PersonItem({
   selected,
   knocked,
   hands,
+  holdable,
 }: {
   row: PersonRow;
   oneLine: boolean;
@@ -397,11 +408,19 @@ const PersonItem = memo(function PersonItem({
   selected: boolean;
   knocked: boolean;
   hands: PersonHands;
+  /** The phone (SPEC §4.15): held, the row raises what its buttons do (#704). */
+  holdable: boolean;
 }) {
   // Their clock, when they show it (#604): said on Knock, so you know it's
   // 3 AM for them before you knock. It never stops one.
   const clock = useTheirTime(row.user);
-  const knockLabel = knocked ? `Knocked on ${row.user.display_name}'s door` : `Knock on ${row.user.display_name}'s door`;
+  const name = row.user.display_name;
+  const knockLabel = knocked ? `Knocked on ${name}'s door` : `Knock on ${name}'s door`;
+  const knockWords = clock && !knocked ? `${knockLabel}, ${clock}` : knockLabel;
+  // Offline, Knock stays greyed out and says why (#288).
+  const offline = row.state === "offline" ? knockOfflineLine(name) : undefined;
+  // The row held on the phone, while its sheet is up.
+  const [held, setHeld] = useState<HTMLButtonElement | null>(null);
   return (
     <Row
       lead={{ kind: "person", person: markerFor(row.user, row.state) }}
@@ -434,14 +453,55 @@ const PersonItem = memo(function PersonItem({
           key="knock"
           icon="knock"
           size="sm"
-          label={clock && !knocked ? `${knockLabel}, ${clock}` : knockLabel}
+          label={knockWords}
           disabled={knocked}
           // Offline, it stays greyed out and says why, on hover, on focus
           // and to a screen reader (#288).
-          unavailable={row.state === "offline" ? knockOfflineLine(row.user.display_name) : undefined}
+          unavailable={offline}
           onClick={(event) => hands.knock(row, rowButtonOf(event.currentTarget))}
         />,
       ]}
+      // The same two from the bottom, with their name over them; Knock
+      // greyed out with its reason in place of its words (#704).
+      hold={
+        holdable
+          ? {
+              onHold: setHeld,
+              raised: held ? (
+                <HeldSheet
+                  label={`Actions for ${name}`}
+                  head={row.line ? `${name}: ${row.line}` : name}
+                  anchor={boxOf(held)}
+                  items={[
+                    {
+                      id: "card",
+                      label: `${name}'s card`,
+                      icon: "card",
+                      onSelect: () => {
+                        setHeld(null);
+                        hands.card(row, held);
+                      },
+                    },
+                    {
+                      id: "knock",
+                      label: knockWords,
+                      icon: "knock",
+                      unavailable: offline ?? (knocked ? knockLabel : undefined),
+                      onSelect: () => {
+                        setHeld(null);
+                        hands.knock(row, held);
+                      },
+                    },
+                  ]}
+                  onClose={(reason) => {
+                    setHeld(null);
+                    if (reason === "escape" || reason === "tab") held.focus();
+                  }}
+                />
+              ) : null,
+            }
+          : undefined
+      }
       onActivate={() => hands.activate(row)}
     />
   );
@@ -484,14 +544,22 @@ const RoomItem = memo(function RoomItem({
 const GroupItem = memo(function GroupItem({
   dm,
   selected,
+  holdable,
   onOpen,
   onLeave,
 }: {
   dm: DmRow;
   selected: boolean;
+  /** The phone (SPEC §4.15): held, the row raises what its ⋯ has (#704). */
+  holdable: boolean;
   onOpen?: (id: RoomId) => void;
   onLeave?: (id: RoomId) => Promise<string | null>;
 }) {
+  // The row held on the phone, while its sheet is up; then the question.
+  const [held, setHeld] = useState<HTMLButtonElement | null>(null);
+  const [asking, setAsking] = useState<MenuAnchor | null>(null);
+  const from = useRef<HTMLButtonElement | null>(null);
+  const leave = onLeave && dm.leavable ? () => onLeave(dm.id) : undefined;
   return (
     <Row
       lead={
@@ -507,7 +575,51 @@ const GroupItem = memo(function GroupItem({
       selected={selected}
       // Its ⋯ menu, with Leave (#565). Never on a one-to-one DM, which has
       // no row of its own.
-      actions={onLeave && dm.leavable ? [<LeaveGroup key="more" label={dm.label} last={dm.last} onLeave={() => onLeave(dm.id)} />] : undefined}
+      actions={leave ? [<LeaveGroup key="more" label={dm.label} last={dm.last} onLeave={leave} />] : undefined}
+      // Leave from the bottom, and then its question (#704).
+      hold={
+        holdable && leave
+          ? {
+              onHold: (button) => {
+                from.current = button;
+                setHeld(button);
+              },
+              raised: (
+                <>
+                  {held ? (
+                    <HeldSheet
+                      label={`Actions for ${dm.label}`}
+                      head={dm.label}
+                      anchor={boxOf(held)}
+                      items={[
+                        leaveItem(() => {
+                          setAsking(boxOf(held));
+                          setHeld(null);
+                        }),
+                      ]}
+                      onClose={(reason) => {
+                        setHeld(null);
+                        if (reason === "escape" || reason === "tab") held.focus();
+                      }}
+                    />
+                  ) : null}
+                  {asking ? (
+                    <LeaveQuestion
+                      anchor={asking}
+                      label={dm.label}
+                      last={dm.last}
+                      onLeave={leave}
+                      onClose={(refocus) => {
+                        setAsking(null);
+                        if (refocus) from.current?.focus();
+                      }}
+                    />
+                  ) : null}
+                </>
+              ),
+            }
+          : undefined
+      }
       onActivate={onOpen ? () => onOpen(dm.id) : undefined}
     />
   );

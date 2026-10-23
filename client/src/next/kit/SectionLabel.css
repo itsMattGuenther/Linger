@@ -66,8 +66,17 @@ button.k-section-toggle:hover .k-section-hint {
 }
 
 .k-section[data-open="no"] .k-section-hint,
-button.k-section-toggle:is(:hover, :focus-visible) .k-section-hint {
+button.k-section-toggle:focus-visible .k-section-hint {
   visibility: visible;
+}
+
+/* "hide" on hover only where the pointer can hover: a tap's hover showing
+   something is what an iPhone takes as a hover only (#704), and on a touch
+   screen the hover stays after the tap. */
+@media (hover: hover) {
+  button.k-section-toggle:hover .k-section-hint {
+    visibility: visible;
+  }
 }
 
 .k-section-action {

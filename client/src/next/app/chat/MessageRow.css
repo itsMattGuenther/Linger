@@ -223,6 +223,16 @@
   opacity: 1;
 }
 
+/* On the phone a message is held for its actions (SPEC §4.15), so its ···
+   never shows for a finger's tap (#704): an iPhone takes a tap whose hover
+   shows something to press as a hover only, with no click, so a link, a name
+   or a picture in a message took two taps. Out of sight, it's out of the
+   finger's way too. It shows for the keyboard and while its menu is open.
+   A computer's touch screen keeps it, where it's the only way to them. */
+:root[data-shell="phone"] .nx-msg:not(:has(:focus-visible), [data-menu="yes"]) .nx-msg-actions {
+  visibility: hidden;
+}
+
 /* A reply's quote: above the name, part of its own message (L-17). */
 .nx-quote {
   grid-area: quote;

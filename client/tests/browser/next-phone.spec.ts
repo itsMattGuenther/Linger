@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
-import { finger, middle, noLongPress, spread } from "./finger";
+import { finger, hoverOnly, iPhoneTaps, middle, noLongPress, spread } from "./finger";
 import { still } from "./still";
 
 // The phone app (SPEC §4.15): the same list window, opened as the phone's one
@@ -781,6 +781,266 @@ test.describe("held with a finger, on an iPhone too", () => {
     await touch.up();
     await expect(page.getByRole("menu")).toHaveCount(0);
     await expect(pill).toHaveAttribute("aria-pressed", "true");
+  });
+});
+
+// A row in the list opens with one tap (#704). On an iPhone a person's row and
+// a group's took two: the first one's hover showed the row's buttons, and an
+// iPhone takes a tap whose hover shows something to press as a hover only.
+// No engine here has that rule, so `iPhoneTaps` (finger.ts) puts it in the
+// page. A touch screen is a device with no hover, `(hover: none)`, in
+// Chromium and WebKit alike; Chromium moves the hover for a tap, as an
+// iPhone does, and Playwright's WebKit doesn't, so Chromium is the one that
+// catches a row showing its buttons for a tap.
+test.describe("one tap opens a row, on an iPhone's rule for taps (#704)", () => {
+  test.use({ isMobile: true, hasTouch: true, userAgent: IPHONE });
+
+  const rows = (page: Page, list: string) => page.getByRole("list", { name: list, exact: true });
+  /** Every row's buttons, and whether any of them is showing. */
+  const buttonsShowing = (page: Page) =>
+    page.locator(".k-row-actions").evaluateAll((all) => all.filter((actions) => getComputedStyle(actions).display !== "none").length);
+
+  test("one tap on a person's row or a group's opens it, and never shows the row's buttons", async ({ page }) => {
+    await phone(page);
+    expect(await page.evaluate(() => matchMedia("(hover: none)").matches), "a touch screen has no hover").toBe(true);
+    await iPhoneTaps(page);
+
+    await rows(page, "People here").getByRole("button", { name: /^Eli\b/ }).tap();
+    await expect(screen(page)).toBeVisible();
+    await expect(title(page)).toContainText("Eli");
+    expect(await hoverOnly(page), "taps taken as a hover only").toEqual([]);
+    await back(page).tap();
+    await expect(list(page)).toBeVisible();
+    expect(await buttonsShowing(page), "back on the list, the row's buttons").toBe(0);
+
+    await rows(page, "Rooms").getByRole("button", { name: /^Eli and Sam/ }).tap();
+    await expect(screen(page)).toBeVisible();
+    await expect(title(page)).toContainText("Eli and Sam");
+    expect(await hoverOnly(page), "taps taken as a hover only").toEqual([]);
+    await back(page).tap();
+    await expect(list(page)).toBeVisible();
+    expect(await buttonsShowing(page), "back on the list, the row's buttons").toBe(0);
+
+    // A room, which has no buttons, as before.
+    await room(page, "general").tap();
+    await expect(screen(page)).toBeVisible();
+    expect(await hoverOnly(page)).toEqual([]);
+  });
+
+  test("one tap folds a server, whose ⋯ never shows for it", async ({ page }) => {
+    await open(page, "?shell=phone");
+    await settled(page);
+    await iPhoneTaps(page);
+    const server = page.locator(".nx-srv").first();
+    const toggle = server.locator(".nx-srv-toggle");
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await toggle.tap();
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await toggle.tap();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(await hoverOnly(page), "taps taken as a hover only").toEqual([]);
+    // Its end, where the ⋯ is out of sight, folds it too: nothing there to press.
+    const box = await toggle.boundingBox();
+    if (!box) throw new Error("no header");
+    await page.touchscreen.tap(box.x + box.width - 12, box.y + box.height / 2);
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByRole("menu")).toHaveCount(0);
+  });
+
+  test("one tap on a section's heading folds it, and one on a name or a link in a message does what it does", async ({ page }) => {
+    await open(page, "?one&guest&shell=phone");
+    await settled(page);
+    await iPhoneTaps(page);
+    const people = page.getByRole("button", { name: /^People\b/ });
+    await people.tap();
+    await expect(people).toHaveAttribute("aria-expanded", "false");
+    await people.tap();
+    await expect(people).toHaveAttribute("aria-expanded", "true");
+
+    await room(page, "general").tap();
+    await expect(page.getByRole("log")).toContainText("Putting it on now.");
+    const name = page.locator(".nx-msg-person").first();
+    await name.tap();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    expect(await hoverOnly(page), "taps taken as a hover only").toEqual([]);
+  });
+});
+
+// Held with a finger, a person's row or a group's raises what its buttons do,
+// from the bottom, as a held message does (#686, #704). Chromium only, where a
+// test can hold a finger down (finger.ts); the long-press is taken away, as an
+// iPhone sends none.
+test.describe("a row held with a finger raises its actions from the bottom (#704)", () => {
+  test.use({ isMobile: true, hasTouch: true, userAgent: IPHONE });
+  test.skip(({ browserName }) => browserName !== "chromium", "Only Chromium lets a test hold a finger down");
+
+  const sheet = (page: Page) => page.getByRole("menu");
+  const items = (page: Page) => sheet(page).locator("[data-kit='MenuItem']");
+  const person = (page: Page, list: string, who: string) =>
+    page.getByRole("list", { name: list, exact: true }).getByRole("button", { name: new RegExp(`^${who},`) });
+  const knocks = async (page: Page) => (await did(page)).filter((line) => line.endsWith("/knock"));
+
+  async function onTheList(page: Page) {
+    await phone(page);
+    await noLongPress(page);
+  }
+
+  test("a person's: their card and Knock under their name; a tap opens them instead, and the sheet's choices are taps", async ({ page }) => {
+    await onTheList(page);
+    const touch = await finger(page);
+    const eli = person(page, "People here", "Eli");
+    await still(eli);
+
+    await touch.down(await middle(eli));
+    await expect(sheet(page)).toBeVisible();
+    await touch.up();
+    await expect(sheet(page)).toHaveAccessibleName("Actions for Eli");
+    await expect(sheet(page).locator(".k-menu-head")).toHaveText(/^Eli/);
+    await expect(items(page)).toHaveText(["Eli's card", "Knock on Eli's door"]);
+    // Nothing chosen, nothing opened, by the hold.
+    await expect(screen(page)).toHaveCount(0);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    expect(await sticksOut(page), "the sheet").toEqual([]);
+
+    // Its card, beside the row.
+    await sheet(page).getByRole("menuitem", { name: "Eli's card" }).tap();
+    await expect(sheet(page)).toHaveCount(0);
+    await expect(page.getByRole("dialog", { name: "Eli" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+
+    // Knock, from the sheet: knocked once, and the row shakes.
+    await touch.down(await middle(eli));
+    await expect(sheet(page)).toBeVisible();
+    await touch.up();
+    await sheet(page).getByRole("menuitem", { name: "Knock on Eli's door" }).tap();
+    await expect(sheet(page)).toHaveCount(0);
+    await expect.poll(() => knocks(page)).toHaveLength(1);
+    await expect(page.locator(".k-row[data-knocked='yes']")).toHaveCount(1);
+
+    // A tap on the dimmed page closes it, and opens nothing under it: the
+    // list's rows are everywhere there.
+    await touch.down(await middle(eli));
+    await expect(sheet(page)).toBeVisible();
+    await touch.up();
+    await page.locator(".k-menu-scrim").tap({ position: { x: 200, y: 300 } });
+    await expect(sheet(page)).toHaveCount(0);
+    await page.waitForTimeout(300);
+    await expect(screen(page)).toHaveCount(0);
+
+    // A tap is the person, with no sheet.
+    await eli.tap();
+    await expect(screen(page)).toBeVisible();
+    await page.waitForTimeout(800);
+    await expect(sheet(page)).toHaveCount(0);
+  });
+
+  test("offline, Knock is greyed out and says why, and choosing it knocks nothing", async ({ page }) => {
+    await onTheList(page);
+    await page.getByRole("button", { name: /^Offline\b/ }).tap();
+    const gone = page.getByRole("list", { name: "Offline", exact: true }).getByRole("button").first();
+    await still(gone);
+    const who = (await gone.getAttribute("aria-label"))?.split(",")[0] ?? "";
+    const touch = await finger(page);
+    await touch.down(await middle(gone));
+    await expect(sheet(page)).toBeVisible();
+    await touch.up();
+    const knock = sheet(page).getByRole("menuitem", { name: `Can't knock while ${who} is offline.` });
+    await expect(knock).toHaveAttribute("aria-disabled", "true");
+    // Greyed out, it isn't enabled as far as a test goes; pressed all the same.
+    await knock.tap({ force: true });
+    await page.waitForTimeout(300);
+    expect(await knocks(page)).toEqual([]);
+    await expect(sheet(page)).toBeVisible();
+  });
+
+  test.describe("low on the screen, where the sheet rises under the finger", () => {
+    // Short enough that Sam, the last row, scrolled to the list's end, is
+    // where the sheet's actions rise.
+    test.use({ viewport: { width: 411, height: 700 } });
+
+    test("the click a hold leaves behind chooses nothing from the sheet, and the next tap does", async ({ page }) => {
+      await onTheList(page);
+      const sam = person(page, "Away", "Sam");
+      await sam.evaluate((row) => row.scrollIntoView({ block: "end" }));
+      await still(sam);
+      const at = await middle(sam);
+      const touch = await finger(page);
+      await touch.down(at);
+      await expect(sheet(page)).toBeVisible();
+      const under = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest("[role='menuitem']")?.textContent ?? null, at);
+      expect(under, "an action of the sheet's is under the finger").not.toBeNull();
+      await touch.up();
+      await page.waitForTimeout(300);
+      await expect(sheet(page)).toBeVisible();
+      await expect(items(page)).toHaveText(["Sam's card", "Knock on Sam's door"]);
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      expect(await knocks(page)).toEqual([]);
+      await expect(screen(page)).toHaveCount(0);
+
+      await sheet(page).getByRole("menuitem", { name: "Knock on Sam's door" }).tap();
+      await expect.poll(() => knocks(page)).toHaveLength(1);
+    });
+  });
+
+  test("a group's: Leave under its name, then its question; Stay changes nothing, Leave leaves", async ({ page }) => {
+    await onTheList(page);
+    const group = page.getByRole("list", { name: "Rooms" }).getByRole("button", { name: /^Eli and Sam/ });
+    await still(group);
+    const touch = await finger(page);
+    await touch.down(await middle(group));
+    await expect(sheet(page)).toBeVisible();
+    await touch.up();
+    await page.waitForTimeout(300);
+    await expect(sheet(page)).toHaveAccessibleName("Actions for Eli and Sam");
+    await expect(sheet(page).locator(".k-menu-head")).toHaveText("Eli and Sam");
+    await expect(items(page)).toHaveText(["Leave this group…"]);
+    await expect(screen(page)).toHaveCount(0);
+    expect(await sticksOut(page), "the sheet").toEqual([]);
+
+    await sheet(page).getByRole("menuitem", { name: "Leave this group…" }).tap();
+    const ask = page.getByRole("dialog", { name: "Leave Eli and Sam" });
+    await expect(ask).toContainText("Nobody can add you back");
+    expect(await sticksOut(page), "the question").toEqual([]);
+    await ask.getByRole("button", { name: "Stay" }).tap();
+    await expect(ask).toHaveCount(0);
+    await expect(group).toBeVisible();
+
+    await touch.down(await middle(group));
+    await expect(sheet(page)).toBeVisible();
+    await touch.up();
+    await sheet(page).getByRole("menuitem", { name: "Leave this group…" }).tap();
+    await ask.getByRole("button", { name: "Leave", exact: true }).tap();
+    await expect(group).toHaveCount(0);
+    expect((await did(page)).filter((line) => line.startsWith("leave "))).toEqual(["leave d-eli-sam"]);
+
+    // A room has nothing to raise.
+    const general = room(page, "general");
+    await touch.down(await middle(general));
+    await page.waitForTimeout(800);
+    await touch.up();
+    await expect(sheet(page)).toHaveCount(0);
+  });
+
+  test("a server's header: Quiet and the order under its name, and a tap still folds it", async ({ page }) => {
+    await open(page, "?shell=phone");
+    await settled(page);
+    await noLongPress(page);
+    const toggle = page.locator(".nx-srv").first().locator(".nx-srv-toggle");
+    const name = (await page.locator(".nx-srv").first().getAttribute("aria-label")) ?? "";
+    await still(toggle);
+    const touch = await finger(page);
+    await touch.down(await middle(toggle));
+    await expect(sheet(page)).toBeVisible();
+    await touch.up();
+    await page.waitForTimeout(300);
+    await expect(sheet(page).locator(".k-menu-head")).toHaveText(name);
+    await expect(items(page)).toHaveText(["Quiet", "Move down"]);
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(await sticksOut(page), "the sheet").toEqual([]);
+    await sheet(page).getByRole("menuitemcheckbox", { name: "Quiet" }).tap();
+    await expect(sheet(page)).toHaveCount(0);
+    await expect(page.locator(".nx-srv").first()).toHaveAttribute("data-quiet", "yes");
   });
 });
 

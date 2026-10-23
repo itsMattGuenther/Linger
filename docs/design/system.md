@@ -408,11 +408,27 @@ margin 6 | padding 10 | lead slot 14 | gap 8 | text column … | actions
     and its `label` says it for screen readers.
   - `knocked` means you just knocked on this person's door: the row gives one
     small shake (two slow durations long, so none under reduced motion).
-- **Actions:** up to three md `IconButton`s, shown on hover and keyboard focus,
-  and while one of them has its menu open (`expanded`), so the menu never points
-  at nothing (#565). While they show, the text column gives up exactly their
-  width, so they never cover text, and the note steps aside. A group DM's row has
-  one, its ⋯ (`app/LeaveGroup.tsx`).
+- **Actions:** up to three md `IconButton`s, shown on keyboard focus, and
+  while one of them has its menu open (`expanded`), so the menu never points
+  at nothing (#565). Where the pointer can hover (`@media (hover: hover)`),
+  they show on hover too, and while the row has focus at all. While they show,
+  the text column gives up exactly their width, so they never cover text, and
+  the note steps aside. A group DM's row has one, its ⋯ (`app/LeaveGroup.tsx`).
+- **Never for a tap** (#704): a finger's tap shows no actions, by its hover or
+  by its focus. An iPhone takes a tap whose hover shows something you could
+  press as a hover only, with no click, so a person's row or a group's opened
+  on the second tap while a room opened on the first. Anything else that
+  shows on hover follows the same rule: a server header's ⋯ and a section's
+  "hide" show on hover only where there's hover, and on the phone a message's
+  ··· never shows for a tap.
+- **`hold`** (the phone, SPEC §4.15): a row held with a finger raises its
+  actions as a `Menu` `sheet` instead, with the timing and the swallowed
+  click of a held message (#686, `kit/useHold.ts`); a tap still opens the
+  row. The sheet is drawn inside the row (`raised`), which is where the
+  lifted finger's click is caught. A person's row raises their card and
+  Knock, Knock greyed out with its reason when they're offline; a group's
+  raises Leave this group…, and then its question. A server's header is held
+  the same way for Quiet and the order.
 - **The row is a button:** Enter or a click activates it. A person's row
   opens them beside the list (#351); `onDoubleActivate` is there for a row
   that needs a second action.
@@ -431,7 +447,7 @@ A small uppercase label over part of a list.
   above a group.
 - **Folding:** with `open` and `onToggle` it is a 24px toggle
   (`aria-expanded`). It says "show" while folded and "hide" on hover while
-  open.
+  open, where the pointer can hover, and on keyboard focus.
 - **`lit`**: folded over a DM you haven't read (#291), it is lit in the lamp
   as the row would be, so a folded section still shows it. Its "show" is drawn
   in the secondary grey there, because muted text falls under 4.5:1 on the
@@ -519,7 +535,13 @@ message's Reply, Edit and Delete.
   the iPhone's web view sends no long-press for a finger; Android's, which
   does, is the same hold (#686). The click a lifted finger leaves behind
   lands on the risen sheet and is swallowed, so it chooses nothing. A tap
-  on the scrim, or Back, closes it.
+  on the scrim, or Back, closes it. The scrim takes that tap's click, so it
+  never lands on what was under it, a row in the list opened by mistake
+  (#704). The list's rows and a server's header are held for theirs too
+  (Row, `hold`).
+- **`unavailable`** greys an item out and puts the reason in place of its
+  label ("Can't knock while Jen is offline."), since a sheet has no hover to
+  say it on. The keyboard reaches it, and choosing it does nothing.
 
 ### OptionList
 
@@ -1097,6 +1119,8 @@ it catches, and nowhere else (AGENTS.md hard rule 4).
 | Menus open on their first item, move and wrap with the arrows, confirm in place, and close on Escape, Tab or a click elsewhere; items are 32px | `kit.spec.ts` › a menu opens on its first item |
 | A reaction pill held on a touch screen lists who left it, by name, over the pill, and adds nothing; it isn't the message's sheet; Escape gives the focus back to the pill and a tap elsewhere closes it; a tap still adds yours and takes it back; a finger that moves opens nothing (#573) | `next-reactions.spec.ts` › held on a phone; `core/hold.test.ts` |
 | A message held with a finger on the phone opens its sheet while the finger is down, with no long-press from the web view, as on an iPhone; a tap or a scroll opens nothing; the click the lifted finger leaves behind chooses nothing from the sheet, and the next tap does; a pill held is still who left it, not the sheet (#686) | `next-phone.spec.ts` › held with a finger, on an iPhone too; `core/hold.test.ts` |
+| One tap opens a person's row, a group's, a room's, folds a server and a section, and does what a name in a message does, under an iPhone's rule for taps put in the page (a tap whose hover brings something to press into sight is a hover only); no row's buttons show for a tap or after Back; a touch screen is `(hover: none)` in both engines (#704) | `next-phone.spec.ts` › one tap opens a row, on an iPhone's rule for taps; `iPhoneTaps` in `finger.ts` |
+| A person's row held with a finger raises their card and Knock under their name, Knock greyed out with its reason and choosing nothing when they're offline; a group's raises Leave this group… and then its question, Stay changing nothing; a server's header raises Quiet and the order and still folds for a tap; a room raises nothing; the click the lifted finger leaves on the sheet chooses nothing, the next tap does, and a tap on the dimmed page opens nothing under it (#704) | `next-phone.spec.ts` › a row held with a finger raises its actions from the bottom |
 | The phone app never zooms: its page's viewport forbids it (`maximum-scale=1`, `user-scalable=no`), which also stops an iPhone zooming in on the message box, and two fingers spread apart change nothing (#689, #688); at 320 wide nothing reaches past the edge or scrolls sideways on the list, a room with a long unbreakable word, the message box with words typed, voice in the room and on the list, a DM, Media, Search or any section of Settings (#688) | `next-phone.spec.ts` › the phone's page never zooms; on a phone 320 wide, the narrowest |
 | A photo in the viewer zooms under fingers and the page doesn't: two fingers pinch it, up to four times, around the point between them; one drags a zoomed one, leaving no gap at its edges; a double tap zooms in where it lands and the next back out; a tap closes it only while it isn't zoomed, and not when it's the first of two; a pinch let go of near where it began goes back (#689) | `next-phone.spec.ts` › a photo opened from a message zooms under your fingers; `core/zoom.test.ts` |
 | On an iPhone a finger swiped in from the left edge goes back (#697): past a third of the width a room slides off with the finger, the list showing under it, and the list is back; let go short of that it slides back into place; a finger starting further in moves nothing; one going up or down from the edge still scrolls the conversation; a message held there still opens its actions, and moving on after goes nowhere; a search hit goes back to Search, then the list; a Settings section to its sections, then those to the list under them; a zoomed photo is dragged, and an unzoomed one slides off and closes. A flick goes back from short of a third and a flick back to the left doesn't; a hold, a pinch, or a finger moving up, down or left is never a swipe. Android's Back is never listened for on an iPhone, and on Android the page adds no swipe of its own, so Back goes back once | `next-phone.spec.ts` › on an iPhone, a swipe in from the left edge goes back; on Android, the swipe in from the edge is Android's Back; a photo opened from a message zooms under your fingers › on an iPhone; `core/edgeSwipe.test.ts`, `core/phone.test.ts` |

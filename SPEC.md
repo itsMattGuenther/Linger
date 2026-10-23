@@ -1049,7 +1049,11 @@ and its swipe in from the screen's edge; on an iPhone, which has no Back of its 
 with a finger swiped in from the left edge, as in an iPhone's own apps (#697). The
 screen being left follows the finger, with what's under it showing, and goes back
 when let go far enough over or flicked, or slides back into place. Only the iPhone's
-page does that swipe itself: on Android it would go back twice. It has no Interface
+page does that swipe itself: on Android it would go back twice. A tap opens
+what it's on, the first time. A phone has no hover, so what a computer shows
+on hover is held for instead, and rises from the bottom: a message's actions
+(#686), a person's card and Knock from their row, Leave from a group's, and
+Quiet and the order from a server's name (#704). It has no Interface
 size of its own: the phone's display size and text size settings do that job (on
 Android; an iPhone's Text Size doesn't reach Linger yet, #690). It doesn't zoom with two fingers as a web
 page does, either (#689): a zoomed screen is only wider than the phone and drags
