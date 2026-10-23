@@ -24,6 +24,7 @@
  *   name gets one from when it was pasted (`pasted-image-…png`).
  */
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { isLinuxApp } from "../phone";
 
 /** What a paste event carries: the part of `DataTransfer` read here. */
 export interface PastedData {
@@ -147,7 +148,7 @@ export function shellImage(answer: unknown, at: Date): File | null {
 
 /** The Linux app's engine, WebKitGTK, which never shows the page a picture on the clipboard. */
 export function engineHidesClipboardImages(userAgent: string, desktop: boolean): boolean {
-  return desktop && /\bLinux\b/.test(userAgent) && !/\bAndroid\b/.test(userAgent);
+  return isLinuxApp(userAgent, desktop);
 }
 
 /** The picture on the clipboard, from the desktop shell, or null when there's none. */

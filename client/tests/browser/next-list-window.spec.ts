@@ -1131,7 +1131,7 @@ test("a computer that can't keep sign-ins keeps saying so under the list, once s
   await form.getByRole("button", { name: "Sign in" }).click();
   await expect(page.locator("[data-screen='list']")).toBeVisible();
   await expect(notes(page)).toHaveText(["Sign-ins aren't remembered on this computer."]);
-  await expect(notes(page)).toHaveAttribute("title", /No usable keyring/);
+  await expect(notes(page)).toHaveAttribute("title", /^Platform secure storage failure: zbus error/);
 });
 
 test("the foot's lines fit the list: nothing clipped or sideways, the words lined up", async ({ page }) => {

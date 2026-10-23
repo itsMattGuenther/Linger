@@ -51,6 +51,21 @@ export function newPasswordReady(password: string): boolean {
 
 export { displayNameProblem, MIN_PASSWORD_CHARS, type NameSaid };
 
+/**
+ * What the sign-in screen says when this device can't keep a sign-in (SIGN-9,
+ * #702): what it means for you, in plain words. The system's own reason is
+ * D-Bus and platform jargon, and was most of what a new person read on the
+ * first screen, so it never goes in the sentence: the screen puts it on the
+ * line's tooltip, as the list's foot does (`core/notes.ts`). `device` is
+ * `thisDevice` (`core/phone.ts`). On Linux a keyring is something you can
+ * turn on, so there it says how (`isLinuxApp`); on Windows, a Mac or a phone
+ * the store is part of the system, and there's nothing to suggest.
+ */
+export function keyringWords(device: string, linux: boolean): string {
+  const said = `Linger can't remember your sign-in on ${device}, so you'll sign in each time it starts.`;
+  return linux ? `${said} Turning on a keyring, such as GNOME Keyring or KWallet, fixes that.` : said;
+}
+
 /** The server calls that decide which form comes after the paste box. */
 export interface Door {
   setupPreview(token: string): Promise<{ valid: boolean }>;

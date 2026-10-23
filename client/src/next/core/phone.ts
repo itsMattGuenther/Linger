@@ -33,6 +33,15 @@ export function onIPhone(): boolean {
   return onPhone() && isIPhone(navigator.userAgent, navigator.maxTouchPoints);
 }
 
+/**
+ * Whether this is the Linux app, from its engine's user agent (WebKitGTK
+ * names Linux); `shell` is whether the page is in Linger's own shell rather
+ * than a browser. Android's engine names Linux too, so it's left out.
+ */
+export function isLinuxApp(userAgent: string, shell: boolean): boolean {
+  return shell && /\bLinux\b/.test(userAgent) && !/\bAndroid\b/.test(userAgent);
+}
+
 /** What the device is called where a sentence names it. */
 export function thisDevice(phone: boolean): string {
   return phone ? "this phone" : "this computer";

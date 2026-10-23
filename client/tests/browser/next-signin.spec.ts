@@ -8,6 +8,13 @@ test.use({ viewport: { width: 340, height: 820 } });
 
 const HOME = "https://good-company.example";
 
+/** Linux: WebKitGTK, as the packaged app reports itself. */
+const WEBKITGTK = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15";
+/** Windows: WebView2, as the packaged app reports itself. */
+const WEBVIEW2 = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0";
+/** The Android app's engine, which names Linux too. */
+const ANDROID = "Mozilla/5.0 (Linux; Android 16; Pixel 9 Pro Build/BP2A.250605.031; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/141.0.0.0 Mobile Safari/537.36";
+
 async function open(page: Page, query = "?one&signedout") {
   await page.goto(`/tests/fixtures/next-list-window.html${query}`);
   await page.evaluate(() => document.fonts.ready);
@@ -284,9 +291,42 @@ test("a sign-in that ended on its own says why, first thing", async ({ page }) =
   expect(await did(page)).toContain(`forget ${HOME}`);
 });
 
-test("a computer that can't keep a sign-in says so before anybody's caught out", async ({ page }) => {
-  await open(page, "?one&nokeyring");
-  await expect(page.getByText("No usable keyring on this computer (no secret service). You'll have to sign in again next time.")).toBeVisible();
+// A computer that can't keep a sign-in says so before anybody's caught out
+// (SIGN-9), in plain words (#702). The system's own text is what the fixture's
+// shell hands back; it's kept on the line's tooltip, never in the sentence.
+const SYSTEM_TEXT = /^Platform secure storage failure: zbus error: org\.freedesktop\.DBus\.Error\.ServiceUnknown/;
+const NOT_KEPT = "Linger can't remember your sign-in on this computer, so you'll sign in each time it starts.";
+const keyringLine = (page: Page) => page.locator(".nx-signin-keyring");
+
+test.describe("on Linux, where a keyring can be turned on (#702)", () => {
+  test.use({ userAgent: WEBKITGTK });
+
+  test("a computer that can't keep a sign-in says so in plain words, and how to fix it", async ({ page }) => {
+    await open(page, "?one&nokeyring");
+    await expect(keyringLine(page)).toHaveText(`${NOT_KEPT} Turning on a keyring, such as GNOME Keyring or KWallet, fixes that.`);
+    await expect(keyringLine(page)).toHaveAttribute("title", SYSTEM_TEXT);
+    await expect(page.getByText(/secure storage|zbus|freedesktop/)).toHaveCount(0);
+  });
+});
+
+test.describe("on Windows, where there's no keyring to turn on (#702)", () => {
+  test.use({ userAgent: WEBVIEW2 });
+
+  test("a computer that can't keep a sign-in says so in plain words alone", async ({ page }) => {
+    await open(page, "?one&nokeyring");
+    await expect(keyringLine(page)).toHaveText(NOT_KEPT);
+    await expect(keyringLine(page)).toHaveAttribute("title", SYSTEM_TEXT);
+  });
+});
+
+test.describe("on an Android phone, whose engine also says Linux (#702)", () => {
+  test.use({ userAgent: ANDROID });
+
+  test("a phone that can't keep a sign-in says so, with nothing about a computer's keyring", async ({ page }) => {
+    await open(page, "?one&nokeyring&shell=phone");
+    await expect(keyringLine(page)).toHaveText("Linger can't remember your sign-in on this phone, so you'll sign in each time it starts.");
+    await expect(keyringLine(page)).toHaveAttribute("title", SYSTEM_TEXT);
+  });
 });
 
 test("every form fits the list window: nothing clipped, nothing sideways, edges lined up", async ({ page }) => {

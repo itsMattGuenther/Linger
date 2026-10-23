@@ -90,17 +90,21 @@ pub enum SessionWrite {
     Unavailable { reason: String },
 }
 
-/// Turn a keyring failure into something a person can act on. The underlying
-/// messages are D-Bus and platform jargon, so they go in parentheses after a
-/// plain sentence rather than being shown raw.
-#[cfg(desktop)]
+/// Why a keyring call failed, in the system's own words. Those are D-Bus and
+/// platform jargon, so nobody is shown them as a sentence: the frontend says
+/// what it means in plain words (`core/signin.ts` `keyringWords`, and the
+/// list's foot) and keeps this for the line's tooltip (#702). It goes in the
+/// log too, for whoever is looking into why sign-ins aren't kept.
 fn explain(err: &StoreError) -> String {
-    format!("No usable keyring on this computer ({err}).")
+    noted(err.to_string())
 }
 
-#[cfg(mobile)]
-fn explain(err: &StoreError) -> String {
-    format!("This phone's secure storage didn't answer ({err}).")
+/// Write a reason the keyring couldn't be used to the log (standard error, as
+/// the rest of the shell does) and hand it back. A reason is the keyring's own
+/// text or ours, never a token: none of the store's errors carry the secret.
+fn noted(reason: String) -> String {
+    eprintln!("linger: sign-ins aren't kept: {reason}");
+    reason
 }
 
 /// Open the Android store, once: Tauri has already handed the app's context
@@ -186,7 +190,9 @@ fn put_index(ns: &str, urls: &[String]) -> SessionWrite {
     match serde_json::to_string(urls) {
         Ok(json) => write(&index_account(ns), &json),
         Err(err) => SessionWrite::Unavailable {
-            reason: format!("Couldn't prepare the server list for storage ({err})."),
+            reason: noted(format!(
+                "Couldn't prepare the server list for storage ({err})."
+            )),
         },
     }
 }
@@ -251,7 +257,7 @@ fn save_in(ns: &str, session: &StoredSession) -> SessionWrite {
         Ok(json) => json,
         Err(err) => {
             return SessionWrite::Unavailable {
-                reason: format!("Couldn't prepare the session for storage ({err})."),
+                reason: noted(format!("Couldn't prepare the session for storage ({err}).")),
             }
         }
     };
@@ -311,6 +317,15 @@ mod tests {
             SessionsLoad::Found { .. } | SessionsLoad::Empty => {}
             SessionsLoad::Unavailable { reason } => assert!(!reason.is_empty()),
         }
+    }
+
+    /// The frontend builds the sentence a person reads (#702), so a failure
+    /// comes back as the store's own text with no sentence wrapped round it,
+    /// for the tooltip and the log.
+    #[test]
+    fn a_failure_is_the_stores_own_words() {
+        let err = StoreError::NoEntry;
+        assert_eq!(explain(&err), err.to_string());
     }
 
     #[test]

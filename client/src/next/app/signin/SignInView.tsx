@@ -1,7 +1,10 @@
+import { isTauri } from "@tauri-apps/api/core";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { hostOf } from "../../../lib/link";
+import { isLinuxApp, onPhone, thisDevice } from "../../core/phone";
 import {
   displayNameProblem,
+  keyringWords,
   loginReady,
   MIN_PASSWORD_CHARS,
   type NameSaid,
@@ -20,7 +23,11 @@ export interface SignInViewProps {
   actions: SignInActions;
   /** Why the last sign-in ended, when it ended on its own (SIGN-11). */
   notice?: string | null;
-  /** This computer can't remember a sign-in between runs (SIGN-9). */
+  /**
+   * This computer can't remember a sign-in between runs (SIGN-9): the
+   * system's own reason, for the line's tooltip. The line says it in words of
+   * its own (#702, `keyringWords`).
+   */
   keyringNotice?: string | null;
   /** Adding another server: the way back to the list. Left out when there's nothing to go back to. */
   onCancel?: () => void;
@@ -66,8 +73,8 @@ export function SignInView({ actions, notice, keyringNotice, onCancel, onClose, 
         {step.kind === "setup" ? <Setup step={step} setup={actions.setup} onBack={back} /> : null}
         {step.kind === "newPassword" ? <NewPassword step={step} newPassword={actions.newPassword} onBack={back} /> : null}
         {keyringNotice ? (
-          <p className="nx-signin-keyring" role="status">
-            {keyringNotice} You'll have to sign in again next time.
+          <p className="nx-signin-keyring" role="status" title={keyringNotice}>
+            {keyringWords(thisDevice(onPhone()), isLinuxApp(navigator.userAgent, isTauri()))}
           </p>
         ) : null}
       </div>

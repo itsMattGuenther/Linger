@@ -135,7 +135,9 @@ if (query.has("motd")) {
 const blocks = new Set<string>(query.has("blocked") ? [people.jules.id] : []);
 /** The sign-ins saved on this computer: all three, or with `?one` The Good Company alone. */
 const saved = query.has("one") ? [SERVER] : [SERVER, GUILD, LISBON];
-const NO_KEYRING = "No usable keyring on this computer (no secret service).";
+/** What the shell says with no Secret Service running (`src-tauri/src/secrets.rs`): the system's own words. */
+const NO_KEYRING =
+  "Platform secure storage failure: zbus error: org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.secrets was not provided by any .service files";
 const names: Record<string, { name: string; accent: string | null }> = { [SERVER]: { name: SERVER_NAME, accent: "amber" }, ...serverInfo };
 // `?servers=30`: that many servers signed in at once (#512), the three and
 // more like Casa da Ribeira, each its own.

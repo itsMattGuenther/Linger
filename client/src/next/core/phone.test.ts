@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { followKeyboard, isIPhone, isPhone, type Online, type Showing, textScale, thisDevice, type Visible, watchBackground, watchNetwork } from "./phone";
+import { followKeyboard, isIPhone, isLinuxApp, isPhone, type Online, type Showing, textScale, thisDevice, type Visible, watchBackground, watchNetwork } from "./phone";
 import { windowRole } from "./role";
 
 describe("the phone app", () => {
@@ -29,6 +29,16 @@ describe("the phone app", () => {
     expect(isIPhone("Mozilla/5.0 (Linux; Android 16; Pixel 9 Pro Build/BP2A.250605.031; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/141.0.0.0 Mobile Safari/537.36", 5)).toBe(false);
     expect(isIPhone("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)", 0)).toBe(false);
     expect(isIPhone("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 Edg/141.0.0.0", 10)).toBe(false);
+  });
+
+  it("knows the Linux app from Android, Windows and a browser, though Android's engine names Linux too (#702)", () => {
+    const webkitgtk = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15";
+    expect(isLinuxApp(webkitgtk, true)).toBe(true);
+    // The same engine in a browser, with `pnpm dev`: no shell, so not the app.
+    expect(isLinuxApp(webkitgtk, false)).toBe(false);
+    expect(isLinuxApp("Mozilla/5.0 (Linux; Android 16; Pixel 9 Pro Build/BP2A.250605.031; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/141.0.0.0 Mobile Safari/537.36", true)).toBe(false);
+    expect(isLinuxApp("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 Edg/141.0.0.0", true)).toBe(false);
+    expect(isLinuxApp("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)", true)).toBe(false);
   });
 });
 

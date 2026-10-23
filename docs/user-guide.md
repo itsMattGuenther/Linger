@@ -209,8 +209,11 @@ is letting other people in right now: try again in a moment.
 
 The app remembers you. On most computers your sign-in is kept in the system's
 password store — the same place your browser keeps passwords — so you do not
-type it again. If your computer has no password store, the app says so and asks
-you to sign in next time.
+type it again. If your computer has no password store, the sign-in screen says
+Linger can't remember your sign-in, and you sign in each time it starts. On
+Linux that means no keyring is running: turning one on, such as GNOME Keyring
+or KWallet, fixes it. Hold the pointer over that line to see what the system
+said.
 
 You can be on **more than one server**: open Settings (the gear), then **Account
 & App → Add a server** (with several servers, it's under **Servers**). Each

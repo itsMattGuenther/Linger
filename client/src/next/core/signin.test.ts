@@ -5,6 +5,7 @@ import { ApiError } from "../../lib/api";
 import {
   type Door,
   type Entrance,
+  keyringWords,
   loginReady,
   newPasswordReady,
   problemIn,
@@ -221,5 +222,22 @@ describe("signing in", () => {
       },
     );
     expect(await actions.login("https://home.example", "matt", "x")).toBe("The keyring is locked.");
+  });
+
+  it("a device that can't keep a sign-in says what that means in plain words, and on Linux how to fix it (#702)", () => {
+    expect(keyringWords("this computer", false)).toBe("Linger can't remember your sign-in on this computer, so you'll sign in each time it starts.");
+    expect(keyringWords("this phone", false)).toBe("Linger can't remember your sign-in on this phone, so you'll sign in each time it starts.");
+    expect(keyringWords("this computer", true)).toBe(
+      "Linger can't remember your sign-in on this computer, so you'll sign in each time it starts. Turning on a keyring, such as GNOME Keyring or KWallet, fixes that.",
+    );
+  });
+
+  it("says nothing a screenshot check would read as the app being broken (#702)", () => {
+    // What the AppImage catalog's test flags on a first screen
+    // (appimage.github.io code/check-screenshot.sh, its HARD and SOFT words).
+    const alarming = /error|fail|could not|cannot|unable to|not found|not installed|fatal|exception|denied|no such file/i;
+    for (const words of [keyringWords("this computer", true), keyringWords("this computer", false), keyringWords("this phone", false)]) {
+      expect(words).not.toMatch(alarming);
+    }
   });
 });
