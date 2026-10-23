@@ -310,9 +310,15 @@ mod ios {
         };
         let left_out = NSArray::from_slice(&[photos, contact]);
         sheet.setExcludedActivityTypes(Some(&*left_out));
+        // Somebody who backs out of one of the sheet's choices (Files' own
+        // picker, say) is back at the sheet, which tells this with that
+        // choice and not done: the file stays for their next one. It goes
+        // once one is done, or the sheet is closed with none.
         let finished = RcBlock::new(
-            move |_: *mut UIActivityType, _: Bool, _: *mut NSArray, _: *mut NSError| {
-                let _ = std::fs::remove_dir_all(&folder);
+            move |chose: *mut UIActivityType, done: Bool, _: *mut NSArray, _: *mut NSError| {
+                if done.as_bool() || chose.is_null() {
+                    let _ = std::fs::remove_dir_all(&folder);
+                }
             },
         );
         // SAFETY: a valid block, which the sheet copies and keeps.
