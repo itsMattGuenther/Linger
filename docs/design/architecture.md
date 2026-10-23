@@ -594,6 +594,15 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   dragged, and double-tapped in and out, the viewer's `touch-action: none`
   keeping the fingers its own. `next-phone.spec.ts` checks the viewport, a
   two-finger pinch, the photo's own zoom, and every main screen at 320 wide.
+- **Downloads on an iPhone** (#703, SPEC §4.10). Safari, handed a
+  download by another app, opened a blank tab, so an iPhone doesn't hand it
+  over: `core/download.ts` sends the card's and Media's downloads to the
+  shell's `phone_save` there, and to the browser everywhere else, Android
+  included. The shell fetches the file with the iPhone's own networking into
+  the app's temporary folder and opens the share sheet with it
+  (`src-tauri/src/phone_save.rs`), so the bytes never reach the page; the
+  sheet closing removes the file. The page only hears whether the sheet
+  opened, and is busy until then.
 - **The phone's bars.** The page is drawn under the phone's status bar and
   gesture bar; `styles/phone.css` pads it by the safe areas the phone reports,
   and `--window-height`, the whole window on a computer, is what's left

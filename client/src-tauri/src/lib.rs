@@ -31,6 +31,9 @@ pub mod packaging;
 // The phone's call bar (#429): voice runs in its page, and this holds it up.
 #[cfg(any(mobile, test))]
 mod phone_call;
+// Downloads on an iPhone (#703): fetched by the app and offered in its share sheet.
+#[cfg(any(mobile, test))]
+mod phone_save;
 #[cfg(any(mobile, test))]
 mod phone_sound;
 #[cfg(any(mobile, test))]
@@ -403,8 +406,9 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
 
 /// What the phone app registers (SPEC §4.15): links to the browser, the
 /// sign-ins and the gateway connections, which are all a text-only app needs
-/// from Rust, its sounds, which follow the phone's ringer, and its own version
-/// for Settings. The window comes from `tauri.android.conf.json` and
+/// from Rust, its sounds, which follow the phone's ringer, its own version
+/// for Settings, and on an iPhone a shared file fetched for its share sheet
+/// (`phone_save.rs`, #703). The window comes from `tauri.android.conf.json` and
 /// `tauri.ios.conf.json`. Every command here is granted by
 /// `capabilities/phone.json` and nothing else is; `src/acl.rs` checks that.
 #[cfg(mobile)]
@@ -418,6 +422,9 @@ fn phone_app() -> tauri::Builder<tauri::Wry> {
         .manage(deep_link::Offered::default())
         .setup(|app| {
             deep_link::install(app);
+            // Downloads a closed app left for its share sheet (#703).
+            #[cfg(target_os = "ios")]
+            phone_save::clear_leftovers();
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -433,6 +440,7 @@ fn phone_app() -> tauri::Builder<tauri::Wry> {
             deep_link::link_offered,
             graphics::graphics_started,
             phone_call::phone_call_bar,
+            phone_save::phone_save,
             phone_sound::phone_sound_mode,
             phone_sound::phone_buzz,
             phone_sound::sound_play,

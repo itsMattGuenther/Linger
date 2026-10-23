@@ -56,6 +56,12 @@
  * Leaving a group DM (#565) is written down as `leave <id>` and answered with
  * the `dm.remove` the server sends; `?leavefails` has it refused.
  *
+ * A file to download (#703): `?file` has Sam share a PDF in #general, after
+ * the evening. The browser being handed an address is written down as
+ * `open <url>`; the iPhone's shell fetching one for its share sheet
+ * (`phone_save`) as `phone_save <url> <name>`, and answered at once, or with
+ * `?savehold` only at `window.core.saved()`; `?savefail` has it refused.
+ *
  * "Open in Linger" (#607): `?opened=<link>` is the link Linger was started
  * with, handed over the first time the window asks (`link_offered`), and
  * `window.core.link(link)` is one handed over while it runs. Each ask is
@@ -293,6 +299,17 @@ mockIPC((cmd, args) => {
     }
     case "app_version":
       return "0.3.6";
+    // A link or a download handed to the browser.
+    case "plugin:opener|open_url":
+      note(`open ${String(a.url)}`);
+      return null;
+    // A file fetched for an iPhone's share sheet (#703).
+    case "phone_save":
+      note(`phone_save ${String(a.url)} ${String(a.name)}`);
+      return (query.has("savehold") ? saving : Promise.resolve()).then(() => {
+        if (query.has("savefail")) throw "Couldn't get the file.";
+        return null;
+      });
     case "update_check":
       note("update_check");
       return query.has("update") ? { kind: "ready", version: "0.4.1", notes: null } : { kind: "current" };
@@ -391,6 +408,8 @@ declare global {
       link: (link: string) => void;
       /** With `?hold`, the server answers its health check from now on. */
       release: () => void;
+      /** With `?savehold`, the iPhone's shell has the file, and the share sheet shows. */
+      saved: () => void;
       /** With `?down`, the server that was down answers from now on. */
       up: () => void;
       /** With `?stall`, Ashen Lanterns' first refresh is answered now. */
@@ -441,6 +460,7 @@ window.core = {
     deliver("next:link", null);
   },
   release: () => release(),
+  saved: () => showSheet(),
   up: () => {
     down = null;
   },
@@ -467,6 +487,11 @@ window.core = {
 // --- the servers -----------------------------------------------------------
 
 let release: () => void = () => undefined;
+/** With `?savehold`, the iPhone's share sheet waits for `window.core.saved()`. */
+let showSheet: () => void = () => undefined;
+const saving = new Promise<void>((settle) => {
+  showSheet = settle;
+});
 /** `?down` is Ashen Lanterns; `?down=<hostname>` any other. */
 let down: string | null = query.has("down") ? query.get("down") || new URL(GUILD).hostname : null;
 let unstall: () => void = () => undefined;
@@ -509,6 +534,43 @@ if (many > 0) {
     })),
     ...held,
   ];
+}
+// `?file`: Sam shares a PDF in #general, a minute after the evening (#703).
+if (query.has("file")) {
+  const held = history["r-general"] ?? [];
+  const last = held.at(-1);
+  if (last) {
+    const created_at = last.created_at + 60_000;
+    history["r-general"] = [
+      ...held,
+      {
+        ...last,
+        id: "m000998",
+        author_id: people.sam.id,
+        body: "the map for saturday",
+        reply_to: null,
+        reactions: [],
+        created_at,
+        attachments: [
+          {
+            id: "a-map",
+            filename: "river-loop-trail-map.pdf",
+            mime: "application/pdf",
+            size_bytes: 2_100_000,
+            url: "/media/river-loop-trail-map.pdf",
+            width: null,
+            height: null,
+            duration_ms: null,
+            blurhash: null,
+            poster_url: null,
+            starred_at: null,
+            uploader_id: people.sam.id,
+            created_at,
+          },
+        ],
+      },
+    ];
+  }
 }
 /** The Good Company's open reports, for its host: `?reports` has one of Jules's messages reported by Eli. */
 let reports: Report[] = (() => {

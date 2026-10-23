@@ -105,7 +105,7 @@ function Fixture() {
         mediaUrl={(_server, path) => (query.has("lazy") ? `/__media${path}` : (PICTURES[path] ?? path))}
         onOpenItem={(server, room, message) => note(`open ${server === SERVER ? "" : `${server} `}${room} ${message}`)}
         onOpenLink={(url) => note(`link ${url}`)}
-        onDownload={(server, file) => note(`download ${server === SERVER ? "" : `${server} `}${file.filename}`)}
+        onDownload={async (server, file) => note(`download ${server === SERVER ? "" : `${server} `}${file.filename}`)}
       />
     </div>
   );

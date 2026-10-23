@@ -3,6 +3,8 @@ import type { Attachment } from "../../../generated/Attachment";
 import { fileNameToShow, fileSize, inlineBox, renderAs } from "../../../lib/media";
 import { Button, Icon, TextField } from "../../kit";
 import { isVoiceMessage } from "../../core/chat/voiceMessage";
+import { copyText } from "../../core/copy";
+import { type DownloadWay, downloadWay } from "../../core/download";
 import { AudioCard } from "./AudioCard";
 import "./Attachments.css";
 
@@ -206,21 +208,33 @@ function Video({
   );
 }
 
+/** What a card says when its download didn't happen, by where it was going (`core/download.ts`). */
+const DOWNLOAD_FAILED: Record<DownloadWay, string> = {
+  browser: "Couldn't open your browser. Try again, or copy this address into it.",
+  sheet: "Couldn't get the file. Try again, or copy its address.",
+};
+
 /**
  * A file that isn't a picture, a video or a sound: its name and size, and a
- * download that goes to the browser (FILE-6). It says so once handed over,
- * never claiming the file was saved, and a handoff that fails offers another
- * go; either way the address is there to copy. The bytes never pass through
- * this window.
+ * download (FILE-6). On a computer or Android it goes to the browser, and the
+ * card says so once handed over, never claiming the file was saved. On an
+ * iPhone the app fetches it and the share sheet opens with it (#703), which
+ * is answer enough. A download that fails offers another go. Either way the
+ * address is there with a Copy beside it, since a finger can't select the
+ * words in the box (#703). The bytes never pass through this window.
  */
 function FileCard({ file, url, onDownload }: { file: Attachment; url: string; onDownload: (file: Attachment) => Promise<void> }) {
   const name = fileNameToShow(file.filename);
+  const way = downloadWay();
   const [phase, setPhase] = useState<"idle" | "opening" | "handed" | "failed">("idle");
+  const [copied, setCopied] = useState<"yes" | "no" | null>(null);
   const download = async () => {
     setPhase("opening");
+    setCopied(null);
     try {
       await onDownload(file);
-      setPhase("handed");
+      // The share sheet is open over the app: nothing to add to it.
+      setPhase(way === "sheet" ? "idle" : "handed");
     } catch {
       // What the desktop said may hold a signed address; the way out matters, not the error.
       setPhase("failed");
@@ -237,11 +251,19 @@ function FileCard({ file, url, onDownload }: { file: Attachment; url: string; on
       {phase === "handed" || phase === "failed" ? (
         <div className="nx-att-download">
           <p className="nx-att-download-note" role={phase === "failed" ? "alert" : "status"}>
-            {phase === "failed"
-              ? "Couldn't open your browser. Try again, or copy this address into it."
-              : "Your browser has it: look in its downloads. If nothing opened, copy this address into it."}
+            {phase === "failed" ? DOWNLOAD_FAILED[way] : "Your browser has it: look in its downloads. If nothing opened, copy this address into it."}
           </p>
-          <TextField label={`Address of ${name}`} hideLabel value={url} onChange={() => undefined} readOnly mono literal size="sm" />
+          <div className="nx-att-address">
+            <TextField label={`Address of ${name}`} hideLabel value={url} onChange={() => undefined} readOnly mono literal size="sm" />
+            <Button size="sm" icon={copied === "yes" ? "check" : undefined} onClick={() => void copyText(url).then((ok) => setCopied(ok ? "yes" : "no"))}>
+              {copied === "yes" ? "Copied" : "Copy"}
+            </Button>
+          </div>
+          {copied === "no" ? (
+            <p className="nx-att-download-note" role="status" data-problem="">
+              Couldn't reach the clipboard. Select the address and copy it yourself.
+            </p>
+          ) : null}
         </div>
       ) : null}
     </div>

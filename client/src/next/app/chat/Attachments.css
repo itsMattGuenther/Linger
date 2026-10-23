@@ -126,8 +126,24 @@
   line-height: var(--line-meta);
 }
 
-.nx-att-card[data-download="failed"] .nx-att-download-note {
+.nx-att-card[data-download="failed"] .nx-att-download-note,
+.nx-att-download-note[data-problem] {
   color: var(--text-danger);
+}
+
+/* The address, and Copy beside it (#703): a finger can't select the words in
+   the box, so the button is how they get out. The box takes what's left of
+   the line. */
+.nx-att-address {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  min-width: 0;
+}
+
+.nx-att-address > .k-field {
+  flex: 1;
+  min-width: 0;
 }
 
 /* Words somebody wrote keep their direction to themselves (#488): one that

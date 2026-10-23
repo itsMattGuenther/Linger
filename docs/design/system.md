@@ -772,7 +772,16 @@ so tall it would be under 120 wide at 400 tall (`MIN_INLINE_WIDTH`, #512) is
 drawn 120 wide and filled from its top, so a phone's scrolling screenshot is
 not a sliver; the viewer shows all of it. A message that is nothing but one
 link shows only its link card. Files that aren't pictures, video or sound are
-a card with a Download button.
+a card with a Download button (FILE-6). Handed to the browser, the card says
+so under its row; a download that fails says so in `--text-danger` and the
+button becomes Try again. Under either note is the file's address, in a small
+read-only box in the mono face, with a small Copy beside it that turns to a
+tick and Copied once it's on the clipboard (#703): a finger can't select the
+words in the box. On an iPhone, Download is busy while the app fetches the
+file, then the share sheet opens over the app and the card adds nothing; one
+it couldn't get offers Try again and the address. Media's download button
+does the same there, standing unavailable and named "Getting …" meanwhile,
+with its status line saying so.
 
 In the viewer, fingers zoom a picture (`core/zoom.ts`, #689), since the
 phone's page never zooms: two pinch it up to four times the size it opened
@@ -1108,6 +1117,7 @@ it catches, and nowhere else (AGENTS.md hard rule 4).
 | The conversation: names on one edge, on a line of their own with no colon; every message's words, wrapped lines and continuations on another, 16px in, whoever wrote them; a name far too long moves nobody's words at 780, 420 and 360, and shows whole at 780; rows edge to edge; groups 8px apart; a one-line continuation 24px; title bar, header, voice strip and box 40px; nothing clipped without "…" | `next-chat.spec.ts` › built on the system |
 | The conversation never moves a reader: arrivals and older history leave the view still; at the end it follows; the reply line and edit box keep the end in view | `next-chat.spec.ts` › reading and arriving, the row menu, the keyboard |
 | A shared video and a shared audio file fetch nothing until they're played (#381) | `next-chat-parity.spec.ts` › fetches nothing until it's played, then loads |
+| A shared file's card (FILE-6, #703): Download goes to the browser and says so without claiming it was saved, and one that fails offers Try again; either way the address is in a box with Copy beside it, which copies it and says Copied, or says the clipboard refused; on an iPhone Download asks the shell for the share sheet instead, busy until it shows and adding nothing after, and one it couldn't get offers Try again and the address; Media's download does the same there, its line saying it's getting the file; Android still goes to the browser | `next-chat.spec.ts` › a file to download; `next-phone.spec.ts` › a shared file (#703); `next-media.spec.ts` › a link opens in the browser, a file downloads; `core/download.test.ts`; `src-tauri/src/phone_save.rs` (the file's name made safe, web addresses only) |
 | A shared audio file's player: every part named, a 32px line of kit-sized controls on the card's edges, the volume and mute reaching the element, the last level kept but never silence, a seek by keys asking for a later byte range, End reaching the end without a failed load, and a failed load said on the same line | `next-chat-parity.spec.ts` › a shared audio file (#247); `core/audioPlayer.test.ts` |
 | A glide in a long conversation slows to a stop without a skip (#698): in every frame as painted the words move exactly as far as the glide scrolls and nothing else moves them, toward older messages into a page of them loading as it goes and into one loaded before, as Android and as an iPhone; older history is measured before anybody scrolls up to it; on an iPhone, older history arriving while the conversation moves waits until it's still, one page only, and goes in without moving what's read; taken hold of while it lands, or just as it follows a new message down, it stays where it was put when older history goes in | `next-phone-glide.spec.ts` |
 | 5,000 messages draw fewer than 80 rows | `next-chat.spec.ts` › 5,000 messages draw only what is near the view |

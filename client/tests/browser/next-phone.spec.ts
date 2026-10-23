@@ -1081,3 +1081,105 @@ test("voice: the call bar shows while in voice, follows mute, and its buttons wo
   await expect.poll(async () => (await bars()).at(-1)).toBe('phone_call_bar:{"bar":null}');
   await expect(page.getByRole("group", { name: "Voice in this conversation" }).getByRole("button", { name: "Join" })).toBeVisible();
 });
+
+// A shared file (#703). On an iPhone, Download handed to Safari opened a blank
+// tab that seemed to do nothing, and the address shown after couldn't be
+// selected with a finger. Now the iPhone's shell fetches the file and its
+// share sheet offers it (src-tauri/src/phone_save.rs): the card asks the
+// shell, never the browser, and the address has a Copy beside it. Android's
+// Chrome saves a download, so there it still goes to the browser.
+test.describe("a shared file (#703)", () => {
+  /** Where the fixture's server serves the PDF Sam shares (`?file`), and Media's tile of it. */
+  const ADDRESS = "https://good-company.example/media/river-loop-trail-map.pdf";
+  const card = (page: Page) => page.locator(".nx-att-card", { hasText: "river-loop-trail-map.pdf" });
+  const opened = async (page: Page) => (await did(page)).filter((line) => line.startsWith("open "));
+  const saves = async (page: Page) => (await did(page)).filter((line) => line.startsWith("phone_save "));
+
+  /** A clipboard that writes down what it's given, and refuses while `window.refuse` is set. */
+  function fakeClipboard() {
+    const copied: string[] = [];
+    Object.assign(window, { copied, refuse: false });
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (text: string) => {
+          if ((window as unknown as { refuse: boolean }).refuse) throw new Error("refused");
+          copied.push(text);
+        },
+      },
+    });
+  }
+  const copied = (page: Page) => page.evaluate(() => (window as unknown as { copied: string[] }).copied);
+
+  /** #general on the phone, with Sam's PDF in it. */
+  async function fileIn(page: Page, query = "") {
+    await page.addInitScript(fakeClipboard);
+    await open(page, `?one&shell=phone&file${query}`);
+    await settled(page);
+    await room(page, "general").click();
+    await expect(card(page)).toBeVisible();
+  }
+
+  test.describe("on an iPhone", () => {
+    test.use({ userAgent: IPHONE });
+
+    test("Download asks the app for the file, is busy until the share sheet shows, then adds nothing", async ({ page }) => {
+      await fileIn(page, "&savehold");
+      const download = card(page).getByRole("button", { name: "Download" });
+      await download.click();
+      await expect(download).toHaveAttribute("aria-busy", "true");
+      expect(await saves(page)).toEqual([`phone_save ${ADDRESS} river-loop-trail-map.pdf`]);
+      await page.evaluate(() => window.core?.saved());
+      await expect(download).not.toHaveAttribute("aria-busy", "true");
+      // The share sheet is the answer: no note about a browser, and no address.
+      await expect(card(page).getByRole("status")).toHaveCount(0);
+      await expect(card(page).getByRole("textbox")).toHaveCount(0);
+      expect(await opened(page)).toEqual([]);
+    });
+
+    test("a file the app couldn't get says so, offers another go, and the address to copy", async ({ page }) => {
+      await fileIn(page, "&savefail");
+      await card(page).getByRole("button", { name: "Download" }).click();
+      await expect(card(page).getByRole("alert")).toHaveText("Couldn't get the file. Try again, or copy its address.");
+      await expect(card(page).getByRole("textbox", { name: "Address of river-loop-trail-map.pdf" })).toHaveValue(ADDRESS);
+      await card(page).getByRole("button", { name: "Copy" }).click();
+      await expect(card(page).getByRole("button", { name: "Copied" })).toBeVisible();
+      expect(await copied(page)).toEqual([ADDRESS]);
+      const again = card(page).getByRole("button", { name: "Try again" });
+      await again.click();
+      await expect.poll(() => saves(page)).toHaveLength(2);
+      await expect(card(page).getByRole("alert")).toBeVisible();
+      expect(await opened(page)).toEqual([]);
+    });
+
+    test("Media's download asks the app too, and says it's getting it meanwhile", async ({ page }) => {
+      await open(page, "?one&shell=phone&savehold");
+      await settled(page);
+      await list(page).getByRole("button", { name: "Media", exact: true }).click();
+      const tile = page.locator(".nx-tile", { hasText: "river-loop-trail-map.pdf" });
+      await tile.getByRole("button", { name: "Download river-loop-trail-map.pdf" }).click();
+      await expect(tile.getByRole("button", { name: "Getting river-loop-trail-map.pdf…" })).toHaveAttribute("aria-disabled", "true");
+      await expect(page.locator(".nx-media-line")).toHaveText("Getting river-loop-trail-map.pdf…");
+      expect(await saves(page)).toEqual([`phone_save ${ADDRESS} river-loop-trail-map.pdf`]);
+      await page.evaluate(() => window.core?.saved());
+      await expect(tile.getByRole("button", { name: "Download river-loop-trail-map.pdf" })).not.toHaveAttribute("aria-disabled", "true");
+      await expect(page.locator(".nx-media-line")).not.toHaveText(/Getting/);
+      expect(await opened(page)).toEqual([]);
+    });
+  });
+
+  test.describe("on Android", () => {
+    test.use({ userAgent: ANDROID });
+
+    test("Download goes to the browser, which saves it, and the address can be copied", async ({ page }) => {
+      await fileIn(page);
+      await card(page).getByRole("button", { name: "Download" }).click();
+      await expect(card(page).getByRole("status")).toHaveText("Your browser has it: look in its downloads. If nothing opened, copy this address into it.");
+      expect(await opened(page)).toEqual([`open ${ADDRESS}`]);
+      expect(await saves(page)).toEqual([]);
+      await card(page).getByRole("button", { name: "Copy" }).click();
+      await expect(card(page).getByRole("button", { name: "Copied" })).toBeVisible();
+      expect(await copied(page)).toEqual([ADDRESS]);
+    });
+  });
+});

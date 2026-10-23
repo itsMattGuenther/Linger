@@ -1045,6 +1045,38 @@ test.describe("a file to download", () => {
     await expect(card(page)).not.toContainText("saved");
   });
 
+  // The address couldn't be selected with a finger, so tapping it did
+  // nothing (#703): Copy beside it puts it on the clipboard, and says so,
+  // or says the clipboard refused rather than claim it was copied.
+  test("the address copies with a press, and a refusing clipboard says so", async ({ page }) => {
+    await page.addInitScript(() => {
+      const copied: string[] = [];
+      Object.assign(window, { copied, refuse: false });
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: async (text: string) => {
+            if ((window as unknown as { refuse: boolean }).refuse) throw new Error("refused");
+            copied.push(text);
+          },
+        },
+      });
+    });
+    await open(page, "?file");
+    await card(page).getByRole("button", { name: "Download" }).click();
+    const address = await card(page).getByRole("textbox", { name: "Address of river-loop-trail-map.pdf" }).inputValue();
+    expect(address).toMatch(/\/media\/river-loop-trail-map\.pdf$/);
+    await card(page).getByRole("button", { name: "Copy" }).click();
+    await expect(card(page).getByRole("button", { name: "Copied" })).toBeVisible();
+    expect(await page.evaluate(() => (window as unknown as { copied: string[] }).copied)).toEqual([address]);
+
+    await page.evaluate(() => Object.assign(window, { refuse: true }));
+    await card(page).getByRole("button", { name: "Download" }).click();
+    await card(page).getByRole("button", { name: "Copy" }).click();
+    await expect(card(page).getByText("Couldn't reach the clipboard. Select the address and copy it yourself.")).toBeVisible();
+    await expect(card(page).getByRole("button", { name: "Copied" })).toHaveCount(0);
+  });
+
   // #488: a name saved before the server took them out, or from a server
   // that doesn't, would read "invoiceexe.pdf". Read left to right as drawn.
   test("a name with a character that turns text around shows what the file really is", async ({ page }) => {

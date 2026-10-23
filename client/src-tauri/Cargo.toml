@@ -132,6 +132,15 @@ ndk-context = "0.1"
 # The iPhone's Keychain, for the phone app (T-1602, `secrets.rs`).
 [target.'cfg(target_os = "ios")'.dependencies]
 keyring = { version = "3", features = ["apple-native"] }
+# A shared file downloaded on an iPhone (#703, `phone_save.rs`): fetched with
+# the phone's own networking (NSURLSession) and offered in its share sheet
+# (UIActivityViewController). All four are already in the iPhone's build,
+# under Tauri's window and web view, so they add nothing to the app's size;
+# named here with only the parts used.
+objc2 = "0.6"
+block2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-foundation", "NSArray", "NSError", "NSGeometry", "NSString", "NSURL", "NSURLResponse", "NSURLSession"] }
+objc2-ui-kit = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-foundation", "UIActivity", "UIActivityViewController", "UIPopoverPresentationController", "UIPopoverSupport", "UIPresentationController", "UIResponder", "UIView", "UIViewController"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 keyring = { version = "3", features = ["windows-native"] }

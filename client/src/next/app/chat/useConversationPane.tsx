@@ -9,7 +9,7 @@ import type { User } from "../../../generated/User";
 import { ApiError, type AuthedApi, TransportError } from "../../../lib/api";
 import { useNow } from "../../../lib/clock";
 import { canLeave, dmLabel, lastOneIn } from "../../../lib/dm";
-import { openExternal, openExternalChecked } from "../../../lib/external";
+import { openExternal } from "../../../lib/external";
 import { hostsHere } from "../../../lib/host";
 import {
   deleteMessage,
@@ -36,6 +36,7 @@ import {
 import { useLinkPreviews, wantPreviews } from "../../../lib/previews";
 import { absoluteUrl } from "../../../lib/url";
 import { onWindows, voiceStartProblem } from "../../../lib/voice";
+import { downloadFile } from "../../core/download";
 import { onPhone } from "../../core/phone";
 import { tauriBus } from "../../core/bus";
 import { conversationIn, dmPeople, micsHere, peopleInRoom, tabModel, typingIn, voiceHere } from "../../core/chat/conversation";
@@ -577,7 +578,8 @@ function serverCalls(api: AuthedApi | null, setKnocks: Dispatch<SetStateAction<R
     closeAsked: async (message: Message) => {
       await closePoll(connected(), message).catch(rethrowInWords("Couldn't close the poll. Try again."));
     },
-    download: (file: Attachment) => openExternalChecked(mediaUrl(file.url)),
+    // The browser, or on an iPhone the share sheet (#703).
+    download: (file: Attachment) => downloadFile(mediaUrl(file.url), file.filename),
     wantCards: (urls: readonly string[]) => {
       if (api) wantPreviews(api, [...urls]);
     },

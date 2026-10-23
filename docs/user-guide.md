@@ -614,8 +614,15 @@ nobody played.
 
 For other files, **Download** hands the file to your browser, which may save
 it straight to Downloads without asking; Linger says so when it has. If it
-fails, **Try again**. A file may have expired. Treat download links as
-private, especially for DM files.
+fails, **Try again**. A file may have expired. Either way the card shows the
+file's address, and **Copy** beside it puts it on your clipboard. Treat
+download links as private, especially for DM files.
+
+On a phone, Android hands the file to Chrome, which saves it the same way. On
+an iPhone, Linger gets the file itself and opens the iPhone's share sheet with
+it: choose **Save to Files**, AirDrop it, or open it in another app. If Linger
+couldn't get it, the card says so, with **Try again** and the address to copy.
+Media's download button works the same way.
 
 - Up to 500 MB per file.
 - **Location data is stripped from every photo and video, always.** Phone

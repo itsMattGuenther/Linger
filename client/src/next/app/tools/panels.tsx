@@ -3,7 +3,8 @@ import type { Attachment } from "../../../generated/Attachment";
 import type { MessageId } from "../../../generated/MessageId";
 import type { RoomId } from "../../../generated/RoomId";
 import { ApiError, type AuthedApi, TransportError } from "../../../lib/api";
-import { openExternal, openExternalChecked } from "../../../lib/external";
+import { openExternal } from "../../../lib/external";
+import { downloadFile } from "../../core/download";
 import { absoluteUrl } from "../../../lib/url";
 import { type MediaAsk, MediaView } from "../media/MediaView";
 import { type SearchAsk, SearchView } from "../search/SearchView";
@@ -59,7 +60,7 @@ export function MediaPanel({ apis, onOpen }: { apis: ReadonlyMap<string, AuthedA
     [servers, onOpen],
   );
   const onDownload = useCallback(
-    (server: string, file: Attachment) => void openExternalChecked(mediaUrl(server, file.url)).catch(() => undefined),
+    (server: string, file: Attachment) => downloadFile(mediaUrl(server, file.url), file.filename),
     [mediaUrl],
   );
   return (

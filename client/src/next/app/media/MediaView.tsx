@@ -22,6 +22,7 @@ import {
   type MediaFilters,
   type TileLine,
 } from "../../core/media";
+import { downloadFailedLine, downloadWay, gettingLine } from "../../core/download";
 import { merge, type Stream } from "../../core/pages";
 import { EVERY_SERVER, inScope, startScope, type ViewServer } from "../../core/scope";
 import { directory, personChoices } from "../../core/search";
@@ -72,8 +73,11 @@ export interface MediaViewProps {
   onOpenItem: (server: string, roomId: RoomId, messageId: MessageId) => void;
   /** A link's own page, in the browser. */
   onOpenLink: (url: string) => void;
-  /** Save a file through the system. */
-  onDownload: (server: string, file: Attachment) => void;
+  /**
+   * Save a file through the system: the browser, or on an iPhone the share
+   * sheet (#703). Resolves once it's there, and rejects when it couldn't be.
+   */
+  onDownload: (server: string, file: Attachment) => Promise<void>;
 }
 
 const OFFLINE = "Couldn't reach the server.";
@@ -123,6 +127,8 @@ export function MediaView({ servers, startOn, media, star, mediaUrl, onOpenItem,
   // without moving them.
   const [stars, setStars] = useState<ReadonlyMap<string, boolean>>(new Map());
   const [starring, setStarring] = useState<ReadonlySet<string>>(new Set());
+  // Files on their way to the browser or the share sheet: only the sheet takes long enough to show.
+  const [getting, setGetting] = useState<ReadonlySet<string>>(new Set());
   const [active, setActive] = useState(0);
 
   const grid = useRef<HTMLUListElement | null>(null);
@@ -245,6 +251,33 @@ export function MediaView({ servers, startOn, media, star, mediaUrl, onOpenItem,
     }
   };
 
+  // On an iPhone the app fetches the file before the share sheet opens
+  // (#703), which takes a moment, so the line says so; the browser takes it
+  // at once.
+  const way = downloadWay();
+  const download = async (server: string, key: string, file: Attachment, title: string) => {
+    if (getting.has(key)) return;
+    setGetting((held) => new Set(held).add(key));
+    const asking = way === "sheet" ? gettingLine(title) : null;
+    if (asking !== null) setSaid({ words: asking, problem: false });
+    const mine = generation.current;
+    let failed = false;
+    try {
+      await onDownload(server, file);
+    } catch {
+      failed = true;
+    }
+    setGetting((held) => {
+      const next = new Set(held);
+      next.delete(key);
+      return next;
+    });
+    if (mine !== generation.current) return;
+    if (failed) setSaid({ words: downloadFailedLine(way, title), problem: true });
+    // The sheet is the answer: the line goes back to what it said.
+    else if (asking !== null) setSaid((now) => (now?.words === asking ? null : now));
+  };
+
   const filtered = isFiltered(filters);
   const empty = mediaEmpty(filtered, filters.leaving);
   // "Leaving soon" is offered where a server can say (#583).
@@ -348,6 +381,7 @@ export function MediaView({ servers, startOn, media, star, mediaUrl, onOpenItem,
                   url={(path) => mediaUrl(server, path)}
                   current={index === Math.min(active, shown.length - 1)}
                   starring={starring.has(key)}
+                  getting={way === "sheet" && getting.has(key)}
                   onFocus={() => setActive(index)}
                   onOpen={() => {
                     if (line.opens && roomId !== null && messageId !== null) onOpenItem(server, roomId, messageId);
@@ -355,7 +389,7 @@ export function MediaView({ servers, startOn, media, star, mediaUrl, onOpenItem,
                   onStar={() => void toggleStar(server, key, item, line)}
                   onLink={link ? () => onOpenLink(link.url) : null}
                   // A picture opens at its message; anything else can be saved from here.
-                  onDownload={attachment && renderAs(attachment.mime) !== "image" ? () => onDownload(server, attachment) : null}
+                  onDownload={attachment && renderAs(attachment.mime) !== "image" ? () => void download(server, key, attachment, line.title) : null}
                 />
               );
             })}
@@ -384,6 +418,7 @@ function Tile({
   url,
   current,
   starring,
+  getting,
   onFocus,
   onOpen,
   onStar,
@@ -396,6 +431,8 @@ function Tile({
   url: (path: string) => string;
   current: boolean;
   starring: boolean;
+  /** Its file is being fetched for the share sheet (#703). */
+  getting: boolean;
   onFocus: () => void;
   onOpen: () => void;
   onStar: () => void;
@@ -416,7 +453,17 @@ function Tile({
       />
     ) : null,
     onLink ? <IconButton key="link" icon="popout" size="sm" label={`Open ${line.title} in your browser`} skipTab={!current} onClick={onLink} /> : null,
-    onDownload ? <IconButton key="save" icon="download" size="sm" label={`Download ${line.title}`} skipTab={!current} onClick={onDownload} /> : null,
+    onDownload ? (
+      <IconButton
+        key="save"
+        icon="download"
+        size="sm"
+        label={`Download ${line.title}`}
+        unavailable={getting ? gettingLine(line.title) : undefined}
+        skipTab={!current}
+        onClick={onDownload}
+      />
+    ) : null,
   ].filter((action) => action !== null);
   return (
     <li className="nx-tile" data-actions={actions.length || undefined} data-starred={line.starred ? "yes" : undefined}>

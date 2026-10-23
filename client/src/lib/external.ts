@@ -21,12 +21,21 @@ export function openExternal(href: string): void {
   void openExternalChecked(href).catch(() => undefined);
 }
 
-/** Report a refused handoff without treating browser launch as a finished download. */
-export async function openExternalChecked(href: string): Promise<void> {
+/**
+ * Throws unless `href` is a web address (http or https): the page's half of
+ * the check before anything is handed out of it, to the browser here or to
+ * an iPhone's share sheet (`next/core/download.ts`), whose shell checks again.
+ */
+export function checkWebAddress(href: string): void {
   const url = new URL(href);
   if (url.protocol !== "https:" && url.protocol !== "http:") {
     throw new Error("Only web addresses can be opened.");
   }
+}
+
+/** Report a refused handoff without treating browser launch as a finished download. */
+export async function openExternalChecked(href: string): Promise<void> {
+  checkWebAddress(href);
   if (isTauri()) {
     await openUrl(href);
     return;

@@ -5,7 +5,8 @@
 /// (docs/design/architecture.md). Every command in either `generate_handler!`
 /// in `src/lib.rs`, the desktop's or the phone's, must be listed here;
 /// `src/acl.rs` tests that. `phone_sound_mode`, `phone_buzz` and
-/// `phone_call_bar` are the phone's alone (`capabilities/phone.json`).
+/// `phone_call_bar` are the phone's alone (`capabilities/phone.json`), and so is
+/// `phone_save`, which only an iPhone uses (#703).
 const COMMANDS: &[&str] = &[
     "sessions_load",
     "session_save",
@@ -49,6 +50,7 @@ const COMMANDS: &[&str] = &[
     "phone_buzz",
     "phone_call_bar",
     "phone_text_scale",
+    "phone_save",
     "clip_start",
     "clip_stop",
     "clip_cancel",

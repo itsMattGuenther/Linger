@@ -680,8 +680,14 @@ carry sender feedback to a different person.
   server's duration stand in until then. Building a player per file costs about
   190 MB a video in WebKitGTK and about 45 MB in WebView2, watched or not (#381).
 - Download controls say that they open the system browser. A failed handoff
-  shows a retryable error and a selectable download URL; a successful handoff
-  does not claim the browser saved the file. Never navigate the app to an upload.
+  shows a retryable error and the download URL with a Copy button; a successful
+  handoff does not claim the browser saved the file. Never navigate the app to an
+  upload. **On an iPhone a download doesn't go to the browser** (#703): Safari,
+  handed a download by another app, opened a blank tab and seemed to do nothing.
+  The app fetches the file itself, in its Rust shell, and opens the iPhone's share
+  sheet with it (Save to Files, AirDrop, or another app), which is answer enough.
+  One it couldn't get says so, with Try again and the URL to copy. Either way the
+  bytes never pass through the app's page.
 - Expanded images are centered in the app viewport, not the message row. Fit
   both dimensions without cropping, stretching or enlarging small originals;
   keep fitting when the window resizes. Escape, a click or the close control
@@ -1033,7 +1039,9 @@ a presence value they don't know, and it would arrive in the first message they 
 on connecting.
 
 **What it does:** rooms, DMs, statuses, media, search, and uploads. A photo or video
-from the phone's camera has where it was taken stripped like any other (§4.10). One screen shows at a
+from the phone's camera has where it was taken stripped like any other (§4.10). A
+shared file downloads to the browser on Android, which saves it, and on an iPhone
+into the share sheet (§4.10, #703). One screen shows at a
 time, as phone chat apps do (Matt, 2026-10-03): the list is home, and a conversation,
 Media or Search opens over it with a way back. Back goes back the phone's way, from
 anything open to what's under it: on Android, with the phone's own Back, its button
