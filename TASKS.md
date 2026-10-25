@@ -939,7 +939,11 @@ and not as a WebRTC track. Branch `feat/360-screen-sharing`. Numbers are `T-19xx
   **Still to do:** an Android phone and an iPhone watching for real (an iPhone
   before iOS 16.4 has no WebCodecs, and offers no Watch).
 - ⬜ **T-1907 · Sharing from Linux and macOS** — the desktop's own picker (the ScreenCast
-  portal on Linux), with WebKitGTK's encoder. **Found 2026-10-25:** WebKit has no
+  portal on Linux), with WebKitGTK's encoder. Share is offered on Windows only until then
+  (`lib/screen/probe.ts` `sharesFromHere`). **Found 2026-10-25:** wry answers no
+  WebKitGTK `permission-request` but the clipboard's, and an unanswered one is refused,
+  so the shell must allow a display-capture request (from the page's own press only)
+  before the portal's picker can open. And WebKit has no
   video track processor, so `share.ts` reads the screen through a hidden video; in
   Playwright's WebKit a page in the background never plays that video
   (`readyState` stays 0), so a share from a Linger window behind others could

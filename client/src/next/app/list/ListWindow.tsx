@@ -97,7 +97,7 @@ import { arrivalsBetween, CARD_EVERY_MS, cardsHushed, CHIME_EVERY_MS, due, loadA
 import { loadSoundPrefs, playSound } from "../../../lib/sound";
 import type { InVoice } from "../chat/VoiceStrip";
 import { VoiceDock, type VoiceDockProps } from "./VoiceDock";
-import { canPickScreen, hasWebCodecs } from "../../../lib/screen/probe";
+import { sharesFromHere } from "../../../lib/screen/probe";
 import { type ScreenShareState, useScreenShare, useShareStopped } from "../../../lib/screen/share";
 import { myScreen, sharersIn, shareStoppedWords, watchersOf, watchingWords } from "../../core/screens";
 import { startSharingHere, stopSharingEverywhere } from "../../core/screenStop";
@@ -887,7 +887,7 @@ function Servers({
 
   const voice = useMemo(() => {
     if (!voiceState || voiceServer === null) return undefined;
-    const screensOn = infos[voiceServer]?.screens === true && !onPhone() && canPickScreen() && hasWebCodecs();
+    const screensOn = infos[voiceServer]?.screens === true && !onPhone() && sharesFromHere();
     const dock = voiceDock(voiceState, talkingNow(voiceState), voiceServer, talkKey, screensOn ? { api: apisRef.current.get(voiceServer) ?? null, share: shareHere, stopped: shareStopped?.server === voiceServer ? shareStoppedWords(shareStopped.why) : null } : null);
     if (!dock || !several) return dock;
     const info = infos[voiceServer];

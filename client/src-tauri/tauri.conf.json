@@ -80,7 +80,8 @@
           "/usr/lib64/gstreamer-1.0/libgstcoreelements.so",
           "/usr/lib64/gstreamer-1.0/libgstinterleave.so",
           "/usr/lib64/gstreamer-1.0/libgstautodetect.so",
-          "/usr/lib64/gstreamer-1.0/libgstpulseaudio.so"
+          "/usr/lib64/gstreamer-1.0/libgstpulseaudio.so",
+          "/usr/lib64/gstreamer-1.0/libgstvpx.so"
         ],
         "recommends": ["libayatana-appindicator-gtk3", "gstreamer1-plugin-libav"]
       }

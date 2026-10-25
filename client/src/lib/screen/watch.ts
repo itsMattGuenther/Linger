@@ -66,6 +66,12 @@ export async function startWatching(options: { server: string; api: AuthedApi; s
   }
   running?.finish();
   const decode = await playable();
+  // Nothing it can play: say so, rather than ask the server for nothing.
+  if (decode.length === 0) {
+    running = null;
+    publish({ server: options.server, place: options.place, who: options.who, target: options.target, status: "unplayable", width: 0, height: 0 });
+    return;
+  }
   const watching = new Watching(options.server, options.api, options.sessionId, options.target, decode, options.place, options.who);
   running = watching;
   publish({ server: options.server, place: options.place, who: options.who, target: options.target, status: "connecting", width: 0, height: 0 });

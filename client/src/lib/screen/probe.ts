@@ -29,6 +29,16 @@ async function supported(test: () => Promise<{ supported?: boolean }>): Promise<
   }
 }
 
+/**
+ * Whether this app shares from here (SPEC §4.20): the Windows app, for now.
+ * Linux's WebKitGTK refuses the picker unless the shell answers its
+ * permission request, and reads a window behind others too slowly (T-1907);
+ * macOS comes with it. Elsewhere Share isn't offered; watching is.
+ */
+export function sharesFromHere(): boolean {
+  return canPickScreen() && hasWebCodecs() && typeof navigator !== "undefined" && /\bWindows\b/.test(navigator.userAgent);
+}
+
 /** The formats this app can play. */
 export function playable(): Promise<ScreenCodec[]> {
   if (!plays) {

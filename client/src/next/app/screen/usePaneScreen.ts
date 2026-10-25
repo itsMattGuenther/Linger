@@ -3,7 +3,7 @@ import type { RoomId } from "../../../generated/RoomId";
 import type { User } from "../../../generated/User";
 import type { AuthedApi } from "../../../lib/api";
 import type { GatewayState } from "../../../lib/gateway";
-import { canPickScreen, hasWebCodecs } from "../../../lib/screen/probe";
+import { hasWebCodecs, sharesFromHere } from "../../../lib/screen/probe";
 import { useScreenShare } from "../../../lib/screen/share";
 import { closeEnded, drawOn, startWatching, stopWatching, useScreenWatch } from "../../../lib/screen/watch";
 import { onPhone } from "../../core/phone";
@@ -92,7 +92,7 @@ export function usePaneScreen({
     };
     const iShare = (mine?.roomId === roomId && mine.sharing) || (share !== null && share.server === server);
     const shareControl: ShareControl | undefined =
-      seatedHere && !onPhone() && canPickScreen()
+      seatedHere && !onPhone() && sharesFromHere()
         ? {
             sharing: iShare,
             unavailable: !iShare && sharers.length >= 3 ? "Three people are sharing here already." : undefined,
