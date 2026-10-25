@@ -920,16 +920,32 @@ and not as a WebRTC track. Branch `feat/360-screen-sharing`. Numbers are `T-19xx
 
 - ✅ **T-1901 · Decided and written down** — Matt, 2026-10-25: 30 and 60 frames a second,
   the screen above the conversation, Watch joins voice, three sharing at most.
-- ⏳ **T-1902 · The server** — the screen socket, passing frames on, picking formats, the
-  ceiling, `screen` and `watching` in `voice.state`.
-- ⏳ **T-1903 · Sharing from the app** — the system's picker, WebCodecs encoders for the
-  formats the server asks for, the socket. Windows first.
-- ⏳ **T-1904 · Watching in the app** — the socket, WebCodecs decoders, drawing.
-- ⏳ **T-1905 · The screens** — Share in the voice bar and the voice line, the screen mark,
-  Watch, the screen above the conversation, Full screen, Stop in the tray menu.
-- ⏳ **T-1906 · Watching on a phone** — the same, at the top of the room; sideways fills it.
+- ✅ **T-1902 · The server** — the screen socket (`gateway/screen_socket.rs`), the
+  board that passes frames on, picks formats, skips a watcher that falls behind and
+  holds a share to its ceiling (`gateway/screens.rs`), `screen` and `watching` in
+  `voice.state`, `screens` in `GET /server`. Tests: the board's own, and
+  `tests/screen.rs` over real sockets.
+- 🟡 **T-1903 · Sharing from the app** — built (`lib/screen/share.ts`) and through a
+  real server in Chromium (`scripts/screen-loop.mjs`). **Still to do:** a share from
+  the real Windows app, watched for real. `client/scripts/windows-screen-check.mjs`
+  checks the installed app's WebView2 in the package check: the picker, the track
+  processor, VP8 at 1080p60, shown and minimized.
+- ✅ **T-1904 · Watching in the app** — `lib/screen/watch.ts`; Chromium and WebKit
+  play a share through a real server, and in the browser tests.
+- 🟡 **T-1905 · The screens** — built and in the browser tests
+  (`next-screen.spec.ts`). **Still to do:** look at it in the real Linux and
+  Windows apps.
+- 🟡 **T-1906 · Watching on a phone** — the layout is built and tested at phone size.
+  **Still to do:** an Android phone and an iPhone watching for real (an iPhone
+  before iOS 16.4 has no WebCodecs, and offers no Watch).
 - ⬜ **T-1907 · Sharing from Linux and macOS** — the desktop's own picker (the ScreenCast
-  portal on Linux), with WebKitGTK's encoder.
+  portal on Linux), with WebKitGTK's encoder. **Found 2026-10-25:** WebKit has no
+  video track processor, so `share.ts` reads the screen through a hidden video; in
+  Playwright's WebKit a page in the background never plays that video
+  (`readyState` stays 0), so a share from a Linger window behind others could
+  stall. Turn on WebKitGTK's `MediaStreamTrackProcessing` feature in the shell
+  (wry's `with_webview`, `webkit_settings_set_feature_enabled`) before Linux
+  sharing ships, and check a share from a window that isn't in front.
 - ⬜ **T-1908 · The real check** — a Windows share watched on Linux, Windows, Android and an
   iPhone through the real server, at both speeds, for half an hour.
 - ⬜ **T-1909 · Streaming a game** — the computer's sound, the graphics card's encoder, later.

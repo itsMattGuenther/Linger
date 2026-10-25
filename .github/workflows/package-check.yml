@@ -157,6 +157,13 @@ jobs:
         # The app windows-icon-check.ps1 installed: minimized, restored, closed
         # to the tray and brought back, read over WebView2's debugging port.
         run: node client/scripts/windows-hidden-check.mjs package-check/installed/linger-client.exe package-check/hidden
+      - name: The installed Windows app can share a screen (#360)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        # The same installed app: the picker answers a press, the track
+        # processor reads the screen and VP8 encodes it at 1080p60, shown and
+        # minimized. Read over WebView2's debugging port; no server.
+        run: node client/scripts/windows-screen-check.mjs package-check/installed/linger-client.exe package-check/screen
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -173,6 +180,7 @@ jobs:
             package-check/next/next_open_conversation.png
             package-check/next/result.json
             package-check/next-*/result.json
+            package-check/screen/result.json
             package-check/audio-*/*.log
             package-check/audio-*/*.json
             package-check/audio-*/*.f32
