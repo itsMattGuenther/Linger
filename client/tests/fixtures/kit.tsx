@@ -862,6 +862,10 @@ function Gallery() {
           <Chip label="Jules" marker={{ color: "fern", state: "here" }} state={{ icon: "headOff", word: "Deafened" }} note="can't reach">
             Jules
           </Chip>
+          {/* Sharing their screen (#360), and muted too: the screen first. */}
+          <Chip label="Dave" marker={{ color: "cyan", state: "here" }} sharing state={{ icon: "micOff", word: "Muted" }}>
+            Dave
+          </Chip>
         </div>
         {/* A big voice room's seats (#197): chips as wide as their column. */}
         <ul className="g-seats" data-testid="seats">

@@ -13,6 +13,7 @@ export function Chip({
   label,
   marker,
   active = false,
+  sharing = false,
   state,
   note,
   onRemove,
@@ -28,6 +29,11 @@ export function Chip({
   marker?: MarkerPerson;
   /** Lit in the lamp: the person is talking right now. */
   active?: boolean;
+  /**
+   * They're sharing their screen (#360): the screen's own mark after the
+   * name, before a muted or deafened one. The words are for screen readers.
+   */
+  sharing?: boolean;
   /**
    * A state shown as its control's own glyph after the name, like muted or
    * deafened; the word is for screen readers. It sits after the name, so
@@ -56,6 +62,12 @@ export function Chip({
     <>
       {marker ? <Marker color={marker.color} state={marker.state} size="sm" /> : null}
       <span className="k-chip-text">{children}</span>
+      {sharing ? (
+        <span className="k-chip-state" data-screen="">
+          <Icon name="screen" size="sm" />
+          <span className="k-sr-only">sharing their screen</span>
+        </span>
+      ) : null}
       {state ? (
         <span className="k-chip-state">
           <Icon name={state.icon} size="sm" />

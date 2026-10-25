@@ -57,6 +57,7 @@ import { PersonCard } from "../list/PersonCard";
 import { useHideReactions } from "../useHideReactions";
 import { hostOf, type ServerTagInfo, useServerInfos } from "../useServerInfos";
 import type { ChatPane } from "./ChatView";
+import { usePaneScreen } from "../screen/usePaneScreen";
 import type { ReactionKit } from "./Reactions";
 import { useFileDrafts } from "./useFileDrafts";
 import { useVoiceMessages } from "./useVoiceMessages";
@@ -237,6 +238,15 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
   const roomId = active?.roomId ?? null;
   const room = state && roomId !== null ? conversationIn(state, roomId) : null;
   const paneId = active ? keyOf(active) : null;
+  // Screens shared in its voice (#360): the one shown above it, Watch, Share.
+  const screen = usePaneScreen({
+    server: active?.server ?? null,
+    api,
+    state,
+    roomId: room ? roomId : null,
+    intend,
+    screensOn: active ? infos[active.server]?.screens === true : false,
+  });
 
   const land = useLanding(api, roomId, state);
   const read = useReading(intend, active, state, land.ready);
@@ -380,6 +390,7 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
         // The host took us out of voice here (#423): the strip says so.
         takenOut: state.voiceTakenOut === room.id && state.myVoice?.roomId !== room.id,
       },
+      screen,
       people,
       gone,
       customEmoji: state.emoji,

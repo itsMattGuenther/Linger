@@ -28,6 +28,8 @@ export interface VoicePerson {
    */
   volume: number;
   session: string | null;
+  /** They're sharing their screen here (#360), from any of their computers. */
+  sharing: boolean;
 }
 
 export interface VoiceModel {
@@ -70,6 +72,7 @@ export function voiceModel(state: GatewayState, speaking: ReadonlySet<string>, t
         link: you || !peer ? null : linkOf(mine.peers[peer.session_id]),
         volume: you || !peer ? 1 : (mine.volumes[peer.session_id] ?? 1),
         session: you || !peer ? null : peer.session_id,
+        sharing: peers.some((one) => one.user_id === user.id && one.screen),
       };
     });
   return {

@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useMemo, useState } from "react";
+import { type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CustomEmoji } from "../../../generated/CustomEmoji";
 import type { Attachment } from "../../../generated/Attachment";
 import type { Message } from "../../../generated/Message";
@@ -10,7 +10,11 @@ import type { MentionPerson } from "../../core/chat/mentions";
 import { lastEditable } from "../../core/chat/rows";
 import type { VoiceStrip as VoiceStripModel } from "../../core/chat/voice";
 import { minimizer } from "../../core/windowControls";
-import { IconButton, TabStrip, type TabItem, TitleBar } from "../../kit";
+import { IconButton, Splitter, TabStrip, type TabItem, TitleBar } from "../../kit";
+import { onPageFullscreenLeft, setWindowFull } from "../../core/fullscreen";
+import { onPhone } from "../../core/phone";
+import { ScreenStage, type StageProps } from "../screen/ScreenStage";
+import type { ShareControl } from "../screen/ShareButton";
 import { PaneBoundary } from "../Boundary";
 import { Composer, type ComposerProps } from "./Composer";
 import { Conversation, type ConversationProps } from "./Conversation";
@@ -19,7 +23,7 @@ import type { MessageActions } from "./MessageRow";
 import { MotdStrip } from "./MotdStrip";
 import { PaneHeader, type PaneHeaderProps } from "./PaneHeader";
 import { Typing, type TypingNow } from "./Typing";
-import { type InVoice, InVoiceLine, type StripControls, type StripProblem, VoiceStrip } from "./VoiceStrip";
+import { type InVoice, InVoiceLine, type StripControls, type StripProblem, type StripWatch, VoiceStrip } from "./VoiceStrip";
 import "./ChatView.css";
 
 /** What the window supplies about the showing conversation's history. */
@@ -75,6 +79,17 @@ export interface ChatPane {
     /** The host took you out of voice here (#423). */
     takenOut?: boolean;
   } | null;
+  /**
+   * Screens shared in this conversation's voice (SPEC §4.20, #360): the one
+   * this window shows, above the conversation; who shares, for their chips;
+   * Watch; and Share. Left out where there are none to offer.
+   */
+  screen?: {
+    stage: Omit<StageProps, "full" | "onFull"> | null;
+    sharing: ReadonlySet<string>;
+    watch?: StripWatch;
+    share?: ShareControl;
+  };
   /** Everyone the pane may name, by id: authors, voice, typing. */
   people: ReadonlyMap<string, User>;
   /** Deleted accounts on the pane's server (#650): what they left says "Deleted account". */
@@ -145,6 +160,72 @@ export interface ChatViewProps {
   others?: readonly { id: string; label: string; body: ReactNode }[];
 }
 
+/** The shortest the shared screen gets, and the least it leaves the conversation under it, in the page's pixels (tokens.css has both for the styles). */
+const STAGE_MIN = 120;
+const TALK_MIN = 160;
+/** Where the screen's height is kept on this device, so it opens the size it was left. */
+const STAGE_KEY = "linger.next.stageHeight";
+
+function savedStage(): number | null {
+  try {
+    const held = Number(localStorage.getItem(STAGE_KEY));
+    return Number.isFinite(held) && held > 0 ? held : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The shared screen's place in the pane (#360): how tall it is, dragged and
+ * kept on this device, half the pane to begin with; and full screen, which
+ * fills the monitor and goes when the screen does.
+ */
+function useStage(shown: boolean) {
+  const box = useRef<HTMLElement | null>(null);
+  // The room the screen and the conversation share: the pane, less its
+  // header, voice line, box and the rest that keep their own heights.
+  const [room, setRoom] = useState(0);
+  const [chosen, setChosen] = useState<number | null>(savedStage);
+  const [full, setFullNow] = useState(false);
+  useEffect(() => {
+    const element = box.current;
+    if (!shown || !element) return;
+    const measure = () => {
+      const stage = element.querySelector<HTMLElement>(".nx-stage");
+      const conversation = element.querySelector<HTMLElement>(".nx-conv");
+      setRoom((stage?.offsetHeight ?? 0) + (conversation?.offsetHeight ?? 0));
+    };
+    const watch = new ResizeObserver(measure);
+    watch.observe(element);
+    const conversation = element.querySelector(".nx-conv");
+    if (conversation) watch.observe(conversation);
+    measure();
+    return () => watch.disconnect();
+  }, [shown]);
+  const setFull = useCallback((on: boolean) => {
+    setFullNow(on);
+    void setWindowFull(on);
+  }, []);
+  // Leaving the page's own full screen by its Escape leaves the screen's too.
+  useEffect(() => (full ? onPageFullscreenLeft(() => setFullNow(false)) : undefined), [full]);
+  // The screen going (stopped watching, the share over) takes full screen with it.
+  useEffect(() => {
+    if (!shown && full) setFull(false);
+  }, [shown, full, setFull]);
+  const most = Math.max(STAGE_MIN, room - TALK_MIN);
+  const half = Math.max(STAGE_MIN, Math.min(most, Math.round(room / 2)));
+  const height = Math.min(most, Math.max(STAGE_MIN, chosen ?? half));
+  const setHeight = useCallback((next: number) => {
+    setChosen(next);
+    try {
+      localStorage.setItem(STAGE_KEY, String(next));
+    } catch {
+      // Not kept; it's the right size until the app closes.
+    }
+  }, []);
+  return { box, height, most, half, full, setFull, setHeight };
+}
+
 /** "#general", or the people in a DM: what the box and the log are named by. */
 function titleOf(header: PaneHeaderProps): string {
   return header.kind === "room" ? `#${header.name}` : header.label;
@@ -169,6 +250,8 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
 
   const paneId = pane?.id ?? null;
   const messages = pane?.stream.messages;
+  const stage = pane?.screen?.stage ?? null;
+  const screen = useStage(stage !== null);
 
   const setReply = useCallback((tab: string, message: Message | null) => {
     setReplies((held) => {
@@ -244,7 +327,7 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
   const back = stack ? <IconButton icon="back" label="Back" size="lg" onClick={stack.onBack} /> : undefined;
 
   return (
-    <div className="nx-chat" data-screen="chat" data-single={single ? "yes" : undefined} data-stack={stack ? "yes" : undefined}>
+    <div className="nx-chat" data-screen="chat" data-single={single ? "yes" : undefined} data-stack={stack ? "yes" : undefined} data-phone={onPhone() ? "yes" : undefined}>
       <TitleBar leading={back ?? leading} focused={focused} actions={stack ? undefined : single ? backBeside : popOut} onMinimize={onCloseWindow && minimizer()} onClose={onCloseWindow}>
         {alone ? (
           pane ? (
@@ -258,7 +341,14 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
       </TitleBar>
 
       {pane && actions ? (
-        <section className="nx-pane" id={`nx-pane-${pane.id}`} role={alone ? "region" : "tabpanel"} aria-label={titleOf(pane.header)}>
+        <section
+          ref={screen.box}
+          className="nx-pane"
+          id={`nx-pane-${pane.id}`}
+          role={alone ? "region" : "tabpanel"}
+          aria-label={titleOf(pane.header)}
+          style={stage ? ({ "--stage-height": `${screen.height}px` } as CSSProperties) : undefined}
+        >
           {/* One conversation that can't be drawn says so in its place, and
               the tabs, the list and every other conversation carry on (#509). */}
           <PaneBoundary what="This conversation couldn't be shown." resetKey={pane.id}>
@@ -279,7 +369,37 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
             {inVoice && pane.voice?.strip.kind !== "mine" ? (
               <InVoiceLine voice={inVoice} />
             ) : pane.voice ? (
-              <VoiceStrip strip={pane.voice.strip} people={pane.people} meId={meId} speaking={pane.speaking} mics={pane.voice.mics} onJoin={pane.voice.onJoin} onPickDevice={pane.voice.onPickDevice} controls={pane.voice.controls} failed={pane.voice.failed} takenOut={pane.voice.takenOut} />
+              <VoiceStrip
+                strip={pane.voice.strip}
+                people={pane.people}
+                meId={meId}
+                speaking={pane.speaking}
+                mics={pane.voice.mics}
+                onJoin={pane.voice.onJoin}
+                onPickDevice={pane.voice.onPickDevice}
+                controls={pane.voice.controls}
+                failed={pane.voice.failed}
+                takenOut={pane.voice.takenOut}
+                sharing={pane.screen?.sharing}
+                watch={pane.screen?.watch}
+                share={pane.screen?.share}
+              />
+            ) : null}
+            {stage ? (
+              <>
+                <ScreenStage {...stage} full={screen.full} onFull={screen.setFull} />
+                {screen.full || onPhone() ? null : (
+                  <Splitter
+                    across
+                    label="Space between the screen and the conversation"
+                    value={screen.height}
+                    min={STAGE_MIN}
+                    max={screen.most}
+                    reset={screen.half}
+                    onChange={screen.setHeight}
+                  />
+                )}
+              </>
             ) : null}
             <Conversation
               key={pane.id}

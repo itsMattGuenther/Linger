@@ -1,8 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "next-windows",
-  "description": "The Buddy list client (M15, docs/design/architecture.md) draws its own title bars, so its windows may move, minimize, maximize and close themselves: the drag region needs start-dragging, and the title bar's buttons need the rest. Nothing else is added. The chat and Settings windows have their own files (next-chat.json, next-settings.json); the app's own commands are in owner.json. Settings can ask the list window to show the sign-in for another server, so it may bring itself forward: unminimize and set-focus. Interface size zooms the page and grows the window to match (core/appearance.ts), which needs set-webview-zoom and set-size, and grows its smallest size by the same ratio (#512), which needs set-min-size. Conversations open beside the list, in its own window (#337): unfolding grows the window, and moves it left where its screen ends, which needs set-position; a conversation opened from a banner while the list is in the tray brings it back through the shell (next_show_list, owner.json), so the page is told it can be seen again (#594), and needs no show of its own.",
-  "platforms": ["linux", "macOS", "windows"],
+  "description": "The Buddy list client (M15, docs/design/architecture.md) draws its own title bars, so its windows may move, minimize, maximize and close themselves: the drag region needs start-dragging, and the title bar's buttons need the rest. Nothing else is added. The chat and Settings windows have their own files (next-chat.json, next-settings.json); the app's own commands are in owner.json. Settings can ask the list window to show the sign-in for another server, so it may bring itself forward: unminimize and set-focus. Interface size zooms the page and grows the window to match (core/appearance.ts), which needs set-webview-zoom and set-size, and grows its smallest size by the same ratio (#512), which needs set-min-size. Conversations open beside the list, in its own window (#337): unfolding grows the window, and moves it left where its screen ends, which needs set-position; a conversation opened from a banner while the list is in the tray brings it back through the shell (next_show_list, owner.json), so the page is told it can be seen again (#594), and needs no show of its own. A shared screen's Full screen (#360) fills the monitor with the window, which needs set-fullscreen.",
+  "platforms": [
+    "linux",
+    "macOS",
+    "windows"
+  ],
   "windows": [
     "main"
   ],
@@ -16,6 +20,7 @@
     "core:window:allow-set-min-size",
     "core:window:allow-set-focus",
     "core:window:allow-unminimize",
-    "core:window:allow-set-position"
+    "core:window:allow-set-position",
+    "core:window:allow-set-fullscreen"
   ]
 }

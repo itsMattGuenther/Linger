@@ -38,6 +38,7 @@ import { startingBank } from "../../src/next/core/you";
 import { ListView } from "../../src/next/app/list/ListView";
 import "../../src/next/styles/app.css";
 import type { User } from "../../src/generated/User";
+import type { VoicePeer } from "../../src/generated/VoicePeer";
 import { NOW, SERVER, SERVER_NAME, dms, evening, ownFields, people, withFields } from "./next/evening";
 import { GUILD, LISBON, guild, lisbon, serverInfo } from "./next/servers";
 import { raid } from "./next/raid";
@@ -75,16 +76,31 @@ const base = query.has("away")
       };
     })()
   : night;
-const state = query.has("voice")
+// `?screen=shared`: Jules shares their screen in #general's voice (#360), and
+// Eli watches it. `?screen=sharing`: you share, Eli and Jules watching.
+const SCREEN = query.get("screen");
+const screenOf = (peer: VoicePeer): VoicePeer => {
+  if (SCREEN === "shared") {
+    if (peer.user_id === people.jules.id) return { ...peer, screen: { fps: 30 as const } };
+    if (peer.user_id === people.eli.id) return { ...peer, watching: "s-jules" };
+  }
+  if (SCREEN === "sharing") {
+    if (peer.user_id === people.matt.id) return { ...peer, screen: { fps: 60 as const } };
+    return { ...peer, watching: "s-matt" };
+  }
+  return peer;
+};
+const state: GatewayState = query.has("voice")
   ? {
       ...base,
+      sessionId: "s-matt",
       voice: {
         "r-general": [
           ...(base.voice["r-general"] ?? []).map((peer) =>
             query.has("mics") ? { session_id: peer.session_id, user_id: peer.user_id, controls: peer.user_id === people.jules.id ? { muted: true, deafened: true } : undefined } : peer,
           ),
           { session_id: "s-matt", user_id: people.matt.id },
-        ],
+        ].map(screenOf),
       },
       myVoice: {
         roomId: "r-general",
@@ -214,6 +230,33 @@ interface Live {
   read: (roomId: string) => void;
 }
 
+/** A screen to share in the test page (#360): a slide that ticks, played as a stream. */
+let fakeScreenStream: MediaStream | null = null;
+function fakeScreen(): MediaStream | null {
+  if (fakeScreenStream) return fakeScreenStream;
+  const canvas = document.createElement("canvas");
+  canvas.width = 640;
+  canvas.height = 360;
+  const context = canvas.getContext("2d");
+  if (!context || typeof canvas.captureStream !== "function") return null;
+  const paint = () => {
+    context.fillStyle = "#f6f3ec";
+    context.fillRect(0, 0, 640, 360);
+    context.fillStyle = "#2f6f62";
+    context.fillRect(0, 0, 20, 360);
+    context.fillStyle = "#1c2733";
+    context.font = "bold 44px sans-serif";
+    context.fillText("The river loop", 60, 120);
+    context.font = "24px sans-serif";
+    context.fillText("Meet at the mill car park", 60, 190);
+    context.fillText("6.5 km, mostly flat", 60, 230);
+    requestAnimationFrame(paint);
+  };
+  paint();
+  fakeScreenStream = canvas.captureStream(30);
+  return fakeScreenStream;
+}
+
 /** One server, as the list has always been. */
 function OneServer() {
   const [held, setHeld] = useState<GatewayState>(clocked);
@@ -287,6 +330,19 @@ function OneServer() {
               onMute: (muted) => note(`mute:${muted}`),
               onDeafen: (deafened) => note(`deafen:${deafened}`),
               onLeave: () => note("leave"),
+              // `?screen`: Share beside your controls (#360); `=sharing` your share, its
+              // small copy a canvas that changes, so the box can be seen working.
+              ...(SCREEN !== null
+                ? {
+                    share: {
+                      sharing: SCREEN === "sharing",
+                      unavailable: SCREEN === "full" ? "Three people are sharing here already." : undefined,
+                      onShare: (fps: number) => note(`share:${fps}`),
+                      onStop: () => note("stop sharing"),
+                      box: SCREEN === "sharing" ? { preview: fakeScreen(), watching: "Eli and Jules are watching", starting: false } : null,
+                    },
+                  }
+                : {}),
               // `?raid`: chips and the everyone card open volumes (#197).
               ...(query.has("takeout") || query.has("raid")
                 ? { onVolume: (person: { user: { id: string } }, volume: number) => note(`volume:${person.user.id}:${volume}`) }

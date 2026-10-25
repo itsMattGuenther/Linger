@@ -5,6 +5,8 @@ import { onPhone } from "../../core/phone";
 import { Chip, IconButton, MarkerCrowd, Name, VoiceGlyph } from "../../kit";
 import { markerFor } from "../markers";
 import { useTalkSeats } from "../useTalkSeats";
+import { ShareButton, type ShareControl } from "../screen/ShareButton";
+import { SharingBox } from "../screen/SharingBox";
 import { EveryoneCard } from "./EveryoneCard";
 import "./VoiceDock.css";
 import { serverColor } from "./ServerSection";
@@ -28,6 +30,8 @@ export interface VoiceDockPerson {
   link?: "connecting" | "unreachable" | null;
   /** How loud they play for you, 0 to 2 (VOICE-10). */
   volume?: number;
+  /** Sharing their screen here (#360). */
+  sharing?: boolean;
 }
 
 /** A person's shared microphone state as their chip's glyph, and its word. */
@@ -67,6 +71,11 @@ export interface VoiceDockProps {
   onVolume?: (person: VoiceDockPerson, volume: number) => void;
   /** The host taking somebody out of voice, from their chip's card (#423). Left out for everybody else. */
   onTakeOut?: (person: VoiceDockPerson) => Promise<string | null>;
+  /**
+   * Share your screen (#360), beside your controls, and your share while
+   * there is one. Left out where you can't: a phone, a server without it.
+   */
+  share?: ShareControl & { box: { preview: MediaStream | null; watching: string; starting: boolean } | null };
 }
 
 /**
@@ -80,7 +89,7 @@ export interface VoiceDockProps {
  * seats for you and whoever just talked, and everybody as a crowd of markers
  * that light while they talk and open everyone by name.
  */
-export function VoiceDock({ where, people, muted, deafened, line, server, onGoToRoom, onMute, onDeafen, onLeave, onVolume, onTakeOut }: VoiceDockProps) {
+export function VoiceDock({ where, people, muted, deafened, line, server, onGoToRoom, onMute, onDeafen, onLeave, onVolume, onTakeOut, share }: VoiceDockProps) {
   // A thumb's size on the phone (#429), a pointer's elsewhere.
   const controlSize = onPhone() ? "lg" : "sm";
   // Whose volume is open, and the chip (or crowd) it opened from.
@@ -123,6 +132,7 @@ export function VoiceDock({ where, people, muted, deafened, line, server, onGoTo
         label={person.you ? "you" : person.user.display_name}
         marker={markerFor(person.user, "in_room")}
         active={person.speaking}
+        sharing={person.sharing}
         state={stateOf(person)}
         note={noteOf(person)}
         fill={fill}
@@ -224,6 +234,7 @@ export function VoiceDock({ where, people, muted, deafened, line, server, onGoTo
           onClose={closeVolume}
         />
       ) : null}
+      {share?.box ? <SharingBox preview={share.box.preview} watching={share.box.watching} starting={share.box.starting} onStop={share.onStop} /> : null}
       {/* Symbols, as in the room's chat window (#216): each word is the button's name and tooltip (#230).
           Mute shows with push-to-talk too: it's a choice of its own, which the key can't undo (#232). */}
       <div className="nx-voice-controls" role="group" aria-label="Your voice">
@@ -235,6 +246,7 @@ export function VoiceDock({ where, people, muted, deafened, line, server, onGoTo
           pressed={deafened}
           onClick={() => onDeafen(!deafened)}
         />
+        {share ? <ShareButton control={share} size={controlSize} /> : null}
         <IconButton icon="leave" label="Leave voice" size={controlSize} onClick={onLeave} />
       </div>
     </section>

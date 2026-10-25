@@ -253,26 +253,41 @@ class Sharing {
       void pump();
       return;
     }
-    // An engine without a track processor: the track plays in a video that
-    // nobody sees, and each new picture it shows is a frame.
+    // An engine without a track processor (WebKitGTK, Safari on a Mac): the
+    // track plays in a video nobody sees, and its picture is taken at the
+    // share's speed. The video is in the page, out of sight, since an engine
+    // may not play one that isn't; a screen that isn't changing is the same
+    // picture again, which costs next to nothing to send.
     const video = document.createElement("video");
     video.muted = true;
     video.playsInline = true;
+    video.setAttribute("aria-hidden", "true");
+    Object.assign(video.style, { position: "fixed", left: "0", top: "0", width: "1px", height: "1px", opacity: "0", pointerEvents: "none" });
     video.srcObject = this.stream;
+    document.body.append(video);
+    let timer = 0;
     this.#stopReading = () => {
+      window.clearInterval(timer);
       video.pause();
       video.srcObject = null;
+      video.remove();
     };
-    const tick = () => {
-      if (this.#done) return;
+    const take = () => {
+      // Not `readyState`: WebKit can leave a stream's video at "nothing yet"
+      // while it plays. A size means there's a picture to take.
+      if (this.#done || video.videoWidth === 0) return;
       try {
         this.frame(new VideoFrame(video, { timestamp: Math.round(performance.now() * 1_000) }));
       } catch {
         // Not a picture yet.
       }
-      video.requestVideoFrameCallback(tick);
     };
-    void video.play().then(() => video.requestVideoFrameCallback(tick)).catch(() => this.finish("dropped"));
+    void video
+      .play()
+      .then(() => {
+        timer = window.setInterval(take, Math.floor(1_000 / this.speed.fps));
+      })
+      .catch(() => this.finish("dropped"));
   }
 
   frame(frame: VideoFrame): void {

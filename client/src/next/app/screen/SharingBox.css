@@ -1,0 +1,45 @@
+/* Your share in the voice bar (#360). Layout only; tokens only. */
+.nx-sharing {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+  padding: var(--space-2);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+}
+
+.nx-sharing-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.nx-sharing-thumb {
+  flex: none;
+  width: var(--screen-thumb-w);
+  height: var(--screen-thumb-h);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-xs);
+  background: var(--surface-backdrop);
+  object-fit: contain;
+}
+
+.nx-sharing-words {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-control);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.nx-sharing-who {
+  margin: 0;
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+  color: var(--text-secondary);
+}

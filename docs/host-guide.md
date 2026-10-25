@@ -468,6 +468,22 @@ gone.)
 2. `docker compose logs linger` says `voice goes to the address LINGER_DOMAIN
    points at` and `voice forwarding is on`.
 
+### Shared screens
+
+Anybody in a room's voice can share their screen (#360), and it goes through
+your server the same way: the person sharing sends it once, and your server
+sends a copy to each person watching. It needs nothing set up. It travels on
+the server's own address, the one the app already uses, so it doesn't need
+UDP 3479 and works through the proxy in front of the server.
+
+What it costs is upload: about 1.5 to 6 Mbps for each person watching, less
+for a still slide and more for a game at 60 frames a second. Eight people
+watching a presentation for an hour is roughly 7 GB of data out; a game shared
+at 60 frames a second to eight people is closer to 20 GB an hour. Your server
+holds every share to 10 Mbps whatever an app sends, and a room to three shares
+at once. The server passes the pictures on without opening them and keeps
+nothing; like voice, a host who changed the server could see them.
+
 **Sending voice somewhere else.** If your name doesn't point straight at the
 server (behind Cloudflare's proxy, say, it points at Cloudflare, which can't
 carry voice), set `LINGER_VOICE_ADDRESS` in `.env` to the server's public IP:

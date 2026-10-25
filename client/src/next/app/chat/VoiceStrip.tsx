@@ -8,6 +8,7 @@ import { copyText } from "../../core/copy";
 import { onPhone } from "../../core/phone";
 import { Button, Chip, IconButton, markerOf, Name, Popover, VoiceGlyph } from "../../kit";
 import { useTalkSeats } from "../useTalkSeats";
+import { ShareButton, type ShareControl } from "../screen/ShareButton";
 import "./VoiceStrip.css";
 
 /**
@@ -43,6 +44,16 @@ export interface StripControls {
   onLeave: () => void;
 }
 
+/** The shares in this conversation's voice, and Watch (SPEC §4.20, #360). */
+export interface StripWatch {
+  /** Who shares here, not you: their session, and them. */
+  sharers: readonly { session: string; user: User }[];
+  /** The share this window shows, if one. */
+  watching: string | null;
+  /** Watch one: joins voice here first when you aren't in it. */
+  onWatch: (session: string) => void;
+}
+
 /** Why the last start here failed, as the strip says it, and the shell's whole reason (#261, #273). */
 export type StripProblem = StartProblem & { detail: string };
 
@@ -57,6 +68,9 @@ export const VoiceStrip = memo(function VoiceStrip({
   controls,
   failed,
   takenOut,
+  sharing,
+  watch,
+  share,
 }: {
   strip: Strip;
   /** Everyone the strip names, by id. */
@@ -88,6 +102,12 @@ export const VoiceStrip = memo(function VoiceStrip({
    * go, until you join again. Join stays, since it isn't a ban.
    */
   takenOut?: boolean;
+  /** Who's sharing their screen here, by user id (#360): the mark on their chip. */
+  sharing?: ReadonlySet<string>;
+  /** Watch, for each share here you aren't watching (#360). */
+  watch?: StripWatch;
+  /** Share your screen, beside your controls, when you're in voice here (#360). */
+  share?: ShareControl;
 }) {
   const showFailed = failed && strip.kind !== "mine" ? failed : undefined;
   const takenOutWords =
@@ -171,6 +191,7 @@ export const VoiceStrip = memo(function VoiceStrip({
               label={user.id === meId ? "you" : user.display_name}
               marker={markerOf(user, "in_room")}
               active={speaking.has(user.id)}
+              sharing={sharing?.has(user.id)}
               state={micState(mics?.get(user.id))}
             >
               {user.id === meId ? "you" : <Name person={user} size="control" />}
@@ -185,8 +206,18 @@ export const VoiceStrip = memo(function VoiceStrip({
         </p>
       )}
       {fix}
+      {watch
+        ? watch.sharers
+            .filter((one) => one.session !== watch.watching)
+            .map((one) => (
+              <Button key={one.session} size="sm" variant="secondary" icon="screen" onClick={press(() => watch.onWatch(one.session), strip.kind !== "mine")}>
+                {watch.sharers.length > 1 ? `Watch ${one.user.display_name}` : "Watch"}
+              </Button>
+            ))
+        : null}
       {strip.kind === "mine" && controls ? (
         <YourControls
+          share={share}
           muted={controls.muted}
           deafened={controls.deafened}
           onMute={press(() => controls.onMute(!controls.muted), false)}
@@ -208,12 +239,13 @@ export const VoiceStrip = memo(function VoiceStrip({
  * Mute, Deafen and Leave, as symbols: each word is the button's name and
  * tooltip (#230). On the phone they're a thumb's size (#429).
  */
-function YourControls({ muted, deafened, onMute, onDeafen, onLeave }: { muted: boolean; deafened: boolean; onMute: (event: MouseEvent<HTMLButtonElement>) => void; onDeafen: (event: MouseEvent<HTMLButtonElement>) => void; onLeave: (event: MouseEvent<HTMLButtonElement>) => void }) {
+function YourControls({ muted, deafened, onMute, onDeafen, onLeave, share }: { muted: boolean; deafened: boolean; onMute: (event: MouseEvent<HTMLButtonElement>) => void; onDeafen: (event: MouseEvent<HTMLButtonElement>) => void; onLeave: (event: MouseEvent<HTMLButtonElement>) => void; share?: ShareControl }) {
   const size = onPhone() ? "lg" : "sm";
   return (
     <div className="nx-strip-controls" role="group" aria-label="Your voice">
       <IconButton icon={muted ? "micOff" : "mic"} label={muted ? "Muted" : "Mute"} size={size} pressed={muted} onClick={onMute} />
       <IconButton icon={deafened ? "headOff" : "head"} label={deafened ? "Deafened" : "Deafen"} size={size} pressed={deafened} onClick={onDeafen} />
+      {share ? <ShareButton control={share} size={size} /> : null}
       <IconButton icon="leave" label="Leave voice" size={size} onClick={onLeave} />
     </div>
   );

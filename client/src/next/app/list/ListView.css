@@ -90,6 +90,12 @@
   gap: var(--space-1-5);
 }
 
+/* A screen shared here (#360): calm, an icon's grey, never the lamp. */
+.nx-list-screen {
+  display: inline-flex;
+  color: var(--icon-default);
+}
+
 /* An empty place: its line, and the host's button under it, on the same
    edge as the line's words (decision 17). */
 .nx-list-empty-place {

@@ -1,0 +1,144 @@
+import { expect, type Page, test } from "@playwright/test";
+
+// Screen sharing's screens (SPEC §4.20, #360), concept A: the mark on whoever
+// shares, Watch on the room's voice line (and Join beside it when you aren't
+// in voice), Share with its two speeds, the screen above the conversation
+// with Full screen and Stop watching, the line between them, and the words in
+// the screen's place until the picture comes. The chat window and the list
+// on the prototype's evening (tests/fixtures/next-chat.tsx, next-list.tsx),
+// `?screen=…`. What the buttons do goes on `body[data-did]` (the list's on
+// `body[data-opened]`).
+
+async function chat(page: Page, query: string) {
+  await page.setViewportSize({ width: 1040, height: 820 });
+  await page.goto(`/tests/fixtures/next-chat.html${query}`);
+  await page.evaluate(() => document.fonts.ready);
+  await expect(page.getByRole("log")).toBeVisible();
+}
+
+const did = (page: Page) => page.locator("body").getAttribute("data-did");
+
+test("somebody sharing is marked on their chip, and Watch sits beside Join when you aren't in voice", async ({ page }) => {
+  await chat(page, "?voice=others&screen=shared");
+  const strip = page.getByRole("group", { name: "Voice in this conversation" });
+  await expect(strip.getByText("sharing their screen")).toHaveCount(1);
+  await expect(strip.getByRole("button", { name: "Join" })).toBeVisible();
+  await strip.getByRole("button", { name: "Watch" }).click();
+  await expect.poll(() => did(page)).toContain("watch:s-jules");
+});
+
+test("in voice, Share asks which speed and starts at the one picked", async ({ page }) => {
+  await chat(page, "?voice=mine&screen=shared");
+  const strip = page.getByRole("group", { name: "Voice in this conversation" });
+  await strip.getByRole("button", { name: "Share your screen" }).click();
+  const menu = page.getByRole("menu", { name: "Share your screen" });
+  await expect(menu.getByRole("menuitem")).toHaveText(["Sharp text, 30 fps", "Smooth motion, 60 fps"]);
+  // The words fit the menu: none is cut short.
+  for (const item of await menu.getByRole("menuitem").all()) {
+    expect(await item.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+  }
+  await menu.getByRole("menuitem", { name: "Smooth motion, 60 fps" }).click();
+  await expect.poll(() => did(page)).toContain("share:60");
+});
+
+test("while you share, Share is lit and stops it", async ({ page }) => {
+  await chat(page, "?voice=mine&screen=sharing");
+  const stop = page.getByRole("button", { name: "Stop sharing your screen" });
+  await expect(stop).toHaveAttribute("aria-pressed", "true");
+  await stop.click();
+  await expect.poll(() => did(page)).toContain("stop sharing");
+});
+
+test("the screen sits above the conversation, its picture drawn, and Stop watching closes it", async ({ page }) => {
+  await chat(page, "?voice=mine&screen=watching");
+  const stage = page.getByRole("region", { name: "Jules's screen" });
+  await expect(stage).toBeVisible();
+  await expect(stage.getByText("with Eli watching")).toBeVisible();
+  // Above the conversation, never over it.
+  const stageBox = await stage.boundingBox();
+  const logBox = await page.getByRole("log").boundingBox();
+  expect(stageBox && logBox && stageBox.y + stageBox.height <= logBox.y + 1).toBe(true);
+  // The picture is drawn, its shape kept: the canvas says 16:9 and is shown.
+  const canvas = stage.getByRole("img", { name: "Jules's screen" });
+  await expect(canvas).toBeVisible();
+  expect(await canvas.evaluate((node) => (node instanceof HTMLCanvasElement ? [node.width, node.height] : []))).toEqual([1600, 900]);
+  await stage.getByRole("button", { name: "Stop watching" }).click();
+  await expect.poll(() => did(page)).toContain("stop watching");
+});
+
+test("Full screen fills the window and Escape leaves it", async ({ page }) => {
+  await chat(page, "?voice=mine&screen=watching");
+  const stage = page.getByRole("region", { name: "Jules's screen" });
+  await stage.getByRole("button", { name: "Full screen" }).click();
+  await expect(stage).toHaveAttribute("data-full", "yes");
+  const box = await stage.boundingBox();
+  expect(box).toEqual({ x: 0, y: 0, width: 1040, height: 820 });
+  await page.keyboard.press("Escape");
+  await expect(stage).not.toHaveAttribute("data-full", "yes");
+});
+
+test("the line between the screen and the conversation moves it, and the conversation keeps room", async ({ page }) => {
+  await chat(page, "?voice=mine&screen=watching");
+  const line = page.getByRole("separator", { name: "Space between the screen and the conversation" });
+  const stage = page.getByRole("region", { name: "Jules's screen" });
+  const before = (await stage.boundingBox())?.height ?? 0;
+  await line.focus();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
+  await expect.poll(async () => (await stage.boundingBox())?.height ?? 0).toBeGreaterThan(before);
+  // As far down as it goes, the conversation still has room.
+  await page.keyboard.press("End");
+  const log = await page.getByRole("log").boundingBox();
+  expect(log?.height ?? 0).toBeGreaterThan(60);
+  // And back to half.
+  await page.keyboard.press("Enter");
+  await expect.poll(async () => Math.abs(((await stage.boundingBox())?.height ?? 0) - before)).toBeLessThan(40);
+});
+
+for (const [status, words] of [
+  ["waiting", "Waiting for Jules's screen…"],
+  ["unplayable", "This device can't play Jules's screen."],
+  ["ended", "Jules stopped sharing."],
+] as const) {
+  test(`until the picture comes, and when it can't, the screen says so: ${status}`, async ({ page }) => {
+    await chat(page, `?voice=mine&screen=${status}`);
+    const stage = page.getByRole("region", { name: "Jules's screen" });
+    await expect(stage.getByRole("status")).toHaveText(words);
+    await expect(stage.getByRole("img")).toBeHidden();
+  });
+}
+
+test("the list marks the room and the person sharing, and says so in words", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.goto("/tests/fixtures/next-list.html?voice&screen=shared");
+  await page.evaluate(() => document.fonts.ready);
+  await expect(page.getByRole("button", { name: /^#general, .*a screen shared/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Jules, .*sharing their screen/ }).first()).toBeVisible();
+  // Nobody else is marked.
+  await expect(page.getByRole("button", { name: /^Eli, .*sharing their screen/ })).toHaveCount(0);
+});
+
+test("your share in the voice bar: a small copy, who's watching by name, and Stop", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.goto("/tests/fixtures/next-list.html?voice&screen=sharing");
+  const box = page.getByRole("group", { name: "Your screen" });
+  await expect(box.getByText("Sharing your screen")).toBeVisible();
+  await expect(box.getByRole("status")).toHaveText("Eli and Jules are watching");
+  await box.getByRole("button", { name: "Stop" }).click();
+  // The list page writes what was pressed on `body[data-opened]`.
+  await expect.poll(() => page.locator("body").getAttribute("data-opened")).toContain("stop sharing");
+});
+
+test("on a phone the screen runs edge to edge at its own shape, and sideways it fills the phone", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/tests/fixtures/next-chat.html?voice=mine&screen=watching&shell=phone");
+  const stage = page.getByRole("region", { name: "Jules's screen" });
+  await expect(stage).toBeVisible();
+  // No line to drag on a phone.
+  await expect(page.getByRole("separator", { name: "Space between the screen and the conversation" })).toHaveCount(0);
+  const canvas = await stage.getByRole("img").boundingBox();
+  expect(canvas?.width).toBe(390);
+  expect(Math.round(canvas?.height ?? 0)).toBe(Math.round((390 * 9) / 16));
+  await page.setViewportSize({ width: 844, height: 390 });
+  await expect.poll(async () => await stage.boundingBox()).toEqual({ x: 0, y: 0, width: 844, height: 390 });
+});

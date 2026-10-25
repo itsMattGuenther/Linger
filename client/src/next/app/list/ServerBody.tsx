@@ -5,7 +5,7 @@ import type { User } from "../../../generated/User";
 import { hostsHere } from "../../../lib/host";
 import { type DmRow, type ListModel, type PersonRow, type RoomRow, splitPeople, splitRooms } from "../../core/list";
 import { onPhone } from "../../core/phone";
-import { Button, IconButton, MarkerCluster, type MenuAnchor, Name, Row, RowList, SectionLabel, VoiceGlyph } from "../../kit";
+import { Button, Icon, IconButton, MarkerCluster, type MenuAnchor, Name, Row, RowList, SectionLabel, VoiceGlyph } from "../../kit";
 import { markerFor } from "../markers";
 import { useOneLine } from "../useOneLine";
 import { useTheirTime } from "../useTheirTime";
@@ -430,8 +430,15 @@ const PersonItem = memo(function PersonItem({
       title={<Name person={row.user} dim={row.state === "idle" || row.state === "away" || row.state === "offline"} />}
       // Written to you and not read: said in words too, never a count (SPEC §4.2).
       // One line per person has no second line, so the status goes in the words (#197).
-      label={`${row.user.display_name}, ${row.note}${oneLine && row.line ? `, ${row.line}` : ""}${row.fresh ? ", wrote to you" : ""}`}
-      trailing={row.inVoice ? <VoiceGlyph speaking={talking} /> : undefined}
+      label={`${row.user.display_name}, ${row.note}${row.sharing ? ", sharing their screen" : ""}${oneLine && row.line ? `, ${row.line}` : ""}${row.fresh ? ", wrote to you" : ""}`}
+      trailing={
+        row.inVoice || row.sharing ? (
+          <span className="nx-list-room-end">
+            {row.sharing ? <ScreenMark /> : null}
+            {row.inVoice ? <VoiceGlyph speaking={talking} /> : null}
+          </span>
+        ) : undefined
+      }
       note={row.note}
       detail={row.line ?? undefined}
       detailTip
@@ -526,10 +533,11 @@ const RoomItem = memo(function RoomItem({
       title={room.name}
       fresh={room.fresh}
       selected={selected}
-      label={roomLabel(room.name, room.people.length, room.voice)}
+      label={roomLabel(room.name, room.people.length, room.voice, room.screen)}
       end={
         room.people.length > 0 || room.voice ? (
           <span className="nx-list-room-end">
+            {room.screen ? <ScreenMark /> : null}
             {room.voice ? <VoiceGlyph speaking={talking} /> : null}
             <MarkerCluster people={room.people.map((user) => markerFor(user, "in_room"))} max={ROOM_DOTS} />
           </span>
@@ -630,12 +638,22 @@ const GroupItem = memo(function GroupItem({
  * who is in it and whether voice is on, without a number on screen (a count
  * spoken to a screen reader is allowed, AGENTS rule 3).
  */
-function roomLabel(name: string, people: number, voice: boolean): string {
+function roomLabel(name: string, people: number, voice: boolean, screen: boolean): string {
   const parts = [`#${name}`];
   if (people === 1) parts.push("one person in it");
   else if (people > 1) parts.push(`${people} people in it`);
   if (voice) parts.push("voice on");
+  if (screen) parts.push("a screen shared");
   return parts.join(", ");
+}
+
+/** Somebody's screen is shared here (#360): its mark, before the voice glyph. The row's label says it in words. */
+function ScreenMark() {
+  return (
+    <span className="nx-list-screen" aria-hidden="true">
+      <Icon name="screen" size="sm" />
+    </span>
+  );
 }
 
 /**

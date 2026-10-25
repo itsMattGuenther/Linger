@@ -652,6 +652,9 @@ chip. The text ends in "…"; a `Name` in it ends in its own, and its glow
 reaches past its box and the pill's edge, as everywhere else (#287).
 
 - `active` lights it in the lamp: that person is talking.
+- `sharing` draws the `screen` glyph after the name, in the same calm grey
+  as a muted microphone and before it: that person is sharing their screen
+  (#360). Its words are for screen readers.
 - `state` draws a control's own glyph after the name, like muted or
   deafened, with the word for screen readers. It comes after the name, so it
   never moves it.
@@ -688,6 +691,29 @@ scrollbar and the fold button beside it. It's a separator with a value
 (`role="separator"`), so the keyboard moves it too: the arrows a step at a
 time, Home and End to either end, and Enter, like a double press, back to
 where it started out.
+
+`across` lays it the other way, a line between a pane above and one below,
+with a row-resizing pointer and the up and down arrows: the line between a
+shared screen and the conversation under it (#360). Its value is then the
+height of what's above.
+
+### The shared screen
+
+A shared screen above a conversation (#360, `app/screen/ScreenStage.tsx`): a
+40px bar like the voice line, with the `screen` glyph, whose screen it is by
+their styled name, who else is watching in muted words (names, never a
+number), and Full screen and Stop watching on the right; then the picture on
+`--surface-backdrop`, as big as there's room for with its shape kept. Until
+the picture comes, and when it can't or has stopped, a muted line says so in
+its place. It is `--screen-stage-min` tall at least and leaves the
+conversation `--screen-talk-min`; full screen it fills the window, which
+fills the monitor. Your own share sits in the voice bar instead
+(`app/screen/SharingBox.tsx`): a `--screen-thumb-w` × `--screen-thumb-h` copy
+of what everybody sees, "Sharing your screen", Stop, and who is watching.
+Share is an `IconButton` with the `share` glyph beside Mute, Deafen and
+Leave; it asks 30 or 60 frames a second in a `Menu`, and is pressed while you
+share. Nothing about a share is drawn in the lamp but the pressed button: a
+screen being shared isn't something new for you.
 
 ### Card and Popover
 

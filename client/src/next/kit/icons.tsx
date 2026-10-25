@@ -70,11 +70,39 @@ export const ICON_NAMES = [
   "react",
   "download",
   "pin",
+  "screen",
+  "share",
+  "fullscreen",
+  "windowed",
 ] as const;
 
 export type IconName = (typeof ICON_NAMES)[number];
 
 export const ICON_PATHS: Record<IconName, ReactElement> = {
+  // A screen being shared (#360): a monitor on its stand. The mark beside a
+  // person or room sharing, and Watch.
+  screen: (
+    <>
+      <rect x="1.8" y="2.5" width="12.4" height="8.6" rx="1.3" fill="none" stroke="currentColor" strokeWidth="1.4" /><path d="M5.5 13.6h5M8 11.1v2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </>
+  ),
+  // Share your screen (#360): the same monitor, an arrow going up out of it.
+  share: (
+    <>
+      <rect x="1.8" y="2.5" width="12.4" height="8.6" rx="1.3" fill="none" stroke="currentColor" strokeWidth="1.4" /><path d="M5.5 13.6h5M8 11.1v2.5M8 8.8V5.2M6.3 6.8L8 5.1l1.7 1.7" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  // Full screen and back (#360): four corners going out, and coming in.
+  fullscreen: (
+    <>
+      <path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  windowed: (
+    <>
+      <path d="M6 2.5V6H2.5M10 2.5V6h3.5M10 13.5V10h3.5M6 13.5V10H2.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
   close: (
     <>
       <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />

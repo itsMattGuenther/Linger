@@ -97,6 +97,10 @@ import { arrivalsBetween, CARD_EVERY_MS, cardsHushed, CHIME_EVERY_MS, due, loadA
 import { loadSoundPrefs, playSound } from "../../../lib/sound";
 import type { InVoice } from "../chat/VoiceStrip";
 import { VoiceDock, type VoiceDockProps } from "./VoiceDock";
+import { canPickScreen, hasWebCodecs } from "../../../lib/screen/probe";
+import { type ScreenShareState, useScreenShare } from "../../../lib/screen/share";
+import { myScreen, sharersIn, watchersOf, watchingWords } from "../../core/screens";
+import { startSharingHere, stopSharingEverywhere } from "../../core/screenStop";
 import { ApiError, PublicApi, TransportError } from "../../../lib/api";
 import type { User } from "../../../generated/User";
 
@@ -832,6 +836,10 @@ function Servers({
   // The tray menu's Mute and Leave (decision 5): the only ones in reach while
   // the list is hidden in the tray. The shell greys them out out of voice.
   const trayMuted = voiceState?.myVoice?.muted ?? false;
+  // Your share, if this window makes one (#360): its small copy for the voice bar.
+  const shareHere = useScreenShare();
+  // The tray's Stop sharing (#360): on while you share, from any window.
+  const traySharing = (voiceState ? (myScreen(voiceState)?.sharing ?? false) : false) || (shareHere !== null && shareHere.server === voiceServer);
   const trayVoice = useRef<(action: string) => void>(() => undefined);
   trayVoice.current = (action) => {
     if (voiceServer === null) return;
@@ -878,12 +886,13 @@ function Servers({
 
   const voice = useMemo(() => {
     if (!voiceState || voiceServer === null) return undefined;
-    const dock = voiceDock(voiceState, talkingNow(voiceState), voiceServer, talkKey);
+    const screensOn = infos[voiceServer]?.screens === true && !onPhone() && canPickScreen() && hasWebCodecs();
+    const dock = voiceDock(voiceState, talkingNow(voiceState), voiceServer, talkKey, screensOn ? { api: apisRef.current.get(voiceServer) ?? null, share: shareHere } : null);
     if (!dock || !several) return dock;
     const info = infos[voiceServer];
     const inVoice = voiceState.myVoice ? (voiceState.voice[voiceState.myVoice.roomId]?.length ?? 0) : 0;
     return { ...dock, server: { name: info?.name ?? hostOf(voiceServer), accent: info?.accent_key ?? null, seats: seatsWords(inVoice) } };
-  }, [voiceState, voiceServer, several, infos, talkKey]);
+  }, [voiceState, voiceServer, several, infos, talkKey, shareHere]);
 
   // On the phone a conversation, Media or Search covers the list and its
   // voice bar, so your voice comes with them, as a line under the title (#429).
@@ -921,9 +930,9 @@ function Servers({
   useEffect(() => {
     if (!isTauri()) return;
     const inVoice = voiceServer !== null;
-    const where = inVoice ? { deafened: trayDeafened, pushToTalk: trayPushToTalk, place: trayPlace } : {};
+    const where = inVoice ? { deafened: trayDeafened, pushToTalk: trayPushToTalk, place: trayPlace, sharing: traySharing } : {};
     void invoke("next_tray_voice", { inVoice, muted: trayMuted, ...where }).catch(() => undefined);
-  }, [voiceServer, trayMuted, trayDeafened, trayPushToTalk, trayPlace]);
+  }, [voiceServer, trayMuted, trayDeafened, trayPushToTalk, trayPlace, traySharing]);
   // The phone's call bar (#429): while in voice, the one notification it
   // shows, which keeps the call going with the phone locked
   // (src-tauri/src/phone_call.rs). Gone when the call is.
@@ -1657,11 +1666,18 @@ function bannerTarget(payload: unknown): { server: string; room: RoomId; message
  * The voice bar: what it shows comes from the store (core/voice.ts); its
  * controls act here, in the owner, which keeps the voice seat.
  */
-function voiceDock(state: GatewayState, speaking: ReadonlySet<string>, server: string, talkKey: string): VoiceDockProps | undefined {
+function voiceDock(
+  state: GatewayState,
+  speaking: ReadonlySet<string>,
+  server: string,
+  talkKey: string,
+  screen: { api: ServerSession["api"] | null; share: ScreenShareState | null } | null,
+): VoiceDockProps | undefined {
   const model = voiceModel(state, speaking, talkKeyName(talkKey));
   if (model === null) return undefined;
   return {
     ...model,
+    ...(screen ? { share: shareOf(state, server, model.roomId, screen.api, screen.share) } : {}),
     onGoToRoom: () => openChat(server, model.roomId),
     onMute: (muted) => void setVoiceMuted(server, muted).catch(() => undefined),
     onDeafen: (deafened) => void setVoiceDeafened(server, deafened).catch(() => undefined),
@@ -1673,6 +1689,29 @@ function voiceDock(state: GatewayState, speaking: ReadonlySet<string>, server: s
     // The host or a co-host can take somebody out of voice from their chip
     // (#423, #424); the dock never offers it on the host's chip.
     ...(canTakeOut(state) ? { onTakeOut: (person: { user: { id: string } }) => takeOutOfVoice(server, model.roomId, person.user.id) } : {}),
+  };
+}
+
+/**
+ * Share in the voice bar (#360), and your share while there is one: its
+ * small copy when it runs in this window, and who is watching it by name,
+ * from the server's word.
+ */
+function shareOf(state: GatewayState, server: string, roomId: string, api: ServerSession["api"] | null, here: ScreenShareState | null): NonNullable<VoiceDockProps["share"]> {
+  const mine = myScreen(state);
+  const sharingHere = here !== null && here.server === server;
+  const sharing = sharingHere || (mine?.sharing ?? false);
+  const users = new Map(state.users.map((user) => [user.id, user.display_name]));
+  const watchers = state.sessionId === null ? [] : watchersOf(state, roomId, state.sessionId).flatMap((id) => users.get(id) ?? []);
+  return {
+    sharing,
+    unavailable: !sharing && sharersIn(state, roomId).length >= 3 ? "Three people are sharing here already." : undefined,
+    onShare: (fps) => {
+      if (!api || state.sessionId === null) return;
+      void startSharingHere({ server, api, sessionId: state.sessionId, fps });
+    },
+    onStop: stopSharingEverywhere,
+    box: sharing ? { preview: sharingHere ? here.preview : null, watching: watchingWords(watchers), starting: sharingHere && here.status !== "sharing" } : null,
   };
 }
 

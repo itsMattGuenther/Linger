@@ -853,6 +853,42 @@ your headphones come unplugged mid-sentence, Linger moves to whatever your compu
 within a second or two. If nothing comes back for twenty seconds, the voice bar
 says the microphone stopped, and you join again.
 
+### Sharing your screen
+
+While you're in a room's voice, the voice bar and the room's voice line have
+**Share your screen** (a monitor with an arrow going up), beside Mute, Deafen
+and Leave. Pick a speed:
+
+- **Sharp text, 30 fps** for slides, documents and code;
+- **Smooth motion, 60 fps** for scrolling, videos or a game.
+
+Then your computer's own window asks what to share: your whole screen or one
+window. Linger never sees that list, and never learns the name of what you
+picked: everybody sees "Jules is sharing their screen", never what it is. The
+voice bar then shows a small copy of what everybody sees, who is watching, by
+name, and **Stop**. Stop is in the tray menu too, for when a slide show covers
+everything. Sharing works from the Windows app for now; Linux and macOS come
+next. A phone watches but doesn't share.
+
+**Showing a PowerPoint?** Share **Entire screen**, then start the slide show.
+Sharing just the PowerPoint window can come out black, because the slide show
+runs in a window of its own.
+
+Somebody sharing has a small monitor beside their name, in the list and in
+voice, and the room's voice line offers **Watch**. Watch joins that room's
+voice first if you weren't in it, since watching is being there, and the
+screen opens above the room's conversation, which carries on underneath. Drag
+the line between them to give either more room, or press **Full screen**
+(Escape to come back). Up to three people can share in a room at once; you
+watch one at a time, and the voice line has a Watch for each. On a phone the
+screen sits at the top of the room, and turning the phone sideways fills the
+screen with it.
+
+There's no sound from the computer yet: talk through your microphone as
+usual, and a video playing in your slides plays silently for the people
+watching. Like voice, a shared screen goes through the host's server, which
+passes it on without keeping it, and it's never recorded.
+
 ## Talking to one person
 
 **Direct messages.** Click somebody in **People**: they open beside the list,

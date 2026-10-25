@@ -18,6 +18,7 @@ import type { RoomId } from "../../generated/RoomId";
 import type { User } from "../../generated/User";
 import { canLeave, dmLabel, lastOneIn, orderDms, others, peopleIn } from "../../lib/dm";
 import { type GatewayState, hasNewActivity, voicePeersIn } from "../../lib/gateway";
+import { sharingPeople } from "./screens";
 import { occupantsOf } from "../../lib/occupancy";
 import { buildRoster, type RosterEntry, shortAgo, shownState, voiceRoomsOf } from "../../lib/roster";
 
@@ -55,6 +56,8 @@ export interface RoomRow {
   people: User[];
   /** Somebody has a microphone on in this room. */
   voice: boolean;
+  /** Somebody in this room's voice is sharing their screen (#360). */
+  screen: boolean;
 }
 
 export interface DmRow {
@@ -86,6 +89,8 @@ export interface PersonRow {
   /** The second line: the away message when there is one, else the status line. */
   line: string | null;
   inVoice: boolean;
+  /** They're sharing their screen, in voice somewhere you can see (#360). */
+  sharing: boolean;
   /** Your one-to-one DM with them, when you have one: it lives on their row (#351). */
   dm: RoomId | null;
   /** They've written there and you haven't read it: the row is lit (#291, #351). */
@@ -124,6 +129,7 @@ export function listModel(state: GatewayState, now: number): ListModel {
         fresh: hasNewActivity(state, room.id),
         people: occupantsOf(room.id, state.occupancy, state.presence, users, voicePeersIn(state, room.id)),
         voice: voicePeersIn(state, room.id).length > 0,
+        screen: voicePeersIn(state, room.id).some((peer) => peer.screen),
       }),
     );
 
@@ -160,6 +166,7 @@ export function listModel(state: GatewayState, now: number): ListModel {
     voiceRooms,
   });
 
+  const sharing = sharingPeople(state);
   const people: PeopleGroups = { here: [], away: [], offline: [] };
   let me: MeCard | null = null;
   for (const entry of roster) {
@@ -170,6 +177,7 @@ export function listModel(state: GatewayState, now: number): ListModel {
       note: noteFor(entry, now),
       line: entry.awayMessage ?? entry.user.status?.line ?? null,
       inVoice: entry.inVoice,
+      sharing: sharing.has(entry.user.id),
       dm: dm?.id ?? null,
       fresh: dm !== undefined && hasNewActivity(state, dm.id),
       talked: dm !== undefined && (hasNewActivity(state, dm.id) || talkedAt(dm) !== null),
@@ -245,6 +253,7 @@ function samePerson(a: PersonRow, b: PersonRow): boolean {
     a.note === b.note &&
     a.line === b.line &&
     a.inVoice === b.inVoice &&
+    a.sharing === b.sharing &&
     a.dm === b.dm &&
     a.fresh === b.fresh &&
     a.talked === b.talked
@@ -252,7 +261,7 @@ function samePerson(a: PersonRow, b: PersonRow): boolean {
 }
 
 function sameRoom(a: RoomRow, b: RoomRow): boolean {
-  return a.name === b.name && a.fresh === b.fresh && a.voice === b.voice && sameItems(a.people, b.people);
+  return a.name === b.name && a.fresh === b.fresh && a.voice === b.voice && a.screen === b.screen && sameItems(a.people, b.people);
 }
 
 function sameGroup(a: DmRow, b: DmRow): boolean {

@@ -11,6 +11,10 @@ import "./Splitter.css";
  * time, Home and End go to either end, and Enter, like a double press, puts
  * it back to `reset`. `value` is the width of what's before it, in the page's
  * pixels; `onChange` fires on every step of a drag.
+ *
+ * `across` lays it the other way, a line between a pane above and one below
+ * (the shared screen over its conversation, #360): `value` is then the
+ * height of what's above, and the up and down arrows move it.
  */
 export const Splitter = memo(function Splitter({
   label,
@@ -19,6 +23,7 @@ export const Splitter = memo(function Splitter({
   max,
   step = 16,
   reset,
+  across = false,
   onChange,
 }: {
   label: string;
@@ -28,6 +33,8 @@ export const Splitter = memo(function Splitter({
   step?: number;
   /** Where Enter and a double press put it back to. */
   reset?: number;
+  /** A line across, between above and below, rather than one down between two sides. */
+  across?: boolean;
   onChange: (value: number) => void;
 }) {
   const [dragging, setDragging] = useState(false);
@@ -42,12 +49,12 @@ export const Splitter = memo(function Splitter({
     if (event.button !== 0) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
-    start.current = { x: event.clientX, value };
+    start.current = { x: across ? event.clientY : event.clientX, value };
     setDragging(true);
   };
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
     const from = start.current;
-    if (from) move(from.value + event.clientX - from.x);
+    if (from) move(from.value + (across ? event.clientY : event.clientX) - from.x);
   };
   const letGo = (event: PointerEvent<HTMLDivElement>) => {
     if (!start.current) return;
@@ -56,10 +63,12 @@ export const Splitter = memo(function Splitter({
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const back = across ? "ArrowUp" : "ArrowLeft";
+    const on = across ? "ArrowDown" : "ArrowRight";
     const next =
-      event.key === "ArrowLeft"
+      event.key === back
         ? value - step
-        : event.key === "ArrowRight"
+        : event.key === on
           ? value + step
           : event.key === "Home"
             ? min
@@ -76,7 +85,7 @@ export const Splitter = memo(function Splitter({
   return (
     <div
       role="separator"
-      aria-orientation="vertical"
+      aria-orientation={across ? "horizontal" : "vertical"}
       aria-label={label}
       aria-valuenow={value}
       aria-valuemin={min}
@@ -85,6 +94,7 @@ export const Splitter = memo(function Splitter({
       className="k-splitter"
       data-kit="Splitter"
       data-dragging={dragging ? "yes" : undefined}
+      data-across={across ? "yes" : undefined}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={letGo}

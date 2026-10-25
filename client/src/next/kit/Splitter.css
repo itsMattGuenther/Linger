@@ -24,6 +24,17 @@
   background: var(--edge-hover);
 }
 
+/* Across, between a pane above and one below (#360). */
+.k-splitter[data-across="yes"] {
+  width: auto;
+  height: 1px;
+  cursor: row-resize;
+}
+
+.k-splitter[data-across="yes"]::before {
+  inset: calc(-1 * var(--space-1)) 0;
+}
+
 /* Focused from the keyboard: the ring sits on the line itself. */
 .k-splitter:focus-visible {
   outline-offset: 0;

@@ -15,6 +15,10 @@ import { closingOf, openScreenSocket, readSaid, RETRIES, retryAfter } from "./so
 
 export interface ScreenWatchState {
   server: string;
+  /** The room or DM whose voice the share is in. */
+  place: string;
+  /** The person sharing, by user id. */
+  who: string;
   /** The session whose share this is. */
   target: string;
   /**
@@ -53,15 +57,18 @@ export function currentWatch(): ScreenWatchState | null {
 let running: Watching | null = null;
 
 /** Watch `target`'s share on `server`, in place of whatever this window watched. */
-export async function startWatching(options: { server: string; api: AuthedApi; sessionId: string; target: string }): Promise<void> {
+export async function startWatching(options: { server: string; api: AuthedApi; sessionId: string; target: string; place: string; who: string }): Promise<void> {
   if (running && running.server === options.server && running.sessionId === options.sessionId) {
+    running.place = options.place;
+    running.who = options.who;
     running.switchTo(options.target);
     return;
   }
   running?.finish();
-  const watching = new Watching(options.server, options.api, options.sessionId, options.target, await playable());
+  const decode = await playable();
+  const watching = new Watching(options.server, options.api, options.sessionId, options.target, decode, options.place, options.who);
   running = watching;
-  publish({ server: options.server, target: options.target, status: "connecting", width: 0, height: 0 });
+  publish({ server: options.server, place: options.place, who: options.who, target: options.target, status: "connecting", width: 0, height: 0 });
   void watching.connect();
 }
 
@@ -102,7 +109,14 @@ class Watching {
     readonly sessionId: string,
     public target: string,
     public decode: ScreenCodec[],
+    public place: string,
+    public who: string,
   ) {}
+
+  /** The state as the screens read it, at `status`. */
+  #state(status: ScreenWatchState["status"], width = 0, height = 0): ScreenWatchState {
+    return { server: this.server, place: this.place, who: this.who, target: this.target, status, width, height };
+  }
 
   async connect(): Promise<void> {
     if (this.#done) return;
@@ -150,7 +164,7 @@ class Watching {
     this.#waitingForKey = true;
     this.#closeDecoder();
     this.#codec = null;
-    publish({ server: this.server, target, status: "connecting", width: 0, height: 0 });
+    publish(this.#state("connecting"));
     const socket = this.#socket;
     if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ op: "watch", target }));
   }
@@ -171,12 +185,12 @@ class Watching {
     if (codec === null) {
       this.#closeDecoder();
       this.#codec = null;
-      publish({ server: this.server, target, status: "unplayable", width: 0, height: 0 });
+      publish(this.#state("unplayable"));
       return;
     }
     if (codec !== this.#codec || !this.#decoder) this.#openDecoder(codec);
     this.#waitingForKey = true;
-    if (shown?.target !== target || shown.status !== "showing") publish({ server: this.server, target, status: "waiting", width: shown?.width ?? 0, height: shown?.height ?? 0 });
+    if (shown?.target !== target || shown.status !== "showing") publish(this.#state("waiting", shown?.width ?? 0, shown?.height ?? 0));
   }
 
   frame(buffer: ArrayBuffer): void {

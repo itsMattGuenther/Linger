@@ -96,6 +96,11 @@ This is not an attempt to build a better platform. It's an attempt to not need o
   the call.
 - **Voice messages**: record a clip in the message box, hear it back, then
   send it or throw it away. Up to five minutes.
+- **Screen sharing** in voice: share a screen or one window from the Windows
+  app at 30 or 60 frames a second, and everybody in that voice can watch it
+  above the conversation, on a computer or a phone. Your system's own picker
+  chooses what's shared, and Linger never learns a window's name. No sound
+  from the computer yet, and it's never recorded. Cameras aren't a feature.
 - **Every emoji**, found by name: type `:smiley:` as on Discord. A server's
   host can add its own emoji too, animated GIFs included.
 - **Reactions**, as on Discord and Slack: any emoji, the server's own
@@ -127,8 +132,8 @@ product.
 
 ## 🔐 Privacy
 
-**The person running the server can read everything on it**, and voice passes
-through it too. There is no end-to-end
+**The person running the server can read everything on it**, and voice and
+shared screens pass through it too. There is no end-to-end
 encryption. Traffic goes over TLS; files and the database are not
 encrypted on the host's disk. Run your own server, or trust the person who
 runs yours. If you need guarantees against your host, use Signal.

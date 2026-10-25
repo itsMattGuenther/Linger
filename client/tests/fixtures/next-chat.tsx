@@ -24,6 +24,11 @@
  *   failed last time (#261); `&windows` words it for Windows. It asked for
  *   the system's default devices, or `&picked` for devices picked by name (#273).
  * - `?takenout`: the host took you out of voice in the tab showing (#423).
+ * - `?screen=shared`: Jules shares their screen in #general's voice (#360) and
+ *   the strip offers Watch. `watching`: the screen shows above the
+ *   conversation, a slide drawn on its canvas; `waiting`, `unplayable` and
+ *   `ended` the words in its place. `sharing`: you share. With `?voice=mine`
+ *   the strip has Share. Watch, Share, Stop and closing go on `body[data-did]`.
  * - `?raid`: forty-five more people in #general's voice (#197,
  *   next/raid.ts), and `window.chat.talk(ids)` says who is talking now.
  * - `?joins`: people joining voice (#473). In #general Jules joins, says
@@ -330,6 +335,53 @@ const note = (what: string) => {
 };
 const keys: string[] = [];
 
+/** `?screen` (#360): what's shared in #general's voice, as the pane would say it. */
+const SCREEN = query.get("screen");
+function screenPane(inVoiceHere: boolean): ChatPane["screen"] {
+  const showing = SCREEN === "watching" || SCREEN === "waiting" || SCREEN === "unplayable" || SCREEN === "ended";
+  return {
+    stage: showing
+      ? {
+          sharer: people.jules,
+          others: [people.eli],
+          status: SCREEN === "watching" ? "showing" : SCREEN,
+          onClose: () => note("stop watching"),
+          onCanvas: paintSlide,
+        }
+      : null,
+    sharing: new Set(SCREEN === "sharing" ? [people.matt.id] : [people.jules.id]),
+    watch:
+      SCREEN === "sharing"
+        ? undefined
+        : { sharers: [{ session: "s-jules", user: people.jules }], watching: showing && SCREEN !== "ended" ? "s-jules" : null, onWatch: (session) => note(`watch:${session}`) },
+    share: inVoiceHere ? { sharing: SCREEN === "sharing", onShare: (fps) => note(`share:${fps}`), onStop: () => note("stop sharing") } : undefined,
+  };
+}
+
+/** A slide on the screen's canvas, as a share would draw one. */
+function paintSlide(canvas: HTMLCanvasElement | null): void {
+  if (!canvas) return;
+  canvas.width = 1600;
+  canvas.height = 900;
+  const context = canvas.getContext("2d");
+  if (!context) return;
+  context.fillStyle = "#f6f3ec";
+  context.fillRect(0, 0, 1600, 900);
+  context.fillStyle = "#2f6f62";
+  context.fillRect(0, 0, 52, 900);
+  context.fillStyle = "#2f6f62";
+  context.font = "600 34px sans-serif";
+  context.fillText("SATURDAY · 9 AM", 160, 150);
+  context.fillStyle = "#1c2733";
+  context.font = "bold 88px sans-serif";
+  context.fillText("The river loop", 160, 260);
+  context.fillStyle = "#33414f";
+  context.font = "40px sans-serif";
+  ["Meet at the mill car park", "6.5 km, mostly flat", "Lunch at the boathouse", "Back by 2"].forEach((line, at) => context.fillText(`• ${line}`, 160, 370 + at * 70));
+  context.fillStyle = "#d08a3c";
+  [[1000, 520, 360], [1110, 420, 460], [1220, 470, 410], [1330, 360, 520]].forEach(([x, y, h]) => context.fillRect(x ?? 0, y ?? 0, 80, h ?? 0));
+}
+
 interface Held {
   messages: Message[];
   /** Where the held window starts in `ALL` (paging, for `?big`). */
@@ -575,6 +627,7 @@ function Fixture() {
               failed: VOICE_FAIL === null ? undefined : { ...voiceStartProblem(VOICE_FAIL, query.has("windows"), ASKED), detail: VOICE_FAIL },
               takenOut: query.has("takenout") && myVoice !== id,
             },
+      screen: room.id === "r-general" && SCREEN !== null ? screenPane(myVoice === id) : undefined,
       people: everyone,
       gone: GONE,
       // The server's own emoji (#359); `?noemoji` has none.

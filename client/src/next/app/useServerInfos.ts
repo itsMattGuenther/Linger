@@ -16,6 +16,8 @@ export interface ServerTagInfo {
   storage?: { used: number; limit: number };
   /** Whether it carries voice; left out by a server from before it said (#306). */
   voice?: boolean;
+  /** Whether it passes shared screens on (#360); left out by a server from before. */
+  screens?: boolean;
 }
 
 /**
@@ -41,6 +43,7 @@ export function useServerInfos(apis: ReadonlyMap<string, AuthedApi>): Readonly<R
             ...(info.file_expiry_when_full === undefined ? {} : { whenFull: info.file_expiry_when_full }),
             storage: { used: info.storage_used_bytes, limit: info.storage_limit_bytes },
             voice: info.voice,
+            screens: info.screens,
           } })),
         )
         .catch(() => undefined);

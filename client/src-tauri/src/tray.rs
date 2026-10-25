@@ -25,12 +25,18 @@ const TRAY_ID: &str = "linger";
 
 /// The tray menu's voice items (decision 5): with the list hidden, they are
 /// the only Mute and Leave in reach. Greyed out while you're not in voice.
-/// Beside them, what the icon shows now, so it's only redrawn on a change.
+/// Stop sharing too (#360), for a slide show that covers every window: greyed
+/// out unless you share. Beside them, what the icon shows now, so it's only
+/// redrawn on a change.
 #[derive(Default)]
-pub struct VoiceItems(
-    Mutex<Option<(MenuItem<Wry>, MenuItem<Wry>)>>,
-    Mutex<Option<(Look, String)>>,
-);
+pub struct VoiceItems(Mutex<Option<Items>>, Mutex<Option<(Look, String)>>);
+
+/// The menu's three voice items, to grey out and name again as voice changes.
+pub struct Items {
+    mute: MenuItem<Wry>,
+    leave: MenuItem<Wry>,
+    stop_share: MenuItem<Wry>,
+}
 
 /// What the tray icon shows about voice (#601). A state, never a number of
 /// people (hard rule 3), and nothing that leaves the computer.
@@ -145,6 +151,13 @@ fn build(app: &App) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, "show", "Show Linger", true, None::<&str>)?;
     let mute = MenuItem::with_id(app, "mute", "Mute", false, None::<&str>)?;
     let leave = MenuItem::with_id(app, "leave", "Leave voice", false, None::<&str>)?;
+    let stop_share = MenuItem::with_id(
+        app,
+        "stop-share",
+        "Stop sharing your screen",
+        false,
+        None::<&str>,
+    )?;
     let quit = MenuItem::with_id(app, "quit", "Quit Linger", true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
@@ -153,12 +166,17 @@ fn build(app: &App) -> tauri::Result<()> {
             &PredefinedMenuItem::separator(app)?,
             &mute,
             &leave,
+            &stop_share,
             &PredefinedMenuItem::separator(app)?,
             &quit,
         ],
     )?;
     if let Ok(mut held) = app.state::<VoiceItems>().0.lock() {
-        *held = Some((mute, leave));
+        *held = Some(Items {
+            mute,
+            leave,
+            stop_share,
+        });
     }
     let mut tray = TrayIconBuilder::with_id(TRAY_ID)
         .tooltip("Linger")
@@ -170,6 +188,11 @@ fn build(app: &App) -> tauri::Result<()> {
             // Voice is the list window's: it does what the tray asks.
             "mute" | "leave" => {
                 let _ = app.emit_to("main", "next:tray", event.id.as_ref());
+            }
+            // A share runs in the window Share was pressed in, which may not
+            // be the list: every window hears it, and the one sharing stops.
+            "stop-share" => {
+                let _ = app.emit("next:screen-stop", ());
             }
             _ => {}
         })
@@ -236,6 +259,8 @@ pub fn next_close_to_tray(
 /// tooltip (#601). Every way out of voice (Leave, being taken out, dropping
 /// out after a sleep) comes here as `in_voice: false` and puts the plain door
 /// back; quitting takes the icon with it. Only the list window may say.
+// A Tauri command's arguments are the keys the page sends, one each.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn next_tray_voice(
     window: WebviewWindow,
@@ -245,6 +270,7 @@ pub fn next_tray_voice(
     deafened: Option<bool>,
     push_to_talk: Option<bool>,
     place: Option<String>,
+    sharing: Option<bool>,
 ) -> Result<(), String> {
     if window.label() != "main" {
         return Err("only the list window says where voice is".into());
@@ -252,11 +278,19 @@ pub fn next_tray_voice(
     let deafened = deafened.unwrap_or(false);
     {
         let held = items.0.lock().map_err(|e| e.to_string())?;
-        if let Some((mute, leave)) = held.as_ref() {
+        if let Some(Items {
+            mute,
+            leave,
+            stop_share,
+        }) = held.as_ref()
+        {
             mute.set_text(if muted { "Unmute" } else { "Mute" })
                 .map_err(|e| e.to_string())?;
             mute.set_enabled(in_voice).map_err(|e| e.to_string())?;
             leave.set_enabled(in_voice).map_err(|e| e.to_string())?;
+            stop_share
+                .set_enabled(in_voice && sharing.unwrap_or(false))
+                .map_err(|e| e.to_string())?;
         }
     }
     let look = Look::of(in_voice, muted || deafened);

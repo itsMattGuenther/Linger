@@ -368,6 +368,7 @@ describe("a long room list", () => {
     name: id,
     fresh: busy.fresh ?? false,
     voice: busy.voice ?? false,
+    screen: false,
     people: Array.from({ length: busy.people ?? 0 }, (_, n) => ({ id: `u${n}` }) as User),
   });
 
