@@ -316,6 +316,7 @@ M0 scaffold → M1 server REST → M2 gateway → M3 client shell
   → M12 voice                                                        ← V2, built
   → M13 ambient voice                                   ← V2, cut 2026-10-11
   → M15 the Buddy list client (#198)                    ← built, the app from 0.4.0
+  → M16 screen sharing (#360)                           ← V2, started 2026-10-25
   → mobile (T-16xx), text first, no push                 ← started 2026-10-02
   → backburner: entrance sounds (T-901…T-903)
 ```

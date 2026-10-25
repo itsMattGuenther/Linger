@@ -303,7 +303,7 @@ consumes the token. Once any user exists, both endpoints return `NOT_FOUND`.
 ```
 GET  /server             → { name, accent_key, icon_key, member_count, created_at,
                              storage_used_bytes, storage_limit_bytes, file_expiry_days,
-                             file_expiry_when_full?, voice?, health? }
+                             file_expiry_when_full?, voice?, screens?, health? }
 PATCH /server            (host or co-host) { name?, accent_key?, icon_key? }   # accent_key from PALETTE
 
 GET  /rooms              → Room[]                       # public rooms only
@@ -400,6 +400,11 @@ host's list too, unless the copy itself is overdue, which says it already.
 out from its domain (§8, "Voice forwarding"). `false` means nobody can join voice here, and the app says so
 rather than offering a call. A server from before the field leaves it out, which a client
 reads as "maybe" (#306).
+
+**`screens`** says whether this server passes shared screens on (§8, "Screen sharing",
+#360): `true` exactly when it carries voice, since only people in a room's voice share or
+watch. A server from before it leaves it out, and the app offers neither Share nor Watch
+there.
 
 ### 3.1 DMs
 
@@ -1811,7 +1816,9 @@ that frame. A client that still sends one is ignored, as any unknown frame is (�
 
 ```ts
 type VoiceControls = { muted: boolean; deafened: boolean }
-type VoicePeer   = { session_id: string; user_id: string; controls?: VoiceControls | null; forwarded?: boolean }
+type VoicePeer   = { session_id: string; user_id: string; controls?: VoiceControls | null; forwarded?: boolean;
+                     screen?: ScreenShare | null; watching?: string | null }
+type ScreenShare = { fps: 30 | 60 }
 ```
 
 **A seat is a session, not a person.** Each client has its own connection to the server,
@@ -1949,6 +1956,138 @@ says `voice: false` (§3).
   0.4.9 ignores it and lets Opus choose (about 51 kbit/s), and a server from before leaves
   it out, which an app takes the same way. The forwarding server's work doesn't change
   with it, since it passes packets on unopened; the host's upload does.
+
+### Screen sharing (#360)
+
+Somebody in a room's voice can share their screen, and anybody else in that room's voice
+can watch it (SPEC §4.20). The pictures don't travel on the gateway or on voice's UDP
+port: each share and each watcher has a **screen socket**, a WebSocket of its own at
+`/api/v1/screen` on the server's address. The sharing app turns the screen into video
+itself (WebCodecs) and sends it there; the server passes each frame on, unopened, to the
+people watching; their apps play it. Nothing is stored. `docs/decisions.md` has why it
+isn't a WebRTC track.
+
+**Who is sharing and watching is in `voice.state`.** Each `VoicePeer` gains:
+
+- `screen: { fps }`, while that session shares, at 30 or 60 frames a second;
+- `watching: session_id`, the session whose screen it is watching.
+
+Both are left out otherwise, and by a server from before this. A share or a watch
+starting, switching or ending sends the room a new `voice.state`, whole, as joining does.
+
+**A screen socket is one session's, and lives inside its seat.** Its first message, text,
+within `linger-core::limits::SCREEN_HELLO_MS` (10 s), says who it is and what for:
+
+```ts
+type ScreenCodec = "vp8" | "avc1"     // VP8, or H.264 in Annex B
+type ScreenHello =
+  | { op: "share"; token: string; session_id: string; fps: 30 | 60; encode: ScreenCodec[] }
+  | { op: "watch"; token: string; session_id: string; target: string; decode: ScreenCodec[] }
+```
+
+`token` is an access token (§2) and `session_id` the gateway session it belongs to, from
+`ready`. The server checks that the token is good and still signed in, and that the
+session is that person's and has a voice seat. Then:
+
+- **`share`**: at most `MAX_SCREENS_PER_ROOM` (3) sessions share in one room at a time;
+  `fps` is 30 or 60; `encode` names the formats the app can make, best first, and needs at
+  least one the server knows. A session that already shares is sharing again: its old
+  socket closes (4006) and the new one takes over, at the new `fps`.
+- **`watch`**: `target` is a session sharing in the same room's voice, not this one.
+  `decode` names the formats the app can play. A session that already watches moves its
+  watching here, and its old socket closes (4006).
+
+A hello that doesn't pass closes the socket with a code and nothing else happens:
+
+| Code | Why |
+|---|---|
+| 4001 | The token isn't good, or that sign-in ended |
+| 4002 | That session has no voice seat, or isn't that person's |
+| 4003 | Three people are sharing in that room already |
+| 4004 | Nothing to watch there: the target isn't sharing in this room |
+| 4005 | The hello wasn't one: not JSON, too late, an unknown `op` or `fps`, no format |
+| 4006 | Another socket took over this session's share or watching |
+| 4007 | The share or the watching ended: the seat left voice, or the session ended |
+
+**Frames are binary messages**, the same shape both ways: a 12-byte header, then one
+encoded frame as WebCodecs made it (`EncodedVideoChunk`).
+
+| Bytes | |
+|---|---|
+| 0 | Version, `1` |
+| 1 | Format: `1` VP8, `2` H.264 (Annex B, parameter sets on every key frame) |
+| 2 | Flags: bit 0 set on a key frame, the others `0` |
+| 3 | `0` |
+| 4–11 | When the frame was captured, in microseconds on the sharer's clock, big-endian |
+
+The server reads bytes 0–2 and passes the message on as it came. Anything else on a share
+socket is dropped, as is a frame over `MAX_SCREEN_FRAME_BYTES` (1 MiB), one with an
+unknown version or format, or one in a format the server didn't ask for.
+
+**The server picks the formats** (#360). For each share it works out, from its watchers'
+`decode` and the sharer's `encode`:
+
+1. The first of the sharer's formats that **every** watcher can play: everybody gets that.
+2. Otherwise each watcher gets the first of the sharer's formats it can play, and the
+   sharer makes each of those.
+3. A watcher that can play none of them gets none, and is told so.
+
+With nobody watching the sharer is asked for nothing, and makes nothing.
+
+**Text messages carry the rest**, JSON, `{ op, … }`:
+
+```ts
+// To a share socket
+type ScreenShareSays =
+  | { op: "want"; codecs: ScreenCodec[] }      // make exactly these from now on; [] is nothing
+  | { op: "keyframe"; codec: ScreenCodec }    // make the next frame of this format a key frame
+// To a watch socket
+type ScreenWatchSays =
+  | { op: "showing"; target: string | null; codec: ScreenCodec | null }
+// From a watch socket
+type ScreenWatchAsks =
+  | { op: "watch"; target: string; decode?: ScreenCodec[] }   // watch another share here
+  | { op: "keyframe" }                                        // my player lost its place
+```
+
+`want` comes right after a good `share` hello, and again whenever the answer changes.
+`showing` comes right after a good `watch` hello and whenever what this socket shows
+changes: `codec: null` with a `target` is a share this app can't play; `target: null` is
+the share ending, after which the socket stays open with nothing on it until the app
+closes it or sends `watch`. The app ignores ops it doesn't know (§9).
+
+**Key frames.** A watcher is sent nothing until a key frame in its format arrives. The
+server asks for one whenever a watcher starts getting a format, falls behind, or sends
+`keyframe`, at most once every `SCREEN_KEYFRAME_EVERY_MS` (500 ms) for each format of a
+share. A sharing app also makes one at least every 10 seconds of its own accord.
+
+**A watcher that falls behind is skipped forward.** The server holds at most
+`SCREEN_WATCH_QUEUE` frames (60) waiting to go to one watcher. Past that, it drops that
+watcher's frames until the next key frame, and asks for one. The share and the other
+watchers don't wait.
+
+**The server holds each share to a ceiling.** A share sends at most
+`SCREEN_MAX_BITS_PER_SECOND` (10 Mbit/s) over a second, with
+`SCREEN_BURST_BYTES` (2 MiB) to spare for key frames, whatever the app asks for; frames
+past it are dropped, and its watchers wait for the next key frame. The apps aim lower:
+
+| Speed | Size | Rate the app asks of its encoder |
+|---|---|---|
+| 30 | Fits 1920×1080 | up to 4.5 Mbit/s, sharpness kept over frames |
+| 60 | Fits 1920×1080 | up to 6 Mbit/s, frames kept over sharpness |
+
+**Ending.** A share ends when its socket closes, its session leaves voice or ends, or a
+newer share takes over; watching ends the same way, or when the share does. A session
+leaving voice closes both its sockets (4007). Nothing of either outlives its seat, and
+neither survives a server restart, as voice doesn't.
+
+**Hard rule 2 holds here too.** Nothing in a hello, a frame or `voice.state` names a
+window or an application; the operating system's picker is the app's only way to choose
+what to share, and its choice reaches the app as pictures alone.
+
+**Limits.** Hellos are rate-limited per person (`RATE_SCREEN_HELLO`), and `watch` and
+`keyframe` messages per socket (`RATE_SCREEN_ASK`). A text message over 1 KiB closes the
+socket (4005).
 
 ### Fan-out rules
 

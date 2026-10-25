@@ -99,6 +99,14 @@ Consequences:
    at the context's sample rate. Each buffer includes 50 ms of zero samples
    before its attack so output startup cannot cut into the note. Preview and
    live notifications use the same buffers and retain their existing policy.
+   **Screen sharing is the page's, not Rust's** (#360, SPEC §4.20). The page asks
+   the system's picker for the screen (`getDisplayMedia`), turns it into VP8 or H.264
+   with WebCodecs, and sends the frames on a WebSocket of its own to the server
+   (PROTOCOL §8, "Screen sharing"); a watching page plays them with WebCodecs onto a
+   canvas. That works the same in WebView2, WebKitGTK (which has WebCodecs but no
+   WebRTC), Android's web view and the iPhone's, and keeps video off voice's
+   forwarding thread. `client/src/lib/screen/` holds it; the Rust side has no part
+   but the tray's Stop. `docs/decisions.md` has why it isn't a WebRTC track.
 3. Avoid CSS features newer than ~2023 without checking WebKitGTK support. `oklch()` is
    supported and is required by §4.5 of the spec; verify it in the target WebKitGTK
    version during M0.
@@ -1246,6 +1254,7 @@ is gone (#306).
 | **M12** | Voice rooms | Four people, four networks, one hour, no drops | 1–2 weeks — **the audio path and the surface landed 2026-09-01 and 2026-09-04 (T-1401, T-1402, T-1404): frames, peer connections, ICE, microphone → Opus → RTP → speakers, and join / mute / push-to-talk / who is talking / per-person volume / a device picker. and a coturn relay in the deploy with short-lived passwords the server signs (T-1403). In real use across separate networks since 2026-09-17; HC-8 and HC-9 closed 2026-09-25, without the four-person hour (see #197)** |
 | **M13** | Ambient voice | A room left running all day costs almost no CPU, and nobody joined anything | **Cut 2026-10-11, never started** (`docs/decisions.md`). What voice work built toward it stays as voice: silence isn't sent (#430), being in a room's voice is being in the room (#420). Notes in `docs/tasks/m13.md` |
 | **M15** | The Buddy list client (#198) | The new client does everything in `docs/design/parity.md` and becomes the default; the old client is deleted | Several weeks — **the app from 0.4.0; the old client deleted after 0.4.3 (#306).** What's left is in `TASKS.md`; plan in `docs/design/architecture.md` |
+| **M16** | Screen sharing (SPEC §4.20, #360) | A Windows share is watched at 30 and 60 frames a second on Linux, Windows, Android and an iPhone through a real server for half an hour | Days — **started 2026-10-25** (`TASKS.md` M16) |
 | **M14** | Custom themes | Somebody makes a colour scheme, it survives a restart, and a file carries it to another computer | **V3, not V2.** Three decisions come first — see `TASKS.md` *Parking lot* |
 
 **A mobile client is not in this sequence** (Matt, 2026-08-28). It was going to

@@ -89,7 +89,8 @@ Every feature decision resolves against these, in order.
 - Federation
 - A bot marketplace
 - A role/permission matrix
-- Video calls or screen sharing
+- Video calls: cameras, of anybody, in voice or anywhere else. Screen sharing came off
+  this list on 2026-10-25 (Matt, #360, §4.20); cameras did not
 - Threads
 - Any algorithmic ordering
 - Analytics or telemetry of any kind, opt-in or otherwise
@@ -1259,6 +1260,68 @@ that keeps the account so the host can let them back in.
   requirement): delete it in the app, or ask your server's host, who removes the account
   and then deletes it. The project itself holds nobody's data.
 
+### 4.20 Screen sharing
+
+**Show the people in voice with you what's on your screen** (Matt, 2026-10-25, #360).
+Anybody in a room's voice can share their whole screen or one window, and anybody else
+in that voice can watch: slides, a document, some code, a game. It came off §2's
+anti-goals that day. Cameras didn't: there is no video of people.
+
+**From the Windows app first; every app watches.** The first version shares from the
+Windows app, where the friends who asked for it are. Linux and macOS share next, each
+through its own desktop's picker. Phones watch and never share. Watching works
+everywhere Linger runs: Windows, Linux, macOS, Android and iPhone.
+
+**The system's own picker, never Linger's.** Share opens the operating system's own
+"choose what to share" window, which the system draws, not Linger. Linger receives only
+the picture that was picked: it never learns the name of a window or of the application
+in it (hard rule 2), and nothing it sends could carry one. The room sees "Jules is sharing
+their screen", never what it is.
+
+**Two speeds**, picked when you start: **30 frames a second** for slides, documents and
+code, sharpest for text; and **60 frames a second** for motion, scrolling, video or a
+game. Both are up to 1080p; a bigger screen is scaled to fit. The host's server holds
+every share to a ceiling, whatever an app asks for.
+
+**Watching is a choice, and it's being there.** Nothing is sent to anybody until they
+press **Watch**, and Watch joins the room's voice first if you weren't in it: watching
+somebody's screen is being in the room with them, and everybody watching shows up in
+voice. You watch one screen at a time. Up to three people in a room can share at once.
+
+**Who's watching is names, never a number.** The person sharing sees who is watching, and
+so does everybody else in that voice: "Matt, Eli and Dave are watching", never "3
+watching" (§4.2).
+
+**Where it shows.** Watching puts the screen above the room's conversation, with the
+conversation and its message box carrying on underneath; the line between them drags,
+and **Full screen** fills the monitor. On a phone it sits at the top of the room, and
+turning the phone sideways fills the screen with it. The person sharing sees a small copy
+of what everybody sees, beside **Stop**, in the voice bar; Stop is in the tray menu too,
+for when a slide show covers the app.
+
+**No sound from the computer yet.** The person sharing talks through their microphone as
+usual. A video playing on a shared screen plays silently for the people watching. The
+computer's own sound comes with streaming a game, later (#360).
+
+**Through the host's server, like voice.** The person sharing sends their screen once, to
+the host's server, which passes a copy to each person watching and keeps nothing. It
+travels on the same secure connection the app already has with the server, not voice's
+port, so it works on networks that block voice. Each person watching costs the host
+roughly 1.5 to 6 Mbps of upload while they watch, depending on what's on the screen and
+the speed. **The host's server could see a shared screen**, the same way it could hear
+voice (§4.14). It isn't end-to-end encrypted, and Linger never says it is.
+
+**Never recorded, never kept.** No copy on the server, no preview pictures, no recordings,
+not opt-in. Stopping, leaving voice, closing the app or losing the connection ends a
+share, and ends watching it.
+
+**A slow connection gets fewer frames, not a frozen room.** When somebody's connection
+can't keep up, they get fewer frames until it does, and nobody else's picture waits for
+them.
+
+**Voice follows the room, and so does this.** Only the people in that room's voice can
+watch, so a share in a DM's call is as private as the DM (§4.13).
+
 ---
 
 ## 5. Design system
@@ -1410,6 +1473,8 @@ says what replaced it: a status somebody typed.
 - A phone app for iPhone and Android, with voice rooms (#429) and no push (§4.15)
 - Every emoji, shortcodes, and a server's own emoji (§4.17, #359)
 - Polls, asked with `/poll` by the host or a co-host (§4.18, #474)
+- Screen sharing at 30 or 60 frames a second, watched from every app (§4.20, #360);
+  streaming a game with its sound comes after it
 
 **Ambient voice used to be on this list and is gone** (Matt, 2026-10-11 —
 `docs/decisions.md`). It was "a room you leave running, not a call you join",

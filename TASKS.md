@@ -911,6 +911,29 @@ Matt cut it before it started: "it's antiquated. It doesn't apply anymore"
 (`docs/decisions.md`). What voice work built toward it stays as ordinary voice.
 The section as it stood that day is in [`docs/tasks/m13.md`](docs/tasks/m13.md).
 
+### M16 — screen sharing (#360): started 2026-10-25
+
+Matt took it off SPEC §2's anti-goals on 2026-10-25, cameras staying there, for a
+friend's presentation from Windows on 2026-10-28. SPEC §4.20 is what it does, PROTOCOL §8
+"Screen sharing" the screen socket, and `docs/decisions.md` why it travels on a WebSocket
+and not as a WebRTC track. Branch `feat/360-screen-sharing`. Numbers are `T-19xx`.
+
+- ✅ **T-1901 · Decided and written down** — Matt, 2026-10-25: 30 and 60 frames a second,
+  the screen above the conversation, Watch joins voice, three sharing at most.
+- ⏳ **T-1902 · The server** — the screen socket, passing frames on, picking formats, the
+  ceiling, `screen` and `watching` in `voice.state`.
+- ⏳ **T-1903 · Sharing from the app** — the system's picker, WebCodecs encoders for the
+  formats the server asks for, the socket. Windows first.
+- ⏳ **T-1904 · Watching in the app** — the socket, WebCodecs decoders, drawing.
+- ⏳ **T-1905 · The screens** — Share in the voice bar and the voice line, the screen mark,
+  Watch, the screen above the conversation, Full screen, Stop in the tray menu.
+- ⏳ **T-1906 · Watching on a phone** — the same, at the top of the room; sideways fills it.
+- ⬜ **T-1907 · Sharing from Linux and macOS** — the desktop's own picker (the ScreenCast
+  portal on Linux), with WebKitGTK's encoder.
+- ⬜ **T-1908 · The real check** — a Windows share watched on Linux, Windows, Android and an
+  iPhone through the real server, at both speeds, for half an hour.
+- ⬜ **T-1909 · Streaming a game** — the computer's sound, the graphics card's encoder, later.
+
 ---
 
 ## V3 — further out than V2, and not all of it will happen

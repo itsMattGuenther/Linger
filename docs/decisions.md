@@ -1612,3 +1612,66 @@ Linger is for sale, nothing is held back for people who tip, and the app never
 shows or links to it. A tip link outside the app, from the person who makes it,
 doesn't change what the app is. Putting one *inside* the app would, and that's
 a separate question for Matt.
+
+---
+
+## Decided — screen sharing (#360)
+
+**Matt, 2026-10-25.** People had asked for it, and a friend on Windows wanted to show a
+PowerPoint to the group on 2026-10-28. Screen sharing comes off SPEC §2's anti-goals;
+cameras stay on it. SPEC §4.20 is what it does, PROTOCOL §8 "Screen sharing" how.
+
+- **Simple sharing first, game streaming after**, built on it. The first release shares a
+  screen or a window with no sound from the computer.
+- **Two speeds in the first release, 30 and 60 frames a second** (Matt: 30 is the least he
+  would consider). The person sharing picks one when they start.
+- **The look is "above the conversation"** (concept A of three mocked up on 2026-10-25): the
+  screen sits at the top of the room's tab, the conversation carries on underneath, a line
+  between them drags, and Full screen fills the monitor. The phone uses the same shape.
+- **Watch joins voice.** Watching is being in the room, so everybody watching shows in
+  voice, and the server only lets somebody in that room's voice watch.
+- **Up to three sharing at once in a room**; you watch one at a time.
+- **Phones watch and never share.**
+
+**How it travels: a WebSocket through the host's server, not voice's WebRTC.** The plan
+shown on 2026-10-25 had the screen ride the voice connection as one more WebRTC track.
+Reading the code changed that:
+
+- The desktop app's WebRTC library (`webrtc-rs`) reads resent video packets (RTX) but
+  never hands them back to the stream, and the forwarding server (`str0m`) resends only
+  that way. Every packet lost between the server and a desktop watcher would freeze the
+  picture until a fresh full frame came, many times a minute at 60 frames a second.
+- WebKitGTK has no WebRTC at all (checked on 2026-10-25: 2.54 links no GStreamer WebRTC),
+  so on Linux the Rust side would have had to carry the video and hand every frame to the
+  page anyway.
+- Voice forwarding is one thread, and a raid already leans on it (#197).
+
+So the page does the video work itself with WebCodecs, which WebView2, WebKitGTK 2.54,
+Android's web view and the iPhone's all have, and the frames go over a WebSocket on the
+server's own address. The server passes each frame on, unopened, to the people watching.
+
+- **Nothing is lost on the way**, so nothing freezes waiting for a fresh frame. A watcher
+  who can't keep up is skipped forward to the next full frame instead of holding up the
+  share.
+- **It works where voice can't**: the server's address and port 443, through whatever
+  proxy the host already runs for the gateway, with no UDP.
+- **It is off the voice thread**, on the server's ordinary async runtime across its cores.
+- **What it costs**: a little more delay than WebRTC when a connection drops packets,
+  since TCP waits to resend them. A few hundred milliseconds is nothing for a slide and
+  fine for most games; a game played by the people watching would want WebRTC, and that
+  is a question for game streaming, not this.
+
+**Video formats: VP8 and H.264, the server picks.** Each app says which it can play, and
+the sharing app which it can make, H.264 first when its graphics card makes it. The server
+picks one every watcher can play, or makes the sharer send both when no one format suits
+everybody, so a Linux AppImage without an H.264 player and an iPhone can watch together.
+VP8 is the one everything plays.
+
+**The limits are the server's.** The rate, the frame size and the three-at-once cap are
+enforced by the server, not only asked of the app.
+
+**What wasn't taken.** An in-app picker listing windows with their names and pictures
+(hard rule 2: Linger uses the system's picker and never sees a name). Preview pictures of
+shares stored on the server. Several sizes of every share for slower connections, which
+costs the sharer and the server more than a screen needs; a slow watcher gets fewer
+frames instead.
