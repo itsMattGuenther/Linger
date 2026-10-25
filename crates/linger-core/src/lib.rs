@@ -12,6 +12,7 @@ pub mod id;
 pub mod limits;
 pub mod media;
 pub mod palette;
+pub mod screen;
 pub mod wire;
 
 pub use id::{AttachmentId, EmojiId, ExportId, MessageId, ReportId, RoomId, UploadId, UserId};

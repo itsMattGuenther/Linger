@@ -38,6 +38,13 @@ file_expiry_when_full?: boolean,
  */
 voice?: boolean, 
 /**
+ * Whether this server passes shared screens on (#360, SPEC §4.20):
+ * exactly when it carries voice, since only people in a room's voice
+ * share or watch. A server from before leaves it out, and the app offers
+ * neither Share nor Watch there.
+ */
+screens?: boolean, 
+/**
  * What the host alone is told about the machine the server runs on
  * (#582): its backups and how full its disk is. Left out for everybody
  * else, co-hosts included, and by a server from before it.

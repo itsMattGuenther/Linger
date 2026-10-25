@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::id::{MessageId, RoomId, UserId};
+use crate::screen::ScreenShare;
 use crate::wire::{CustomEmoji, Message, PresenceEntry, PresenceState, Room, User};
 
 // ---------------------------------------------------------------------------
@@ -108,6 +109,16 @@ pub struct VoicePeer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub forwarded: Option<bool>,
+    /// This session is sharing its screen (#360, SPEC §4.20). Left out
+    /// otherwise, and by a server from before screen sharing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub screen: Option<ScreenShare>,
+    /// The session whose screen this session is watching (#360). Left out
+    /// otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub watching: Option<String>,
 }
 
 /// One receiving m-line in a `voice.offer`, and whose voice it carries.

@@ -178,6 +178,8 @@ mod tests {
                 deafened: false,
             }),
             forwarded: Some(true),
+            screen: Some(linger_core::screen::ScreenShare { fps: 60 }),
+            watching: Some(AWKWARD.into()),
         }];
         vec![
             ServerEvent::Hello {

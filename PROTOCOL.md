@@ -2086,7 +2086,7 @@ window or an application; the operating system's picker is the app's only way to
 what to share, and its choice reaches the app as pictures alone.
 
 **Limits.** Hellos are rate-limited per person (`RATE_SCREEN_HELLO`), and `watch` and
-`keyframe` messages per socket (`RATE_SCREEN_ASK`). A text message over 1 KiB closes the
+`keyframe` messages per socket (`RATE_SCREEN_ASK`). A text message over 2 KiB closes the
 socket (4005).
 
 ### Fan-out rules

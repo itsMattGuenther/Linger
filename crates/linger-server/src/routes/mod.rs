@@ -119,6 +119,7 @@ pub fn router(state: AppState) -> Router {
         .merge(links::router())
         .merge(emoji::router())
         .route("/gateway", any(crate::gateway::ws_route))
+        .route("/screen", any(crate::gateway::screen_route))
         .fallback(api_not_found);
 
     Router::new()

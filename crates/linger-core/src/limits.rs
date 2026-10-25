@@ -177,6 +177,32 @@ pub const MAX_VOICE_PAYLOAD_BYTES: usize = 128 * 1024;
 /// sent), and hears everybody else through the server.
 pub const MAX_VOICE_PEERS: usize = 60;
 
+/// How many people can share their screen in one voice room at once (#360,
+/// SPEC §4.20). Everybody watches one at a time, and the host's upload
+/// carries a copy of each share to each of its watchers.
+pub const MAX_SCREENS_PER_ROOM: usize = 3;
+/// How long a screen socket has to say what it is for (PROTOCOL §8).
+pub const SCREEN_HELLO_MS: u64 = 10_000;
+/// The biggest frame a screen socket carries, header included. A 1080p key
+/// frame of a busy screen is a few hundred kilobytes.
+pub const MAX_SCREEN_FRAME_BYTES: usize = 1024 * 1024;
+/// The biggest text message on a screen socket. A hello, the largest, is an
+/// access token and a few names.
+pub const MAX_SCREEN_TEXT_BYTES: usize = 2 * 1024;
+/// The least time between two key frames the server asks of one share, in
+/// one format. A key frame costs many ordinary ones, and a room of watchers
+/// arriving or catching up at once wants one between them.
+pub const SCREEN_KEYFRAME_EVERY_MS: u64 = 500;
+/// Frames waiting to go to one watcher before the server gives up on them
+/// and skips that watcher forward to the next key frame: a second at 60
+/// frames a second, two at 30.
+pub const SCREEN_WATCH_QUEUE: usize = 60;
+/// The most one share sends, on average over a second, whatever its app
+/// asks for. The apps aim for 4.5 Mbit/s at 30 frames a second and 6 at 60.
+pub const SCREEN_MAX_BITS_PER_SECOND: u64 = 10_000_000;
+/// What a share may send above that at once, for a key frame.
+pub const SCREEN_BURST_BYTES: u64 = 2 * 1024 * 1024;
+
 /// Gateway (PROTOCOL §8).
 pub const HEARTBEAT_INTERVAL_MS: u64 = 30_000;
 pub const RESUME_BUFFER_FRAMES: usize = 500;
@@ -288,6 +314,12 @@ pub const RATE_VOICE_SIGNAL: (u32, u64) = (300, 10);
 /// for each join, so twenty a minute is somebody hopping rooms as fast as
 /// they can click, and a loop gets no further.
 pub const RATE_VOICE_ICE: (u32, u64) = (20, 60);
+/// Screen socket hellos per person (#360): a share started, or a screen
+/// watched or switched to, each one. An evening's sharing and watching
+/// stays well inside it.
+pub const RATE_SCREEN_HELLO: (u32, u64) = (30, 60);
+/// `watch` and `keyframe` messages per watch socket (#360).
+pub const RATE_SCREEN_ASK: (u32, u64) = (20, 10);
 /// Votes per person (#474): plenty for changing your mind, too few to make a
 /// room's every app redraw a poll many times a second.
 pub const RATE_POLL_VOTE: (u32, u64) = (20, 10);

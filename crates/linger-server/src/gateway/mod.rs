@@ -14,6 +14,8 @@
 //! everyone offline until they reconnect.
 
 mod frame;
+mod screen_socket;
+pub mod screens;
 mod socket;
 
 use std::collections::{HashMap, VecDeque};
@@ -33,6 +35,7 @@ use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::time::Instant;
 
 use frame::EventJson;
+pub use screen_socket::screen_route;
 pub use socket::{tell_back_everywhere, ws_route};
 
 /// Everything the fan-out layer holds. Lives in `AppState` as `Arc<Gateway>`;
@@ -111,6 +114,9 @@ pub struct Gateway {
     /// server carries no voice at all: the mesh it used to fall back on is
     /// gone (#306).
     forwarding: OnceLock<linger_sfu::Sfu>,
+    /// Who shares a screen and who watches whom (#360, SPEC §4.20). Every
+    /// share and watch lives inside a voice seat: leaving voice ends both.
+    pub(crate) screens: screens::Screens,
 }
 
 /// One session's own say in where its person is (#653). Somebody on a phone
@@ -497,6 +503,7 @@ impl Gateway {
             voice_held: DashMap::new(),
             dm_members: DashMap::new(),
             voice: DashMap::new(),
+            screens: screens::Screens::default(),
             seats: AtomicU64::new(0),
             forwarding: OnceLock::new(),
         }
@@ -697,11 +704,16 @@ impl Gateway {
             .voice
             .iter()
             .filter(|seat| seat.value().room_id == room_id)
-            .map(|seat| VoicePeer {
-                session_id: seat.key().clone(),
-                user_id: seat.value().user_id,
-                controls: seat.value().controls,
-                forwarded: Some(true),
+            .map(|seat| {
+                let (screen, watching) = self.screens.peer(seat.key());
+                VoicePeer {
+                    session_id: seat.key().clone(),
+                    user_id: seat.value().user_id,
+                    controls: seat.value().controls,
+                    forwarded: Some(true),
+                    screen,
+                    watching,
+                }
             })
             .collect();
         peers.sort_by(|a, b| a.session_id.cmp(&b.session_id));
@@ -795,6 +807,22 @@ impl Gateway {
         VoiceJoined::Seated(number)
     }
 
+    /// The room `session_id`'s voice seat is in, when it has one and it is
+    /// `user_id`'s: what a screen socket must belong to (#360).
+    #[must_use]
+    pub fn screen_seat(&self, session_id: &str, user_id: UserId) -> Option<RoomId> {
+        self.voice
+            .get(session_id)
+            .filter(|seat| seat.user_id == user_id)
+            .map(|seat| seat.room_id)
+    }
+
+    /// Tell a room who shares and watches now (#360): its `voice.state`,
+    /// which carries both.
+    pub(crate) fn announce_screens(&self, room_id: RoomId) {
+        self.announce_voice(room_id);
+    }
+
     /// The room a session's seat is in, if it has one.
     fn seat_room(&self, session_id: &str) -> Option<RoomId> {
         self.voice.get(session_id).map(|seat| seat.room_id)
@@ -841,6 +869,10 @@ impl Gateway {
         if let Some(sfu) = self.forwarding.get() {
             sfu.leave(session_id);
         }
+        // A share and a watch live inside the seat (#360): leaving voice,
+        // moving rooms or the session ending closes both sockets. The room's
+        // announcement, the caller's, says so to everybody.
+        self.screens.leave(session_id);
         Some(seat.room_id)
     }
 
