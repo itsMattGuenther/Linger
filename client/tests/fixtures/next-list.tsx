@@ -34,7 +34,7 @@ import { listModel } from "../../src/next/core/list";
 import { moveServer, seatsWords, serverHeader } from "../../src/next/core/servers";
 import type { ServerListing } from "../../src/next/app/list/ListView";
 import { voiceModel } from "../../src/next/core/voice";
-import { awayChoices } from "../../src/next/core/you";
+import { startingBank } from "../../src/next/core/you";
 import { ListView } from "../../src/next/app/list/ListView";
 import "../../src/next/styles/app.css";
 import type { User } from "../../src/generated/User";
@@ -307,7 +307,8 @@ function OneServer() {
       onEditProfile={() => note("settings:profile")}
       nudge={query.has("back") ? { onDismiss: () => note("stay away") } : undefined}
       you={{
-        awayChoices: awayChoices([]),
+        awayChoices: () => startingBank([]),
+        forgetAway: (message) => note(`forget:${message}`),
         saveLine: async (line) => {
           note(`line:${line}`);
           return null;
@@ -406,7 +407,8 @@ function Servers() {
         setOrder((held) => moveServer(held, id, by));
       }}
       everywhere={{
-        awayChoices: awayChoices([]),
+        awayChoices: () => startingBank([]),
+        forgetAway: (message) => note(`forget:${message}`),
         goAway: async (message, chosen) => {
           note(`away:${chosen.join("+")}:${message}`);
           const answers: Record<string, string | null> = {};

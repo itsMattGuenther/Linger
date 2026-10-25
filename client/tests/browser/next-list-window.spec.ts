@@ -619,7 +619,7 @@ test("back at the computer while still away, the top card says so, and nothing s
   const you = page.getByRole("region", { name: "You" });
   await you.getByRole("button", { name: "Away" }).click();
   const editor = page.getByRole("dialog", { name: "Away message" });
-  await editor.getByRole("button", { name: "asleep 💤" }).click();
+  await editor.getByRole("button", { name: "asleep 💤", exact: true }).click();
   await editor.getByRole("button", { name: "I'm away" }).click();
   await expect(you).toHaveAttribute("data-away", "yes");
   const nudge = you.getByRole("status");
@@ -651,6 +651,59 @@ test("back at the computer while still away, the top card says so, and nothing s
   await expect(nudge).toHaveCount(0);
   await expect(you).not.toHaveAttribute("data-away", "yes");
 });
+
+// The away picker is a bank you build (#708): six messages, newest first,
+// each with a × that takes it out for good, a built-in one too. This device
+// keeps it, starting from the recent messages it kept before, and the picker
+// reads it each time it opens, with one server or several.
+for (const [servers, query] of [
+  ["one server", "?one"],
+  ["several servers", ""],
+] as const) {
+  test(`the away picker is a bank you build: × takes one out for good, and a new one goes on top, with ${servers} (#708)`, async ({ page }) => {
+    await open(page, query);
+    await page.evaluate(() => window.localStorage.setItem("linger.next.recentAway", JSON.stringify(["at the gym"])));
+    await open(page, query);
+    const you = page.getByRole("region", { name: "You" });
+    const editor = page.getByRole("dialog", { name: "Away message" });
+    const bank = editor.getByRole("list", { name: "Your away messages" }).locator(".nx-away-choice");
+    const box = editor.getByRole("textbox", { name: "Away message" });
+
+    await you.getByRole("button", { name: "Away" }).click();
+    await expect(bank).toHaveText(["at the gym", "back after work", "asleep 💤", "walking the dog 🐕", "out on the porch, phone inside", "at dinner, back in a bit 🍝"]);
+    await expect(box).toHaveValue("at the gym");
+
+    // A built-in one goes, and the keyboard is on the × that took its place.
+    await editor.getByRole("button", { name: "Forget “asleep 💤”" }).click();
+    await expect(editor.getByRole("button", { name: "Forget “walking the dog 🐕”" })).toBeFocused();
+    // One of your own goes too, and that's all a × does: the box keeps what it
+    // says, and the picker stays open.
+    await editor.getByRole("button", { name: "Forget “at the gym”" }).click();
+    await expect(box).toHaveValue("at the gym");
+    const kept = ["back after work", "walking the dog 🐕", "out on the porch, phone inside", "at dinner, back in a bit 🍝"];
+    await expect(bank).toHaveText(kept);
+
+    // Closed and opened again, they're still gone.
+    await editor.getByRole("button", { name: "Cancel" }).click();
+    await you.getByRole("button", { name: "Away" }).click();
+    await expect(bank).toHaveText(kept);
+
+    // Going away with a new one puts it at the top, and the ones taken out stay out.
+    await box.fill("lunch");
+    await editor.getByRole("button", { name: "I'm away" }).click();
+    await expect(you).toHaveAttribute("data-away", "yes");
+    await you.getByRole("button", { name: "I'm back" }).click();
+    await expect(you).not.toHaveAttribute("data-away", "yes");
+    await you.getByRole("button", { name: "Away" }).click();
+    await expect(bank).toHaveText(["lunch", ...kept]);
+
+    // Linger starting again on this device finds the same bank, and the old list is gone.
+    await open(page, query);
+    await you.getByRole("button", { name: "Away" }).click();
+    await expect(bank).toHaveText(["lunch", ...kept]);
+    expect(await page.evaluate(() => window.localStorage.getItem("linger.next.recentAway"))).toBeNull();
+  });
+}
 
 /** Join voice in #general as a chat window would ask, once the connection is up. */
 async function joinGeneral(page: Page) {

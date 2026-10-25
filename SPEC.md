@@ -471,6 +471,16 @@ windows, it says you're still away, beside I'm back. It never sets you back by
 itself: away is something you choose (§4.3). It knows only that there was
 input, never what it was.
 
+Away offers your **bank** of away messages (#708): six, newest first,
+starting as six built-in ones. Going away with a message puts it at the top,
+and when that makes seven, the one at the bottom drops off, the one you've
+gone longest without. A × beside each takes it out for good, a built-in one
+too, and nothing takes its place until you go away with another, so over
+time the bank becomes the ones you use. Each computer and phone keeps its
+own. It's a convenience, and a copy on the server would be a copy on each of
+your servers, where every host could read messages you only ever showed on
+another.
+
 A status is words. It has no picture: a photo goes in a room, where people see
 it without opening anybody's card and Media keeps it (#269, `docs/decisions.md`).
 

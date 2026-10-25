@@ -864,6 +864,30 @@ test.describe("one tap opens a row, on an iPhone's rule for taps (#704)", () => 
     await expect(page.getByRole("dialog")).toBeVisible();
     expect(await hoverOnly(page), "taps taken as a hover only").toEqual([]);
   });
+
+  // The away picker's × (#708) is always in sight, so one tap takes a message
+  // out, and each is a thumb's size, as are the messages beside them.
+  test("one tap on an away message's × takes it out, and each is a thumb's size (#708)", async ({ page }) => {
+    await phone(page);
+    await iPhoneTaps(page);
+    await page.getByRole("region", { name: "You" }).getByRole("button", { name: "Away" }).tap();
+    const editor = page.getByRole("dialog", { name: "Away message" });
+    const bank = editor.getByRole("list", { name: "Your away messages" });
+    await expect(bank.getByRole("listitem")).toHaveCount(6);
+    // Laid out, as a finger finds them: the picker grows a touch as it opens.
+    const sizes = await bank.getByRole("button").evaluateAll((buttons) => buttons.flatMap((button) => (button instanceof HTMLElement ? [{ width: button.offsetWidth, height: button.offsetHeight }] : [])));
+    expect(sizes).toHaveLength(12);
+    for (const size of sizes) {
+      expect(size.height).toBeGreaterThanOrEqual(44);
+      expect(size.width).toBeGreaterThanOrEqual(44);
+    }
+    expect(await sticksOut(page)).toEqual([]);
+
+    await editor.getByRole("button", { name: "Forget “asleep 💤”" }).tap();
+    await expect(bank.getByRole("listitem")).toHaveCount(5);
+    await expect(bank).not.toContainText("asleep");
+    expect(await hoverOnly(page), "taps taken as a hover only").toEqual([]);
+  });
 });
 
 // Held with a finger, a person's row or a group's raises what its buttons do,

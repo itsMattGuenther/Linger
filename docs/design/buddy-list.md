@@ -187,8 +187,9 @@ icon is still the porch picture the friend group chose.
 From top to bottom, for each server:
 
 1. **You:** your styled name, where you are, your status (click to edit), and an
-   **Away** button. It opens an AIM-style away-message editor with saved
-   presets. There is no picture. Click your name to see your own card (below).
+   **Away** button. It opens an AIM-style away-message editor with your bank
+   of six away messages, each with a × to take it out (#708). There is no
+   picture. Click your name to see your own card (below).
 2. **Rooms,** right under you, because they're where the activity shows:
    - the room's name, bold when something new arrives (weight only, no number);
    - the dots of who's in it;

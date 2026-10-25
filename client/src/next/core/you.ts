@@ -25,7 +25,7 @@ export function lineProblem(line: string): string | null {
   return length > MAX_LINE_CHARS ? `That's ${length - MAX_LINE_CHARS} characters too long.` : null;
 }
 
-/** The away messages offered before you've written your own (the prototype's). */
+/** The away messages a new bank starts with (the prototype's). */
 export const AWAY_PRESETS = [
   "back after work",
   "asleep 💤",
@@ -36,25 +36,53 @@ export const AWAY_PRESETS = [
 ] as const;
 
 /**
- * The presets to show: your own recent messages first (newest first, no
- * repeats), then the built-in ones, at most `limit`.
+ * How many away messages your bank holds (SPEC §4.6, #708): the ones the
+ * picker offers, newest first, no repeats. It starts as the built-in ones.
+ * Going away with a message puts it at the top, and × takes one out for
+ * good, a built-in one too, so over time it becomes the ones you use. Each
+ * device keeps its own, as a convenience; no server sees it.
  */
-export function awayChoices(recent: readonly string[], limit = 6): string[] {
+export const AWAY_BANK_SIZE = 6;
+
+/** Messages as a bank holds them: trimmed, no blanks, no repeats whatever their case, six at most. */
+function tidied(messages: Iterable<string>): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const message of [...recent, ...AWAY_PRESETS]) {
-    const key = message.trim();
-    if (key === "" || seen.has(key.toLowerCase())) continue;
-    seen.add(key.toLowerCase());
-    out.push(key);
-    if (out.length === limit) break;
+  for (const message of messages) {
+    const words = message.trim();
+    if (words === "" || seen.has(words.toLowerCase())) continue;
+    seen.add(words.toLowerCase());
+    out.push(words);
+    if (out.length === AWAY_BANK_SIZE) break;
   }
   return out;
 }
 
-/** Remember a message you went away with, newest first, a few at most. */
-export function rememberAway(recent: readonly string[], message: string, keep = 4): string[] {
-  const trimmed = message.trim();
-  if (trimmed === "" || (AWAY_PRESETS as readonly string[]).includes(trimmed)) return [...recent];
-  return [trimmed, ...recent.filter((held) => held.toLowerCase() !== trimmed.toLowerCase())].slice(0, keep);
+/**
+ * A device's first bank. Before #708 a device kept only your own recent
+ * messages and added the built-in ones when it showed them, so the bank
+ * starts from those, then the built-in ones: nobody loses theirs.
+ */
+export function startingBank(recent: readonly string[]): string[] {
+  return tidied([...recent, ...AWAY_PRESETS]);
+}
+
+/** A bank as a device kept it, or null when what's kept isn't one. */
+export function bankOf(kept: unknown): string[] | null {
+  return Array.isArray(kept) ? tidied(kept.filter((item): item is string => typeof item === "string")) : null;
+}
+
+/**
+ * The bank once you've gone away with a message: it's at the top, and when
+ * that makes seven, the bottom one drops off, the one you've gone longest
+ * without. A built-in one you took out comes back the same way.
+ */
+export function rememberAway(bank: readonly string[], message: string): string[] {
+  return message.trim() === "" ? [...bank] : tidied([message, ...bank]);
+}
+
+/** The bank without one message, × beside it. Nothing takes its place until you go away with another. */
+export function forgetAway(bank: readonly string[], message: string): string[] {
+  const key = message.trim().toLowerCase();
+  return bank.filter((held) => held.toLowerCase() !== key);
 }

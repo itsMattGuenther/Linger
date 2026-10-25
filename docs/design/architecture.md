@@ -446,6 +446,8 @@ one.
   Windows.
 - **Remembering.** Open tabs and their order are remembered on this computer
   (`linger.next.tabs`), and whether the list was unfolded (`linger.next.side`).
+  So is your bank of away messages, on each computer and phone
+  (`linger.next.awayBank`, #708).
   Closing the last tab folds the list window back, and the next conversation
   opened starts a fresh set. Every new-client window's size,
   position and maximized state are remembered by the desktop shell

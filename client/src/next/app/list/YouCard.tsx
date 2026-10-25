@@ -13,8 +13,10 @@ export interface YouActions {
   saveLine: (line: string) => Promise<string | null>;
   goAway: (message: string) => Promise<string | null>;
   comeBack: () => Promise<string | null>;
-  /** Away messages to offer, your own recent ones first. */
-  awayChoices: string[];
+  /** Your bank of away messages to offer (#708), read when the editor opens. */
+  awayChoices: () => string[];
+  /** Take one out of the bank, for good. */
+  forgetAway: (message: string) => void;
 }
 
 /**
@@ -169,7 +171,8 @@ export function YouCard({ me, actions, nudge, onEditProfile }: { me: MeCard; act
         <AwayEditor
           me={me.user}
           anchor={awayOpen}
-          choices={actions.awayChoices}
+          choices={actions.awayChoices()}
+          onForget={actions.forgetAway}
           onCancel={() => {
             setAwayOpen(null);
             requestAnimationFrame(() => awayButton.current?.querySelector("button")?.focus());

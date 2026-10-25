@@ -987,10 +987,15 @@ you live. It follows the clock of the computer or phone you last opened Linger
 on, so if you travel, your card follows you. Turning it off takes it off your
 card for everybody at once. Friends on an older version of Linger don't see it.
 
-There's also an **away message**: **Away** at the top of the list. Pick a
-recent one or write your own; setting one is what makes you away, and it shows
-instead of your status. With several servers, tick where it shows. **I'm
-back** clears it.
+There's also an **away message**: **Away** at the top of the list. Pick one
+of your six or write your own; setting one is what makes you away, and it
+shows instead of your status. With several servers, tick where it shows.
+**I'm back** clears it.
+
+Your six start as Linger's own. One you go away with goes to the top, and the
+one you've gone longest without drops off the bottom. **✕** beside one takes
+it out for good, Linger's own too, so over time they become the ones you use.
+Each computer and phone keeps its own six.
 
 While you're away, the top of your list looks it: **I'm back** is filled in
 a warm cream, and your away message sits where your status was, with the

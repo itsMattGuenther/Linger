@@ -10,8 +10,10 @@ import "./YouCard.css";
 
 /** Going away and coming back on several servers, each answering per server. */
 export interface AwayEverywhere {
-  /** Away messages to offer, your own recent ones first. */
-  awayChoices: string[];
+  /** Your bank of away messages to offer (#708), read when the editor opens. */
+  awayChoices: () => string[];
+  /** Take one out of the bank, for good. */
+  forgetAway: (message: string) => void;
   /** Go away on these servers; answers per server with a problem in words, or null where it worked. */
   goAway: (message: string, servers: string[]) => Promise<Record<string, string | null>>;
   /** Come back on these servers; answers the same way. */
@@ -103,7 +105,8 @@ export function YouEverywhere({ me, servers, actions, nudge }: { me: User; serve
         <AwayEditor
           me={me}
           anchor={editor}
-          choices={actions.awayChoices}
+          choices={actions.awayChoices()}
+          onForget={actions.forgetAway}
           servers={servers.flatMap((server) =>
             server.model.me ? [{ id: server.id, name: server.name, accent: server.accent, as: server.model.me.user }] : [],
           )}

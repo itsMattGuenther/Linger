@@ -23,9 +23,23 @@
   list-style: none;
 }
 
+/* A message from your bank, and the × that takes it out (#708), always
+   shown: a × that appeared on hover would take an iPhone two taps (#704). */
+.nx-away-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.nx-away-forget {
+  display: flex;
+  flex: none;
+}
+
 .nx-away-choice {
   display: block;
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   height: var(--control-md);
   padding: 0 var(--space-2);
   border-radius: var(--radius-sm);
@@ -46,6 +60,16 @@
 .nx-away-choice[aria-pressed="true"] {
   background: var(--accent-wash);
   color: var(--text-primary);
+}
+
+/* A thumb's size on the phone, as its rows are (styles/tokens.css). */
+:root[data-shell="phone"] .nx-away-choice {
+  height: var(--row-1);
+}
+
+:root[data-shell="phone"] .nx-away-forget .k-icon-button {
+  width: var(--row-1);
+  height: var(--row-1);
 }
 
 .nx-away-preview {

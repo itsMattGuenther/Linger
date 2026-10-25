@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { User } from "../../../generated/User";
-import { Button, Checkbox, Marker, Name, Popover, TextField } from "../../kit";
+import { forgetAway } from "../../core/you";
+import { Button, Checkbox, IconButton, Marker, Name, Popover, TextField } from "../../kit";
 import { markerFor } from "../markers";
 import "./AwayEditor.css";
 import { serverColor } from "./ServerSection";
@@ -18,8 +19,9 @@ export interface AwayServer {
 
 /**
  * The away message (SPEC §4.6, "the AIM away message"): type one or pick one
- * of your recent messages or the presets, see what friends will see, and go.
- * It opens inside the list window, under the Away button.
+ * from your bank, see what friends will see, and go. It opens inside the
+ * list window, under the Away button. The × beside each in the bank takes it
+ * out for good (#708), so the bank becomes the ones you use.
  *
  * With several servers it asks where to show it, each server ticked to start
  * with (docs/design/buddy-list.md, "Away goes everywhere, with a choice"). A
@@ -29,6 +31,7 @@ export function AwayEditor({
   me,
   anchor,
   choices,
+  onForget,
   onCancel,
   onGoAway,
   servers,
@@ -36,7 +39,10 @@ export function AwayEditor({
 }: {
   me: User;
   anchor: { top: number; bottom: number };
+  /** Your bank of away messages, as it was when the editor opened. */
   choices: string[];
+  /** Take one out of the bank for good. Without it, there's no ×. */
+  onForget?: (message: string) => void;
   onCancel: () => void;
   /** One server: answers with a problem in words, or null when you're away. */
   onGoAway?: (message: string) => Promise<string | null>;
@@ -45,6 +51,7 @@ export function AwayEditor({
   /** Several servers: go away on these; answers per server with a problem in words, or null where it worked. */
   onGoAwayOn?: (message: string, servers: string[]) => Promise<Record<string, string | null>>;
 }) {
+  const [bank, setBank] = useState(choices);
   const [message, setMessage] = useState(choices[0] ?? "");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -55,6 +62,23 @@ export function AwayEditor({
   const shownAs = servers?.find((server) => chosen.has(server.id))?.as ?? me;
   const box = useRef<HTMLDivElement | null>(null);
   const [at, setAt] = useState({ x: 8, y: anchor.bottom + 4 });
+  // Where focus goes after a ×, whose row is gone: the × that took its place, else the last, else the box.
+  const refocus = useRef<number | null>(null);
+
+  useLayoutEffect(() => {
+    const was = refocus.current;
+    if (was === null) return;
+    refocus.current = null;
+    const forgets = box.current?.querySelectorAll<HTMLButtonElement>(".nx-away-forget button") ?? [];
+    (forgets[Math.min(was, forgets.length - 1)] ?? box.current?.querySelector<HTMLInputElement>("input"))?.focus();
+  }, [bank]);
+
+  const forget = (choice: string, row: number) => {
+    if (!onForget) return;
+    refocus.current = row;
+    setBank((held) => forgetAway(held, choice));
+    onForget(choice);
+  };
 
   useLayoutEffect(() => {
     const card = box.current?.parentElement;
@@ -91,15 +115,22 @@ export function AwayEditor({
       <div className="nx-away" ref={box}>
         <h2 className="nx-away-title">What should friends see?</h2>
         <TextField label="Away message" hideLabel value={message} onChange={setMessage} italic autoFocus maxLength={240} onEnter={() => void go()} error={problem ?? undefined} />
-        <ul className="nx-away-choices" aria-label="Recent and suggested away messages">
-          {choices.map((choice) => (
-            <li key={choice}>
-              <button type="button" className="nx-away-choice" aria-pressed={choice === message.trim()} onClick={() => setMessage(choice)}>
-                {choice}
-              </button>
-            </li>
-          ))}
-        </ul>
+        {bank.length > 0 ? (
+          <ul className="nx-away-choices" aria-label="Your away messages">
+            {bank.map((choice, row) => (
+              <li key={choice} className="nx-away-row">
+                <button type="button" className="nx-away-choice" aria-pressed={choice === message.trim()} onClick={() => setMessage(choice)}>
+                  {choice}
+                </button>
+                {onForget ? (
+                  <span className="nx-away-forget">
+                    <IconButton icon="close" label={`Forget “${choice}”`} size="sm" onClick={() => forget(choice, row)} />
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : null}
         {several && servers ? (
           <fieldset className="nx-away-servers">
             <legend className="nx-away-legend">Show on</legend>

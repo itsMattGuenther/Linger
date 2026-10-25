@@ -45,7 +45,7 @@ import { inOrder, loadServerPrefs, saveServerPrefs, type ServerPrefs } from "../
 import { moveServer, seatsWords, serverHeader } from "../../core/servers";
 import { keepAsking, type ListedInfo, withInfo } from "../../core/serverInfo";
 import { talkingNow, voiceModel } from "../../core/voice";
-import { awayChoices, rememberAway, withAway, withLine } from "../../core/you";
+import { bankOf, forgetAway, rememberAway, startingBank, withAway, withLine } from "../../core/you";
 import type { YouActions } from "./YouCard";
 import { loadScale } from "../../core/appearance";
 import { conversationIn } from "../../core/chat/conversation";
@@ -1269,24 +1269,33 @@ async function said(saving: Promise<unknown>): Promise<string | null> {
   }
 }
 
-/** Your own recent away messages, remembered on this computer only. */
+/** Your bank of away messages (#708), kept on this device only. */
+const AWAY_BANK = "linger.next.awayBank";
+/** Before #708: only your own recent messages, the built-in ones added when shown. The bank starts from it. */
 const RECENT_AWAY = "linger.next.recentAway";
 
-function loadRecentAway(): string[] {
+function loadAwayBank(): string[] {
   try {
-    const parsed: unknown = JSON.parse(window.localStorage.getItem(RECENT_AWAY) ?? "[]");
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string").slice(0, 8) : [];
+    const kept = window.localStorage.getItem(AWAY_BANK);
+    if (kept !== null) return bankOf(JSON.parse(kept)) ?? startingBank([]);
+    const recent: unknown = JSON.parse(window.localStorage.getItem(RECENT_AWAY) ?? "[]");
+    return startingBank(Array.isArray(recent) ? recent.filter((item): item is string => typeof item === "string") : []);
   } catch {
-    return [];
+    return startingBank([]);
   }
 }
 
-function saveRecentAway(recent: string[]): void {
+function saveAwayBank(bank: string[]): void {
   try {
-    window.localStorage.setItem(RECENT_AWAY, JSON.stringify(recent));
+    window.localStorage.setItem(AWAY_BANK, JSON.stringify(bank));
+    window.localStorage.removeItem(RECENT_AWAY);
   } catch {
-    // Storage refused: the presets still work, this is a convenience.
+    // Storage refused: the built-in ones still work, this is a convenience.
   }
+}
+
+function forgetAwayMessage(message: string): void {
+  saveAwayBank(forgetAway(loadAwayBank(), message));
 }
 
 /**
@@ -1454,13 +1463,14 @@ function addingWith(accounts: Accounts, setAdding: (adding: boolean) => void, al
 /** One server: your status and away from the top card. */
 function youOn({ api, baseUrl }: ServerSession, me: User): YouActions {
   return {
-    awayChoices: awayChoices(loadRecentAway()),
+    awayChoices: loadAwayBank,
+    forgetAway: forgetAwayMessage,
     saveLine: (line) => said(saveStatus(api, withLine(me.status, line))),
     goAway: async (message) => {
       const problem = await said(saveStatus(api, withAway(me.status, message)));
       if (problem === null) {
         setAway(baseUrl, message);
-        saveRecentAway(rememberAway(loadRecentAway(), message));
+        saveAwayBank(rememberAway(loadAwayBank(), message));
       }
       return problem;
     },
@@ -1488,10 +1498,11 @@ function awayEverywhere(signedIn: readonly ServerSession[]): AwayEverywhere {
     return Object.fromEntries(answers);
   };
   return {
-    awayChoices: awayChoices(loadRecentAway()),
+    awayChoices: loadAwayBank,
+    forgetAway: forgetAwayMessage,
     goAway: async (message, servers) => {
       const answers = await each(servers, message);
-      if (Object.values(answers).some((problem) => problem === null)) saveRecentAway(rememberAway(loadRecentAway(), message));
+      if (Object.values(answers).some((problem) => problem === null)) saveAwayBank(rememberAway(loadAwayBank(), message));
       return answers;
     },
     comeBack: (servers) => each(servers, null),

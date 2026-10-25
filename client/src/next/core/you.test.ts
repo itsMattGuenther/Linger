@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { UserStatus } from "../../generated/UserStatus";
-import { AWAY_PRESETS, awayChoices, lineProblem, rememberAway, withAway, withLine } from "./you";
+import { AWAY_BANK_SIZE, AWAY_PRESETS, bankOf, forgetAway, lineProblem, rememberAway, startingBank, withAway, withLine } from "./you";
 
 const status: UserStatus = {
   line: "fixing the porch light (the real one)",
@@ -70,17 +70,42 @@ describe("changing your status from the list", () => {
   });
 });
 
-describe("away presets", () => {
-  it("offers your own recent messages first, then the built-in ones, without repeats", () => {
-    expect(awayChoices(["at the gym", "Asleep 💤"])).toEqual(["at the gym", "Asleep 💤", "back after work", "walking the dog 🐕", "out on the porch, phone inside", "at dinner, back in a bit 🍝"]);
-    expect(awayChoices([])).toEqual([...AWAY_PRESETS]);
+describe("your bank of away messages (#708)", () => {
+  it("starts as the built-in ones", () => {
+    expect(startingBank([])).toEqual([...AWAY_PRESETS]);
+    expect(AWAY_PRESETS).toHaveLength(AWAY_BANK_SIZE);
   });
 
-  it("remembers what you wrote yourself, newest first, a few at most", () => {
-    let recent: string[] = [];
-    for (const message of ["one", "two", "three", "four", "five", "two"]) recent = rememberAway(recent, message);
-    expect(recent).toEqual(["two", "five", "four", "three"]);
-    expect(rememberAway(recent, "asleep 💤")).toEqual(recent);
-    expect(rememberAway(recent, "  ")).toEqual(recent);
+  it("starts from a device's recent messages, then the built-in ones, without repeats", () => {
+    expect(startingBank(["at the gym", "Asleep 💤"])).toEqual(["at the gym", "Asleep 💤", "back after work", "walking the dog 🐕", "out on the porch, phone inside", "at dinner, back in a bit 🍝"]);
+  });
+
+  it("puts a message you go away with at the top, and the bottom one drops off at seven", () => {
+    let bank = startingBank([]);
+    bank = rememberAway(bank, "  at the gym ");
+    expect(bank).toEqual(["at the gym", "back after work", "asleep 💤", "walking the dog 🐕", "out on the porch, phone inside", "at dinner, back in a bit 🍝"]);
+    bank = rememberAway(bank, "walking the dog 🐕");
+    expect(bank).toEqual(["walking the dog 🐕", "at the gym", "back after work", "asleep 💤", "out on the porch, phone inside", "at dinner, back in a bit 🍝"]);
+    expect(rememberAway(bank, "  ")).toEqual(bank);
+  });
+
+  it("takes out the one beside its ×, a built-in one too, and leaves its place empty", () => {
+    let bank = rememberAway(startingBank([]), "at the gym");
+    bank = forgetAway(bank, "asleep 💤");
+    bank = forgetAway(bank, "at the gym");
+    expect(bank).toEqual(["back after work", "walking the dog 🐕", "out on the porch, phone inside", "at dinner, back in a bit 🍝"]);
+    // Taken out stays out: going away with another doesn't bring it back.
+    expect(rememberAway(bank, "lunch")).toEqual(["lunch", "back after work", "walking the dog 🐕", "out on the porch, phone inside", "at dinner, back in a bit 🍝"]);
+    // Going away with it again does.
+    expect(rememberAway(bank, "asleep 💤")[0]).toBe("asleep 💤");
+    expect(forgetAway([], "lunch")).toEqual([]);
+  });
+
+  it("reads a kept bank, and nothing else as one", () => {
+    expect(bankOf(["lunch", 4, " lunch ", "", "nap"])).toEqual(["lunch", "nap"]);
+    expect(bankOf([])).toEqual([]);
+    expect(bankOf(["1", "2", "3", "4", "5", "6", "7"])).toHaveLength(AWAY_BANK_SIZE);
+    expect(bankOf({ lunch: true })).toBeNull();
+    expect(bankOf(null)).toBeNull();
   });
 });

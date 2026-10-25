@@ -1201,7 +1201,7 @@ test.describe("you, at the top", () => {
   test("go away with a preset, seeing what friends will see", async ({ page }) => {
     await page.getByRole("region", { name: "You" }).getByRole("button", { name: "Away" }).click();
     const editor = page.getByRole("dialog", { name: "Away message" });
-    await editor.getByRole("button", { name: "asleep 💤" }).click();
+    await editor.getByRole("button", { name: "asleep 💤", exact: true }).click();
     await expect(editor).toContainText("Friends see");
     await expect(editor).toContainText("“asleep 💤”");
     await editor.getByRole("button", { name: "I'm away" }).click();
