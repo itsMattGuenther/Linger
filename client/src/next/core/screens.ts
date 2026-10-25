@@ -1,5 +1,6 @@
 import type { RoomId } from "../../generated/RoomId";
 import { type GatewayState, voicePeersIn } from "../../lib/gateway";
+import type { ShareStopped } from "../../lib/screen/share";
 
 /**
  * Who is sharing a screen and who is watching whom (SPEC §4.20, #360), read
@@ -53,4 +54,31 @@ export function watchingWords(names: readonly string[]): string {
   if (names.length === 0) return "Nobody's watching yet";
   if (names.length === 1) return `${names[0]} is watching`;
   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} are watching`;
+}
+
+/**
+ * Why a share ended by itself, in words for the voice bar (#360); null when
+ * there's nothing to say: you stopped it, or you left voice, which is plain
+ * already.
+ */
+export function shareStoppedWords(why: ShareStopped): string | null {
+  switch (why) {
+    case "room-full":
+      return "Three people are sharing here already, so yours didn't start.";
+    case "not-signed-in":
+      return "Sharing stopped: this server needs you to sign in again.";
+    case "dropped":
+      return "Sharing stopped: the connection to the server dropped.";
+    case "no-encoder":
+      return "This computer can't make the video Linger sends, so it can't share.";
+    case "no-picker":
+      return "This app can't ask for a screen on this computer.";
+    case "bad-hello":
+      return "The server didn't take the share. It may need an update.";
+    case "not-in-voice":
+    case "nothing-to-watch":
+    case "replaced":
+    case "ended":
+      return null;
+  }
 }

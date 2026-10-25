@@ -340,6 +340,8 @@ function OneServer() {
                       onShare: (fps: number) => note(`share:${fps}`),
                       onStop: () => note("stop sharing"),
                       box: SCREEN === "sharing" ? { preview: fakeScreen(), watching: "Eli and Jules are watching", starting: false } : null,
+                      // `=stopped`: your last share didn't start, and the bar says why.
+                      stopped: SCREEN === "stopped" ? "Three people are sharing here already, so yours didn't start." : null,
                     },
                   }
                 : {}),

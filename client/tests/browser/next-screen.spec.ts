@@ -142,3 +142,11 @@ test("on a phone the screen runs edge to edge at its own shape, and sideways it 
   await page.setViewportSize({ width: 844, height: 390 });
   await expect.poll(async () => await stage.boundingBox()).toEqual({ x: 0, y: 0, width: 844, height: 390 });
 });
+
+test("a share that ended by itself says why in the voice bar", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.goto("/tests/fixtures/next-list.html?voice&screen=stopped");
+  const bar = page.getByRole("region", { name: /^In voice in #general/ });
+  await expect(bar.getByRole("status")).toHaveText("Three people are sharing here already, so yours didn't start.");
+  await expect(bar.getByRole("group", { name: "Your screen" })).toHaveCount(0);
+});

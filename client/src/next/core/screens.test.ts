@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { VoicePeer } from "../../generated/VoicePeer";
 import { serverState } from "../../lib/gateway";
-import { myScreen, seatedIn, sharersIn, sharingPeople, watchersOf, watchingWords } from "./screens";
+import { myScreen, seatedIn, sharersIn, shareStoppedWords, sharingPeople, watchersOf, watchingWords } from "./screens";
 
 function withVoice(peers: VoicePeer[], session = "s-me") {
   return { ...serverState("https://screens.example"), sessionId: session, voice: { "r-1": peers }, myVoice: null };
@@ -47,5 +47,14 @@ describe("who shares and who watches (#360)", () => {
     expect(seatedIn(withVoice(peers, "s-nobody"), "r-1")).toBe(false);
     // No seat of its own until the client knows it's in voice.
     expect(myScreen(state)).toBeNull();
+  });
+});
+
+describe("a share that ended by itself (#360)", () => {
+  it("says why in words, and nothing when you left or stopped it", () => {
+    expect(shareStoppedWords("room-full")).toMatch(/Three people are sharing here already/);
+    expect(shareStoppedWords("dropped")).toMatch(/connection to the server dropped/);
+    expect(shareStoppedWords("bad-hello")).toMatch(/may need an update/);
+    for (const quiet of ["ended", "replaced", "not-in-voice", "nothing-to-watch"] as const) expect(shareStoppedWords(quiet)).toBeNull();
   });
 });

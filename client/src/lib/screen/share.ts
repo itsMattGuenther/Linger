@@ -30,8 +30,20 @@ export interface ScreenShareState {
 
 /** The share as this window holds it, or null. */
 let shown: ScreenShareState | null = null;
-/** Why the last share ended by itself, until another starts or it's cleared. */
+/** Why the last share ended by itself, until another starts or it's been said a while. */
 let lastStop: { server: string; why: ShareStopped } | null = null;
+/** How long the voice bar says why a share ended by itself. */
+const STOPPED_SAID_MS = 15_000;
+let stopTimer = 0;
+
+function stopped(server: string, why: ShareStopped): void {
+  lastStop = { server, why };
+  window.clearTimeout(stopTimer);
+  stopTimer = window.setTimeout(() => {
+    lastStop = null;
+    for (const listener of listeners) listener();
+  }, STOPPED_SAID_MS);
+}
 const listeners = new Set<() => void>();
 
 function publish(next: ScreenShareState | null): void {
@@ -77,7 +89,7 @@ export async function startSharing(options: { server: string; api: AuthedApi; se
   running?.finish(null);
   lastStop = null;
   if (!canPickScreen()) {
-    lastStop = { server: options.server, why: "no-picker" };
+    stopped(options.server, "no-picker");
     publish(null);
     return;
   }
@@ -100,7 +112,7 @@ export async function startSharing(options: { server: string; api: AuthedApi; se
   const made = await makeable(options.fps);
   if (!track || made.codecs.length === 0) {
     for (const each of stream.getTracks()) each.stop();
-    lastStop = { server: options.server, why: "no-encoder" };
+    stopped(options.server, "no-encoder");
     publish(null);
     return;
   }
@@ -402,7 +414,7 @@ class Sharing {
     this.#socket = null;
     socket?.close(1000);
     if (running === this) running = null;
-    if (why !== null && why !== "ended") lastStop = { server: this.server, why };
+    if (why !== null && why !== "ended") stopped(this.server, why);
     if (shown?.server === this.server) publish(null);
     else for (const listener of listeners) listener();
   }

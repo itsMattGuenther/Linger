@@ -75,7 +75,11 @@ export interface VoiceDockProps {
    * Share your screen (#360), beside your controls, and your share while
    * there is one. Left out where you can't: a phone, a server without it.
    */
-  share?: ShareControl & { box: { preview: MediaStream | null; watching: string; starting: boolean } | null };
+  share?: ShareControl & {
+    box: { preview: MediaStream | null; watching: string; starting: boolean } | null;
+    /** Why your last share ended by itself, said for a while: the room was full, the line dropped. */
+    stopped?: string | null;
+  };
 }
 
 /**
@@ -233,6 +237,11 @@ export function VoiceDock({ where, people, muted, deafened, line, server, onGoTo
           {...(onTakeOut && !open.user.is_host ? { onTakeOut: () => onTakeOut(open) } : {})}
           onClose={closeVolume}
         />
+      ) : null}
+      {share?.stopped ? (
+        <p className="nx-voice-line" role="status">
+          {share.stopped}
+        </p>
       ) : null}
       {share?.box ? <SharingBox preview={share.box.preview} watching={share.box.watching} starting={share.box.starting} onStop={share.onStop} /> : null}
       {/* Symbols, as in the room's chat window (#216): each word is the button's name and tooltip (#230).
