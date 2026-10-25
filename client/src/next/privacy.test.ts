@@ -62,8 +62,12 @@ describe("privacy, from the source", () => {
     const fetches = uses(SHIPPED, /\bfetch\(/);
     expect(fetches.map((line) => line.split(":")[0]).sort()).toEqual(["src/lib/api.ts", "src/lib/upload.ts"]);
     for (const line of fetches) expect(line).toMatch(/fetch\((`\$\{baseUrl\}|absoluteUrl\(baseUrl,)/);
+    // One WebSocket, the screen socket (#360), and it addresses the server too.
+    const sockets = uses(SHIPPED, /new WebSocket\(/);
+    expect(sockets.map((line) => line.split(":")[0])).toEqual(["src/lib/screen/socket.ts"]);
+    for (const line of sockets) expect(line).toMatch(/new WebSocket\(`\$\{baseUrl\.replace\(/);
     // No other way out of the page.
-    expect(uses(SHIPPED, /XMLHttpRequest|sendBeacon|new WebSocket|new EventSource|new Image\(|navigator\.(sendBeacon|connection)/)).toEqual([]);
+    expect(uses(SHIPPED, /XMLHttpRequest|sendBeacon|new EventSource|new Image\(|navigator\.(sendBeacon|connection)/)).toEqual([]);
 
     const REPORTERS = /sentry|bugsnag|posthog|mixpanel|segment|amplitude|datadog|rollbar|newrelic|logrocket|fullstory|hotjar|analytics|gtag|plausible|umami|matomo|honeybadger|raygun|appsignal|opentelemetry|telemetry|firebase|crashpad|breakpad/i;
     const pkg = JSON.parse(readFileSync(join(CLIENT, "package.json"), "utf8")) as Record<string, Record<string, string> | undefined>;
@@ -91,6 +95,17 @@ describe("privacy, from the source", () => {
     // `windows-sys` only to ask whether the one talk key is down (#500):
     // none of Windows' windows, processes or hooks.
     expect(featuresOf(crates, "windows-sys")).toEqual(["Win32_UI_Input_KeyboardAndMouse"]);
+  });
+
+  it("never asks a shared screen what it is: no window's or app's name, no picker of its own (PRIV-2, #360)", () => {
+    // The system's picker chooses; the app gets pictures. A track's label is
+    // a window's title on some engines, and its settings name what kind of
+    // thing was picked: none of it is read, anywhere in what ships.
+    const SCREEN = SHIPPED.filter((file) => /src\/lib\/screen\/|[Ss]creen/.test(rel(file)));
+    expect(SCREEN.length).toBeGreaterThan(4);
+    expect(uses(SCREEN, /\.label\b|getSettings\(|getCapabilities\(|getConstraints\(|displaySurface|\.deviceId\b|CaptureController|getDisplayMediaSet|desktopCapturer/)).toEqual([]);
+    // The one call that asks for a screen is the system's own picker.
+    expect(uses(SHIPPED, /getDisplayMedia\(/).map((line) => line.split(":")[0])).toEqual(["src/lib/screen/share.ts"]);
   });
 
   it("never sees the whole keyboard: only the one talk key, only in voice (PRIV-2, #500)", () => {

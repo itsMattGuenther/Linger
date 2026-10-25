@@ -179,6 +179,24 @@ LINGER_LOAD_SERVER=http://203.0.113.7:8420 LINGER_LOAD_SETUP=<token> \
 silence) change the room. It can't see the server's CPU; watch that on the
 server itself (`top`) while it runs.
 
+### Screen sharing end to end
+
+`scripts/screen-loop.mjs` checks screen sharing (#360) the whole way through a
+real server: it builds and starts a throwaway `linger-server` on 127.0.0.1 with
+voice on, puts two people in a room's voice through real gateway sessions, and
+has one browser page share a screen that changes colour while another watches
+through the server, at 30 and at 60 frames a second. The pages are
+`client/tests/fixtures/screen-loop.html`, served by Vite. It passes when the
+watcher's colours follow the sharer's.
+
+```bash
+node scripts/screen-loop.mjs
+```
+
+To watch with WebKit as well, start Playwright's WebKit server the way
+`scripts/webkit.sh` does and give its address in `LINGER_WEBKIT_WS`. It can't
+use a real screen or a real Windows picker; that check is the real app.
+
 ## How the desktop app starts on Linux
 
 Linux v0.3.3 selects native Wayland when a Wayland display is available, so
