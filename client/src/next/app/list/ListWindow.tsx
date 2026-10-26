@@ -99,9 +99,10 @@ import type { InVoice } from "../chat/VoiceStrip";
 import { VoiceDock, type VoiceDockProps } from "./VoiceDock";
 import { useSharesFromHere } from "../../../lib/screen/probe";
 import { type ScreenShareState, useScreenShare, useShareStopped } from "../../../lib/screen/share";
+import { stopWatching } from "../../../lib/screen/watch";
 import { previewOf } from "../screen/SharingBox";
 import { myScreen, sharersIn, shareStoppedWords, watchersOf, watchingWords } from "../../core/screens";
-import { startSharingHere, stopSharingEverywhere } from "../../core/screenStop";
+import { hearBlackShares, startSharingHere, stopSharingEverywhere } from "../../core/screenStop";
 import { ApiError, PublicApi, TransportError } from "../../../lib/api";
 import type { User } from "../../../generated/User";
 
@@ -129,6 +130,9 @@ export function ListWindow() {
   const [prefill, setPrefill] = useState<Offered | null>(null);
   const [offer, setOffer] = useState<Offered | null>(null);
   useEffect(() => (isTauri() ? watchOfferedLinks(tauriBus(), takeOfferedLink, numbering(setArrived)) : undefined), []);
+  // A share in a conversation's own window that went black (#722): only
+  // this window may raise its notice.
+  useEffect(hearBlackShares, []);
   const restoring = sessions.state.status === "restoring";
   const anySignedIn = sessions.state.status === "ready" && sessions.state.servers.length > 0;
   useEffect(() => {
@@ -336,6 +340,11 @@ function Servers({
   // The phone app, a while in the background (SPEC §4.15): its connections close.
   const [backgrounded, setBackgrounded] = useState(false);
   useEffect(() => (onPhone() ? watchBackground(document, BACKGROUND_GRACE_MS, setBackgrounded, () => void retryAllNow(), flushReadMarkers) : undefined), []);
+  // A screen being watched stops then too (#360): nobody sees it, and it
+  // went on costing the phone's data and saying it was watching.
+  useEffect(() => {
+    if (backgrounded) stopWatching();
+  }, [backgrounded]);
   // And with no network: closed, and opened again the moment there is one.
   const [offline, setOffline] = useState(false);
   useEffect(() => (onPhone() ? watchNetwork(window, setOffline) : undefined), []);

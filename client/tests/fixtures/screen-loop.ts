@@ -14,9 +14,11 @@
  * (`usePaneScreen`), with the room's voice as `loop.voice` says it.
  *
  * Desktop notices the app raises are kept for `loop.notices` where it plays
- * the Linux app (`?shell`), the only place here the page is an app's.
+ * the Linux app (`?shell`), the only place here the page is an app's: the
+ * list window, or with `?label=chat-…` a conversation's own, which asks the
+ * list window for one (`loop.shell_asked` has `emit_to <event>`).
  */
-import { mockIPC } from "@tauri-apps/api/mocks";
+import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { createElement, useEffect, useMemo, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import type { VoicePeer } from "../../src/generated/VoicePeer";
@@ -25,7 +27,8 @@ import { usePaneScreen } from "../../src/next/app/screen/usePaneScreen";
 import type { ChatPane } from "../../src/next/app/chat/ChatView";
 import { AuthedApi, type TokenSource } from "../../src/lib/api";
 import { type GatewayState, serverState } from "../../src/lib/gateway";
-import { currentShare, currentShareStopped, startSharing, stopSharing } from "../../src/lib/screen/share";
+import { currentShare, currentShareStopped, stopSharing } from "../../src/lib/screen/share";
+import { startSharingHere } from "../../src/next/core/screenStop";
 import { currentWatch, drawOn, startWatching, stopWatching } from "../../src/lib/screen/watch";
 import type { ScreenFps } from "../../src/lib/screen/presets";
 import { packFrame } from "../../src/lib/screen/frames";
@@ -180,11 +183,13 @@ const notices: unknown[] = [];
 
 if (new URLSearchParams(location.search).has("shell")) {
   (window as unknown as { isTauri: boolean }).isTauri = true;
+  mockWindows(new URLSearchParams(location.search).get("label") ?? "main");
   // Notices allowed, as the app's own permission says on a desktop.
   Object.defineProperty(window, "Notification", { value: { permission: "granted", requestPermission: async () => "granted" }, configurable: true });
   mockIPC(async (command, args) => {
     shellAsked.push(command);
     if (command === "show_notification") notices.push(args);
+    if (command === "plugin:event|emit_to" && typeof args === "object" && args !== null) shellAsked.push(`emit_to ${String(Reflect.get(args, "event"))}`);
     if (command === "screen_share_available") return true;
     if (command === "screen_share_keyframe") shellKeyframe();
     if (command === "screen_share_preview") shellPreview = typeof args === "object" && args !== null && Reflect.get(args, "shown") === true;
@@ -288,7 +293,7 @@ declare global {
 }
 
 window.loop = {
-  share: (baseUrl, token, sessionId, fps) => startSharing({ server: baseUrl, api: api(baseUrl, token), sessionId, fps }),
+  share: (baseUrl, token, sessionId, fps) => startSharingHere({ server: baseUrl, api: api(baseUrl, token), sessionId, fps }),
   watch: async (baseUrl, token, sessionId, target) => {
     await startWatching({ server: baseUrl, api: api(baseUrl, token), sessionId, target, place: "loop", who: "sharer" });
     drawOn(watched instanceof HTMLCanvasElement ? watched : null);

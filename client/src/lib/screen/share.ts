@@ -1,8 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { ScreenCodec } from "../../generated/ScreenCodec";
 import type { AuthedApi } from "../api";
-import { showNotice } from "../notify";
-import { BLACK_NOTICE, BlackWatch, LOOK_EVERY_MS, LOOK_HEIGHT, LOOK_WIDTH, looksBlack } from "./black";
+import { BlackWatch, LOOK_EVERY_MS, LOOK_HEIGHT, LOOK_WIDTH, looksBlack } from "./black";
 import { packFrame, readFrame } from "./frames";
 import { encoderConfig, fitWithin, KEYFRAME_EVERY_MS, SCREEN_SPEEDS, type ScreenFps, type ScreenSpeed } from "./presets";
 import { canPickScreen, makeable } from "./probe";
@@ -131,6 +130,18 @@ export function setPreviewShown(shown: boolean): void {
   }
   if (running?.source.kind === "shell") running.source.capture.preview(shown);
   for (const listener of previewListeners) listener();
+}
+
+const blackListeners = new Set<() => void>();
+
+/**
+ * Told once a share has gone black (`black.ts`), for the desktop notice:
+ * only the list window may raise one, so a share from a conversation's own
+ * window asks it to (`core/screenStop.ts`).
+ */
+export function onShareWentBlack(listener: () => void): () => void {
+  blackListeners.add(listener);
+  return () => blackListeners.delete(listener);
 }
 
 const pictureListeners = new Set<(picture: ArrayBuffer) => void>();
@@ -463,7 +474,7 @@ class Sharing {
   looked(black: boolean): void {
     if (this.#done || running !== this || !this.#black.look(performance.now(), black)) return;
     if (shown?.server === this.server) publish({ ...shown, wentBlack: true });
-    void showNotice(BLACK_NOTICE.title, BLACK_NOTICE.body);
+    for (const listener of blackListeners) listener();
   }
 
   /** Take frames from the track as they come. */
@@ -550,12 +561,11 @@ class Sharing {
   encode(codec: ScreenCodec, frame: VideoFrame, forceKey: boolean): void {
     const socket = this.#socket;
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
-    // The line to the server is behind: skip this frame rather than queue it.
-    if (socket.bufferedAmount > MOST_WAITING) {
-      const held = this.#encoders.get(codec);
-      if (held) held.wantKey = true;
-      return;
-    }
+    // The line to the server is behind: skip this frame rather than queue
+    // it. Skipped before it's encoded, it leaves the next one nothing
+    // missing, so that one needn't be a key frame: one asked for here, five
+    // to fifteen times the size, only put the line further behind.
+    if (socket.bufferedAmount > MOST_WAITING) return;
     const size = fitWithin(frame.displayWidth, frame.displayHeight, this.speed.maxWidth, this.speed.maxHeight);
     let held = this.#encoders.get(codec);
     if (!held || held.width !== size.width || held.height !== size.height) {
@@ -565,10 +575,8 @@ class Sharing {
       this.#encoders.set(codec, opened);
       held = opened;
     }
-    if (held.encoder.encodeQueueSize > MOST_ENCODING) {
-      held.wantKey = true;
-      return;
-    }
+    // The computer is behind: skip it, before it's encoded, as above.
+    if (held.encoder.encodeQueueSize > MOST_ENCODING) return;
     const now = performance.now();
     const key = forceKey || held.wantKey || now - held.keyAt > KEYFRAME_EVERY_MS;
     try {

@@ -208,21 +208,25 @@ const PREVIEW_FPS: u32 = 4;
 const LOOK_WIDTH: u32 = 160;
 const LOOK_HEIGHT: u32 = 90;
 const LOOK_FPS: u32 = 1;
-/// The brightest a black picture's pixel is, out of 255: GStreamer's
-/// conversion puts black at 16 and white at 235, not 0 and 255.
+/// The brightest a black picture's pixel is, out of 255, in its brightest
+/// of red, green and blue: a capture's black can come through a little above 0.
 const BLACK_LEVEL: u8 = 24;
 
-/// Whether a picture's brightness, one byte a pixel, is black: one pixel in
-/// a thousand may be brighter, for a pointer over it. As `looksBlack` in
-/// `black.ts`.
-pub fn looks_black(brightness: &[u8]) -> bool {
-    if brightness.is_empty() {
+/// Whether a picture, as RGB, three bytes a pixel, is black: no pixel's
+/// red, green or blue above `BLACK_LEVEL`, but one pixel in a thousand, for
+/// a pointer over it. The page's own rule (`looksBlack` in `black.ts`), so
+/// a dark blue slide is black on neither: brightness alone counts a deep
+/// blue as black, and a near-black grey as not.
+pub fn looks_black(rgb: &[u8]) -> bool {
+    let pixels = rgb.len() / 3;
+    if pixels == 0 {
         return false;
     }
-    let allowed = brightness.len() / 1000;
-    brightness
+    let allowed = pixels / 1000;
+    rgb.as_chunks::<3>()
+        .0
         .iter()
-        .filter(|&&value| value > BLACK_LEVEL)
+        .filter(|pixel| pixel.iter().any(|&value| value > BLACK_LEVEL))
         .count()
         <= allowed
 }
@@ -340,13 +344,13 @@ fn pipeline_from(
              ! appsink name=pictures sync=false async=false max-buffers=1 drop=true emit-signals=false"
         ));
     }
-    // Brightness alone, a byte a pixel, from the elements the share already
+    // Plain RGB, three bytes a pixel, from the elements the share already
     // has; like the preview's, its sink holds nothing up.
     text.push_str(&format!(
             " split. ! queue name=look max-size-buffers=1 max-size-bytes=0 max-size-time=0 leaky=downstream \
              ! videorate drop-only=true ! video/x-raw,framerate={LOOK_FPS}/1 \
              ! videoscale ! video/x-raw,width={LOOK_WIDTH},height={LOOK_HEIGHT} \
-             ! videoconvert ! video/x-raw,format=GRAY8 \
+             ! videoconvert ! video/x-raw,format=RGB \
              ! appsink name=looks sync=false async=false max-buffers=1 drop=true emit-signals=false"
         ));
     text
@@ -377,6 +381,15 @@ pub struct Outlets<F, P, L, E> {
     pub picture: P,
     pub looked: L,
     pub ended: E,
+}
+
+/// A pipeline `Capture::run` started: its frames' sink, the preview's switch,
+/// and the thread watching its bus for an ending.
+struct Ran {
+    pipeline: gst::Pipeline,
+    frames: gst_app::AppSink,
+    switch: Option<Arc<AtomicBool>>,
+    watching: std::thread::JoinHandle<()>,
 }
 
 /// A share running: the picked screen through GStreamer.
@@ -415,7 +428,14 @@ impl Capture {
             preview,
         );
         match Self::run(&text, size, outlets) {
-            Ok((pipeline, frames, switch)) => {
+            Ok(Ran {
+                pipeline,
+                frames,
+                switch,
+                watching,
+            }) => {
+                // It runs on its own, and ends when the share does (`stop`).
+                drop(watching);
                 let capture = Self {
                     pipeline,
                     frames,
@@ -433,7 +453,7 @@ impl Capture {
         text: &str,
         size: (u32, u32),
         outlets: Outlets<F, P, L, E>,
-    ) -> Result<(gst::Pipeline, gst_app::AppSink, Option<Arc<AtomicBool>>), String>
+    ) -> Result<Ran, String>
     where
         F: Fn(Vec<u8>) + Send + Sync + 'static,
         P: Fn(Vec<u8>) + Send + Sync + 'static,
@@ -556,11 +576,19 @@ impl Capture {
                     }
                 }
             });
-        if let Err(error) = watched {
-            let _ = pipeline.set_state(gst::State::Null);
-            return Err(error.to_string());
-        }
-        Ok((pipeline, frames, switch))
+        let watching = match watched {
+            Ok(watching) => watching,
+            Err(error) => {
+                let _ = pipeline.set_state(gst::State::Null);
+                return Err(error.to_string());
+            }
+        };
+        Ok(Ran {
+            pipeline,
+            frames,
+            switch,
+            watching,
+        })
     }
 
     /// Show the preview or hide it. Hidden, its pictures are dropped before
@@ -587,12 +615,15 @@ impl Capture {
     /// Stop reading and let the portal's session go. Returns the session to
     /// close, which is a call to the desktop.
     pub fn stop(mut self) -> Option<Picked> {
-        let _ = self.pipeline.set_state(gst::State::Null);
+        // Told to stop watching the bus first: stopped, the pipeline empties
+        // its bus and takes no more messages, and the thread waited for one
+        // for as long as the app ran, one more each share.
         if let Some(bus) = self.pipeline.bus() {
             let _ = bus.post(gst::message::Application::new(gst::Structure::new_empty(
                 "linger-stop",
             )));
         }
+        let _ = self.pipeline.set_state(gst::State::Null);
         self.picked.take()
     }
 }
@@ -726,20 +757,23 @@ mod tests {
     #[test]
     fn a_black_picture_is_black_and_a_dark_one_with_something_on_it_isnt() {
         let pixels = (LOOK_WIDTH * LOOK_HEIGHT) as usize;
-        // GStreamer's black is 16.
-        assert!(looks_black(&vec![16; pixels]));
-        assert!(looks_black(&vec![BLACK_LEVEL; pixels]));
-        assert!(!looks_black(&vec![BLACK_LEVEL + 1; pixels]));
+        let picture = |rgb: [u8; 3], lit: usize| {
+            let mut bytes = Vec::with_capacity(pixels * 3);
+            for at in 0..pixels {
+                bytes.extend_from_slice(if at < lit { &[255, 255, 255] } else { &rgb });
+            }
+            bytes
+        };
+        assert!(looks_black(&picture([0, 0, 0], 0)));
+        assert!(looks_black(&picture([BLACK_LEVEL; 3], 0)));
+        assert!(!looks_black(&picture([BLACK_LEVEL + 1, 0, 0], 0)));
+        // A deep blue slide isn't black, as on the page.
+        assert!(!looks_black(&picture([0, 0, 88], 0)));
         // A pointer over it: one pixel in a thousand, and no more.
-        let mut pointer = vec![16; pixels];
-        pointer[..pixels / 1000].fill(235);
-        assert!(looks_black(&pointer));
-        pointer[pixels / 1000] = 235;
-        assert!(!looks_black(&pointer));
+        assert!(looks_black(&picture([0, 0, 0], pixels / 1000)));
+        assert!(!looks_black(&picture([0, 0, 0], pixels / 1000 + 1)));
         // A line of white text across a black slide.
-        let mut title = vec![16; pixels];
-        title[..300].fill(235);
-        assert!(!looks_black(&title));
+        assert!(!looks_black(&picture([0, 0, 0], 300)));
         assert!(!looks_black(&[]));
     }
 
@@ -750,7 +784,7 @@ mod tests {
             let looks = &text[text.find("queue name=look ").expect("a look")..];
             assert!(looks.contains("framerate=1/1"));
             assert!(looks.contains("width=160,height=90"));
-            assert!(looks.contains("format=GRAY8"));
+            assert!(looks.contains("format=RGB"));
             // It holds nothing up, and keeps at most the newest.
             assert!(
                 looks.contains("appsink name=looks sync=false async=false max-buffers=1 drop=true")
@@ -784,7 +818,7 @@ mod tests {
             let heard = seen.clone();
             let frames = Arc::new(AtomicUsize::new(0));
             let counted = frames.clone();
-            let (pipeline, _sink, _switch) = Capture::run(
+            let Ran { pipeline, .. } = Capture::run(
                 &text,
                 (640, 360),
                 Outlets {
@@ -823,6 +857,48 @@ mod tests {
         }
     }
 
+    /// Stop ends the thread that watched the share's bus, as the app's Stop
+    /// does it. Skipped where this computer's GStreamer lacks the elements.
+    #[test]
+    fn stopping_a_share_ends_the_thread_that_watched_it() {
+        use std::time::{Duration, Instant};
+        if gst::init().is_err() || !have(&ELEMENTS[1..]) || !have(&["videotestsrc"]) {
+            eprintln!("skipped: this GStreamer can't run a share's pipeline");
+            return;
+        }
+        let source = "videotestsrc is-live=true pattern=ball ! video/x-raw,width=640,height=360,framerate=30/1";
+        let text = pipeline_from(source, speed(30).expect("30"), 2, (640, 360), false);
+        let Ran {
+            pipeline,
+            frames,
+            switch,
+            watching,
+        } = Capture::run(
+            &text,
+            (640, 360),
+            Outlets {
+                frame: |_| {},
+                picture: |_| {},
+                looked: |_| {},
+                ended: |_| {},
+            },
+        )
+        .expect("the pipeline runs");
+        std::thread::sleep(Duration::from_millis(300));
+        let capture = Capture {
+            pipeline,
+            frames,
+            preview: switch,
+            picked: None,
+        };
+        assert!(capture.stop().is_none());
+        let until = Instant::now() + Duration::from_secs(2);
+        while !watching.is_finished() && Instant::now() < until {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(watching.is_finished(), "the bus thread was still waiting");
+    }
+
     /// The pipeline as it runs, from GStreamer's moving test picture in
     /// place of the portal's stream: the share's frames and the preview's
     /// pictures counted while the preview is hidden, shown, hidden and shown
@@ -844,7 +920,9 @@ mod tests {
         let frames = Arc::new(AtomicUsize::new(0));
         let pictures = Arc::new(AtomicUsize::new(0));
         let (counted, shown) = (frames.clone(), pictures.clone());
-        let (pipeline, _sink, switch) = Capture::run(
+        let Ran {
+            pipeline, switch, ..
+        } = Capture::run(
             &text,
             (640, 360),
             Outlets {

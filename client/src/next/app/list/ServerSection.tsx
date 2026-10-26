@@ -1,4 +1,4 @@
-import { type CSSProperties, memo, useEffect, useRef, useState } from "react";
+import { type CSSProperties, type FocusEvent, memo, useEffect, useRef, useState } from "react";
 import type { User } from "../../../generated/User";
 import type { ListModel } from "../../core/list";
 import { type FoldedLine, foldedText, type OpenLine, openLineSays, openText, type ServerHeader } from "../../core/servers";
@@ -86,17 +86,22 @@ export const ServerSection = memo(function ServerSection({
 
   // The line under the header goes once it has nothing to say (#719): your
   // status cleared from it, say. Focus that was in it goes to the header,
-  // not off the page.
+  // not off the page; focus anywhere else, or none, stays as it was, so a
+  // status cleared elsewhere moves nothing. A focused button that goes
+  // takes no blur with it, so the last focus in or out of the line says.
   const lineSays = !folded && header.open !== null && openLineSays(header.open, topName ?? null);
   const lineSaid = useRef(lineSays);
+  const focusInLine = useRef(false);
   useEffect(() => {
     const focused = document.activeElement;
-    if (lineSaid.current && !lineSays && (focused === null || focused === document.body)) toggleButton.current?.focus();
+    if (lineSaid.current && !lineSays && focusInLine.current && (focused === null || focused === document.body)) toggleButton.current?.focus();
+    if (!lineSays) focusInLine.current = false;
     lineSaid.current = lineSays;
   }, [lineSays]);
 
   const items: MenuItem[] = [];
-  if (onProfile) items.push({ id: "profile", label: "Edit your profile here", icon: "tag", onSelect: () => onProfile(id) });
+  // Not until the server has said who you are: Settings would wait for it.
+  if (onProfile && header.open !== null) items.push({ id: "profile", label: "Edit your profile here", icon: "tag", onSelect: () => onProfile(id) });
   if (onQuiet) items.push({ id: "quiet", label: "Quiet", icon: "quiet", checked: quiet, onSelect: () => onQuiet(id, !quiet) });
   if (onMove && !first) items.push({ id: "up", label: "Move up", icon: "up", onSelect: () => onMove(id, -1) });
   if (onMove && !last) items.push({ id: "down", label: "Move down", icon: "down", onSelect: () => onMove(id, 1) });
@@ -203,7 +208,7 @@ export const ServerSection = memo(function ServerSection({
           </span>
         </p>
       ) : header.open && lineSays ? (
-        <YouHere line={header.open} saveLine={listing.saveLine} />
+        <YouHere line={header.open} saveLine={listing.saveLine} onFocusIn={(inside) => (focusInLine.current = inside)} />
       ) : null}
       </div>
 
@@ -305,7 +310,14 @@ function Folded({ line }: { line: FoldedLine }) {
  * can change from here (with several servers the top card only holds what's
  * true everywhere). Drawn only when it says something (`openLineSays`).
  */
-function YouHere({ line, saveLine }: { line: OpenLine; saveLine?: (line: string) => Promise<string | null> }) {
+function YouHere({ line, saveLine, onFocusIn }: { line: OpenLine; saveLine?: (line: string) => Promise<string | null>; onFocusIn?: (inside: boolean) => void }) {
+  // Whether focus is in the line, for the section to know when it goes.
+  const focusing = {
+    onFocus: () => onFocusIn?.(true),
+    onBlur: (event: FocusEvent<HTMLElement>) => {
+      if (!(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))) onFocusIn?.(false);
+    },
+  };
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
@@ -335,6 +347,7 @@ function YouHere({ line, saveLine }: { line: OpenLine; saveLine?: (line: string)
     return (
       <div
         className="nx-srv-edit"
+        {...focusing}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.stopPropagation();
@@ -376,7 +389,7 @@ function YouHere({ line, saveLine }: { line: OpenLine; saveLine?: (line: string)
   );
 
   return (
-    <p className="nx-srv-line" data-kind="you">
+    <p className="nx-srv-line" data-kind="you" {...focusing}>
       <span className="nx-srv-line-icon" aria-hidden="true" />
       {saveLine && !away ? (
         <button

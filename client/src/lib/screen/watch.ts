@@ -164,9 +164,17 @@ class Watching {
         window.setTimeout(() => void this.connect(), wait);
         return;
       }
-      // Left voice, the share gone, another window watching instead: over.
-      // After a drop it's the connection that went, whatever the server
-      // says when it's back (a restart forgets every seat), so it says that.
+      // You left voice (4007), or another of your windows watches instead
+      // (4006): the screen goes, as Close would, rather than say they
+      // stopped sharing, which they didn't. A share that ends says so
+      // itself (`showing` with no target).
+      if (this.#attempts === 0 && (why === "ended" || why === "replaced")) {
+        this.finish();
+        return;
+      }
+      // The share gone before it was watched: over. After a drop it's the
+      // connection that went, whatever the server says when it's back (a
+      // restart forgets every seat), so it says that.
       this.end(why === "dropped" || this.#attempts > 0 ? "lost" : "ended");
     });
   }

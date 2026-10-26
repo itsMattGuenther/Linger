@@ -320,10 +320,43 @@ test.describe("your servers", () => {
     await expect(page.getByLabel("Display name")).toHaveValue("Matt");
   });
 
+  test("a server's save that answers after another is picked lands on its own, not the one showing (#719)", async ({ page }) => {
+    await open(page, "?servers&section=server");
+    await expect(page.getByRole("textbox", { name: "Server name" })).toHaveValue("The Good Company");
+    // The Good Company's save waits until the test lets it answer.
+    await page.evaluate((server) => {
+      const inner = window.fetch;
+      let answer = () => {};
+      const held = new Promise<void>((settle) => (answer = settle));
+      (window as unknown as { letSaveAnswer: () => void }).letSaveAnswer = () => answer();
+      window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (init?.method === "PATCH" && url.startsWith(server) && url.endsWith("/server")) await held;
+        return inner(input, init);
+      };
+    }, SERVER);
+    await page.getByRole("textbox", { name: "Server name" }).fill("Renamed Company");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await picker(page).selectOption(GUILD);
+    await page.getByRole("tab", { name: "Account & App" }).click();
+    const panel = page.getByRole("tabpanel");
+    await expect(panel).toContainText("The password you sign in to Ashen Lanterns with.");
+    // The save answers; the list window is told once it has.
+    await page.evaluate(() => (window as unknown as { letSaveAnswer: () => void }).letSaveAnswer());
+    await expect.poll(async () => intents(await did(page)).filter((intent) => intent.kind === "serverinfo")).toEqual([{ kind: "serverinfo", server: SERVER }]);
+    await expect(panel).toContainText("The password you sign in to Ashen Lanterns with.");
+    await expect(panel).not.toContainText("Renamed Company");
+    // Back on The Good Company, its new name is there.
+    await picker(page).selectOption(SERVER);
+    await expect(page.getByRole("tabpanel")).toContainText("The password you sign in to Renamed Company with.");
+  });
+
   test("Servers opens Profile on the server you choose there (#719)", async ({ page }) => {
     await open(page, "?section=servers&servers");
     const cards = page.getByRole("list", { name: "Your servers, in order" }).getByRole("listitem");
-    await cards.nth(1).getByRole("button", { name: "Edit your profile here" }).click();
+    // Each says which server, as Sign out beside it does: a screen reader hears them apart.
+    await expect(cards.getByRole("button", { name: /^Edit your profile on / })).toHaveText(["Edit your profile on The Good Company", "Edit your profile on Ashen Lanterns", "Edit your profile on Casa da Ribeira"]);
+    await cards.nth(1).getByRole("button", { name: "Edit your profile on Ashen Lanterns" }).click();
     await expect(page.getByRole("tabpanel")).toHaveAccessibleName("Profile");
     await expect(picker(page)).toHaveValue(GUILD);
     await expect(page.getByLabel("Display name")).toHaveValue("Lamplighter");

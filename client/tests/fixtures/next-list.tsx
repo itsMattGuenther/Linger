@@ -55,6 +55,8 @@ declare global {
   interface Window {
     answerKnock?: (ok: boolean) => void;
     talk?: (ids: string[]) => void;
+    /** `?servers`: your status on server `id` changed somewhere else (Settings, another device). */
+    statusElsewhere?: (id: string, line: string | null) => void;
   }
 }
 // `&oneline`: one line per person (#197), saved before the list reads it;
@@ -405,7 +407,8 @@ function Servers() {
   const [states, setStates] = useState<Record<string, GatewayState>>(() => ({
     [SERVER]: state,
     [GUILD]: guild(serverState(GUILD)),
-    [LISBON]: lisbon(serverState(LISBON)),
+    // `&waiting`: Casa da Ribeira hasn't said who you are yet.
+    [LISBON]: query.has("waiting") ? serverState(LISBON) : lisbon(serverState(LISBON)),
   }));
   const [order, setOrder] = useState<string[]>([SERVER, GUILD, LISBON]);
   const [quiet, setQuiet] = useState<ReadonlySet<string>>(() => new Set(query.has("quiet") ? [GUILD] : []));
@@ -415,6 +418,7 @@ function Servers() {
       return held ? { ...all, [id]: withStatus(held, change(held)) } : all;
     });
 
+  window.statusElsewhere = (id, line) => restatus(id, (held) => withLine(held.me?.status, line ?? ""));
   const listings = order.flatMap((id): ServerListing[] => {
     const held = states[id];
     const info = NAMES[id];

@@ -313,6 +313,34 @@ test("an open server says who you are there only when it's news: a status, or an
   expect(await words(lineOf(page, "The Good Company"))).toMatch(/^you're Matt here · /);
 });
 
+test("a line that goes for a reason outside it leaves focus and the list where they were (#719)", async ({ page }) => {
+  await page.setViewportSize({ width: 340, height: 500 });
+  await open(page, "&open");
+  await expect(lineOf(page, "Casa da Ribeira")).toBeVisible();
+  // Nothing focused (a click on a Mac focuses nothing), the list scrolled to its end.
+  await page.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.blur() : undefined));
+  const scroller = page.locator(".nx-list-scroll");
+  await scroller.evaluate((element) => (element.scrollTop = element.scrollHeight));
+  const before = await scroller.evaluate((element) => element.scrollTop);
+  expect(before).toBeGreaterThan(200);
+  // Your status on Casa da Ribeira is cleared somewhere else, and its line goes.
+  await page.evaluate((server) => window.statusElsewhere?.(server, null), LISBON);
+  await expect(section(page, "Casa da Ribeira").locator('.nx-srv-line[data-kind="you"]')).toHaveCount(0);
+  await page.waitForTimeout(100);
+  expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
+  // At most the line's own height, as the list got shorter; not up to its header.
+  expect(await scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(before - 60);
+});
+
+test("a server that hasn't said who you are yet offers no Edit your profile here (#719)", async ({ page }) => {
+  await open(page, "&waiting");
+  await page.getByRole("button", { name: "Casa da Ribeira options" }).click();
+  await expect(page.getByRole("menu").getByRole("menuitem", { name: "Edit your profile here" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Ashen Lanterns options" }).click();
+  await expect(page.getByRole("menu").getByRole("menuitem", { name: "Edit your profile here" })).toHaveCount(1);
+});
+
 test("a server's menu opens Settings on who you are there (#719)", async ({ page }) => {
   await open(page);
   await page.getByRole("button", { name: "Ashen Lanterns options" }).click();

@@ -71,7 +71,7 @@ export function ServersSection({ servers, onMove, onQuiet, onOwnWindow, onSignOu
                 <div className="nx-set-server-foot">
                   {onProfile ? (
                     <Button size="sm" icon="tag" onClick={() => onProfile(server.id)}>
-                      Edit your profile here
+                      Edit your profile on {server.name}
                     </Button>
                   ) : null}
                   <Button size="sm" variant="danger" icon="leave" onClick={() => onSignOut(server.id)}>

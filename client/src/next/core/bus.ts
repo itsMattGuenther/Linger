@@ -24,6 +24,11 @@ export interface Bus {
 /** The owner window's label: the buddy list. */
 export const OWNER = "main";
 
+/** Whether `bus` is the owner's: the list window, the only one that holds connections and raises notices. */
+export function isOwner(bus: Bus): boolean {
+  return bus.label === OWNER;
+}
+
 /** Bumped when a message's shape changes, so an old window can say so. */
 export const PROTOCOL = 1;
 

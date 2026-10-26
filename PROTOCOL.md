@@ -2060,12 +2060,17 @@ closes it or sends `watch`. The app ignores ops it doesn't know (§9).
 **Key frames.** A watcher is sent nothing until a key frame in its format arrives. The
 server asks for one whenever a watcher starts getting a format, falls behind, or sends
 `keyframe`, at most once every `SCREEN_KEYFRAME_EVERY_MS` (500 ms) for each format of a
-share. A sharing app also makes one at least every 10 seconds of its own accord.
+share. A sharing app also makes one at least every 10 seconds of its own accord. A
+frame the app skips before encoding it (its line to the server, or the computer, behind)
+leaves nothing missing, so the next one isn't made a key frame for it.
 
 **A watcher that falls behind is skipped forward.** The server holds at most
-`SCREEN_WATCH_QUEUE` frames (60) waiting to go to one watcher. Past that, it drops that
-watcher's frames until the next key frame, and asks for one. The share and the other
-watchers don't wait.
+`SCREEN_WATCH_QUEUE` frames (60), or `MAX_SCREEN_WATCH_BYTES` (4 MiB), waiting to go to
+one watcher. Past that, it drops that watcher's frames until the next key frame. It asks
+for one on that watcher's behalf only once the watcher has room for it again (a free
+place in its queue, and under half its bytes): a watcher that stays behind, a phone on a
+weak line, would otherwise have every key frame asked for twice a second, which costs
+everybody else's picture its detail. The share and the other watchers don't wait.
 
 **The server holds each share to a ceiling.** A share sends at most
 `SCREEN_MAX_BITS_PER_SECOND` (10 Mbit/s) over a second, with

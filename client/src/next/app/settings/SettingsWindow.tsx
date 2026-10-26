@@ -350,19 +350,22 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
     };
   }, [voice.pushToTalkKey]);
 
-  // The server's own details, for its name and the host's settings.
-  const [info, setInfo] = useState<ServerInfo | null>(null);
+  // Each server's own details, for its name and the host's settings, kept
+  // under the server they came from (#719): an answer that comes back after
+  // another server was picked, a save's say, shows only under its own.
+  const [details, setDetails] = useState<Readonly<Record<string, ServerInfo>>>({});
+  const info = server === null ? null : (details[server] ?? null);
+  const keepDetails = useCallback((at: string, got: ServerInfo) => setDetails((held) => ({ ...held, [at]: got })), []);
   useEffect(() => {
-    // Another server picked: nothing of the last one's shows while this one's is asked for.
-    setInfo(null);
-    if (!api) return;
+    if (!api || server === null) return;
+    const at = server;
     const abort = new AbortController();
     void api
       .serverInfo(abort.signal)
-      .then(setInfo)
+      .then((got) => keepDetails(at, got))
       .catch(() => undefined);
     return () => abort.abort();
-  }, [api]);
+  }, [api, server, keepDetails]);
 
   // Updates and the archive: how each stands.
   const [version, setVersion] = useState<string | null>(null);
@@ -428,18 +431,21 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
 
   // The host's lists, read when the window opens: the host's, or a
   // co-host's, who has the same Hosting sections (#424).
+  // Kept under their server, as its details are: a list read again after
+  // another server was picked lands under the one it's from.
   const hosting = hostsHere(state?.me);
-  const [invites, setInvites] = useState<Invite[] | null>(null);
-  const [removed, setRemoved] = useState<User[] | null>(null);
+  const [invitesHeld, setInvitesHeld] = useState<Readonly<Record<string, Invite[]>>>({});
+  const [removedHeld, setRemovedHeld] = useState<Readonly<Record<string, User[]>>>({});
+  const invites = server === null ? null : (invitesHeld[server] ?? null);
+  const removed = server === null ? null : (removedHeld[server] ?? null);
   const readHostLists = useCallback(() => {
-    if (!api || !hosting) return;
-    void api.invites().then(setInvites, () => setInvites([]));
-    void api.removedUsers().then(setRemoved, () => setRemoved([]));
-  }, [api, hosting]);
-  useEffect(() => {
-    setInvites(null);
-    setRemoved(null);
-  }, [api]);
+    if (!api || !hosting || server === null) return;
+    const at = server;
+    const keepInvites = (list: Invite[]) => setInvitesHeld((held) => ({ ...held, [at]: list }));
+    const keepRemoved = (list: User[]) => setRemovedHeld((held) => ({ ...held, [at]: list }));
+    void api.invites().then(keepInvites, () => keepInvites([]));
+    void api.removedUsers().then(keepRemoved, () => keepRemoved([]));
+  }, [api, hosting, server]);
   useEffect(readHostLists, [readHostLists]);
 
   // The last sign-in link somebody made you (#581), for a line under your
@@ -769,7 +775,7 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
                 create: async (choice) => {
                   try {
                     const made = await api.createInvite({ max_uses: choice.uses, expires_in_hours: choice.hours });
-                    setInvites((list) => [made, ...(list ?? [])]);
+                    setInvitesHeld((held) => ({ ...held, [server]: [made, ...(held[server] ?? [])] }));
                     return { code: made.code, copied: await copyText(inviteUrl(server, made.code)) };
                   } catch (error: unknown) {
                     return { problem: inWords(error, "Couldn't make an invite.") };
@@ -778,7 +784,7 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
                 copy: (code) => copyText(inviteUrl(server, code)),
                 revoke: async (code) => {
                   const problem = await said(api.revokeInvite(code), "Couldn't revoke the link.");
-                  if (problem === null) setInvites((list) => (list ?? []).filter((invite) => invite.code !== code));
+                  if (problem === null) setInvitesHeld((held) => ({ ...held, [server]: (held[server] ?? []).filter((invite) => invite.code !== code) }));
                   return problem;
                 },
               },
@@ -882,7 +888,7 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
                 accent: info?.accent_key ?? null,
                 save: async (change) => {
                   try {
-                    setInfo(await api.updateServer({ name: change.name, accent_key: change.accent as ServerInfo["accent_key"], icon_key: null }));
+                    keepDetails(server, await api.updateServer({ name: change.name, accent_key: change.accent as ServerInfo["accent_key"], icon_key: null }));
                     // The list shows it now, not at its next hourly ask (#536).
                     void intend({ kind: "serverinfo", server }).catch(() => undefined);
                     return null;

@@ -922,7 +922,8 @@ as the cursor isn't in the message box, and so does a double-click on the
 picture. If F is your push-to-talk key, it stays push to talk. Up to three people can share in a room at once; you
 watch one at a time, and the voice line has a Watch for each. On a phone the
 screen sits at the top of the room, and turning the phone sideways fills the
-screen with it.
+screen with it. Leave the app for more than half a minute and the phone
+stops watching, so it isn't using your data for a screen nobody sees.
 
 When somebody stops sharing, their screen stays open saying so. If they share
 again while it's still open, say to pick another window or the other speed,

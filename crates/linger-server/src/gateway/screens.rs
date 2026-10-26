@@ -113,6 +113,17 @@ struct Watch {
     gated: bool,
 }
 
+impl Watch {
+    /// Whether it could take a key frame now: room in its queue, and not
+    /// much more than half its bytes' worth waiting. A watcher that's still
+    /// full would only refuse one, and every key frame asked for on its
+    /// behalf costs everybody else's picture its detail.
+    fn has_room(&self) -> bool {
+        self.line.frames.capacity() > 0
+            && self.line.queued.load(Ordering::Relaxed) < MAX_SCREEN_WATCH_BYTES / 2
+    }
+}
+
 #[derive(Default)]
 struct Board {
     shares: HashMap<String, Share>,
@@ -564,15 +575,19 @@ impl Screens {
             }
             if watch.gated {
                 if !head.key {
-                    behind = true;
+                    // A key frame is asked for on its behalf once it can
+                    // take one: asked for while it's still full, the sharer
+                    // sent one twice a second for as long as it stayed
+                    // behind, and it took none of them.
+                    behind |= watch.has_room();
                     continue;
                 }
                 watch.gated = false;
             }
             if watch.line.queued.load(Ordering::Relaxed) + frame.len() > MAX_SCREEN_WATCH_BYTES {
-                // Too much waiting for it already, however few frames.
+                // Too much waiting for it already, however few frames: it
+                // waits for a key frame, asked for once it has room.
                 watch.gated = true;
-                behind = true;
                 continue;
             }
             match watch.line.frames.try_send(frame.clone()) {
@@ -581,9 +596,9 @@ impl Screens {
                     went = true;
                 }
                 Err(mpsc::error::TrySendError::Full(_)) => {
-                    // It fell behind: skip it forward to the next key frame.
+                    // It fell behind: skip it forward to the next key frame,
+                    // asked for once it has room.
                     watch.gated = true;
-                    behind = true;
                 }
                 Err(mpsc::error::TrySendError::Closed(_)) => {}
             }
@@ -861,6 +876,44 @@ mod tests {
         assert!(screens.frame("s", sharer.socket, &frame(VP8, true, 10)));
         assert!(screens.frame("s", sharer.socket, &frame(VP8, false, 10)));
         assert_eq!(slow.got(), 2);
+    }
+
+    #[test]
+    fn a_watcher_that_stays_behind_asks_for_no_key_frames_until_it_can_take_one() {
+        let screens = Screens::default();
+        let here = room();
+        let mut sharer = Sharer::start(&screens, "s", here, &[VP8]);
+        let mut stuck = Watcher::start(&screens, "stuck", here, "s", &[VP8]);
+        let mut quick = Watcher::start(&screens, "quick", here, "s", &[VP8]);
+        let start = Instant::now() + Duration::from_millis(1);
+        let at = |tenths: u64| start + Duration::from_millis(tenths * 100);
+        assert!(screens.frame_at("s", sharer.socket, &frame(VP8, true, 10), at(0)));
+        let _ = sharer.heard();
+        // `stuck` reads nothing (a phone in the background, a line that
+        // stalled): its queue fills, and it falls behind. Ten seconds of
+        // frames go by, key frames among them, while `quick` reads as it goes.
+        let mut quick_got = quick.got();
+        for tenth in 1..=100 {
+            assert!(screens.frame_at(
+                "s",
+                sharer.socket,
+                &frame(VP8, tenth % 20 == 0, 10),
+                at(tenth)
+            ));
+            quick_got += quick.got();
+        }
+        assert_eq!(quick_got, 101);
+        // No key frame was asked for on its behalf: it could take none.
+        assert_eq!(sharer.heard(), vec![]);
+        // Once it has read what it holds, one is asked for, and it carries on from it.
+        assert_eq!(stuck.got(), SCREEN_WATCH_QUEUE);
+        assert!(screens.frame_at("s", sharer.socket, &frame(VP8, false, 10), at(101)));
+        assert_eq!(
+            sharer.heard(),
+            vec![ScreenShareSays::Keyframe { codec: VP8 }]
+        );
+        assert!(screens.frame_at("s", sharer.socket, &frame(VP8, true, 10), at(102)));
+        assert_eq!(stuck.got(), 1);
     }
 
     #[test]

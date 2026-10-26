@@ -145,7 +145,7 @@ test("a screen left open opens the same person's next share by itself, and a clo
   expect(watches()).toBe(2);
 });
 
-test("a watch that ends while its person still shares doesn't come back by itself", async ({ page }) => {
+test("a watch another of your windows takes over closes here, and doesn't come back by itself", async ({ page }) => {
   const { asked, endWatch } = await standIn(page);
   await page.goto("/tests/fixtures/screen-loop.html");
   await page.evaluate((server) => window.loop.feed(server, "s-jules"), SERVER);
@@ -154,13 +154,28 @@ test("a watch that ends while its person still shares doesn't come back by itsel
   await page.evaluate(() => window.loop.pane_watch("s-jules"));
   await expect.poll(() => page.evaluate(() => window.loop.pane_state().status), { timeout: 15_000 }).toBe("showing");
   // Another window of yours watches instead (4006): Jules never stopped, so
-  // this one stays over, or two windows would take it from each other.
+  // nothing here says they did; the screen goes, and doesn't come back, or
+  // two windows would take it from each other.
   await endWatch(4006);
-  await expect.poll(() => page.evaluate(() => window.loop.pane_state().status)).toBe("ended");
+  await expect.poll(() => page.evaluate(() => window.loop.pane_state().status)).toBeNull();
   await page.evaluate(() => window.loop.voice(true));
   await page.waitForTimeout(1000);
-  expect(await page.evaluate(() => window.loop.pane_state().status)).toBe("ended");
+  expect(await page.evaluate(() => window.loop.pane_state().status)).toBeNull();
   expect(asked.filter((op) => op === "watch")).toHaveLength(1);
+});
+
+test("leaving voice while watching closes the screen, without saying they stopped sharing", async ({ page }) => {
+  const { endWatch } = await standIn(page);
+  await page.goto("/tests/fixtures/screen-loop.html");
+  await page.evaluate((server) => window.loop.feed(server, "s-jules"), SERVER);
+  await page.evaluate((server) => window.loop.pane(server, "s-watcher"), SERVER);
+  await page.evaluate(() => window.loop.voice(true));
+  await page.evaluate(() => window.loop.pane_watch("s-jules"));
+  await expect.poll(() => page.evaluate(() => window.loop.pane_state().status), { timeout: 15_000 }).toBe("showing");
+  // The server's 4007 for leaving voice comes before the room's voice says
+  // you've gone, and Jules is still sharing.
+  await endWatch(4007);
+  await expect.poll(() => page.evaluate(() => window.loop.pane_state().status)).toBeNull();
 });
 
 test("when the server restarts, a share and a watcher end saying the connection went", async ({ page }) => {
@@ -330,6 +345,19 @@ test.describe("through the Linux app's shell", () => {
     // Said once a share, however long it stays black.
     await page.waitForTimeout(2_500);
     expect(await page.evaluate(() => window.loop.notices())).toHaveLength(1);
+  });
+
+  test("through the shell, a share from a conversation's own window gone black asks the list window for the notice", async ({ page }) => {
+    await standIn(page);
+    // Only the list window may raise a notice (show_notification is the owner's).
+    await page.goto("/tests/fixtures/screen-loop.html?shell&label=chat-general");
+    await page.evaluate((server) => window.loop.pane(server, "s-me", true), SERVER);
+    await page.evaluate(() => window.loop.voice(false));
+    await page.evaluate((server) => window.loop.share(server, "token", "s-me", 30), SERVER);
+    await page.evaluate(() => window.loop.paint("#000000"));
+    await expect(page.getByRole("alert")).toHaveText(WENT_BLACK, { timeout: 15_000 });
+    await expect.poll(() => page.evaluate(() => window.loop.shell_asked().filter((asked) => asked === "emit_to next:screen-black"))).toHaveLength(1);
+    expect(await page.evaluate(() => window.loop.notices())).toEqual([]);
   });
 
   test("through the shell, your share's copy shows the shell's pictures, and hidden the shell stops making them", async ({ page }) => {

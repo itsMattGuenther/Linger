@@ -1331,7 +1331,8 @@ voice (§4.14). It isn't end-to-end encrypted, and Linger never says it is.
 
 **Never recorded, never kept.** No copy on the server, no preview pictures, no recordings,
 not opt-in. Stopping, leaving voice, closing the app or losing the connection ends a
-share, and ends watching it.
+share, and ends watching it; leaving voice closes the screen you were watching. A phone
+out of sight for half a minute stops watching.
 
 **A slow connection gets fewer frames, not a frozen room.** When somebody's connection
 can't keep up, they get fewer frames until it does, and nobody else's picture waits for
