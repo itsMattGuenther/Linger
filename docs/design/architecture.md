@@ -530,7 +530,13 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   conversation's own note (`measured`), not the virtualizer's size cache:
   that keeps a size only when it differs from the estimate, so a row exactly
   `ESTIMATE_PX` tall looked never measured and was drawn again at every stop,
-  about a hundred rows each time (#709). And on an iPhone, where WebKit stops
+  about a hundred rows each time (#709). When the scrolling stops, the
+  virtualizer is told where the conversation is then, not where it was at
+  the last scroll event (`observeScrollNow`, `core/chat/scrollWatch.ts`). On
+  a busy computer, a page going in above had moved the reader down since,
+  before that move's own scroll event, and the next row measured was
+  corrected from the old place: the reader was thrown a page up into older
+  history (#716). And on an iPhone, where WebKit stops
   a glide the page moves the scroll position in and the virtualizer so holds
   every correction until the scroll stops, older history that arrives while
   the conversation moves (a scroll, or a finger on it or just off it,

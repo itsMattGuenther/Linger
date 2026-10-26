@@ -148,7 +148,8 @@ was cheap to test, and the tests only came after.
 Don't just re-run it and move on. Sometimes the test is at fault: it waits a
 fixed time, or measures a frame that a busy machine draws late. Sometimes the
 app is: #266 looked like a flaky test and was a real race in how history
-loads. That is why there are no blanket retries ([L-31](design/lessons.md)):
+loads, and #716, failing once in a nightly run, was a busy computer throwing
+the reader a page up when older history went in. That is why there are no blanket retries ([L-31](design/lessons.md)):
 a retry that passes hides both.
 
 One check plays again, once, for one proven cause. When the packaged audio
