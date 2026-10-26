@@ -28,6 +28,10 @@ export function ShareButton({ control, size }: { control: ShareControl; size: Co
     setAnchor(null);
     if (refocus) opener.current?.focus();
   };
+  const pick = (fps: ScreenFps) => {
+    close(false);
+    control.onShare(fps);
+  };
   return (
     <>
       <IconButton
@@ -47,9 +51,11 @@ export function ShareButton({ control, size }: { control: ShareControl; size: Co
           label="Share your screen"
           anchor={anchor}
           onClose={(reason) => close(reason === "escape" || reason === "tab")}
+          // Closed as a speed is picked: the menu doesn't close itself, and
+          // one left open came back when the share ended.
           items={[
-            { id: "30", label: "Sharp text, 30 fps", icon: "share", onSelect: () => control.onShare(30) },
-            { id: "60", label: "Smooth motion, 60 fps", icon: "share", onSelect: () => control.onShare(60) },
+            { id: "30", label: "Sharp text, 30 fps", icon: "share", onSelect: () => pick(30) },
+            { id: "60", label: "Smooth motion, 60 fps", icon: "share", onSelect: () => pick(60) },
           ]}
         />
       ) : null}
