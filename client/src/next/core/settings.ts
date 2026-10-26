@@ -36,6 +36,8 @@ export interface SettingsScope {
   cohost?: boolean;
   /** More than one server signed in: Servers appears only then. */
   severalServers: boolean;
+  /** With several, the name of the one Settings shows (#719), for the words that say whose you it is. */
+  server?: string;
   /** Something to choose in Windows (it appears only when there is). */
   windows: boolean;
   /** The phone app: no Notifications, since a phone raises none (SPEC §4.15). */
@@ -100,8 +102,9 @@ export function showable(scope: SettingsScope, wanted: SettingsKey): SettingsKey
 export function sectionLead(key: SettingsKey, scope: SettingsScope): string {
   switch (key) {
     case "profile":
+      // Each server has its own you (#719): the picker above the sections says which.
       return scope.severalServers
-        ? "Who you are on this server. Each server has its own name and look: see Servers."
+        ? `Who you are on ${scope.server ?? "this server"}. Each of your servers has its own name, status and look.`
         : "Who you are here, what you're up to, and how your name looks.";
     case "appearance":
       return `Make yourself comfortable. These choices stay on ${scope.phone === true ? "this phone" : "this computer"}.`;

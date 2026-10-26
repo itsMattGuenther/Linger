@@ -394,10 +394,12 @@ Windows doesn't let an app put its own icon in sight, but you can: open
 **Linger** on. Or drag the icon out from under the **^** onto the taskbar.
 
 Several servers? Each is a section of the list with its own rooms and
-people. Click its name to fold it, and use its **⋯** for **Quiet** (no sounds
-or arrival cards from it, though somebody naming you still gets a banner) and
-to move it up or down. On the phone, hold its name for the same choices; a
-tap folds it.
+people. Click its name to fold it, and use its **⋯** for **Edit your profile
+here**, **Quiet** (no sounds or arrival cards from it, though somebody naming
+you still gets a banner) and to move it up or down. On the phone, hold its
+name for the same choices; a tap folds it. Open, a server says who you are
+there, under its name, only when there's something to say: your status
+there, or a different name from the one at the top of the list.
 
 The list may also show a line at its foot, only while it's true: a server it
 can't reach, a computer that can't remember your sign-in, or a new version of
@@ -427,6 +429,15 @@ Settings opens in its own window:
 - **Servers** (with more than one): their order, Quiet, and signing out of one
 
 Everything this guide calls *Settings → something* is one of those.
+
+**On more than one server?** Each one is its own account, so you can be a
+different you on each: another name, another look, another status. A
+**Server** picker at the top of Settings says which one you're changing.
+Profile, the people in Notifications, your password, archive and blocked
+people under Account & App, and Hosting are all that server's. To go
+straight to one, open its **⋯** menu in the list (on a phone, hold its name)
+and choose **Edit your profile here**. **Edit profile** on your own card in
+a conversation opens that conversation's server.
 
 **Too small?** Open **Appearance → Interface Size** and choose a larger size,
 up to 200%. Every window follows, including the sign-in screen. It's saved

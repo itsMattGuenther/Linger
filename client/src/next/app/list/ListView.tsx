@@ -87,6 +87,8 @@ interface ListShared {
   onQuiet?: (server: string, quiet: boolean) => void;
   /** Several servers: moving a server up or down your order, from its menu. */
   onMove?: (server: string, by: -1 | 1) => void;
+  /** Several servers: Settings → Profile for who you are on one, from its menu (#719). */
+  onProfileOn?: (server: string) => void;
   /** Several servers: which start folded. Every server, if left out (#712). */
   folded?: readonly string[];
 }
@@ -120,7 +122,7 @@ const Foot = memo(function Foot({ onMedia, onSearch }: { onMedia?: () => void; o
  * the fixture page.
  */
 export function ListView(props: ListViewProps) {
-  const { onClose, onSettings, notices, notes, voice, you, nudge, onEditProfile, everywhere, onQuiet, onMove, folded, onMedia, onSearch, rock, onUnfold } = props;
+  const { onClose, onSettings, notices, notes, voice, you, nudge, onEditProfile, everywhere, onQuiet, onMove, onProfileOn, folded, onMedia, onSearch, rock, onUnfold } = props;
   // Two names for one rock, taken in turn, so a knock during a rock starts it over.
   const rocking = rock ? (rock % 2 === 1 ? "a" : "b") : undefined;
   // Made again only when what's in them changes, so an event on a server
@@ -216,6 +218,8 @@ export function ListView(props: ListViewProps) {
             onToggle={toggle}
             onQuiet={onQuiet}
             onMove={onMove}
+            onProfile={onProfileOn}
+            topName={me?.display_name ?? null}
           />
         ))}
       </div>

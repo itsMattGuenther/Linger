@@ -8,7 +8,9 @@
  * Open it at /tests/fixtures/next-settings-window.html. Options:
  * `?section=invites` opens on a section; `?member` is you as a member, not
  * the host; `?cohost` is you as a co-host, with Eli the host (#424); `?refuse` has the list window refuse a rule or a password;
- * `?servers` signs in to the guild and Lisbon too, so Servers shows.
+ * `?servers` signs in to the guild and Lisbon too, so Servers shows, and the
+ * server picker above the sections (#719); `&server=` (an address) opens on
+ * that one, as the shell's `next_open_settings` does.
  * Starting at sign-in (#228) is off on this computer; `?autostart=on` has it
  * on already, `?autostart=refuse` has the computer refuse to change it,
  * `?autostart=ignores` has it take the change without keeping it,
@@ -151,7 +153,8 @@ const desktop = fakeDesktop({
 declare global {
   interface Window {
     shell?: {
-      section: (key: string) => void;
+      /** Settings asked for again while open, on a section, and on one of your servers if one's named (#719). */
+      section: (key: string | null, server?: string) => void;
       /** The list window says a server was signed out of. */
       signedOut: (server: string) => void;
       /** The list window says your servers' order or Quiet changed. */
@@ -160,7 +163,7 @@ declare global {
   }
 }
 window.shell = {
-  section: (key) => desktop.deliver("next:section", key),
+  section: (key, server) => desktop.deliver("next:section", { section: key, server: server ?? null }),
   signedOut: (server) => desktop.deliver("next:signedout", { v: 1, server }),
   prefs: (prefs) => desktop.deliver("next:serverprefs", { v: 1, prefs }),
 };

@@ -65,6 +65,17 @@ function sectionOf(search: string): SettingsKey | undefined {
   return settingsKeys(EVERY_SECTION).find((key) => key === wanted);
 }
 
+/** The server asked for in the address, if any (#719): Settings shows it only if you're signed in to it. */
+function serverOf(search: string): string | undefined {
+  return new URLSearchParams(search).get("server") ?? undefined;
+}
+
+/** What Settings is asked to show while it's open: a section, one of your servers, or both (`next:section`). */
+export interface SettingsAsked {
+  section: string | null;
+  server: string | null;
+}
+
 /**
  * What holds Settings, and how it reaches the list window (the owner): a
  * window of its own, over the shell's events, or the phone's one window,
@@ -76,8 +87,8 @@ export interface SettingsHolder {
   notify(question: NotifyQuestion): Promise<Outcome>;
   /** Change your password: only the owner may, since it signs straight back in (PASSWORD). */
   password(question: PasswordQuestion): Promise<Outcome>;
-  /** Hear a section asked for again while Settings is open. Answers how to stop. */
-  onSection(heard: (key: string | null) => void): () => void;
+  /** Hear a section, or a server, asked for again while Settings is open. Answers how to stop. */
+  onSection(heard: (asked: SettingsAsked) => void): () => void;
   /** Hear your servers' order and Quiet change (SERVER_PREFS). Answers how to stop. */
   onServerPrefs(heard: (message: ServerPrefsMessage) => void): () => void;
   /** Close Settings: its window, or back to the list. */
@@ -86,6 +97,8 @@ export interface SettingsHolder {
   closable: boolean;
   /** The section it opens on. */
   section?: SettingsKey;
+  /** With several servers, the one it opens on (#719); the first in your order otherwise. */
+  server?: string;
   /** The phone app: no Windows, no Notifications, no microphones and no updates (SPEC §4.15). */
   phone: boolean;
 }
@@ -114,13 +127,14 @@ function windowHolder(following: Following): SettingsHolder {
     notify: (question) => ask<Outcome>(tauriBus(), OWNER, NOTIFY, question, 30_000),
     password: (question) => ask<Outcome>(tauriBus(), OWNER, PASSWORD, question, 30_000),
     // Asked for again while open: window.rs emits `next:section`.
-    onSection: (heard) => listening<string | null>("next:section", heard),
+    onSection: (heard) => listening<SettingsAsked>("next:section", heard),
     onServerPrefs: (heard) => listening<ServerPrefsMessage>(SERVER_PREFS, heard),
     close: () => {
       if (isTauri()) void getCurrentWindow().close();
     },
     closable: isTauri(),
     section: sectionOf(window.location.search),
+    server: serverOf(window.location.search),
     phone: false,
   };
 }
@@ -191,12 +205,24 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
   const now = useNow();
   // Bumped when a server is signed out of or in to, so what's shown is worked out again.
   const [signedOuts, setSignedOuts] = useState(0);
-  // One server for now: several, each with its own you, come with T-1809.
+  // Your servers' order and Quiet are the list window's: Settings asks it to
+  // change them, and it says whenever they have changed (SERVER_PREFS).
+  const [serverPrefs, setServerPrefs] = useState<ServerPrefs>(() => loadServerPrefs(localStore()));
+  // With several, each with its own you, the one whose you, account and
+  // hosting Settings shows (#719): the one asked for, or picked, while
+  // you're signed in to it, and otherwise the first in your order.
+  const [picked, setPicked] = useState<string | undefined>(holder.server);
   const [server, api] = useMemo((): [string, AuthedApi] | [null, null] => {
     void signedOuts;
-    const [first] = apis;
-    return first ?? [null, null];
-  }, [apis, signedOuts]);
+    const chosen = picked === undefined ? undefined : apis.get(picked);
+    if (picked !== undefined && chosen) return [picked, chosen];
+    const [first] = inOrder(
+      [...apis.keys()].map((baseUrl) => ({ baseUrl })),
+      serverPrefs.order,
+    );
+    const firstApi = first ? apis.get(first.baseUrl) : undefined;
+    return first && firstApi ? [first.baseUrl, firstApi] : [null, null];
+  }, [apis, signedOuts, picked, serverPrefs.order]);
   const state: GatewayState | undefined = server === null ? undefined : servers[server];
   const [section, setSection] = useState<{ key: SettingsKey | undefined; asked: number }>({ key: holder.section, asked: 0 });
 
@@ -230,11 +256,12 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
     };
   }, [following, closeWindow]);
 
-  // Asked for again while open: show that section.
+  // Asked for again while open: show that section, on that server if one's named.
   useEffect(
     () =>
-      holder.onSection((key) => {
-        const wanted = settingsKeys(EVERY_SECTION).find((one) => one === key);
+      holder.onSection((asked) => {
+        const wanted = settingsKeys(EVERY_SECTION).find((one) => one === asked.section);
+        if (typeof asked.server === "string") setPicked(asked.server);
         setSection((held) => ({ key: wanted ?? held.key, asked: held.asked + 1 }));
       }),
     [holder],
@@ -260,9 +287,6 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [closeWindow]);
 
-  // Your servers' order and Quiet are the list window's: Settings asks it to
-  // change them, and it says whenever they have changed (SERVER_PREFS).
-  const [serverPrefs, setServerPrefs] = useState<ServerPrefs>(() => loadServerPrefs(localStore()));
   useEffect(
     () =>
       holder.onServerPrefs((message) => {
@@ -329,6 +353,8 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
   // The server's own details, for its name and the host's settings.
   const [info, setInfo] = useState<ServerInfo | null>(null);
   useEffect(() => {
+    // Another server picked: nothing of the last one's shows while this one's is asked for.
+    setInfo(null);
     if (!api) return;
     const abort = new AbortController();
     void api
@@ -389,7 +415,9 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
       },
     );
   }, []);
-  const [archive, setArchive] = useState<ExportPhase>({ kind: "idle" });
+  // Each server's archive is its own (#719): one started on a server keeps
+  // going while another is picked, and is still there when it's picked again.
+  const [archives, setArchives] = useState<Readonly<Record<string, ExportPhase>>>({});
   // An export in flight stops asking when the window closes.
   const exportAbort = useRef(new AbortController());
   useEffect(() => {
@@ -408,12 +436,17 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
     void api.invites().then(setInvites, () => setInvites([]));
     void api.removedUsers().then(setRemoved, () => setRemoved([]));
   }, [api, hosting]);
+  useEffect(() => {
+    setInvites(null);
+    setRemoved(null);
+  }, [api]);
   useEffect(readHostLists, [readHostLists]);
 
   // The last sign-in link somebody made you (#581), for a line under your
   // password. A server from before them has no such list: nothing shows.
   const [madeForMe, setMadeForMe] = useState<SignInLinkMade | null>(null);
   useEffect(() => {
+    setMadeForMe(null);
     if (!api) return;
     const abort = new AbortController();
     api.mySignInLinks(abort.signal).then(
@@ -472,6 +505,11 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
       key={section.asked}
       initialSection={section.key}
       onClose={holder.closable ? closeWindow : undefined}
+      serverPicker={
+        signedInTo.length > 1
+          ? { servers: signedInTo.map(({ id, name, accent }) => ({ id, name, accent })), current: server, onPick: setPicked }
+          : undefined
+      }
       profile={{
         me,
         plainNames: plain,
@@ -618,10 +656,11 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
           ? signInLinkWords(madeForMe, state?.users.find((user) => user.id === madeForMe.made_by)?.display_name ?? "The host", now)
           : null,
         archive: {
-          phase: archive,
+          phase: archives[server] ?? { kind: "idle" },
           start: () => {
-            setArchive({ kind: "working", progress: 0 });
-            void runExport(api, setArchive, exportAbort.current.signal);
+            const keep = (phase: ExportPhase) => setArchives((held) => ({ ...held, [server]: phase }));
+            keep({ kind: "working", progress: 0 });
+            void runExport(api, keep, exportAbort.current.signal);
           },
           download: (url) => openExternal(url),
         },
@@ -687,6 +726,10 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
         onQuiet: (id, quiet) =>
           askServerPrefs({ ...serverPrefs, quiet: quiet ? [...serverPrefs.quiet.filter((one) => one !== id), id] : serverPrefs.quiet.filter((one) => one !== id) }),
         onSignOut: (id) => void intend({ kind: "signout", server: id }).catch(() => undefined),
+        onProfile: (id) => {
+          setPicked(id);
+          setSection((held) => ({ key: "profile", asked: held.asked + 1 }));
+        },
         onAddServer: addServer,
       }}
       hosting={

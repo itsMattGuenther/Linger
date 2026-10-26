@@ -75,7 +75,7 @@ import { desktopOf, firstTimeInTray, loadCloseList, placeWords, trayNotice, type
 import { cardSafety } from "../../core/safety";
 import { BACKGROUND_GRACE_MS, onPhone, thisDevice, watchBackground, watchNetwork } from "../../core/phone";
 import { type SettingsKey, settingsKeys } from "../../core/settings";
-import { Settings, type SettingsHolder } from "../settings/SettingsWindow";
+import { Settings, type SettingsAsked, type SettingsHolder } from "../settings/SettingsWindow";
 import { useBackButton } from "../useBackButton";
 import { listNotes, TROUBLE_GRACE_MS, troubleSince, UPDATE_EVERY_MS } from "../../core/notes";
 import { checkForUpdate, type UpdateCheck } from "../../../lib/updates";
@@ -666,7 +666,7 @@ function Servers({
 
   // Settings on the phone: drawn over the list, in the phone's one window
   // (SPEC §4.15). On a computer it's a window of its own (`shell.settings`).
-  const [phoneSettings, setPhoneSettings] = useState<{ section?: SettingsKey } | null>(null);
+  const [phoneSettings, setPhoneSettings] = useState<{ section?: SettingsKey; server?: string } | null>(null);
   const phoneSettingsOpen = useRef(false);
   phoneSettingsOpen.current = phoneSettings !== null;
   // On the phone, Back takes the top screen off: a conversation, Media or
@@ -676,12 +676,12 @@ function Servers({
   const goBack = useCallback(() => setTabs((held) => backTab(held)), []);
   const app = useRef<HTMLDivElement | null>(null);
   useBackButton(unfolded && phoneSettings === null, goBack, { slide: () => app.current?.querySelector<HTMLElement>(":scope > .nx-side") ?? null });
-  const sectionAsked = useRef(new Set<(key: string | null) => void>());
+  const sectionAsked = useRef(new Set<(asked: SettingsAsked) => void>());
   useEffect(() => {
     if (!onPhone()) return;
-    showSettingsHere = (section) => {
-      if (phoneSettingsOpen.current) for (const heard of sectionAsked.current) heard(section ?? null);
-      else setPhoneSettings({ section: settingsKeys(EVERY_SECTION).find((key) => key === section) });
+    showSettingsHere = (section, server) => {
+      if (phoneSettingsOpen.current) for (const heard of sectionAsked.current) heard({ section: section ?? null, server: server ?? null });
+      else setPhoneSettings({ section: settingsKeys(EVERY_SECTION).find((key) => key === section), server });
     };
     return () => {
       showSettingsHere = null;
@@ -727,9 +727,10 @@ function Servers({
       close: () => setPhoneSettings(null),
       closable: true,
       section: phoneSettings?.section,
+      server: phoneSettings?.server,
       phone: true,
     }),
-    [intendHere, phoneSettings?.section],
+    [intendHere, phoneSettings?.section, phoneSettings?.server],
   );
 
   // Ctrl+, opens Settings from the list too, and Ctrl+K Search.
@@ -1219,6 +1220,7 @@ function Servers({
               nudge={nudge}
               onQuiet={onQuiet}
               onMove={onMove}
+              onProfileOn={editProfileOn}
               onSettings={openSettings}
               onMedia={openMedia}
               onSearch={openSearch}
@@ -1387,14 +1389,14 @@ const shell: WindowOpener = {
       console.error("could not open the conversation's window", error),
     );
   },
-  settings: (section) => {
+  settings: (section, server) => {
     // The phone's one window draws Settings over the list (SPEC §4.15).
     if (showSettingsHere) {
-      showSettingsHere(section);
+      showSettingsHere(section, server);
       return;
     }
     if (!isTauri()) return;
-    void invoke("next_open_settings", { section: section ?? null }).catch((error: unknown) => console.error("could not open Settings", error));
+    void invoke("next_open_settings", { section: section ?? null, server: server ?? null }).catch((error: unknown) => console.error("could not open Settings", error));
   },
   // Media and Search open where conversations do: beside the list, or in
   // a window of their own when everything opens in its own (#337).
@@ -1436,10 +1438,10 @@ function listingOf(
     onKnock: (user) => knockOn(api, user.id),
     safetyFor: (user) => cardSafety(api, state, user),
     // The host, with a report open (T-1605): Settings, People, where they are.
-    onReports: (state.reports?.length ?? 0) > 0 ? () => shell.settings("people") : undefined,
+    onReports: (state.reports?.length ?? 0) > 0 ? () => shell.settings("people", baseUrl) : undefined,
     onStartDm: (people) => startDm(api, people),
     onLeaveDm: (room) => leaveDm(api, room),
-    onHost: (section) => shell.settings(section),
+    onHost: (section) => shell.settings(section, baseUrl),
     showing: showingHere,
     saveLine: me ? (line) => said(saveStatus(api, withLine(me.status, line))) : undefined,
   };
@@ -1538,9 +1540,13 @@ function openSettings(): void {
 function openAccount(): void {
   shell.settings("account");
 }
-/** A server you host needs you (#582): Hosting → Server. */
-function openServerSettings(): void {
-  shell.settings("server");
+/** A server you host needs you (#582): Hosting → Server, for that one. */
+function openServerSettings(server: string): void {
+  shell.settings("server", server);
+}
+/** Who you are on one of your servers (#719): its menu's Edit your profile here. */
+function editProfileOn(server: string): void {
+  shell.settings("profile", server);
 }
 function openMedia(): void {
   shell.tool("media");
@@ -1580,7 +1586,7 @@ let showBeside: ((server: string, roomId: RoomId, messageId?: MessageId, preview
 /** Media or Search beside the list, once it's drawn. */
 let showToolBeside: ((which: "media" | "search") => void) | null = null;
 /** Settings over the list, on the phone only, once the list is drawn. */
-let showSettingsHere: ((section?: string) => void) | null = null;
+let showSettingsHere: ((section?: string, server?: string) => void) | null = null;
 /** A scope with every section in it, to check a section asked for against. */
 const EVERY_SECTION = { hosting: "any", severalServers: true, windows: true };
 

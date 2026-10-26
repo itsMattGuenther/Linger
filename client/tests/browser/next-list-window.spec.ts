@@ -305,7 +305,18 @@ test("your own card's Edit profile asks the shell for Settings, on Profile (#271
   await expect(card).toHaveCount(0);
   await expect
     .poll(async () => (await did(page)).filter((line) => line.startsWith("next_open_settings")))
-    .toEqual([`next_open_settings:${JSON.stringify({ section: "profile" })}`]);
+    .toEqual([`next_open_settings:${JSON.stringify({ section: "profile", server: null })}`]);
+});
+
+test("a server's Edit your profile here asks the shell for Settings on that server's Profile (#719)", async ({ page }) => {
+  await open(page);
+  const guild = page.getByRole("region", { name: "Ashen Lanterns", exact: true });
+  await guild.locator(".nx-srv-head").hover();
+  await page.getByRole("button", { name: "Ashen Lanterns options" }).click();
+  await page.getByRole("menuitem", { name: "Edit your profile here" }).click();
+  await expect
+    .poll(async () => (await did(page)).filter((line) => line.startsWith("next_open_settings")))
+    .toEqual([`next_open_settings:${JSON.stringify({ section: "profile", server: GUILD })}`]);
 });
 
 test("Search and Media open from the foot as tabs beside the list, and Ctrl+K opens Search (#337)", async ({ page }) => {
@@ -1149,7 +1160,7 @@ test("a new version gets one quiet line, and Update… opens Settings where it's
   await expect(notes(page)).toHaveText(["Linger 0.4.1 is ready.Update…"]);
   await notes(page).getByRole("button", { name: "Update…" }).click();
   expect((await did(page)).filter((line) => line.startsWith("next_open_settings")).at(-1)).toBe(
-    `next_open_settings:${JSON.stringify({ section: "account" })}`,
+    `next_open_settings:${JSON.stringify({ section: "account", server: null })}`,
   );
 });
 
@@ -1157,14 +1168,14 @@ test("a server you host says when its disk is nearly full or it hasn't been back
   await open(page, "?one&hostissues");
   await expect(notes(page)).toHaveText(["The disk The Good Company runs on is nearly full.Hosting…", "The Good Company hasn't been backed up for 4 days.Hosting…"]);
   await notes(page).first().getByRole("button", { name: "Hosting…" }).click();
-  expect((await did(page)).filter((line) => line.startsWith("next_open_settings")).at(-1)).toBe(`next_open_settings:${JSON.stringify({ section: "server" })}`);
+  expect((await did(page)).filter((line) => line.startsWith("next_open_settings")).at(-1)).toBe(`next_open_settings:${JSON.stringify({ section: "server", server: HOME })}`);
 });
 
 test("a server you host says when its backups haven't reached its bucket for days (#614)", async ({ page }) => {
   await open(page, "?one&hostbucket");
   await expect(notes(page)).toHaveText(["The Good Company's backups haven't reached its bucket for 4 days.Hosting…"]);
   await notes(page).first().getByRole("button", { name: "Hosting…" }).click();
-  expect((await did(page)).filter((line) => line.startsWith("next_open_settings")).at(-1)).toBe(`next_open_settings:${JSON.stringify({ section: "server" })}`);
+  expect((await did(page)).filter((line) => line.startsWith("next_open_settings")).at(-1)).toBe(`next_open_settings:${JSON.stringify({ section: "server", server: HOME })}`);
 });
 
 test("a server somebody else hosts says nothing about its machine (#582)", async ({ page }) => {

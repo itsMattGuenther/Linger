@@ -456,8 +456,10 @@ Rules for this milestone:
   (decisions 4 and 5).
 - 🟡 **T-1809 · Several servers** — folding sections, the time there, quiet,
   and a server in its own window. Folding sections, your order and Quiet are
-  built, with the list window connecting to every server; "the time there"
-  waits on decision 3, and a server in its own window isn't built.
+  built, with the list window connecting to every server, and Settings
+  shows one server's you, account and hosting at a time, picked at the top
+  of its sidebar (#719); "the time there" waits on decision 3, and a server
+  in its own window isn't built.
 - ⬜ **T-1811 · Frames on a private channel** — the Rust core hands the list
   window its gateway frames on a Tauri `Channel` rather than a broadcast
   event, so no other window can make one up (architecture.md, "Still open").

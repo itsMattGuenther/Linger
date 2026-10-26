@@ -527,7 +527,7 @@ there or where the design puts it.
 | MULTI-6 | Every conversation says where it's from: the server's stripe and tag. | new | Design; the color source is **decision 18** | G | ✅ (next-chat-window.spec.ts, kit.spec.ts) |
 | MULTI-7 | Per-server Quiet (no chimes, no bold, no arrival cards; knocks still come through) and Own window. | new | Design | U + F | 🟡 Quiet done (next-list-window.spec.ts, servers.test.ts); Own window isn't built |
 | MULTI-8 | "4:52 AM there" from the host's time zone. | new, needs a server field | **Decision 3** | U | — dropped for now (decision 3) |
-| MULTI-9 | A different you on each server (name, styling, status); a friend on two servers appears twice, unlinked. | today, implicitly | Explicit in the design | F | ✅ (servers.test.ts, next-servers.spec.ts) |
+| MULTI-9 | A different you on each server (name, styling, status); a friend on two servers appears twice, unlinked. Each you is changed in Settings, its server picked at the top of the sidebar or by the server menu's Edit your profile here; an open server's line says who you are there only when it's news (#719). | today, implicitly | Explicit in the design | U + F | ✅ (servers.test.ts, settings.test.ts, share.test.ts, next-servers.spec.ts, next-settings-window.spec.ts, next-list-window.spec.ts, next-phone.spec.ts) |
 
 ## WIN — windows and tabs (new)
 

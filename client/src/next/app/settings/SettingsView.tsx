@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { type SettingsKey, type SettingsScope, sectionLabel, sectionLead, settingsEntries, showable } from "../../core/settings";
 import { minimizer } from "../../core/windowControls";
-import { Icon, IconButton, type IconName, type NavEntry, NavList, TitleBar } from "../../kit";
+import { Icon, IconButton, type IconName, type NavEntry, NavList, Select, TitleBar } from "../../kit";
 import { type AccountProps, AccountSection } from "./AccountSection";
 import { type AppearanceProps, AppearanceSection } from "./AppearanceSection";
 import {
@@ -18,7 +18,7 @@ import {
 } from "./HostingSections";
 import { type NotificationsProps, NotificationsSection } from "./NotificationsSection";
 import { type ProfileProps, ProfileSection } from "./ProfileSection";
-import { type ServersProps, ServersSection } from "./ServersSection";
+import { accentStyle, type ServersProps, ServersSection } from "./ServersSection";
 import { type SoundProps, SoundSection } from "./SoundSection";
 import { hasWindowsChoices, type WindowsProps, WindowsSection } from "./WindowsSection";
 import { PaneBoundary } from "../Boundary";
@@ -38,9 +38,23 @@ export interface HostingProps {
   server: HostServerProps;
 }
 
+/**
+ * With several servers, which one's you Settings shows (#719): Profile, the
+ * parts of Notifications and Account that are a server's, and Hosting all
+ * follow it. The app's own sections don't change.
+ */
+export interface ServerPickerProps {
+  /** Your servers, in your order. */
+  servers: readonly { id: string; name: string; accent: string | null }[];
+  current: string;
+  onPick: (id: string) => void;
+}
+
 export interface SettingsViewProps {
   /** The section to open on; a missing one (Hosting for a member) opens Profile. */
   initialSection?: SettingsKey;
+  /** With more than one server; leave out with one. */
+  serverPicker?: ServerPickerProps;
   /** The window has focus: full-strength title bar. */
   focused?: boolean;
   /** Draws Linger's own close button, where the desktop draws none. */
@@ -83,10 +97,12 @@ const ICONS: Record<SettingsKey, IconName> = {
  * callbacks, so the same view serves the real window and the fixture page.
  */
 export function SettingsView(props: SettingsViewProps) {
+  const picker = props.serverPicker;
   const scope: SettingsScope = {
     hosting: props.hosting?.serverName ?? null,
     cohost: props.hosting?.cohost === true,
     severalServers: (props.servers?.servers.length ?? 0) > 1,
+    server: picker?.servers.find((one) => one.id === picker.current)?.name,
     windows: hasWindowsChoices(props.windows),
     phone: props.phone === true,
   };
@@ -145,6 +161,7 @@ export function SettingsView(props: SettingsViewProps) {
       </TitleBar>
       <div className="nx-set-body">
         <nav className="nx-set-nav" aria-label="Settings">
+          {picker ? <ServerPicker {...picker} /> : null}
           <NavList label="Settings sections" entries={entries} current={section} onSelect={phone ? choose : setWanted} panelId="nx-set-panel" />
         </nav>
         <div className="nx-set-main" ref={main}>
@@ -155,9 +172,10 @@ export function SettingsView(props: SettingsViewProps) {
               </h2>
               <p className="nx-set-intro">{sectionLead(section, scope)}</p>
             </header>
-            {/* Keyed by section, so each opens with fresh drafts, and one
-                that can't be drawn leaves the others to be chosen (#509). */}
-            <div className="nx-set-sections" key={section}>
+            {/* Keyed by section and server, so each opens with fresh drafts
+                (#719), and one that can't be drawn leaves the others to be
+                chosen (#509). */}
+            <div className="nx-set-sections" key={`${picker?.current ?? ""} ${section}`}>
               <PaneBoundary what="This section couldn't be shown.">
                 <Section section={section} {...props} />
               </PaneBoundary>
@@ -165,6 +183,22 @@ export function SettingsView(props: SettingsViewProps) {
           </section>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** The server Settings shows, above its sections, in that server's color (#719). */
+function ServerPicker({ servers, current, onPick }: ServerPickerProps) {
+  const here = servers.find((one) => one.id === current);
+  return (
+    <div className="nx-set-picker" style={accentStyle(here?.accent ?? null)}>
+      <span className="nx-set-picker-label" aria-hidden="true">
+        Server
+      </span>
+      <span className="nx-set-picker-row">
+        <span className="nx-set-picker-mark" aria-hidden="true" />
+        <Select label="Server" hideLabel size="sm" value={current} options={servers.map(({ id, name }) => ({ value: id, label: name }))} onChange={onPick} />
+      </span>
     </div>
   );
 }

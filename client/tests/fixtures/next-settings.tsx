@@ -173,6 +173,8 @@ function Fixture() {
   const [removed, setRemoved] = useState<User[]>(removedPeople);
   const [server, setServer] = useState({ name: SERVER_NAME, accent: "amber" as string | null });
   const [order, setOrder] = useState(["home", "work", "raid"]);
+  // Which server's you the sections show (#719): only the picker changes here.
+  const [picked, setPicked] = useState("home");
   const [startsAtSignIn, setStartsAtSignIn] = useState(false);
 
   const reaches: Record<string, TalkKeyReach> = {
@@ -207,6 +209,18 @@ function Fixture() {
     <SettingsView
       initialSection={(query.get("section") ?? "profile") as SettingsKey}
       onClose={() => note("close")}
+      serverPicker={
+        several
+          ? {
+              servers: serverEntries.map(({ id, name, accent }) => ({ id, name, accent })),
+              current: picked,
+              onPick: (id) => {
+                note(`pick:${id}`);
+                setPicked(id);
+              },
+            }
+          : undefined
+      }
       profile={{
         me,
         plainNames: plain,
@@ -352,6 +366,10 @@ function Fixture() {
               onQuiet: (id, on) => note(`quiet:${id}:${on}`),
               onOwnWindow: (id, on) => note(`own:${id}:${on}`),
               onSignOut: (id) => note(`signout:${id}`),
+              onProfile: (id) => {
+                note(`profile:${id}`);
+                setPicked(id);
+              },
               onAddServer: () => note("add-server"),
             }
           : undefined

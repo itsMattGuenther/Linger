@@ -262,9 +262,77 @@ test.describe("your servers", () => {
   const GUILD = "https://ashen-lanterns.example";
   const LISBON = "https://casa-da-ribeira.example";
 
+  const picker = (page: Page) => page.getByRole("combobox", { name: "Server" });
+  const lead = (page: Page) => page.getByRole("tabpanel").locator(".nx-set-intro");
+
+  test("with several, Settings shows one server's you at a time, picked above its sections, and saves there (#719)", async ({ page }) => {
+    await open(page, "?servers");
+    await expect(picker(page)).toHaveValue(SERVER);
+    await expect(picker(page).locator("option")).toHaveText(["The Good Company", "Ashen Lanterns", "Casa da Ribeira"]);
+    await expect(lead(page)).toHaveText("Who you are on The Good Company. Each of your servers has its own name, status and look.");
+    await expect(page.getByLabel("Display name")).toHaveValue("Matt");
+    // You host The Good Company: its Hosting is there.
+    await expect(nav(page)).toContainText("The Good Company");
+    await expect(page.getByRole("tab", { name: "Invites" })).toBeVisible();
+
+    await picker(page).selectOption(GUILD);
+    await expect(lead(page)).toHaveText("Who you are on Ashen Lanterns. Each of your servers has its own name, status and look.");
+    await expect(page.getByLabel("Display name")).toHaveValue("Lamplighter");
+    await expect(page.getByLabel("Status", { exact: true })).toHaveValue("healing tonight. be nice");
+    // A member there: no Hosting, and nobody asked for its host's lists.
+    await expect(page.getByRole("tab", { name: "Invites" })).toHaveCount(0);
+    expect((await did(page)).some((line) => line.startsWith(`GET ${GUILD}/invites`))).toBe(false);
+
+    // What's saved goes to Ashen Lanterns, not to the first server.
+    const before = (await did(page)).filter((line) => line.startsWith("PATCH /me")).length;
+    await page.getByLabel("Display name").fill("Lamplighter of the Lanterns");
+    await page.getByRole("button", { name: "Save name" }).click();
+    await expect.poll(async () => (await did(page)).filter((line) => line.startsWith(`PATCH ${GUILD}/me`))).toHaveLength(1);
+    expect((await did(page)).filter((line) => line.startsWith("PATCH /me"))).toHaveLength(before);
+
+    // Account's password and archive are Ashen Lanterns' too, and the app's own sections don't change.
+    await page.getByRole("tab", { name: "Account & App" }).click();
+    await expect(page.getByRole("tabpanel")).toContainText("Ashen Lanterns");
+    await expect(picker(page)).toHaveValue(GUILD);
+  });
+
+  test("opened on one of your servers, or asked for one while it's open, it shows that one (#719)", async ({ page }) => {
+    await open(page, `?servers&section=profile&server=${encodeURIComponent(LISBON)}`);
+    await expect(picker(page)).toHaveValue(LISBON);
+    await expect(lead(page)).toContainText("Casa da Ribeira");
+    await expect(page.getByLabel("Status", { exact: true })).toHaveValue("saudades de tudo");
+
+    await page.getByRole("tab", { name: "Sound & Voice" }).click();
+    await page.evaluate((server) => window.shell?.section("profile", server), GUILD);
+    await expect(page.getByRole("tabpanel")).toHaveAccessibleName("Profile");
+    await expect(picker(page)).toHaveValue(GUILD);
+    await expect(page.getByLabel("Display name")).toHaveValue("Lamplighter");
+
+    // Asked for a section alone, it stays on the server it shows.
+    await page.evaluate(() => window.shell?.section("account"));
+    await expect(page.getByRole("tabpanel")).toHaveAccessibleName("Account & App");
+    await expect(picker(page)).toHaveValue(GUILD);
+  });
+
+  test("asked for a server you aren't signed in to, it shows your first (#719)", async ({ page }) => {
+    await open(page, `?servers&server=${encodeURIComponent("https://elsewhere.example")}`);
+    await expect(picker(page)).toHaveValue(SERVER);
+    await expect(page.getByLabel("Display name")).toHaveValue("Matt");
+  });
+
+  test("Servers opens Profile on the server you choose there (#719)", async ({ page }) => {
+    await open(page, "?section=servers&servers");
+    const cards = page.getByRole("list", { name: "Your servers, in order" }).getByRole("listitem");
+    await cards.nth(1).getByRole("button", { name: "Edit your profile here" }).click();
+    await expect(page.getByRole("tabpanel")).toHaveAccessibleName("Profile");
+    await expect(picker(page)).toHaveValue(GUILD);
+    await expect(page.getByLabel("Display name")).toHaveValue("Lamplighter");
+  });
+
   test("with one server, Account & App offers to add another, in the list window", async ({ page }) => {
     await open(page, "?section=account");
     await expect(page.getByRole("tab", { name: "Servers" })).toHaveCount(0);
+    await expect(picker(page)).toHaveCount(0);
     await page.getByRole("button", { name: "Add a server" }).click();
     await expect.poll(() => did(page)).toContain("window:close");
     expect(intents(await did(page))).toContainEqual({ kind: "addserver" });

@@ -1,7 +1,7 @@
-import { type CSSProperties, memo, useRef, useState } from "react";
+import { type CSSProperties, memo, useEffect, useRef, useState } from "react";
 import type { User } from "../../../generated/User";
 import type { ListModel } from "../../core/list";
-import { type FoldedLine, foldedText, type OpenLine, openText, type ServerHeader } from "../../core/servers";
+import { type FoldedLine, foldedText, type OpenLine, openLineSays, openText, type ServerHeader } from "../../core/servers";
 import { onPhone } from "../../core/phone";
 import { lineProblem } from "../../core/you";
 import { Icon, IconButton, MarkerCluster, Menu, type MenuAnchor, type MenuCloseReason, type MenuItem, Name, TextField, useHold, VoiceGlyph } from "../../kit";
@@ -39,8 +39,9 @@ export function serverColor(accent: string | null): CSSProperties {
  * servers"), like an AIM buddy group. Its header folds it, and stays pinned
  * while you scroll through a long one. Folded, it still shows its lights: the
  * name, bold when something inside is new, the dots of who's on, and one
- * plain line. Open, the line is who you are there, and the section holds the
- * server's rooms, DMs and people. The menu holds Quiet and the order.
+ * plain line. Open, the line is who you are there when that's news, and the
+ * section holds the server's rooms, DMs and people. The menu holds your
+ * profile there, Quiet and the order.
  */
 export const ServerSection = memo(function ServerSection({
   listing,
@@ -51,6 +52,8 @@ export const ServerSection = memo(function ServerSection({
   onToggle,
   onQuiet,
   onMove,
+  onProfile,
+  topName,
 }: {
   listing: ServerListing;
   /** Its place in your order, for ids. */
@@ -65,6 +68,10 @@ export const ServerSection = memo(function ServerSection({
   onToggle: (server: string, index: number) => void;
   onQuiet?: (server: string, quiet: boolean) => void;
   onMove?: (server: string, by: -1 | 1) => void;
+  /** Settings → Profile for who you are on this server (#719). */
+  onProfile?: (server: string) => void;
+  /** Your name at the top of the list: open, the line under the header says yours here only when it's another (#719). */
+  topName?: string | null;
 }) {
   const { id, name, header, quiet } = listing;
   const bodyId = `nx-srv-${index}-body`;
@@ -77,7 +84,19 @@ export const ServerSection = memo(function ServerSection({
   const backToMenuButton = () => menuSlot.current?.querySelector("button")?.focus();
   const backFrom = (held: boolean) => (held ? toggleButton.current?.focus() : backToMenuButton());
 
+  // The line under the header goes once it has nothing to say (#719): your
+  // status cleared from it, say. Focus that was in it goes to the header,
+  // not off the page.
+  const lineSays = !folded && header.open !== null && openLineSays(header.open, topName ?? null);
+  const lineSaid = useRef(lineSays);
+  useEffect(() => {
+    const focused = document.activeElement;
+    if (lineSaid.current && !lineSays && (focused === null || focused === document.body)) toggleButton.current?.focus();
+    lineSaid.current = lineSays;
+  }, [lineSays]);
+
   const items: MenuItem[] = [];
+  if (onProfile) items.push({ id: "profile", label: "Edit your profile here", icon: "tag", onSelect: () => onProfile(id) });
   if (onQuiet) items.push({ id: "quiet", label: "Quiet", icon: "quiet", checked: quiet, onSelect: () => onQuiet(id, !quiet) });
   if (onMove && !first) items.push({ id: "up", label: "Move up", icon: "up", onSelect: () => onMove(id, -1) });
   if (onMove && !last) items.push({ id: "down", label: "Move down", icon: "down", onSelect: () => onMove(id, 1) });
@@ -183,7 +202,7 @@ export const ServerSection = memo(function ServerSection({
             <Folded line={header.folded} />
           </span>
         </p>
-      ) : header.open ? (
+      ) : header.open && lineSays ? (
         <YouHere line={header.open} saveLine={listing.saveLine} />
       ) : null}
       </div>
@@ -284,7 +303,7 @@ function Folded({ line }: { line: FoldedLine }) {
 /**
  * An open server's line: who you are there and your status there, which you
  * can change from here (with several servers the top card only holds what's
- * true everywhere).
+ * true everywhere). Drawn only when it says something (`openLineSays`).
  */
 function YouHere({ line, saveLine }: { line: OpenLine; saveLine?: (line: string) => Promise<string | null> }) {
   const [editing, setEditing] = useState(false);

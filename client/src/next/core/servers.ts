@@ -144,6 +144,16 @@ export function foldedText(line: FoldedLine): string {
   }
 }
 
+/**
+ * Whether an open server's line has anything to say (#719): your status or
+ * away message there, or a name there that isn't the one at the top of the
+ * list. "you're Matt here" under every server where you're Matt says nothing
+ * the top card doesn't, and a look of your own there shows in its rooms.
+ */
+export function openLineSays(line: OpenLine, topName: string | null): boolean {
+  return line.away !== null || Boolean(line.status) || line.me.display_name !== topName;
+}
+
 /** The open line in plain words. */
 export function openText(line: OpenLine): string {
   const lead = `you're ${line.me.display_name} here`;

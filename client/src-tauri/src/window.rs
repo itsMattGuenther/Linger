@@ -120,21 +120,36 @@ const SETTINGS: &str = "settings";
 const SEARCH: &str = "search";
 const MEDIA: &str = "media";
 
-/// The page for the Settings window, opened on a section when one is named.
-/// A section is a short lowercase key (`profile`, `invites`); anything else
-/// is refused rather than put into the address.
-fn settings_url(section: Option<&str>) -> Result<String, String> {
+/// The page for the Settings window, opened on a section when one is named,
+/// and on one of your servers when one is (with several, each its own you).
+/// A section is a short lowercase key (`profile`, `invites`) and a server a
+/// plain origin; anything else is refused rather than put into the address.
+fn settings_url(section: Option<&str>, server: Option<&str>) -> Result<String, String> {
+    let mut url = String::from("next.html?window=settings");
     match section {
-        None => Ok("next.html?window=settings".into()),
+        None => {}
         Some(key)
             if !key.is_empty()
                 && key.len() <= 24
                 && key.bytes().all(|b| b.is_ascii_lowercase() || b == b'-') =>
         {
-            Ok(format!("next.html?window=settings&section={key}"))
+            url.push_str(&format!("&section={key}"));
         }
-        Some(_) => Err("not a settings section".into()),
+        Some(_) => return Err("not a settings section".into()),
     }
+    match server {
+        None => {}
+        Some(origin) if is_origin(origin) => url.push_str(&format!("&server={}", escape(origin))),
+        Some(_) => return Err("not a server address".into()),
+    }
+    Ok(url)
+}
+
+/// What an open Settings window is asked to show (`next:section`).
+#[derive(Clone, serde::Serialize)]
+struct SettingsAsked<'a> {
+    section: Option<&'a str>,
+    server: Option<&'a str>,
 }
 
 /// One window per conversation: the label is made from the conversation, so
@@ -257,24 +272,32 @@ pub async fn next_open_conversation(
     .map_err(|e| e.to_string())
 }
 
-/// Open the Settings window, on a section if one is named, or bring it
-/// forward and tell it to show that section. Only the list window may ask; a
+/// Open the Settings window, on a section and a server if they're named, or
+/// bring it forward and tell it to show them. Only the list window may ask; a
 /// chat window asks the list window (an intent).
 #[tauri::command]
 pub async fn next_open_settings(
     app: AppHandle,
     window: WebviewWindow,
     section: Option<String>,
+    server: Option<String>,
 ) -> Result<(), String> {
     if window.label() != OWNER {
         return Err("only the list window opens windows".into());
     }
-    let url = settings_url(section.as_deref())?;
+    let url = settings_url(section.as_deref(), server.as_deref())?;
     if let Some(open) = app.get_webview_window(SETTINGS) {
         let _ = open.unminimize();
         let _ = open.set_focus();
         return app
-            .emit_to(SETTINGS, "next:section", section)
+            .emit_to(
+                SETTINGS,
+                "next:section",
+                SettingsAsked {
+                    section: section.as_deref(),
+                    server: server.as_deref(),
+                },
+            )
             .map_err(|e| e.to_string());
     }
     with_drops(
@@ -895,11 +918,11 @@ mod tests {
     #[test]
     fn settings_opens_only_on_a_section_key() {
         assert_eq!(
-            settings_url(None).as_deref(),
+            settings_url(None, None).as_deref(),
             Ok("next.html?window=settings")
         );
         assert_eq!(
-            settings_url(Some("invites")).as_deref(),
+            settings_url(Some("invites"), None).as_deref(),
             Ok("next.html?window=settings&section=invites")
         );
         for junk in [
@@ -909,7 +932,28 @@ mod tests {
             "../x",
             "x".repeat(25).as_str(),
         ] {
-            assert!(settings_url(Some(junk)).is_err(), "{junk}");
+            assert!(settings_url(Some(junk), None).is_err(), "{junk}");
+        }
+    }
+
+    #[test]
+    fn settings_opens_on_a_server_only_by_its_origin() {
+        assert_eq!(
+            settings_url(Some("profile"), Some("https://loop.example.com")).as_deref(),
+            Ok("next.html?window=settings&section=profile&server=https%3A%2F%2Floop.example.com")
+        );
+        assert_eq!(
+            settings_url(None, Some("http://127.0.0.1:3000")).as_deref(),
+            Ok("next.html?window=settings&server=http%3A%2F%2F127.0.0.1%3A3000")
+        );
+        for junk in [
+            "",
+            "loop.example.com",
+            "https://loop.example.com/next.html",
+            "https://a.example&window=chat",
+            "javascript:alert(1)",
+        ] {
+            assert!(settings_url(Some("profile"), Some(junk)).is_err(), "{junk}");
         }
     }
 }

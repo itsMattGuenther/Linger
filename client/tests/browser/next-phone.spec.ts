@@ -1062,13 +1062,36 @@ test.describe("a row held with a finger raises its actions from the bottom (#704
     await touch.up();
     await page.waitForTimeout(300);
     await expect(sheet(page).locator(".k-menu-head")).toHaveText(name);
-    await expect(items(page)).toHaveText(["Quiet", "Move down"]);
+    await expect(items(page)).toHaveText(["Edit your profile here", "Quiet", "Move down"]);
     // Held, not tapped: it stays as it started, folded (#712).
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(await sticksOut(page), "the sheet").toEqual([]);
     await sheet(page).getByRole("menuitemcheckbox", { name: "Quiet" }).tap();
     await expect(sheet(page)).toHaveCount(0);
     await expect(page.locator(".nx-srv").first()).toHaveAttribute("data-quiet", "yes");
+  });
+
+  test("a server's header: Edit your profile here opens Settings over the list, on who you are there (#719)", async ({ page }) => {
+    await open(page, "?shell=phone");
+    await settled(page);
+    await noLongPress(page);
+    const guild = page.getByRole("region", { name: "Ashen Lanterns", exact: true });
+    const toggle = guild.locator(".nx-srv-toggle");
+    await still(toggle);
+    const touch = await finger(page);
+    await touch.down(await middle(toggle));
+    await expect(sheet(page)).toBeVisible();
+    await touch.up();
+    await page.waitForTimeout(300);
+    await sheet(page).getByRole("menuitem", { name: "Edit your profile here" }).tap();
+    const settings = page.locator(".nx-phone-over [data-screen='settings']");
+    await expect(settings.locator(".nx-set-title")).toHaveText("Profile");
+    await expect(settings.getByLabel("Display name")).toHaveValue("Lamplighter");
+    expect((await did(page)).some((line) => line.includes("next_open_settings"))).toBe(false);
+    // Back to the sections: the picker says whose, and nothing sticks out of the phone.
+    await settings.getByRole("button", { name: "Back to Settings" }).click();
+    await expect(settings.getByRole("combobox", { name: "Server" })).toHaveValue("https://ashen-lanterns.example");
+    expect(await sticksOut(page), "Settings with its picker").toEqual([]);
   });
 });
 

@@ -335,7 +335,12 @@ describe("a viewer window sharing the owner's connection", () => {
     await owner.gateway.connect(api as never);
     const done: string[] = [];
     const sharing = await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]), {
-      opener: { side: () => undefined, conversation: () => undefined, settings: (section) => done.push(`settings ${section ?? "-"}`), tool: () => undefined },
+      opener: {
+        side: () => undefined,
+        conversation: () => undefined,
+        settings: (section, server) => done.push(`settings ${section ?? "-"}${server ? ` on ${server}` : ""}`),
+        tool: () => undefined,
+      },
       accounts: {
         reauthenticate: async (server, auth) => void done.push(`signed back in to ${server} as ${auth.user.username}`),
         signOut: async (server) => void done.push(`signed out of ${server}`),
@@ -388,10 +393,19 @@ describe("a viewer window sharing the owner's connection", () => {
     vi.unstubAllGlobals();
 
     await follower.intend({ kind: "settings", section: "invites" });
+    // On one of your servers (#719); a server you aren't signed in to isn't passed on.
+    await follower.intend({ kind: "settings", section: "profile", server: HOME });
+    await follower.intend({ kind: "settings", section: "profile", server: "https://elsewhere.example" });
     await follower.intend({ kind: "signout", server: HOME });
     await follower.intend({ kind: "signout", server: "https://elsewhere.example" });
     await vi.waitFor(() =>
-      expect(done).toEqual([`signed back in to ${HOME} as matt`, "settings invites", `signed out of ${HOME}`]),
+      expect(done).toEqual([
+        `signed back in to ${HOME} as matt`,
+        "settings invites",
+        `settings profile on ${HOME}`,
+        "settings profile",
+        `signed out of ${HOME}`,
+      ]),
     );
     sharing.stop();
     follower.stop();

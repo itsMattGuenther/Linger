@@ -469,6 +469,7 @@ function Servers() {
         note(`move:${id}:${by}`);
         setOrder((held) => moveServer(held, id, by));
       }}
+      onProfileOn={(id) => note(`profile:${id}`)}
       everywhere={{
         awayChoices: () => startingBank([]),
         forgetAway: (message) => note(`forget:${message}`),

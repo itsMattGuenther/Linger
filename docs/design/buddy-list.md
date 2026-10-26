@@ -445,6 +445,11 @@ Voice.
   Linger has no account that spans servers. You might be Matt at home and
   Lamplighter in the guild, styled differently, with a status per server.
   - The top card keeps only what's true everywhere: you, and Away.
+  - An open server's line says who you are there only when it's news: your
+    status or away message there, or a name that isn't the top card's
+    (#719). Matt on every server needs no line under each.
+  - Settings changes one server's you at a time, picked at the top of its
+    sidebar, and each server's menu has **Edit your profile here** (#719).
   - A friend on two of your servers appears twice, not linked, on purpose.
 - **Away goes everywhere, with a choice.** The away editor has a checkbox per
   server.

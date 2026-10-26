@@ -360,7 +360,9 @@ one.
 ## Window management
 
 - **Opening windows.** The owner asks Rust to open or focus a window through a
-  command: `next_open_settings { section }` for Settings, and
+  command: `next_open_settings { section, server }` for Settings, on one of
+  your servers when one's named (#719; an open Settings hears both in
+  `next:section`), and
   `next_open_conversation { server, room, kind }` for a conversation in its
   own window, labelled from the conversation so asking again brings the same
   window forward. Opening a conversation from the list shows it in its own

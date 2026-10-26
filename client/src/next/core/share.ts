@@ -203,8 +203,8 @@ export type Intent =
   | { kind: "tray"; on: boolean }
   /** Settings changed how conversations open: every window rearranges itself. */
   | { kind: "conversations"; mode: ConversationsMode }
-  /** Open Settings (Ctrl+, in any window), on a section if one is named. */
-  | { kind: "settings"; section?: string }
+  /** Open Settings (Ctrl+, in any window), on a section if one is named, and on one of your servers if one is (#719). */
+  | { kind: "settings"; section?: string; server?: string }
   /** Sign out of a server on this computer. */
   | { kind: "signout"; server: string }
   /** You went away (with the message) or came back (null), from Settings: presence is the owner's. */
@@ -248,8 +248,8 @@ export interface WindowOpener {
   side(server: string, roomId: RoomId, messageId?: MessageId, preview?: boolean): void;
   /** This conversation in a window of its own, or that window brought forward, at a message if one is named. */
   conversation(server: string, roomId: RoomId, kind: "room" | "dm", messageId?: MessageId): void;
-  /** The Settings window, on a section if one is named. */
-  settings(section?: string): void;
+  /** The Settings window, on a section and one of your servers if they are named (#719). */
+  settings(section?: string, server?: string): void;
   /** Search's or Media's window, or that window brought forward (decision 15). */
   tool(which: "search" | "media"): void;
 }
@@ -466,7 +466,10 @@ export async function shareAsOwner(
         return;
       }
       case "settings":
-        opener?.settings(typeof intent.section === "string" ? intent.section : undefined);
+        opener?.settings(
+          typeof intent.section === "string" ? intent.section : undefined,
+          typeof intent.server === "string" && sessions().has(intent.server) ? intent.server : undefined,
+        );
         return;
       case "tool":
         if (intent.which === "search" || intent.which === "media") opener?.tool(intent.which);

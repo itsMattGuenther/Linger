@@ -70,6 +70,15 @@ describe("the Settings sidebar", () => {
     expect(sectionLead("account", { ...MEMBER, phone: true })).not.toContain("updates");
   });
 
+  it("says whose you Profile is, with several servers (#719)", () => {
+    expect(sectionLead("profile", { ...MEMBER, severalServers: true, server: "Ashen Lanterns" })).toBe(
+      "Who you are on Ashen Lanterns. Each of your servers has its own name, status and look.",
+    );
+    // No pointing at Servers, where none of it can be changed.
+    expect(sectionLead("profile", { ...MEMBER, severalServers: true })).not.toContain("Servers");
+    expect(sectionLead("profile", MEMBER)).toBe("Who you are here, what you're up to, and how your name looks.");
+  });
+
   it("opens on the section asked for when it exists here, and on Profile when not", () => {
     expect(showable(HOST, "invites")).toBe("invites");
     expect(showable(MEMBER, "invites")).toBe("profile");

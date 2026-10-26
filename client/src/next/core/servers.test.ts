@@ -10,7 +10,7 @@ vi.mock("../../lib/sound", () => ({ playKnock: () => false, playSound: () => fal
 
 const { serverState } = await import("../../lib/gateway");
 const { listModel } = await import("./list");
-const { awayOn, foldedText, moveServer, moveShown, namesText, openText, seatsWords, serverHeader, serverNames } = await import("./servers");
+const { awayOn, foldedText, moveServer, moveShown, namesText, openLineSays, openText, seatsWords, serverHeader, serverNames } = await import("./servers");
 
 const NOW = Date.parse("2026-09-25T22:52:00Z");
 
@@ -204,6 +204,23 @@ describe("an open server's line", () => {
     const bare = guild(asMe({ ...me, status: null }));
     const plain = header(bare).open;
     expect(plain && openText(plain)).toBe("you're Lamplighter here");
+  });
+
+  it("is there only when it says something the top of the list doesn't (#719)", () => {
+    const bare = header(guild(asMe({ ...me, status: null }))).open;
+    const busy = header(guild()).open;
+    const away = header(guild(asMe({ ...me, status: status("", "brb, dog needs out") }))).open;
+    const blank = header(guild(asMe({ ...me, status: status("", null) }))).open;
+    if (!bare || !busy || !away || !blank) throw new Error("no open line");
+    // The same name as the top card, and nothing else to say: no line.
+    expect(openLineSays(bare, "Lamplighter")).toBe(false);
+    expect(openLineSays(blank, "Lamplighter")).toBe(false);
+    // A status, or an away message, there.
+    expect(openLineSays(busy, "Lamplighter")).toBe(true);
+    expect(openLineSays(away, "Lamplighter")).toBe(true);
+    // Somebody else there than at the top: Matt at home, Lamplighter in the guild.
+    expect(openLineSays(bare, "Matt")).toBe(true);
+    expect(openLineSays(bare, null)).toBe(true);
   });
 });
 

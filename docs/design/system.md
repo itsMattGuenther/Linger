@@ -1066,6 +1066,16 @@ Settings is its own window (`app/settings/`): the `NavList` sidebar on the
 left, and the showing section on the right, with its title and one sentence
 saying what it's for.
 
+- **With several servers, a server picker heads the sidebar** (#719): a
+  label-face "Server", then the server's color bar and a small `Select` of
+  your servers in your order, over a hairline. Each server is its own you, so
+  Profile, the people in Notifications, Account's password, archive and
+  blocked people, and the Hosting group all follow it; Appearance, Windows
+  and Sound don't. It opens on the server it was asked for (a server's menu,
+  your own card in a conversation, a host's note), or the first in your
+  order, and Profile's sentence names it. Picking another starts each
+  section's drafts afresh.
+
 - **A section is made of blocks.** Each has a heading (the label face, in the
   lamp's color, like a `ChoiceCards` legend), an optional sentence, and its
   controls, with a hairline between blocks.
@@ -1094,14 +1104,19 @@ built on the rows' own grid so nothing new lines up by eye:
   padding; the server's color is a short bar in the lead column, where a
   person's marker sits; its name starts on the same edge as every other name
   in the list, bold only when something inside is new and never while the
-  server is Quiet. The dots of who's on end the row. The menu button (Quiet,
-  Move up, Move down) shows over the end of the dots on hover or focus, on a
-  patch of whatever is behind it.
+  server is Quiet. The dots of who's on end the row. The menu button (Edit
+  your profile here, Quiet, Move up, Move down) shows over the end of the
+  dots on hover or focus, on a patch of whatever is behind it. Edit your
+  profile here opens Settings on that server's Profile (#719).
 - **The line under it** is 16px on the same grid: an icon in the lead column
   when voice is on, then one plain sentence that ends in "…". Folded, it says
   what's happening there; open, who you are there and your status there,
-  which you can change from it. It never holds a digit: a nearly full voice
-  room says "room for one more".
+  which you can change from it, but only when that's news (#719,
+  `openLineSays`): a status or away message there, or a name that isn't the
+  top card's. "you're Matt here" under every server you're Matt on is
+  clutter, so an open server with nothing to say has no line, and focus in
+  a line that goes moves to its header. It never holds a digit: a nearly
+  full voice room says "room for one more".
 - **Pinned:** the header and its line stay at the top while you scroll
   through a long server, and what slides under them fades over 10px rather
   than being cut mid-letter.

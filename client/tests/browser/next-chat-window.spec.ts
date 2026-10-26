@@ -280,7 +280,7 @@ test("your own name opens your card as friends see it, with Edit profile; focus 
   // Edit profile asks the list window for Settings, on Profile, and closes the card.
   await name.click();
   await card.getByRole("button", { name: "Edit profile" }).click();
-  await expect.poll(async () => intents(await did(page)).filter((intent) => intent.kind === "settings")).toEqual([{ kind: "settings", section: "profile" }]);
+  await expect.poll(async () => intents(await did(page)).filter((intent) => intent.kind === "settings")).toEqual([{ kind: "settings", section: "profile", server: SERVER }]);
   await expect(card).toHaveCount(0);
   await expect(name).toBeFocused();
   // Nothing was asked of the server on your behalf.

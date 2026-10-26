@@ -458,10 +458,11 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
         onClose={closeCard}
         {...(cardRow.user.id === cardState?.me?.id
           ? {
-              // Your own card (#271): Settings → Profile, through the list window.
+              // Your own card (#271): Settings → Profile, through the list
+              // window, for who you are on this conversation's server (#719).
               onEditProfile: () => {
                 closeCard();
-                void intend({ kind: "settings", section: "profile" }).catch(() => undefined);
+                void intend({ kind: "settings", section: "profile", server: card.server }).catch(() => undefined);
               },
             }
           : {

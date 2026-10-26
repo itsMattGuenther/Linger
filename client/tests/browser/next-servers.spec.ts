@@ -119,21 +119,23 @@ test("folds and unfolds by click and by keyboard, and each server's lists say wh
   expect(await opened(page)).toBe(`room:${LISBON}:l-fotos`);
 });
 
-test("the server menu: Quiet, and moving a server up and down, with focus back on its button", async ({ page }) => {
+test("the server menu: your profile there, Quiet, and moving a server up and down, with focus back on its button", async ({ page }) => {
   await open(page);
   const menuButton = (name: string) => page.getByRole("button", { name: `${name} options` });
 
   // The first can't move up, the last can't move down.
   await menuButton("The Good Company").click();
-  await expect(page.getByRole("menu").getByRole("menuitem")).toHaveText(["Move down"]);
+  await expect(page.getByRole("menu").getByRole("menuitem")).toHaveText(["Edit your profile here", "Move down"]);
   await page.keyboard.press("Escape");
   await expect(menuButton("The Good Company")).toBeFocused();
   await menuButton("Casa da Ribeira").click();
-  await expect(page.getByRole("menu").getByRole("menuitem")).toHaveText(["Move up"]);
+  await expect(page.getByRole("menu").getByRole("menuitem")).toHaveText(["Edit your profile here", "Move up"]);
   await page.keyboard.press("Escape");
 
   // Quiet is an on/off item, ticked when on.
   await menuButton("Ashen Lanterns").click();
+  await expect(page.getByRole("menuitem", { name: "Edit your profile here" })).toBeFocused();
+  await page.keyboard.press("ArrowDown");
   const quiet = page.getByRole("menuitemcheckbox", { name: "Quiet" });
   await expect(quiet).toHaveAttribute("aria-checked", "false");
   await expect(quiet).toBeFocused();
@@ -145,6 +147,7 @@ test("the server menu: Quiet, and moving a server up and down, with focus back o
   await expect(page.locator(".k-menu-tick")).toHaveCount(1);
 
   // Move down, from the keyboard.
+  await page.keyboard.press("ArrowDown");
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("ArrowDown");
   await expect(page.getByRole("menuitem", { name: "Move down" })).toBeFocused();
@@ -289,6 +292,32 @@ test("your status on one server changes from that server's line", async ({ page 
   expect(await words(lineOf(page, "Casa da Ribeira"))).toBe("you're Matt here · fado tonight");
   expect(await opened(page)).toBe(`line:${LISBON}:fado tonight`);
   await expect(section(page, "Casa da Ribeira").getByRole("button", { name: /Change your status here/ })).toBeFocused();
+});
+
+test("an open server says who you are there only when it's news: a status, or another name (#719)", async ({ page }) => {
+  await open(page, "&open");
+  const clear = async (name: string) => {
+    await section(page, name).getByRole("button", { name: /Change your status here/ }).click();
+    await page.getByRole("textbox", { name: /^Your status as / }).fill("");
+    await page.keyboard.press("Enter");
+  };
+  // Matt at the top, and Matt with no status here would be the same thing twice.
+  await clear("Casa da Ribeira");
+  await expect(section(page, "Casa da Ribeira").locator('.nx-srv-line[data-kind="you"]')).toHaveCount(0);
+  // Its focus goes to the header, not off the page.
+  await expect(toggle(page, "Casa da Ribeira")).toBeFocused();
+  // Lamplighter in the guild is still worth saying, status or not.
+  await clear("Ashen Lanterns");
+  expect(await words(lineOf(page, "Ashen Lanterns"))).toBe("you're Lamplighter here");
+  // A status on The Good Company keeps its line.
+  expect(await words(lineOf(page, "The Good Company"))).toMatch(/^you're Matt here · /);
+});
+
+test("a server's menu opens Settings on who you are there (#719)", async ({ page }) => {
+  await open(page);
+  await page.getByRole("button", { name: "Ashen Lanterns options" }).click();
+  await page.getByRole("menuitem", { name: "Edit your profile here" }).click();
+  expect(await opened(page)).toBe(`profile:${GUILD}`);
 });
 
 test("in voice, the voice bar says which server", async ({ page }) => {
