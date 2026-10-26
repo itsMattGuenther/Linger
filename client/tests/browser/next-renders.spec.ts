@@ -124,8 +124,11 @@ async function open(page: Page, query = "") {
     .toBe(true);
 }
 
-/** #general beside the list, its evening drawn. */
+/** #general beside the list, its evening drawn, its server opened first: every server starts folded (#712). */
 async function generalBeside(page: Page) {
+  const home = page.getByRole("region", { name: "The Good Company", exact: true }).locator(".nx-srv-toggle");
+  await home.click();
+  await expect(home).toHaveAttribute("aria-expanded", "true");
   await page.getByRole("list", { name: "Rooms" }).getByRole("button", { name: /^#general\b/ }).click();
   await expect(page.getByRole("log")).toContainText("Putting it on now.");
 }

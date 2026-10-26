@@ -87,7 +87,7 @@ interface ListShared {
   onQuiet?: (server: string, quiet: boolean) => void;
   /** Several servers: moving a server up or down your order, from its menu. */
   onMove?: (server: string, by: -1 | 1) => void;
-  /** Several servers: which start folded. Every server but the first, if left out. */
+  /** Several servers: which start folded. Every server, if left out (#712). */
   folded?: readonly string[];
 }
 
@@ -146,15 +146,15 @@ export function ListView(props: ListViewProps) {
     </>
   );
   const servers = props.servers;
-  // What you've folded or opened yourself, by server. Anything you haven't
-  // touched follows `folded`, or starts folded if it isn't your first server;
-  // decided as each server appears, since they arrive one by one.
+  // What you've folded or opened yourself, by server, until Linger closes.
+  // Anything you haven't touched follows `folded`, or starts folded: every
+  // server does, so the list opens on all of them, each header saying
+  // what's happening there, and you open the one you want. The first one
+  // opened by itself, and buried the rest under it (#712).
   const [chosen, setChosen] = useState<ReadonlyMap<string, boolean>>(new Map());
-  const isFolded = (id: string, index: number) => chosen.get(id) ?? (folded ? folded.includes(id) : index > 0);
-  const toggle = useCallback(
-    (id: string, index: number) => setChosen((held) => new Map(held).set(id, !(held.get(id) ?? (folded ? folded.includes(id) : index > 0)))),
-    [folded],
-  );
+  const startsFolded = useCallback((id: string) => (folded ? folded.includes(id) : true), [folded]);
+  const isFolded = (id: string) => chosen.get(id) ?? startsFolded(id);
+  const toggle = useCallback((id: string) => setChosen((held) => new Map(held).set(id, !(held.get(id) ?? startsFolded(id)))), [startsFolded]);
 
   if (servers === undefined || servers.length <= 1) {
     const only: (OneServer | ServerListing) | undefined = servers === undefined ? props : servers[0];
@@ -210,7 +210,7 @@ export function ListView(props: ListViewProps) {
             key={listing.id}
             listing={listing}
             index={index}
-            folded={isFolded(listing.id, index)}
+            folded={isFolded(listing.id)}
             first={index === 0}
             last={index === servers.length - 1}
             onToggle={toggle}

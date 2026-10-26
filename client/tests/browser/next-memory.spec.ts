@@ -59,6 +59,10 @@ test("switching between rooms beside the list over and over leaves no old drawin
       return connects > 0 && lines.filter((line) => line.startsWith("ready ")).length === connects;
     })
     .toBe(true);
+  // Every server starts folded (#712): open the one whose rooms are clicked.
+  const home = page.getByRole("region", { name: "The Good Company", exact: true }).locator(".nx-srv-toggle");
+  await home.click();
+  await expect(home).toHaveAttribute("aria-expanded", "true");
 
   // Each switch is a click on a room in the list, and the room drawn beside
   // it, landed on, and a moment to read it, as somebody clicking through

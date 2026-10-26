@@ -79,8 +79,8 @@ test("restores every saved sign-in and leaves one live connection to each server
     const last = asked.filter((line) => line === `connect ${server}` || line === `disconnect ${server}`).at(-1);
     expect(last).toBe(`connect ${server}`);
   }
-  // Only the first starts open, even though they arrive one by one.
-  await expect(toggle(page, "The Good Company")).toHaveAttribute("aria-expanded", "true");
+  // Every one starts folded, even though they arrive one by one (#712).
+  await expect(toggle(page, "The Good Company")).toHaveAttribute("aria-expanded", "false");
   await expect(toggle(page, "Ashen Lanterns")).toHaveAttribute("aria-expanded", "false");
   await expect(toggle(page, "Casa da Ribeira")).toHaveAttribute("aria-expanded", "false");
 });
