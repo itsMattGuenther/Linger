@@ -898,7 +898,19 @@ hidden, your computer doesn't make the copy at all.
 
 **Showing a PowerPoint?** Share **Entire screen**, then start the slide show.
 Sharing just the PowerPoint window can come out black, because the slide show
-runs in a window of its own.
+runs in a window of its own. If your share stays black for a few seconds,
+Linger says so under it until you stop, and once as a desktop notice.
+Windows may hold that notice back while a slide show fills the screen, so
+the people watching may tell you first. A black slide you hold for a while
+on your whole screen gets the note too; it says it once, and you can ignore
+it.
+
+**Two monitors?** PowerPoint's Presenter View puts your notes on one monitor
+and the slides on the other. Share the monitor with the slides: under
+**Entire screen**, the picker shows a picture of each monitor. Picked the one
+with your notes? You don't have to share again: Presenter View's **Display
+Settings** has **Swap Presenter View and Slide Show**. The small copy beside
+Stop shows what everybody sees.
 
 Somebody sharing has a small monitor beside their name, in the list and in
 voice, and the room's voice line offers **Watch**. Watch joins that room's

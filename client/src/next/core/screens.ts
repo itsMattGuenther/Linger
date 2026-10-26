@@ -66,6 +66,14 @@ export function watchingWords(names: readonly string[]): string {
  * there's nothing to say: you stopped it, or you left voice, which is plain
  * already.
  */
+/**
+ * Your share's box, once your share has gone black for a while
+ * (`lib/screen/black.ts`): said until that share stops, since leaving the
+ * slide show that made it black brings the window back, and with it the box,
+ * too late to see it while it was black.
+ */
+export const WENT_BLACK_WORDS = "Your share went black for everybody watching. Shared one window for a slide show? Stop, then share your entire screen.";
+
 export function shareStoppedWords(why: ShareStopped): string | null {
   switch (why) {
     case "room-full":

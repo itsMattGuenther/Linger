@@ -971,6 +971,15 @@ and not as a WebRTC track. Branch `feat/360-screen-sharing`. Numbers are `T-19xx
   watcher saw at 1920×1056. macOS is still Share-less: nobody has tried its picker.
 - ⬜ **T-1908 · The real check** — a Windows share watched on Linux, Windows, Android and an
   iPhone through the real server, at both speeds, for half an hour.
+- 🟡 **T-1910 · A share gone black says so** (Matt, 2026-10-26, #722) — a share looked
+  at once a second for black (`lib/screen/black.ts`; on Linux
+  `looks_black` in `screen_shell/linux.rs`, on a GStreamer branch of 160×90 brightness):
+  five seconds black, the box says so until the share stops, and a desktop notice once.
+  Tests: `black.test.ts`, the shell's own (a real pipeline on GStreamer's black and
+  moving pictures), `screen-pipeline.spec.ts` and `next-screen.spec.ts`. The user guide
+  has the two-monitor tip. **Still to do:** share PowerPoint's window from Windows and
+  start the show, to see that WebView2 sends black (the warning) and not a picture that
+  stops changing (no warning).
 - ⬜ **T-1909 · Streaming a game** — the computer's sound, the graphics card's encoder, later.
 
 ---

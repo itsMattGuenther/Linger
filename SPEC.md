@@ -261,8 +261,9 @@ are person-to-person only. `@everyone` and `@here` do not exist and will not be 
 who it's from, and the desktop is asked to point at Linger (Windows flashes the
 taskbar button until you look; Linux marks the window urgent), unless somebody is
 already using Linger or reading that DM. Both are on unless turned off, on that
-computer (Settings → Notifications). Besides these, Linger says one thing about
-itself, once ever: where it went the first time the list is closed (§3, #400).
+computer (Settings → Notifications). Besides these, Linger says two things about
+itself: where it went, once ever, the first time the list is closed (§3, #400), and
+that your share has gone black, once a share (§4.20).
 Nothing opens a window by itself. The phone
 app raises none of these (§4.15): it marks mentions and DMs inside the app only.
 
@@ -1278,6 +1279,16 @@ runs: Windows, Linux, macOS, Android and iPhone.
 the picture that was picked: it never learns the name of a window or of the application
 in it (hard rule 2), and nothing it sends could carry one. The room sees "Jules is sharing
 their screen", never what it is.
+
+**A share gone black says so** (Matt, 2026-10-26, #722). A slide show runs in a window of
+its own, so a shared PowerPoint window comes out black for everybody watching, and the
+person showing it can't tell: the show covers their screen, Linger too. The app looks at a
+small copy of what it sends, about once a second, only for whether it's black, on that
+computer: nothing is kept or sent, and nothing asks what the picture is, or whether a
+window or the whole screen was picked. Black for five seconds, the share's box says so
+until that share stops, since leaving the show brings the window back, and a desktop
+notice says it once: "Shared one window for a slide show? Stop, then share your entire
+screen." A black slide held that long on a whole screen says so too, once.
 
 **Two speeds**, picked when you start: **30 frames a second** for slides, documents and
 code, sharpest for text; and **60 frames a second** for motion, scrolling, video or a

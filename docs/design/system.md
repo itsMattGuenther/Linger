@@ -719,7 +719,10 @@ hidden, the computer stops making it. Shared from a popped-out conversation,
 which has no voice bar, the box is a band under its voice line
 (`layout="band"`): the copy `--sharing-band-copy` wide beside the words, the
 eye and Stop on the right; hidden, one line as tall as the voice line. Why a
-share from there ended by itself takes the band's place for a while.
+share from there ended by itself takes the band's place for a while. A share
+that has gone black for a while (#722, `lib/screen/black.ts`) says so in
+`--text-danger` meta text, as a problem: in the box under who is watching,
+and on a line of its own under the band, until that share stops.
 Share is an `IconButton` with the `share` glyph beside Mute, Deafen and
 Leave; it asks 30 or 60 frames a second in a `Menu`, and is pressed while you
 share. Nothing about a share is drawn in the lamp but the pressed button: a

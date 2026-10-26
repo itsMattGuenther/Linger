@@ -12,6 +12,9 @@
  *
  * `loop.pane` runs a conversation's screens as the app does
  * (`usePaneScreen`), with the room's voice as `loop.voice` says it.
+ *
+ * Desktop notices the app raises are kept for `loop.notices` where it plays
+ * the Linux app (`?shell`), the only place here the page is an app's.
  */
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { createElement, useEffect, useMemo, useSyncExternalStore } from "react";
@@ -157,6 +160,8 @@ function shellShare(fps: number, frames: { id: number; sent: number }, pictures:
   };
   shellKeyframe = keyframe;
   if (shellMode === "fails") window.setTimeout(() => tell(says, { op: "ended", why: "failed" }), 1_000);
+  // Looked at once a second, as GStreamer's look does.
+  const looks = window.setInterval(() => tell(says, { op: "looks", black: colour === "#000000" }), 1_000);
   const previews = window.setInterval(() => {
     if (!shellPreview) return;
     canvas.toBlob((blob) => void blob?.arrayBuffer().then((bytes) => tell(pictures, bytes)), "image/jpeg");
@@ -164,16 +169,22 @@ function shellShare(fps: number, frames: { id: number; sent: number }, pictures:
   return () => {
     window.clearInterval(timer);
     window.clearInterval(previews);
+    window.clearInterval(looks);
     if (encoder.state !== "closed") encoder.close();
   };
 }
 let shellKeyframe: () => void = () => undefined;
 let shellStop: (() => void) | null = null;
+/** The desktop notices raised, as Tauri was asked for them. */
+const notices: unknown[] = [];
 
 if (new URLSearchParams(location.search).has("shell")) {
   (window as unknown as { isTauri: boolean }).isTauri = true;
+  // Notices allowed, as the app's own permission says on a desktop.
+  Object.defineProperty(window, "Notification", { value: { permission: "granted", requestPermission: async () => "granted" }, configurable: true });
   mockIPC(async (command, args) => {
     shellAsked.push(command);
+    if (command === "show_notification") notices.push(args);
     if (command === "screen_share_available") return true;
     if (command === "screen_share_keyframe") shellKeyframe();
     if (command === "screen_share_preview") shellPreview = typeof args === "object" && args !== null && Reflect.get(args, "shown") === true;
@@ -256,6 +267,7 @@ declare global {
       busy: (on: boolean) => void;
       shell: (mode: string) => void;
       shell_asked: () => string[];
+      notices: () => unknown[];
       pick: () => void;
       box: () => void;
       picker: (says: string | null) => void;
@@ -291,6 +303,7 @@ window.loop = {
     shellMode = mode;
   },
   shell_asked: () => [...shellAsked],
+  notices: () => [...notices],
   pick: () => answerPicker?.(),
   box: showBox,
   picker: (says) => {

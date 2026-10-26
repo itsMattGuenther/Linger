@@ -1721,7 +1721,7 @@ function shareOf(state: GatewayState, server: string, roomId: string, api: Serve
       void startSharingHere({ server, api, sessionId: state.sessionId, fps });
     },
     onStop: stopSharingEverywhere,
-    box: sharing ? { preview: sharingHere ? previewOf(here) : null, watching: watchingWords(watchers), starting: sharingHere && here.status !== "sharing" } : null,
+    box: sharing ? { preview: sharingHere ? previewOf(here) : null, watching: watchingWords(watchers), starting: sharingHere && here.status !== "sharing", wentBlack: sharingHere && here.wentBlack } : null,
   };
 }
 

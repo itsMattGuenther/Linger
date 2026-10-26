@@ -231,6 +231,42 @@ test("hiding your share's copy keeps the share going, and a share that starts hi
   await expect.poll(() => colour(page).then((got) => near(got, [255, 0, 0, 255])), { timeout: 15_000 }).toBe(true);
 });
 
+// A slide show runs in a window of its own, so PowerPoint's window, shared,
+// comes out black (lib/screen/black.ts). Where the page shares for itself
+// (Windows), it looks at a small copy once a second.
+const WENT_BLACK = "Your share went black for everybody watching. Shared one window for a slide show? Stop, then share your entire screen.";
+const NOTICE = { title: "Your share is black", body: "Everybody watching sees black. Shared one window for a slide show? Stop, then share your entire screen." };
+
+const wentBlack = (page: Page) => page.evaluate(() => (window.loop.share_state() as { wentBlack?: boolean } | null)?.wentBlack ?? null);
+
+test("a share that stays black is marked so until it stops, even once it's back, and a dark one isn't", async ({ page, browserName }) => {
+  test.skip(browserName === "webkit", "Playwright's WebKit can't read a screen the way the Linux app does");
+  await standIn(page);
+  await page.goto("/tests/fixtures/screen-loop.html");
+  await page.evaluate((server) => window.loop.share(server, "token", "s-sharer", 30), SERVER);
+  await page.evaluate((server) => window.loop.watch(server, "token", "s-watcher", "s-sharer"), SERVER);
+  await expect.poll(() => colour(page).then((got) => near(got, [255, 0, 0, 255])), { timeout: 15_000 }).toBe(true);
+  expect(await wentBlack(page)).toBe(false);
+  // A dark slide, past the five seconds black would have had, isn't black.
+  await page.evaluate(() => window.loop.paint("#101830"));
+  await expect.poll(() => colour(page).then((got) => near(got, [16, 24, 48, 255])), { timeout: 15_000 }).toBe(true);
+  await page.waitForTimeout(6_500);
+  expect(await wentBlack(page)).toBe(false);
+  // The slide show starts, and the window shared goes black.
+  await page.evaluate(() => window.loop.paint("#000000"));
+  await expect.poll(() => colour(page).then((got) => near(got, [0, 0, 0, 255])), { timeout: 15_000 }).toBe(true);
+  await expect.poll(() => wentBlack(page), { timeout: 15_000 }).toBe(true);
+  // Out of the slide show the window is back, and with it the box, where
+  // it's still said: it went black while nobody here could see the box.
+  await page.evaluate(() => window.loop.paint("#ff0000"));
+  await expect.poll(() => colour(page).then((got) => near(got, [255, 0, 0, 255])), { timeout: 15_000 }).toBe(true);
+  expect(await wentBlack(page)).toBe(true);
+  // A new share starts with nothing said.
+  await page.evaluate(() => window.loop.stop());
+  await page.evaluate((server) => window.loop.share(server, "token", "s-sharer", 30), SERVER);
+  expect(await wentBlack(page)).toBe(false);
+});
+
 // The Linux app shares through its shell (T-1907, src-tauri/src/screen_shell.rs),
 // played here by the test page (`?shell`): the shell's frames go out on the
 // same screen socket, and a watcher plays them. Each engine says it's the
@@ -279,6 +315,21 @@ test.describe("through the Linux app's shell", () => {
     await expect.poll(() => page.evaluate(() => window.loop.share_stopped()), { timeout: 10_000 }).toBe("no-frames");
     expect(await page.evaluate(() => window.loop.share_state())).toBeNull();
     expect(await page.evaluate(() => window.loop.shell_asked())).toContain("screen_share_stop");
+  });
+
+  test("through the shell, a share gone black says so under it, and once on the desktop", async ({ page }) => {
+    await standIn(page);
+    await page.goto("/tests/fixtures/screen-loop.html?shell");
+    await page.evaluate((server) => window.loop.pane(server, "s-me", true), SERVER);
+    await page.evaluate(() => window.loop.voice(false));
+    await page.evaluate((server) => window.loop.share(server, "token", "s-me", 30), SERVER);
+    await expect(page.getByRole("group", { name: "Your screen" })).toBeVisible();
+    await page.evaluate(() => window.loop.paint("#000000"));
+    await expect(page.getByRole("alert")).toHaveText(WENT_BLACK, { timeout: 15_000 });
+    await expect.poll(() => page.evaluate(() => window.loop.notices())).toEqual([{ ...NOTICE, open: null }]);
+    // Said once a share, however long it stays black.
+    await page.waitForTimeout(2_500);
+    expect(await page.evaluate(() => window.loop.notices())).toHaveLength(1);
   });
 
   test("through the shell, your share's copy shows the shell's pictures, and hidden the shell stops making them", async ({ page }) => {

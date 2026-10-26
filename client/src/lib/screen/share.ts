@@ -1,6 +1,8 @@
 import { useSyncExternalStore } from "react";
 import type { ScreenCodec } from "../../generated/ScreenCodec";
 import type { AuthedApi } from "../api";
+import { showNotice } from "../notify";
+import { BLACK_NOTICE, BlackWatch, LOOK_EVERY_MS, LOOK_HEIGHT, LOOK_WIDTH, looksBlack } from "./black";
 import { packFrame, readFrame } from "./frames";
 import { encoderConfig, fitWithin, KEYFRAME_EVERY_MS, SCREEN_SPEEDS, type ScreenFps, type ScreenSpeed } from "./presets";
 import { canPickScreen, makeable } from "./probe";
@@ -34,6 +36,8 @@ export interface ScreenShareState {
   preview: MediaStream | null;
   /** The shell's preview pictures come instead (`onPreviewPicture`, Linux). */
   pictures: boolean;
+  /** It went black for a while: a slide show in a window of its own, if one window was shared (`black.ts`). */
+  wentBlack: boolean;
 }
 
 /** The share as this window holds it, or null. */
@@ -168,7 +172,7 @@ export async function startSharing(options: { server: string; api: AuthedApi; se
     video: { frameRate: { ideal: speed.fps, max: speed.fps }, width: { max: speed.maxWidth }, height: { max: speed.maxHeight } },
     audio: false,
   });
-  publish({ server: options.server, fps: options.fps, status: "picking", preview: null, pictures: false });
+  publish({ server: options.server, fps: options.fps, status: "picking", preview: null, pictures: false, wentBlack: false });
   let stream: MediaStream;
   try {
     stream = await asked;
@@ -200,7 +204,7 @@ export async function startSharing(options: { server: string; api: AuthedApi; se
   track.contentHint = speed.hint === "detail" ? "detail" : "motion";
   const sharing = new Sharing(options.server, options.api, options.sessionId, speed, { kind: "track", stream, track }, made.codecs, made.hardware);
   running = sharing;
-  publish({ server: options.server, fps: options.fps, status: "starting", preview: stream, pictures: false });
+  publish({ server: options.server, fps: options.fps, status: "starting", preview: stream, pictures: false, wentBlack: false });
   sharing.start();
 }
 
@@ -210,7 +214,7 @@ export async function startSharing(options: { server: string; api: AuthedApi; se
  * VP8 only, as the page does where the graphics card makes no H.264.
  */
 async function startInShell(options: { server: string; api: AuthedApi; sessionId: string; fps: ScreenFps }, ask: object): Promise<void> {
-  publish({ server: options.server, fps: options.fps, status: "picking", preview: null, pictures: false });
+  publish({ server: options.server, fps: options.fps, status: "picking", preview: null, pictures: false, wentBlack: false });
   const capture = await captureInShell(options.fps, previewShown);
   if (picking !== ask) {
     if (typeof capture !== "string") capture.stop();
@@ -224,7 +228,7 @@ async function startInShell(options: { server: string; api: AuthedApi; sessionId
   }
   const sharing = new Sharing(options.server, options.api, options.sessionId, SCREEN_SPEEDS[options.fps], { kind: "shell", capture }, ["vp8"], new Set());
   running = sharing;
-  publish({ server: options.server, fps: options.fps, status: "starting", preview: null, pictures: true });
+  publish({ server: options.server, fps: options.fps, status: "starting", preview: null, pictures: true, wentBlack: false });
   sharing.start();
 }
 
@@ -297,6 +301,12 @@ class Sharing {
   #stopReading: (() => void) | null = null;
   /** The shell's frames go out from a key frame on, after one is skipped. */
   #shellWaitsForKey = true;
+  /** Looked at for whether it has gone black (`black.ts`). */
+  #black = new BlackWatch();
+  #lookTimer = 0;
+  /** The picture last looked at, and whether it was black: a screen that isn't changing sends no new ones. */
+  #looked: { frame: VideoFrame; black: boolean } | null = null;
+  #look: OffscreenCanvas | null = null;
 
   constructor(
     readonly server: string,
@@ -320,6 +330,8 @@ class Sharing {
       };
       // The screen went (a shared window closed), or the shell couldn't read it.
       source.capture.onEnded = (why) => this.finish(why === "gone" ? null : "no-frames");
+      // The shell looks at the share itself, and says what it saw.
+      source.capture.onLooked = (black) => this.looked(black);
       this.#stopReading = () => source.capture.stop();
       void this.connect();
       return;
@@ -328,6 +340,7 @@ class Sharing {
     source.track.addEventListener("ended", () => this.finish(null), { once: true });
     void this.connect();
     this.read(source.track);
+    this.#lookTimer = window.setInterval(() => this.lookAtLatest(), LOOK_EVERY_MS);
   }
 
   async connect(): Promise<void> {
@@ -418,6 +431,39 @@ class Sharing {
     }
     this.#shellWaitsForKey = false;
     socket.send(frame);
+  }
+
+  /**
+   * Look at the newest picture for whether it's black, about once a
+   * second: a small copy, here, read only for that (`black.ts`). The same
+   * picture as last time is the same answer.
+   */
+  lookAtLatest(): void {
+    const frame = this.#latest;
+    if (!frame || this.#done) return;
+    if (this.#looked?.frame !== frame) this.#looked = { frame, black: this.blackIn(frame) };
+    this.looked(this.#looked.black);
+  }
+
+  blackIn(frame: VideoFrame): boolean {
+    try {
+      this.#look ??= new OffscreenCanvas(LOOK_WIDTH, LOOK_HEIGHT);
+      const context = this.#look.getContext("2d");
+      if (!context) return false;
+      context.clearRect(0, 0, LOOK_WIDTH, LOOK_HEIGHT);
+      context.drawImage(frame, 0, 0, LOOK_WIDTH, LOOK_HEIGHT);
+      return looksBlack(context.getImageData(0, 0, LOOK_WIDTH, LOOK_HEIGHT).data, 4);
+    } catch {
+      // An engine that can't draw a frame: nothing is said.
+      return false;
+    }
+  }
+
+  /** What a look saw: black long enough, the box says so from now on, and a desktop notice says it once. */
+  looked(black: boolean): void {
+    if (this.#done || running !== this || !this.#black.look(performance.now(), black)) return;
+    if (shown?.server === this.server) publish({ ...shown, wentBlack: true });
+    void showNotice(BLACK_NOTICE.title, BLACK_NOTICE.body);
   }
 
   /** Take frames from the track as they come. */
@@ -590,6 +636,8 @@ class Sharing {
     if (this.#done) return;
     this.#done = true;
     window.clearTimeout(this.#firstFrameTimer);
+    window.clearInterval(this.#lookTimer);
+    this.#looked = null;
     this.#stopReading?.();
     for (const held of this.#encoders.values()) closeEncoder(held);
     this.#encoders.clear();

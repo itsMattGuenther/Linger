@@ -354,7 +354,7 @@ function screenPane(inVoiceHere: boolean): ChatPane["screen"] {
   const showing = SCREEN === "watching" || SCREEN === "waiting" || SCREEN === "unplayable" || SCREEN === "ended" || SCREEN === "lost";
   const boxHere = SCREEN === "sharing" && query.has("box") && inVoiceHere;
   return {
-    ...(boxHere ? { box: { preview: { kind: "stream" as const, stream: slide() }, watching: "Eli and Dave are watching", starting: false, onStop: () => note("stop sharing") } } : {}),
+    ...(boxHere ? { box: { preview: { kind: "stream" as const, stream: slide() }, watching: "Eli and Dave are watching", starting: false, wentBlack: query.has("black"), onStop: () => note("stop sharing") } } : {}),
     ...(SCREEN === "stopped" && inVoiceHere ? { stopped: "Linger couldn't read the screen you picked, so sharing stopped." } : {}),
     stage: showing
       ? {

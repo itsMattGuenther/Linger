@@ -76,7 +76,7 @@ export interface VoiceDockProps {
    * there is one. Left out where you can't: a phone, a server without it.
    */
   share?: ShareControl & {
-    box: { preview: SharePreview | null; watching: string; starting: boolean } | null;
+    box: { preview: SharePreview | null; watching: string; starting: boolean; wentBlack: boolean } | null;
     /** Why your last share ended by itself, said for a while: the room was full, the line dropped. */
     stopped?: string | null;
   };
@@ -243,7 +243,7 @@ export function VoiceDock({ where, people, muted, deafened, line, server, onGoTo
           {share.stopped}
         </p>
       ) : null}
-      {share?.box ? <SharingBox preview={share.box.preview} watching={share.box.watching} starting={share.box.starting} onStop={share.onStop} /> : null}
+      {share?.box ? <SharingBox preview={share.box.preview} watching={share.box.watching} starting={share.box.starting} wentBlack={share.box.wentBlack} onStop={share.onStop} /> : null}
       {/* Symbols, as in the room's chat window (#216): each word is the button's name and tooltip (#230).
           Mute shows with push-to-talk too: it's a choice of its own, which the key can't undo (#232). */}
       <div className="nx-voice-controls" role="group" aria-label="Your voice">

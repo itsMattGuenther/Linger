@@ -201,6 +201,31 @@ pub const MAX_HEIGHT: u32 = 1080;
 const PREVIEW_WIDTH: u32 = 480;
 const PREVIEW_HEIGHT: u32 = 270;
 const PREVIEW_FPS: u32 = 4;
+/// A share, looked at once a second for whether it has gone black, at a
+/// small size, as the page looks at its own (`client/src/lib/screen/black.ts`,
+/// which has why): a slide show runs in a window of its own, and a shared
+/// window comes out black.
+const LOOK_WIDTH: u32 = 160;
+const LOOK_HEIGHT: u32 = 90;
+const LOOK_FPS: u32 = 1;
+/// The brightest a black picture's pixel is, out of 255: GStreamer's
+/// conversion puts black at 16 and white at 235, not 0 and 255.
+const BLACK_LEVEL: u8 = 24;
+
+/// Whether a picture's brightness, one byte a pixel, is black: one pixel in
+/// a thousand may be brighter, for a pointer over it. As `looksBlack` in
+/// `black.ts`.
+pub fn looks_black(brightness: &[u8]) -> bool {
+    if brightness.is_empty() {
+        return false;
+    }
+    let allowed = brightness.len() / 1000;
+    brightness
+        .iter()
+        .filter(|&&value| value > BLACK_LEVEL)
+        .count()
+        <= allowed
+}
 
 /// `width` by `height` made to fit `most_width` by `most_height`, its shape
 /// kept, never made bigger, in even numbers (I420 halves both). As
@@ -252,7 +277,7 @@ pub fn source_caps(size: (u32, u32)) -> String {
 
 /// The pipeline, as GStreamer's launch syntax: `remote` and `node` are the
 /// portal's, `size` the size it's sent at, and the preview is there when
-/// `preview`. The preview is switched where its branch starts (`Capture`'s
+/// `preview`. The look for whether it's black is always there. The preview is switched where its branch starts (`Capture`'s
 /// `preview`), not with GStreamer's `valve`: closing a valve there stopped
 /// the whole share, and opening it again gave one picture (2026-10-25). Its
 /// sink doesn't hold the pipeline up for a first picture (`async=false`):
@@ -315,6 +340,15 @@ fn pipeline_from(
              ! appsink name=pictures sync=false async=false max-buffers=1 drop=true emit-signals=false"
         ));
     }
+    // Brightness alone, a byte a pixel, from the elements the share already
+    // has; like the preview's, its sink holds nothing up.
+    text.push_str(&format!(
+            " split. ! queue name=look max-size-buffers=1 max-size-bytes=0 max-size-time=0 leaky=downstream \
+             ! videorate drop-only=true ! video/x-raw,framerate={LOOK_FPS}/1 \
+             ! videoscale ! video/x-raw,width={LOOK_WIDTH},height={LOOK_HEIGHT} \
+             ! videoconvert ! video/x-raw,format=GRAY8 \
+             ! appsink name=looks sync=false async=false max-buffers=1 drop=true emit-signals=false"
+        ));
     text
 }
 
@@ -336,10 +370,12 @@ pub struct StartFailed {
 /// Where a share's output goes, each from GStreamer's own threads: every
 /// frame, already in the screen socket's shape (PROTOCOL §8: the 12-byte
 /// header, then the VP8 frame); the preview's pictures, as JPEG, while it's
-/// shown; and, once, how it ended if it ended by itself.
-pub struct Outlets<F, P, E> {
+/// shown; once a second, whether it's black; and,
+/// once, how it ended if it ended by itself.
+pub struct Outlets<F, P, L, E> {
     pub frame: F,
     pub picture: P,
+    pub looked: L,
     pub ended: E,
 }
 
@@ -355,15 +391,16 @@ pub struct Capture {
 
 impl Capture {
     /// Start reading `picked` at `speed`, the preview shown or not.
-    pub fn start<F, P, E>(
+    pub fn start<F, P, L, E>(
         picked: Picked,
         speed: Speed,
         shown: bool,
-        outlets: Outlets<F, P, E>,
+        outlets: Outlets<F, P, L, E>,
     ) -> Result<Self, StartFailed>
     where
         F: Fn(Vec<u8>) + Send + Sync + 'static,
         P: Fn(Vec<u8>) + Send + Sync + 'static,
+        L: Fn(bool) + Send + Sync + 'static,
         E: Fn(Ended) + Send + Sync + 'static,
     {
         let threads = std::thread::available_parallelism().map_or(2, |count| count.get().min(8));
@@ -392,14 +429,15 @@ impl Capture {
         }
     }
 
-    fn run<F, P, E>(
+    fn run<F, P, L, E>(
         text: &str,
         size: (u32, u32),
-        outlets: Outlets<F, P, E>,
+        outlets: Outlets<F, P, L, E>,
     ) -> Result<(gst::Pipeline, gst_app::AppSink, Option<Arc<AtomicBool>>), String>
     where
         F: Fn(Vec<u8>) + Send + Sync + 'static,
         P: Fn(Vec<u8>) + Send + Sync + 'static,
+        L: Fn(bool) + Send + Sync + 'static,
         E: Fn(Ended) + Send + Sync + 'static,
     {
         gst::init().map_err(|error| error.to_string())?;
@@ -423,6 +461,7 @@ impl Capture {
         let Outlets {
             frame,
             picture,
+            looked,
             ended,
         } = outlets;
         frames.set_callbacks(
@@ -452,6 +491,22 @@ impl Capture {
                             .and_then(|buffer| buffer.map_readable().ok())
                         {
                             picture(map.as_slice().to_vec());
+                        }
+                        Ok(gst::FlowSuccess::Ok)
+                    })
+                    .build(),
+            );
+        }
+        if let Some(looks) = sink("looks") {
+            looks.set_callbacks(
+                gst_app::AppSinkCallbacks::builder()
+                    .new_sample(move |sink| {
+                        let sample = sink.pull_sample().map_err(|_| gst::FlowError::Eos)?;
+                        if let Some(map) = sample
+                            .buffer()
+                            .and_then(|buffer| buffer.map_readable().ok())
+                        {
+                            looked(looks_black(map.as_slice()));
                         }
                         Ok(gst::FlowSuccess::Ok)
                     })
@@ -668,6 +723,106 @@ mod tests {
         );
     }
 
+    #[test]
+    fn a_black_picture_is_black_and_a_dark_one_with_something_on_it_isnt() {
+        let pixels = (LOOK_WIDTH * LOOK_HEIGHT) as usize;
+        // GStreamer's black is 16.
+        assert!(looks_black(&vec![16; pixels]));
+        assert!(looks_black(&vec![BLACK_LEVEL; pixels]));
+        assert!(!looks_black(&vec![BLACK_LEVEL + 1; pixels]));
+        // A pointer over it: one pixel in a thousand, and no more.
+        let mut pointer = vec![16; pixels];
+        pointer[..pixels / 1000].fill(235);
+        assert!(looks_black(&pointer));
+        pointer[pixels / 1000] = 235;
+        assert!(!looks_black(&pointer));
+        // A line of white text across a black slide.
+        let mut title = vec![16; pixels];
+        title[..300].fill(235);
+        assert!(!looks_black(&title));
+        assert!(!looks_black(&[]));
+    }
+
+    #[test]
+    fn a_share_is_looked_at_small_and_once_a_second_with_its_preview_or_without() {
+        for preview in [true, false] {
+            let text = pipeline_text(1, 2, speed(60).expect("60"), 2, (1920, 1080), preview);
+            let looks = &text[text.find("queue name=look ").expect("a look")..];
+            assert!(looks.contains("framerate=1/1"));
+            assert!(looks.contains("width=160,height=90"));
+            assert!(looks.contains("format=GRAY8"));
+            // It holds nothing up, and keeps at most the newest.
+            assert!(
+                looks.contains("appsink name=looks sync=false async=false max-buffers=1 drop=true")
+            );
+        }
+    }
+
+    /// The look as it runs, on GStreamer's black test picture and its moving
+    /// ball, beside the share and its preview as the app runs them: black,
+    /// then not, once a second, and the share's frames going out all the
+    /// while. Skipped where this computer's GStreamer lacks the elements.
+    #[test]
+    fn a_black_window_is_seen_black_and_a_moving_one_isnt() {
+        use std::sync::atomic::AtomicUsize;
+        use std::sync::Mutex;
+        use std::time::Duration;
+        if gst::init().is_err()
+            || !have(&ELEMENTS[1..])
+            || !have(&PREVIEW_ELEMENTS)
+            || !have(&["videotestsrc"])
+        {
+            eprintln!("skipped: this GStreamer can't run a share's pipeline");
+            return;
+        }
+        for (pattern, black) in [("black", true), ("ball", false)] {
+            let source = format!(
+                "videotestsrc is-live=true pattern={pattern} ! video/x-raw,width=640,height=360,framerate=30/1"
+            );
+            let text = pipeline_from(&source, speed(30).expect("30"), 2, (640, 360), true);
+            let seen = Arc::new(Mutex::new(Vec::new()));
+            let heard = seen.clone();
+            let frames = Arc::new(AtomicUsize::new(0));
+            let counted = frames.clone();
+            let (pipeline, _sink, _switch) = Capture::run(
+                &text,
+                (640, 360),
+                Outlets {
+                    frame: move |_| {
+                        counted.fetch_add(1, Ordering::Relaxed);
+                    },
+                    picture: |_| {},
+                    looked: move |looked| {
+                        heard
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .push(looked);
+                    },
+                    ended: |_| {},
+                },
+            )
+            .expect("the pipeline runs");
+            std::thread::sleep(Duration::from_millis(2_500));
+            let _ = pipeline.set_state(gst::State::Null);
+            let seen = seen
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone();
+            // Once a second: two or three in two and a half, at least one on a busy machine.
+            assert!(
+                !seen.is_empty() && seen.len() <= 4,
+                "{pattern}: looked {} times",
+                seen.len()
+            );
+            assert!(
+                seen.iter().all(|&looked| looked == black),
+                "{pattern}: {seen:?}"
+            );
+            let frames = frames.load(Ordering::Relaxed);
+            assert!(frames > 20, "{pattern}: the share sent {frames} frames");
+        }
+    }
+
     /// The pipeline as it runs, from GStreamer's moving test picture in
     /// place of the portal's stream: the share's frames and the preview's
     /// pictures counted while the preview is hidden, shown, hidden and shown
@@ -699,6 +854,7 @@ mod tests {
                 picture: move |_| {
                     shown.fetch_add(1, Ordering::Relaxed);
                 },
+                looked: |_| {},
                 ended: |_| {},
             },
         )

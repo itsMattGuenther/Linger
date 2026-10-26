@@ -1681,6 +1681,20 @@ own, so the server, the watchers and the share's rules are the same. GStreamer i
 already there for WebKitGTK; its Rust bindings add about 440 KB. A share sends VP8
 only, as on a Windows computer with no hardware H.264.
 
+**A share gone black says so** (Matt, 2026-10-26, #722, for the presentation two days
+later). Sharing PowerPoint's window and then starting the show sends black: the show is a
+window of its own. The app looks at a 160×90 copy of what a share sends, about once a
+second, only for whether it's black, and after five seconds says so in the share's box
+until it stops, and once as a desktop notice, the one notice besides #400's that Linger
+raises about itself. The page looks on Windows; on Linux GStreamer makes the copy and the
+shell looks. Reading a copy's brightness is not asking what's on the screen (hard rule 2):
+nothing is kept, sent or named. It doesn't ask whether a window or the whole screen was
+picked either: PRIV-2's guard keeps both the page's track settings and the portal's
+source type unread, so every share is looked at, and the words say what to do if it was
+one window. A black slide held five seconds on a whole screen gets the note, once.
+Windows' Do Not Disturb may hold the notice back during a full-screen show, which is why
+the box keeps saying it once the show ends.
+
 **What wasn't taken.** An in-app picker listing windows with their names and pictures
 (hard rule 2: Linger uses the system's picker and never sees a name). Preview pictures of
 shares stored on the server. Several sizes of every share for slower connections, which

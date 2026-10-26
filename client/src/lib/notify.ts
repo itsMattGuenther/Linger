@@ -5,8 +5,10 @@
  * stream. The exception is a message that names you, one from somebody you
  * have explicitly asked to hear from, and, in the Buddy list client, a DM,
  * which is addressed to you just as a mention is (#291) — and that exception
- * is this file. Besides those, Linger says one thing about itself, once ever:
- * where it went the first time its list is closed (`showNotice`, #400).
+ * is this file. Besides those, Linger says two things about itself
+ * (`showNotice`): where it went, once ever, the first time its list is closed
+ * (#400), and that your share has gone black, once a share
+ * (`lib/screen/black.ts`, SPEC §4.20).
  *
  * Three rules shape it.
  *

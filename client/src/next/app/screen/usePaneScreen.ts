@@ -134,6 +134,7 @@ export function usePaneScreen({
           preview: previewOf(mineHere),
           watching: watchingWords(me === null ? [] : watchersOf(state, roomId, me).flatMap((id) => users.get(id)?.display_name ?? [])),
           starting: mineHere.status !== "sharing",
+          wentBlack: mineHere.wentBlack,
           onStop: stopSharingEverywhere,
         }
       : undefined;

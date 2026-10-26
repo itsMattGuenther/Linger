@@ -344,7 +344,7 @@ function OneServer() {
                       unavailable: SCREEN === "full" ? "Three people are sharing here already." : undefined,
                       onShare: (fps: number) => note(`share:${fps}`),
                       onStop: () => note("stop sharing"),
-                      box: SCREEN === "sharing" ? { preview: previewOf(fakeScreen()), watching: "Eli and Jules are watching", starting: false } : null,
+                      box: SCREEN === "sharing" ? { preview: previewOf(fakeScreen()), watching: "Eli and Jules are watching", starting: false, wentBlack: query.has("black") } : null,
                       // `=stopped`: your last share didn't start, and the bar says why.
                       stopped: SCREEN === "stopped" ? "Three people are sharing here already, so yours didn't start." : null,
                     },

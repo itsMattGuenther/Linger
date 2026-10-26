@@ -21,6 +21,8 @@ export interface ShellCapture {
   onPicture: (picture: ArrayBuffer) => void;
   /** It ended by itself: the screen went, or it couldn't be read. */
   onEnded: (why: "gone" | "failed") => void;
+  /** About once a second: whether the share is black (`black.ts`). */
+  onLooked: (black: boolean) => void;
   keyframe(): void;
   /** Show the preview or hide it; hidden, the shell stops making it. */
   preview(shown: boolean): void;
@@ -71,6 +73,12 @@ function refusal(error: unknown): ShellRefused {
   return error === "declined" || error === "no-encoder" ? error : "no-screen";
 }
 
+/** A look at the share, `{ op: "looks", black }`, or null for anything else. */
+function looked(said: unknown): boolean | null {
+  if (typeof said !== "object" || said === null || !("op" in said) || said.op !== "looks" || !("black" in said)) return null;
+  return said.black === true;
+}
+
 function ended(said: unknown): "gone" | "failed" | null {
   if (typeof said !== "object" || said === null || !("op" in said) || said.op !== "ended" || !("why" in said)) return null;
   return said.why === "gone" ? "gone" : "failed";
@@ -86,6 +94,7 @@ export async function captureInShell(fps: ScreenFps, shown: boolean): Promise<Sh
     onFrame: () => undefined,
     onPicture: () => undefined,
     onEnded: () => undefined,
+    onLooked: () => undefined,
     keyframe: () => void invoke("screen_share_keyframe").catch(() => undefined),
     preview: (on) => void invoke("screen_share_preview", { shown: on }).catch(() => undefined),
     stop: () => void invoke("screen_share_stop").catch(() => undefined),
@@ -97,6 +106,11 @@ export async function captureInShell(fps: ScreenFps, shown: boolean): Promise<Sh
     if (picture instanceof ArrayBuffer) capture.onPicture(picture);
   });
   const says = new Channel<unknown>((said) => {
+    const black = looked(said);
+    if (black !== null) {
+      capture.onLooked(black);
+      return;
+    }
     const why = ended(said);
     if (why) capture.onEnded(why);
   });

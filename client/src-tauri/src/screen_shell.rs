@@ -29,6 +29,9 @@ pub enum ShareSays {
     /// It ended by itself: `gone` when the screen went (the desktop's own
     /// Stop, or the window shared closed), `failed` when it couldn't be read.
     Ended { why: &'static str },
+    /// About once a second: whether the share is black
+    /// (`client/src/lib/screen/black.ts`).
+    Looks { black: bool },
 }
 
 /// The share running, if there is one.
@@ -99,6 +102,12 @@ pub async fn screen_share_start(
                 },
                 picture: move |picture| {
                     let _ = pictures.send(InvokeResponseBody::Raw(picture));
+                },
+                looked: {
+                    let says = says.clone();
+                    move |black| {
+                        let _ = says.send(ShareSays::Looks { black });
+                    }
                 },
                 ended: move |ended| {
                     let why = match ended {
@@ -214,9 +223,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn an_ending_reads_as_the_page_reads_it() {
+    fn what_the_shell_says_reads_as_the_page_reads_it() {
         // `lib/screen/shell.ts`: { op: "ended", why: "gone" | "failed" }.
         let said = serde_json::to_value(ShareSays::Ended { why: "gone" }).expect("json");
         assert_eq!(said, serde_json::json!({ "op": "ended", "why": "gone" }));
+        // `lib/screen/shell.ts`: { op: "looks", black }.
+        let said = serde_json::to_value(ShareSays::Looks { black: true }).expect("json");
+        assert_eq!(said, serde_json::json!({ "op": "looks", "black": true }));
     }
 }

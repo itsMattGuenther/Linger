@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 
 // Screen sharing's screens (SPEC §4.20, #360), concept A: the mark on whoever
 // shares, Watch on the room's voice line (and Join beside it when you aren't
@@ -175,6 +175,44 @@ test("sharing from a popped-out window, your box sits under its voice line: a co
   await expect.poll(() => did(page)).toContain("stop sharing");
 });
 
+// Your share went black for a while (lib/screen/black.ts): said under it
+// until it stops, in the danger color.
+const WENT_BLACK = "Your share went black for everybody watching. Shared one window for a slide show? Stop, then share your entire screen.";
+
+/** Whether `said` is in the danger color, as the app's other problems are. */
+async function inDanger(said: Locator): Promise<boolean> {
+  return said.evaluate((element) => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--text-danger)";
+    document.body.append(probe);
+    const danger = getComputedStyle(probe).color;
+    probe.remove();
+    return getComputedStyle(element).color === danger;
+  });
+}
+
+test("a share from a popped-out window that went black says so under its band, above the conversation", async ({ page }) => {
+  await chat(page, "?voice=mine&screen=sharing&box&black");
+  const strip = page.getByRole("group", { name: "Voice in this conversation" });
+  const box = page.getByRole("group", { name: "Your screen" });
+  const said = page.getByRole("alert");
+  await expect(said).toHaveText(WENT_BLACK);
+  expect(await inDanger(said)).toBe(true);
+  const under = async () => {
+    const shown = await box.boundingBox();
+    const at = await said.boundingBox();
+    const log = await page.getByRole("log").boundingBox();
+    return Boolean(shown && at && log && at.y >= shown.y + shown.height - 1 && at.y + at.height <= log.y + 1);
+  };
+  expect(await under()).toBe(true);
+  // With the copy hidden, the band is still one line as tall as the voice line, the words under it.
+  await box.getByRole("button", { name: "Show the preview" }).click();
+  const line = await strip.boundingBox();
+  await expect.poll(async () => Math.round((await box.boundingBox())?.height ?? 0)).toBe(Math.round(line?.height ?? -1));
+  await expect(said).toHaveText(WENT_BLACK);
+  expect(await under()).toBe(true);
+});
+
 test("a share from a popped-out window that ended by itself says why under its voice line", async ({ page }) => {
   await chat(page, "?voice=mine&screen=stopped");
   const why = page.getByText("Linger couldn't read the screen you picked, so sharing stopped.");
@@ -215,6 +253,26 @@ test("your share in the voice bar: a copy, who's watching by name, and Stop", as
   await box.getByRole("button", { name: "Stop" }).click();
   // The list page writes what was pressed on `body[data-opened]`.
   await expect.poll(() => page.locator("body").getAttribute("data-opened")).toContain("stop sharing");
+});
+
+test("a share that went black says so in the voice bar's box, under who's watching", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.goto("/tests/fixtures/next-list.html?voice&screen=sharing&black");
+  const box = page.getByRole("group", { name: "Your screen" });
+  const said = box.getByRole("alert");
+  await expect(said).toHaveText(WENT_BLACK);
+  expect(await inDanger(said)).toBe(true);
+  // Under who's watching, wrapped inside the box rather than cut.
+  const who = await box.getByRole("status").boundingBox();
+  const at = await said.boundingBox();
+  const around = await box.boundingBox();
+  expect(who && at && at.y >= who.y + who.height - 1).toBe(true);
+  expect(at && around && at.x >= around.x && at.x + at.width <= around.x + around.width + 1).toBe(true);
+  expect(await said.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  // Without it, nothing's said.
+  await page.goto("/tests/fixtures/next-list.html?voice&screen=sharing");
+  await expect(page.getByRole("group", { name: "Your screen" }).getByText("Sharing your screen")).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
 });
 
 test("on a phone the screen runs edge to edge at its own shape, and sideways it fills the phone", async ({ page }) => {
