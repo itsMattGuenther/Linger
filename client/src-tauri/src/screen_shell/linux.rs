@@ -254,7 +254,9 @@ pub fn source_caps(size: (u32, u32)) -> String {
 /// portal's, `size` the size it's sent at, and the preview is there when
 /// `preview`. The preview is switched where its branch starts (`Capture`'s
 /// `preview`), not with GStreamer's `valve`: closing a valve there stopped
-/// the whole share, and opening it again gave one picture (2026-10-25). Frames past the share's speed are
+/// the whole share, and opening it again gave one picture (2026-10-25). Its
+/// sink doesn't hold the pipeline up for a first picture (`async=false`):
+/// one that starts hidden never gets one, and the share never started. Frames past the share's speed are
 /// dropped first, the speed named as a frame rate: PipeWire's stream says it
 /// has none, and `videorate`'s `max-rate` lets every frame of a stream like
 /// that through, and the picture is made its size before its colours are
@@ -271,10 +273,24 @@ pub fn pipeline_text(
     size: (u32, u32),
     preview: bool,
 ) -> String {
+    let source = format!(
+        "pipewiresrc fd={remote} path={node} do-timestamp=true keepalive-time={STILL_EVERY_MS} always-copy=true min-buffers={BUFFERS}"
+    );
+    pipeline_from(&source, speed, threads, size, preview)
+}
+
+/// The pipeline after its source: `pipeline_text`'s, or a test's.
+fn pipeline_from(
+    source: &str,
+    speed: Speed,
+    threads: usize,
+    size: (u32, u32),
+    preview: bool,
+) -> String {
     let (width, height) = size;
     let helpers = threads.min(4);
     let mut text = format!(
-        "pipewiresrc fd={remote} path={node} do-timestamp=true keepalive-time={STILL_EVERY_MS} always-copy=true min-buffers={BUFFERS} \
+        "{source} \
          ! capsfilter name=source \
          ! videorate drop-only=true ! video/x-raw,framerate={fps}/1 \
          ! videoscale n-threads={helpers} add-borders=true ! video/x-raw,width={width},height={height},pixel-aspect-ratio=1/1 \
@@ -296,7 +312,7 @@ pub fn pipeline_text(
              ! videorate drop-only=true ! video/x-raw,framerate={PREVIEW_FPS}/1 \
              ! videoscale ! video/x-raw,width={small_width},height={small_height} \
              ! jpegenc quality=70 \
-             ! appsink name=pictures sync=false max-buffers=1 drop=true emit-signals=false"
+             ! appsink name=pictures sync=false async=false max-buffers=1 drop=true emit-signals=false"
         ));
     }
     text
@@ -643,10 +659,88 @@ mod tests {
         assert!(preview.contains(&format!("framerate={PREVIEW_FPS}/1")));
         assert!(preview.contains("width=480,height=270"));
         assert!(preview.contains("jpegenc"));
+        // A preview that starts hidden doesn't hold the share up.
+        assert!(preview.contains("appsink name=pictures sync=false async=false"));
         // Without the preview's elements, a share goes without one.
         assert!(
             !pipeline_text(1, 2, speed(30).expect("30"), 2, (1920, 1080), false)
                 .contains("preview")
         );
+    }
+
+    /// The pipeline as it runs, from GStreamer's moving test picture in
+    /// place of the portal's stream: the share's frames and the preview's
+    /// pictures counted while the preview is hidden, shown, hidden and shown
+    /// again. Skipped where this computer's GStreamer lacks the elements.
+    #[test]
+    fn hiding_the_preview_keeps_the_share_going_and_showing_it_brings_it_back() {
+        use std::sync::atomic::AtomicUsize;
+        use std::time::Duration;
+        if gst::init().is_err()
+            || !have(&ELEMENTS[1..])
+            || !have(&PREVIEW_ELEMENTS)
+            || !have(&["videotestsrc"])
+        {
+            eprintln!("skipped: this GStreamer can't run a share's pipeline");
+            return;
+        }
+        let source = "videotestsrc is-live=true pattern=ball ! video/x-raw,width=640,height=360,framerate=30/1";
+        let text = pipeline_from(source, speed(30).expect("30"), 2, (640, 360), true);
+        let frames = Arc::new(AtomicUsize::new(0));
+        let pictures = Arc::new(AtomicUsize::new(0));
+        let (counted, shown) = (frames.clone(), pictures.clone());
+        let (pipeline, _sink, switch) = Capture::run(
+            &text,
+            (640, 360),
+            Outlets {
+                frame: move |_| {
+                    counted.fetch_add(1, Ordering::Relaxed);
+                },
+                picture: move |_| {
+                    shown.fetch_add(1, Ordering::Relaxed);
+                },
+                ended: |_| {},
+            },
+        )
+        .expect("the pipeline runs");
+        let switch = switch.expect("a preview");
+        // Over a while, how many frames and pictures came: at 30 and 4 a
+        // second, 45 and 6 in a second and a half, held to far less so a
+        // busy machine still passes.
+        let over = |wait: Duration| {
+            let before = (
+                frames.load(Ordering::Relaxed),
+                pictures.load(Ordering::Relaxed),
+            );
+            std::thread::sleep(wait);
+            (
+                frames.load(Ordering::Relaxed) - before.0,
+                pictures.load(Ordering::Relaxed) - before.1,
+            )
+        };
+        let wait = Duration::from_millis(1_500);
+        let hidden = over(wait);
+        assert!(
+            hidden.0 > 10,
+            "the share ran with the preview hidden: {hidden:?}"
+        );
+        assert_eq!(hidden.1, 0, "a hidden preview made pictures");
+        switch.store(true, Ordering::Relaxed);
+        let shown = over(wait);
+        assert!(shown.0 > 10 && shown.1 >= 2, "shown: {shown:?}");
+        switch.store(false, Ordering::Relaxed);
+        let _ = over(Duration::from_millis(300));
+        let hidden_again = over(wait);
+        // A valve here stopped the whole share (2026-10-25).
+        assert!(
+            hidden_again.0 > 10,
+            "the share stopped when the preview was hidden: {hidden_again:?}"
+        );
+        assert_eq!(hidden_again.1, 0);
+        switch.store(true, Ordering::Relaxed);
+        let back = over(wait);
+        // And opening it again gave one picture, then none.
+        assert!(back.0 > 10 && back.1 >= 2, "shown again: {back:?}");
+        let _ = pipeline.set_state(gst::State::Null);
     }
 }
