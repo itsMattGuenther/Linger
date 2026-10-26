@@ -16,6 +16,7 @@
 //! second, a key frame at least every ten seconds.
 
 use std::os::fd::{AsRawFd, OwnedFd};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use ashpd::desktop::screencast::{
@@ -150,9 +151,9 @@ const ELEMENTS: [&str; 9] = [
     "appsink",
 ];
 
-/// And the preview's, which a share goes without where they're missing:
-/// a switch and JPEG (`gst-plugins-good`).
-const PREVIEW_ELEMENTS: [&str; 2] = ["valve", "jpegenc"];
+/// And the preview's, which a share goes without where it's missing: JPEG
+/// (`gst-plugins-good`).
+const PREVIEW_ELEMENTS: [&str; 1] = ["jpegenc"];
 
 fn have(names: &[&str]) -> bool {
     names
@@ -251,7 +252,9 @@ pub fn source_caps(size: (u32, u32)) -> String {
 
 /// The pipeline, as GStreamer's launch syntax: `remote` and `node` are the
 /// portal's, `size` the size it's sent at, and the preview is there when
-/// `preview` (its switch starts off). Frames past the share's speed are
+/// `preview`. The preview is switched where its branch starts (`Capture`'s
+/// `preview`), not with GStreamer's `valve`: closing a valve there stopped
+/// the whole share, and opening it again gave one picture (2026-10-25). Frames past the share's speed are
 /// dropped first, the speed named as a frame rate: PipeWire's stream says it
 /// has none, and `videorate`'s `max-rate` lets every frame of a stream like
 /// that through, and the picture is made its size before its colours are
@@ -289,8 +292,7 @@ pub fn pipeline_text(
     if preview {
         let (small_width, small_height) = fit(width, height, PREVIEW_WIDTH, PREVIEW_HEIGHT);
         text.push_str(&format!(
-            " split. ! queue max-size-buffers=1 max-size-bytes=0 max-size-time=0 leaky=downstream \
-             ! valve name=preview drop=true \
+            " split. ! queue name=preview max-size-buffers=1 max-size-bytes=0 max-size-time=0 leaky=downstream \
              ! videorate drop-only=true ! video/x-raw,framerate={PREVIEW_FPS}/1 \
              ! videoscale ! video/x-raw,width={small_width},height={small_height} \
              ! jpegenc quality=70 \
@@ -329,8 +331,9 @@ pub struct Outlets<F, P, E> {
 pub struct Capture {
     pipeline: gst::Pipeline,
     frames: gst_app::AppSink,
-    /// The preview's switch, where there is a preview.
-    preview: Option<gst::Element>,
+    /// Whether the preview is shown, where there is one: its branch takes
+    /// no frames while it isn't.
+    preview: Option<Arc<AtomicBool>>,
     picked: Option<Picked>,
 }
 
@@ -377,7 +380,7 @@ impl Capture {
         text: &str,
         size: (u32, u32),
         outlets: Outlets<F, P, E>,
-    ) -> Result<(gst::Pipeline, gst_app::AppSink, Option<gst::Element>), String>
+    ) -> Result<(gst::Pipeline, gst_app::AppSink, Option<Arc<AtomicBool>>), String>
     where
         F: Fn(Vec<u8>) + Send + Sync + 'static,
         P: Fn(Vec<u8>) + Send + Sync + 'static,
@@ -439,7 +442,23 @@ impl Capture {
                     .build(),
             );
         }
-        let switch = pipeline.by_name("preview");
+        // Hidden, the preview's branch drops each frame as it comes in, so it
+        // holds none and does nothing; everything else carries on as it was.
+        let switch = pipeline
+            .by_name("preview")
+            .and_then(|queue| queue.static_pad("sink"))
+            .map(|pad| {
+                let shown = Arc::new(AtomicBool::new(false));
+                let asked = shown.clone();
+                pad.add_probe(gst::PadProbeType::BUFFER, move |_, _| {
+                    if asked.load(Ordering::Relaxed) {
+                        gst::PadProbeReturn::Ok
+                    } else {
+                        gst::PadProbeReturn::Drop
+                    }
+                });
+                shown
+            });
         let bus = pipeline.bus().ok_or("no bus")?;
         if let Err(error) = pipeline.set_state(gst::State::Playing) {
             let _ = pipeline.set_state(gst::State::Null);
@@ -477,7 +496,7 @@ impl Capture {
     /// they're made smaller or turned into JPEG, so it costs nothing.
     pub fn show_preview(&self, shown: bool) {
         if let Some(switch) = &self.preview {
-            switch.set_property("drop", !shown);
+            switch.store(shown, Ordering::Relaxed);
         }
     }
 
@@ -618,14 +637,16 @@ mod tests {
     #[test]
     fn the_preview_is_small_slow_and_switched_off_until_shown() {
         let text = pipeline_text(1, 2, speed(30).expect("30"), 2, (1920, 1080), true);
-        let preview = &text[text.find("valve").expect("a preview")..];
-        assert!(preview.starts_with("valve name=preview drop=true"));
+        let preview = &text[text.find("queue name=preview").expect("a preview")..];
+        // Switched at its start, not with a valve, which stopped the whole share.
+        assert!(!text.contains("valve"));
         assert!(preview.contains(&format!("framerate={PREVIEW_FPS}/1")));
         assert!(preview.contains("width=480,height=270"));
         assert!(preview.contains("jpegenc"));
         // Without the preview's elements, a share goes without one.
         assert!(
-            !pipeline_text(1, 2, speed(30).expect("30"), 2, (1920, 1080), false).contains("valve")
+            !pipeline_text(1, 2, speed(30).expect("30"), 2, (1920, 1080), false)
+                .contains("preview")
         );
     }
 }
