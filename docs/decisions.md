@@ -1670,6 +1670,15 @@ VP8 is the one everything plays.
 **The limits are the server's.** The rate, the frame size and the three-at-once cap are
 enforced by the server, not only asked of the app.
 
+**On Linux, frames are read in a worker** (T-1907, added the same day). WebKitGTK has
+`getDisplayMedia` and WebCodecs, but refuses the screen until the app answers its
+permission request, which wry leaves unanswered, and keeps its track processor behind a
+feature switch and inside workers. The shell answers yes for a screen and nothing else,
+and turns the switch on; the page reads frames in a worker. The other way, playing the
+screen in a hidden video and taking its picture on a timer, works only while the window
+is in front: WebKit stops playing a video nobody can see, and a slide show covers Linger.
+It is kept as the last resort for an engine with neither.
+
 **What wasn't taken.** An in-app picker listing windows with their names and pictures
 (hard rule 2: Linger uses the system's picker and never sees a name). Preview pictures of
 shares stored on the server. Several sizes of every share for slower connections, which
