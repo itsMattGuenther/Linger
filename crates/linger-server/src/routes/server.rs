@@ -55,7 +55,7 @@ async fn build_info(state: &AppState, viewer: UserId) -> Result<ServerInfo, ApiE
         file_expiry_days: state.config.file_expiry.days(),
         file_expiry_when_full: Some(state.config.file_expiry == FileExpiry::WhenFull),
         voice: Some(state.gateway.forwards_voice()),
-        screens: Some(state.gateway.forwards_voice()),
+        screens: Some(state.gateway.passes_screens()),
         health,
     })
 }

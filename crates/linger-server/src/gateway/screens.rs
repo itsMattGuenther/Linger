@@ -15,12 +15,14 @@
 //! a key frame from the header, and hands every watcher the same bytes.
 
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use axum::body::Bytes;
 use linger_core::limits::{
-    MAX_SCREENS_PER_ROOM, SCREEN_BURST_BYTES, SCREEN_KEYFRAME_EVERY_MS, SCREEN_MAX_BITS_PER_SECOND,
+    MAX_SCREENS_PER_ROOM, MAX_SCREEN_WATCH_BYTES, SCREEN_BURST_BYTES, SCREEN_KEYFRAME_EVERY_MS,
+    SCREEN_MAX_BITS_PER_SECOND,
 };
 use linger_core::screen::{
     ScreenCodec, ScreenFrameHead, ScreenShare, ScreenShareSays, ScreenWatchSays,
@@ -45,6 +47,8 @@ pub enum Closing {
     Replaced = 4006,
     /// The seat left voice, or the session ended.
     Ended = 4007,
+    /// This server doesn't pass screens on: no voice, or `LINGER_SCREENS=off`.
+    Off = 4008,
 }
 
 impl Closing {
@@ -74,6 +78,9 @@ pub enum ToWatch {
 pub struct WatchLine {
     pub frames: mpsc::Sender<Bytes>,
     pub says: mpsc::UnboundedSender<ToWatch>,
+    /// The bytes waiting on `frames`: the board adds, the socket takes away
+    /// as each one goes (`MAX_SCREEN_WATCH_BYTES`).
+    pub queued: Arc<AtomicUsize>,
 }
 
 struct Share {
@@ -562,8 +569,17 @@ impl Screens {
                 }
                 watch.gated = false;
             }
+            if watch.line.queued.load(Ordering::Relaxed) + frame.len() > MAX_SCREEN_WATCH_BYTES {
+                // Too much waiting for it already, however few frames.
+                watch.gated = true;
+                behind = true;
+                continue;
+            }
             match watch.line.frames.try_send(frame.clone()) {
-                Ok(()) => went = true,
+                Ok(()) => {
+                    watch.line.queued.fetch_add(frame.len(), Ordering::Relaxed);
+                    went = true;
+                }
                 Err(mpsc::error::TrySendError::Full(_)) => {
                     // It fell behind: skip it forward to the next key frame.
                     watch.gated = true;
@@ -677,6 +693,7 @@ mod tests {
         socket: u64,
         frames: mpsc::Receiver<Bytes>,
         says: mpsc::UnboundedReceiver<ToWatch>,
+        queued: Arc<AtomicUsize>,
     }
 
     impl Watcher {
@@ -689,6 +706,7 @@ mod tests {
         ) -> Self {
             let (frames_tx, frames) = mpsc::channel(SCREEN_WATCH_QUEUE);
             let (says_tx, says) = mpsc::unbounded_channel();
+            let queued = Arc::new(AtomicUsize::new(0));
             let showing = screens
                 .watch(
                     session,
@@ -698,6 +716,7 @@ mod tests {
                     WatchLine {
                         frames: frames_tx,
                         says: says_tx,
+                        queued: Arc::clone(&queued),
                     },
                 )
                 .expect("watching");
@@ -705,12 +724,15 @@ mod tests {
                 socket: showing.socket,
                 frames,
                 says,
+                queued,
             }
         }
 
+        /// Take what's waiting, as the socket does: the bytes go with it.
         fn got(&mut self) -> usize {
             let mut got = 0;
-            while self.frames.try_recv().is_ok() {
+            while let Ok(frame) = self.frames.try_recv() {
+                self.queued.fetch_sub(frame.len(), Ordering::Relaxed);
                 got += 1;
             }
             got
@@ -896,6 +918,37 @@ mod tests {
     }
 
     #[test]
+    fn a_watcher_holding_too_many_bytes_is_skipped_forward_however_few_frames() {
+        let screens = Screens::default();
+        let here = room();
+        let sharer = Sharer::start(&screens, "s", here, &[VP8]);
+        let mut watcher = Watcher::start(&screens, "w", here, "s", &[VP8]);
+        // Frames of most of a megabyte, a second apart so the ceiling allows
+        // each: the watcher reads none of them.
+        let start = Instant::now() + Duration::from_millis(1);
+        let big = 900 * 1024;
+        let sent = (0..6)
+            .filter(|at| {
+                screens.frame_at(
+                    "s",
+                    sharer.socket,
+                    &frame(VP8, *at == 0, big),
+                    start + Duration::from_secs(*at),
+                )
+            })
+            .count();
+        // Four fit under MAX_SCREEN_WATCH_BYTES; past that it's held, not queued.
+        assert_eq!(sent, MAX_SCREEN_WATCH_BYTES / (big + 12));
+        assert!(watcher.queued.load(Ordering::Relaxed) <= MAX_SCREEN_WATCH_BYTES);
+        // Once it has read them it carries on, from a key frame.
+        assert_eq!(watcher.got(), sent);
+        assert_eq!(watcher.queued.load(Ordering::Relaxed), 0);
+        let later = start + Duration::from_secs(10);
+        assert!(!screens.frame_at("s", sharer.socket, &frame(VP8, false, 10), later));
+        assert!(screens.frame_at("s", sharer.socket, &frame(VP8, true, 10), later));
+    }
+
+    #[test]
     fn nobody_watches_themselves_or_a_share_in_another_room() {
         let screens = Screens::default();
         let here = room();
@@ -903,7 +956,11 @@ mod tests {
         let line = || {
             let (frames, _f) = mpsc::channel(1);
             let (says, _s) = mpsc::unbounded_channel();
-            WatchLine { frames, says }
+            WatchLine {
+                frames,
+                says,
+                queued: Arc::new(AtomicUsize::new(0)),
+            }
         };
         assert_eq!(
             screens.watch("s", here, "s", vec![VP8], line()),

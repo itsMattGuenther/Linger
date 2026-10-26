@@ -197,6 +197,11 @@ pub const SCREEN_KEYFRAME_EVERY_MS: u64 = 500;
 /// and skips that watcher forward to the next key frame: a second at 60
 /// frames a second, two at 30.
 pub const SCREEN_WATCH_QUEUE: usize = 60;
+/// The most bytes waiting to go to one watcher before it is skipped forward,
+/// whatever the count of frames: a watcher whose line stalls without closing
+/// must not hold a minute of a share in the server's memory. About three
+/// seconds at the share ceiling.
+pub const MAX_SCREEN_WATCH_BYTES: usize = 4 * 1024 * 1024;
 /// The most one share sends, on average over a second, whatever its app
 /// asks for. The apps aim for 4.5 Mbit/s at 30 frames a second and 6 at 60.
 pub const SCREEN_MAX_BITS_PER_SECOND: u64 = 10_000_000;

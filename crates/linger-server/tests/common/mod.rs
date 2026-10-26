@@ -76,6 +76,7 @@ pub fn data_config(dir: &tempfile::TempDir) -> Config {
         password_checks_at_once: linger_server::auth::DEFAULT_PASSWORD_CHECKS_AT_ONCE,
         backups: true,
         backup_bucket: None,
+        screens: true,
     }
 }
 
@@ -104,6 +105,7 @@ pub async fn spawn_named_server(domain: &str, media_domain: &str) -> TestServer 
         password_checks_at_once: linger_server::auth::DEFAULT_PASSWORD_CHECKS_AT_ONCE,
         backups: true,
         backup_bucket: None,
+        screens: true,
     };
     spawn_with(dir, config).await
 }
@@ -143,6 +145,7 @@ pub async fn spawn_s3_server() -> Option<TestServer> {
         password_checks_at_once: linger_server::auth::DEFAULT_PASSWORD_CHECKS_AT_ONCE,
         backups: true,
         backup_bucket: None,
+        screens: true,
     };
     Some(spawn_with(dir, config).await)
 }

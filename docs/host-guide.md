@@ -364,6 +364,7 @@ That keeps working, and [Updating](#updating-the-server) says how to move them.)
 | `LINGER_POOL_BYTES` | Total storage the server will use. Write `250GB`, `500MB`, or a plain number. | `50GB` |
 | `LINGER_FILE_EXPIRY_DAYS` | When old files are deleted. `when-full` keeps them until the server needs the room: past 90% of `LINGER_POOL_BYTES`, the oldest go first until it's under 80%. A number of days deletes each file that long after it was shared, however much room there is. `off` keeps every sent file forever, and uploads are refused once it's full. Starred files, and files on pinned messages, never go. | `when-full` |
 | `LINGER_BACKUPS` | `off` stops the server's nightly copy of its database into `data/backups` ([Backups](#backups)). | on |
+| `LINGER_SCREENS` | `off` stops screen sharing in voice ([Shared screens](#shared-screens)). Voice carries on. | on |
 | `LINGER_BACKUP_S3_*` | A bucket each nightly copy is also sent to, so it survives the machine: `_BUCKET`, `_ACCESS_KEY_ID` and `_SECRET_ACCESS_KEY`, plus `_ENDPOINT`, `_REGION` and `_PATH_STYLE` as for files, and `_PREFIX` for where in the bucket. See [Sending the copies to a bucket](#sending-the-copies-to-a-bucket). | unset — copies stay on the machine |
 | `LINGER_MEDIA_DOMAIN` | The name files are served from. Set it if you are using two free names, or want something other than `cdn.` + your domain. It must be different from the main one. | `cdn.<your address>` |
 | `LINGER_STORAGE` | `local` keeps files on the machine. `s3` keeps them in a cloud bucket. | `local` |
@@ -483,6 +484,10 @@ at 60 frames a second to eight people is closer to 20 GB an hour. Your server
 holds every share to 10 Mbps whatever an app sends, and a room to three shares
 at once. The server passes the pictures on without opening them and keeps
 nothing; like voice, a host who changed the server could see them.
+
+To turn screen sharing off, put `LINGER_SCREENS=off` in `.env` and run
+`docker compose up -d`. Voice carries on as before; the apps stop offering
+Share and Watch.
 
 **Sending voice somewhere else.** If your name doesn't point straight at the
 server (behind Cloudflare's proxy, say, it points at Cloudflare, which can't

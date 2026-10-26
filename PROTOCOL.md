@@ -402,8 +402,8 @@ rather than offering a call. A server from before the field leaves it out, which
 reads as "maybe" (#306).
 
 **`screens`** says whether this server passes shared screens on (§8, "Screen sharing",
-#360): `true` exactly when it carries voice, since only people in a room's voice share or
-watch. A server from before it leaves it out, and the app offers neither Share nor Watch
+#360): `true` when it carries voice, since only people in a room's voice share or watch,
+and its host hasn't turned screens off (`LINGER_SCREENS=off`, docs/host-guide.md). A server from before it leaves it out, and the app offers neither Share nor Watch
 there.
 
 ### 3.1 DMs
@@ -2008,6 +2008,7 @@ A hello that doesn't pass closes the socket with a code and nothing else happens
 | 4005 | The hello wasn't one: not JSON, too late, an unknown `op` or `fps`, no format |
 | 4006 | Another socket took over this session's share or watching |
 | 4007 | The share or the watching ended: the seat left voice, or the session ended |
+| 4008 | This server doesn't pass screens on: it carries no voice, or its host set `LINGER_SCREENS=off` |
 
 **Frames are binary messages**, the same shape both ways: a 12-byte header, then one
 encoded frame as WebCodecs made it (`EncodedVideoChunk`).

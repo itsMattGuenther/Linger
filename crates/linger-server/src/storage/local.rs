@@ -386,6 +386,7 @@ mod tests {
             password_checks_at_once: crate::auth::DEFAULT_PASSWORD_CHECKS_AT_ONCE,
             backups: true,
             backup_bucket: None,
+            screens: true,
         }))
         .unwrap()
     }

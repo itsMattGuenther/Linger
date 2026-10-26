@@ -3,6 +3,8 @@
 //! a watcher's going out. The board in `screens.rs` decides who gets what;
 //! this is the socket around it.
 
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
@@ -50,6 +52,9 @@ struct Signed {
 
 async fn handle(socket: WebSocket, state: AppState) {
     let (mut sink, mut stream) = socket.split();
+    if !state.gateway.passes_screens() {
+        return close(&mut sink, Closing::Off).await;
+    }
     let first = tokio::time::timeout(Duration::from_millis(SCREEN_HELLO_MS), stream.next()).await;
     let hello = match first {
         Ok(Some(Ok(Message::Text(text)))) if text.len() <= MAX_SCREEN_TEXT_BYTES => {
@@ -173,9 +178,11 @@ async fn watch(
     let screens = &state.gateway.screens;
     let (frames_tx, mut frames) = mpsc::channel(SCREEN_WATCH_QUEUE);
     let (says_tx, mut says) = mpsc::unbounded_channel();
+    let queued = Arc::new(AtomicUsize::new(0));
     let line = WatchLine {
         frames: frames_tx,
         says: says_tx,
+        queued: Arc::clone(&queued),
     };
     let socket = match screens.watch(&signed.session_id, signed.room, target, decode, line) {
         Ok(showing) => showing.socket,
@@ -201,7 +208,10 @@ async fn watch(
             },
             frame = frames.recv() => match frame {
                 Some(frame) => {
-                    if sink.send(Message::Binary(frame)).await.is_err() {
+                    let size = frame.len();
+                    let sent = sink.send(Message::Binary(frame)).await;
+                    queued.fetch_sub(size, Ordering::Relaxed);
+                    if sent.is_err() {
                         break;
                     }
                 }

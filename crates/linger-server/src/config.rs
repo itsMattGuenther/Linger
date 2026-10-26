@@ -145,6 +145,10 @@ pub struct Config {
     /// `LINGER_BACKUP_S3_*`: a bucket each nightly copy is also sent to
     /// (#614). `None`, the default, keeps the copies on this machine.
     pub backup_bucket: Option<BackupBucketConfig>,
+    /// `LINGER_SCREENS`: whether people in voice can share their screens
+    /// (#360, SPEC §4.20). On unless set to `off`: a host's way to turn it
+    /// off without an update, should it ever need to be.
+    pub screens: bool,
 }
 
 /// What takes a shared file nobody starred or pinned (`LINGER_FILE_EXPIRY_DAYS`,
@@ -328,6 +332,11 @@ pub enum ConfigError {
     )]
     Backups(String),
     #[error(
+        "LINGER_SCREENS is {0:?}. Leave it out (or write `on`) so people in voice can share \
+         their screens, or write `off` to turn that off."
+    )]
+    Screens(String),
+    #[error(
         "{missing} isn't set, but other LINGER_BACKUP_S3_ settings are. The nightly copy goes \
          to a bucket only when LINGER_BACKUP_S3_BUCKET, LINGER_BACKUP_S3_ACCESS_KEY_ID and \
          LINGER_BACKUP_S3_SECRET_ACCESS_KEY are all set. Set the missing one, or remove the \
@@ -407,6 +416,7 @@ impl Config {
             )?,
             backups,
             backup_bucket: backup_bucket(|name| std::env::var(name).ok(), backups)?,
+            screens: screens(std::env::var("LINGER_SCREENS").ok())?,
         })
     }
 
@@ -628,6 +638,21 @@ fn backups(configured: Option<String>) -> Result<bool, ConfigError> {
         Ok(true)
     } else {
         Err(ConfigError::Backups(text.to_string()))
+    }
+}
+
+/// `LINGER_SCREENS` (#360): on unless `off`, and anything else a startup error.
+fn screens(configured: Option<String>) -> Result<bool, ConfigError> {
+    let Some(raw) = configured.filter(|value| !value.trim().is_empty()) else {
+        return Ok(true);
+    };
+    let text = raw.trim();
+    if text.eq_ignore_ascii_case("off") {
+        Ok(false)
+    } else if text.eq_ignore_ascii_case("on") {
+        Ok(true)
+    } else {
+        Err(ConfigError::Screens(text.to_string()))
     }
 }
 
@@ -1172,6 +1197,7 @@ mod tests {
             password_checks_at_once: DEFAULT_PASSWORD_CHECKS_AT_ONCE,
             backups: true,
             backup_bucket: None,
+            screens: true,
         }
     }
 
@@ -1398,6 +1424,18 @@ mod tests {
         assert!(matches!(
             pool_bytes(Some("100MB".to_string())),
             Err(ConfigError::PoolTooSmall(_))
+        ));
+    }
+
+    #[test]
+    fn screens_are_on_unless_turned_off() {
+        assert!(screens(None).unwrap());
+        assert!(screens(Some(" ".to_string())).unwrap());
+        assert!(screens(Some("On".to_string())).unwrap());
+        assert!(!screens(Some("off".to_string())).unwrap());
+        assert!(matches!(
+            screens(Some("sometimes".to_string())),
+            Err(ConfigError::Screens(_))
         ));
     }
 

@@ -117,6 +117,8 @@ pub struct Gateway {
     /// Who shares a screen and who watches whom (#360, SPEC §4.20). Every
     /// share and watch lives inside a voice seat: leaving voice ends both.
     pub(crate) screens: screens::Screens,
+    /// `LINGER_SCREENS` (#360): off, nobody shares and the app offers no Share.
+    screens_allowed: std::sync::atomic::AtomicBool,
 }
 
 /// One session's own say in where its person is (#653). Somebody on a phone
@@ -504,6 +506,7 @@ impl Gateway {
             dm_members: DashMap::new(),
             voice: DashMap::new(),
             screens: screens::Screens::default(),
+            screens_allowed: std::sync::atomic::AtomicBool::new(true),
             seats: AtomicU64::new(0),
             forwarding: OnceLock::new(),
         }
@@ -555,6 +558,19 @@ impl Gateway {
     #[must_use]
     pub fn forwards_voice(&self) -> bool {
         self.forwarding.get().is_some()
+    }
+
+    /// Whether this server passes shared screens on (#360): it carries voice,
+    /// which every share and watch lives inside, and its host hasn't turned
+    /// screens off (`LINGER_SCREENS=off`).
+    #[must_use]
+    pub fn passes_screens(&self) -> bool {
+        self.forwards_voice() && self.screens_allowed.load(Ordering::Relaxed)
+    }
+
+    /// Set from `LINGER_SCREENS` at startup.
+    pub fn allow_screens(&self, on: bool) {
+        self.screens_allowed.store(on, Ordering::Relaxed);
     }
 
     /// Fan an event out, to whoever the event says it is for.

@@ -74,6 +74,7 @@ impl AppState {
             .reload_dms(&db.read)
             .await
             .map_err(|_| anyhow::anyhow!("could not load DM membership from the database"))?;
+        gateway.allow_screens(config.screens);
         // Voice through this server (#197), the only way it travels (#306). A
         // server told to forward that can't is refused, not quietly left with
         // no voice.

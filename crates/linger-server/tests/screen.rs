@@ -357,3 +357,27 @@ async fn the_server_says_whether_it_passes_screens_on() {
         .unwrap();
     assert_eq!(info["screens"], json!(false));
 }
+
+#[tokio::test]
+async fn a_host_can_turn_screens_off() {
+    // LINGER_SCREENS=off (#360): voice carries on, nobody shares, and the
+    // app is told so in GET /server before anybody tries.
+    let (server, host, room) = common::voice_server_tuned("quiet", |config| config.screens = false).await;
+    let room = room.id.to_string();
+    let info: Value = reqwest::Client::new()
+        .get(server.url("/server"))
+        .bearer_auth(&host.access_token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(info["voice"], json!(true));
+    assert_eq!(info["screens"], json!(false));
+    let (mut gw, session) = gateway(&server, &host.access_token).await;
+    join_voice(&mut gw, &room).await;
+    drain(&mut gw, SETTLE).await;
+    let mut ws = screen(&server, share_hello(&host.access_token, &session, 30)).await;
+    assert_eq!(closed_with(&mut ws).await, Some(4008));
+}
