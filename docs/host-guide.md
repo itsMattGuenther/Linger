@@ -485,6 +485,12 @@ holds every share to 10 Mbps whatever an app sends, and a room to three shares
 at once. The server passes the pictures on without opening them and keeps
 nothing; like voice, a host who changed the server could see them.
 
+It is light on the server itself. On the smallest DigitalOcean server (one
+CPU, 2 GB of memory), eight people watching a busy screen at 60 frames a
+second took the Linger server about 4% of the CPU and under 10 MB of memory,
+and Caddy about 10% for the HTTPS (2026-10-25, `scripts/screen-loop.mjs`).
+Upload is the limit, not the computer.
+
 To turn screen sharing off, put `LINGER_SCREENS=off` in `.env` and run
 `docker compose up -d`. Voice carries on as before; the apps stop offering
 Share and Watch.

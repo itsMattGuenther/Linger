@@ -6,20 +6,27 @@
  * (`page.routeWebSocket`); `scripts/screen-loop.mjs` at a real one.
  */
 import { AuthedApi, type TokenSource } from "../../src/lib/api";
-import { currentShare, startSharing, stopSharing } from "../../src/lib/screen/share";
+import { currentShare, currentShareStopped, startSharing, stopSharing } from "../../src/lib/screen/share";
 import { currentWatch, drawOn, startWatching, stopWatching } from "../../src/lib/screen/watch";
 import type { ScreenFps } from "../../src/lib/screen/presets";
 import { packFrame } from "../../src/lib/screen/frames";
 
 /** The colour the fake screen shows now, as CSS. */
 let colour = "#ff0000";
+/** Whether the next fake screen is a busy 1080p one, for a load test. */
+let busy = false;
 
-/** A screen to share: a canvas repainted 30 times a second, so frames keep coming. */
+/**
+ * A screen to share: a canvas repainted 30 times a second, so frames keep
+ * coming. A busy one is 1920×1080 and changes all over every frame, so the
+ * encoder spends its whole allowance, the way a video or a game would.
+ */
 function fakeScreen(): MediaStream {
   const canvas = document.createElement("canvas");
-  canvas.width = 640;
-  canvas.height = 360;
+  canvas.width = busy ? 1920 : 640;
+  canvas.height = busy ? 1080 : 360;
   const context = canvas.getContext("2d");
+  const big = busy;
   let tick = 0;
   const paint = () => {
     tick += 1;
@@ -29,13 +36,17 @@ function fakeScreen(): MediaStream {
       // A corner that moves, so no two frames are the same picture.
       context.fillStyle = "#000000";
       context.fillRect(tick % 600, 0, 8, 8);
+      for (let block = 0; big && block < 60; block += 1) {
+        context.fillStyle = `hsl(${Math.floor(Math.random() * 360)} 80% 50%)`;
+        context.fillRect(Math.random() * 1880, Math.random() * 1040, 40 + Math.random() * 160, 40 + Math.random() * 120);
+      }
     }
   };
   // A timer, not animation frames: a page in the background (several tests
   // at once) gets no animation frames in WebKit, and its screen would stop.
   paint();
-  window.setInterval(paint, 33);
-  return canvas.captureStream(30);
+  window.setInterval(paint, big ? 16 : 33);
+  return canvas.captureStream(big ? 60 : 30);
 }
 
 Object.defineProperty(navigator.mediaDevices, "getDisplayMedia", { value: async () => fakeScreen(), configurable: true });
@@ -59,8 +70,10 @@ declare global {
       share: (baseUrl: string, token: string, sessionId: string, fps: ScreenFps) => Promise<void>;
       watch: (baseUrl: string, token: string, sessionId: string, target: string) => Promise<void>;
       paint: (css: string) => void;
+      busy: (on: boolean) => void;
       stop: () => void;
       share_state: () => unknown;
+      share_stopped: () => unknown;
       feed: (baseUrl: string, sessionId: string) => void;
       watch_state: () => unknown;
       pixel: () => number[];
@@ -77,11 +90,15 @@ window.loop = {
   paint: (css) => {
     colour = css;
   },
+  busy: (on) => {
+    busy = on;
+  },
   stop: () => {
     stopSharing();
     stopWatching();
   },
   share_state: () => currentShare(),
+  share_stopped: () => currentShareStopped()?.why ?? null,
   // A share made without the screen-reading part: frames drawn on a canvas
   // and encoded here, sent on a share socket. For testing the watching half
   // in an engine whose own sharing isn't tested yet (T-1907).

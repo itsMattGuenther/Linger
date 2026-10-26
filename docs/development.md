@@ -197,6 +197,25 @@ To watch with WebKit as well, start Playwright's WebKit server the way
 `scripts/webkit.sh` does and give its address in `LINGER_WEBKIT_WS`. It can't
 use a real screen or a real Windows picker; that check is the real app.
 
+It can run against a test server of your own instead, over the internet and
+through its HTTPS proxy, which is how the numbers in `docs/host-guide.md`
+were measured. Never point it at a server people use: it makes accounts and
+a room there. Give it the address and the token from the server's setup link,
+and the host password to make (or, on a later run, the one it made):
+
+```bash
+LINGER_LOOP_SERVER=https://test.example LINGER_LOOP_SETUP=<token> \
+  LINGER_LOOP_PASSWORD=<a password> LINGER_LOOP_WATCHERS=8 node scripts/screen-loop.mjs
+```
+
+`LINGER_LOOP_WATCHERS` adds a load test after the colour checks: a busy 1080p
+screen at 60 frames a second, watched by that many people at once for
+`LINGER_LOOP_SECONDS` (30). The watchers past the first are screen sockets
+that only count what reaches them, so the server does the work it does for
+real people without a browser decoding every copy. It passes when every
+watcher gets as many frames as the best one. Run `docker stats` on the server
+meanwhile to see what it costs.
+
 ## How the desktop app starts on Linux
 
 Linux v0.3.3 selects native Wayland when a Wayland display is available, so
