@@ -46,6 +46,7 @@ node --test --test-reporter=dot scripts/csp-assets.test.mjs scripts/package-deps
 python3 scripts/linux-audio-check.test.py -q
 bash scripts/android-signing-test.sh >/dev/null
 bash scripts/tidy-branches-test.sh >/dev/null
+bash scripts/apt-mirrors-test.sh >/dev/null
 if docker info >/dev/null 2>&1; then
   echo "== workflow files =="
   # No network: on Docker's own network the container adds a network

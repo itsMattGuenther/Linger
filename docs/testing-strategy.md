@@ -76,7 +76,8 @@ version check, and the tests of these scripts themselves
 `scripts/issue-label.test.mjs`, `scripts/action-pins.test.mjs`,
 `scripts/startup-time.test.mjs`,
 `python3 scripts/linux-audio-check.test.py`,
-`scripts/android-signing-test.sh`, and `scripts/tidy-branches-test.sh`).
+`scripts/android-signing-test.sh`, `scripts/tidy-branches-test.sh`, and
+`scripts/apt-mirrors-test.sh`).
 
 **One required check.** GitHub requires only `all green` before a merge. It
 waits for every other `ci.yml` job and passes when each passed or was skipped
@@ -265,6 +266,14 @@ rules that came out of them:
   `scripts/playwright-image.test.mjs` checks it, so bump both together. It
   also checks those jobs say `shell: bash`: in a container GitHub runs steps
   with `sh` unless told otherwise, and their steps are bash.
+- **The jobs that still install Ubuntu packages** (ffmpeg for the server's
+  tests, WebKitGTK for the shell, the Linux build tools for the packages and
+  the release) run `scripts/apt-mirrors.sh` before `apt-get update`. GitHub's
+  runners try Azure's Ubuntu mirror first and only move on when it fails, and
+  on 2026-10-26 it crawled at 40 KB/s instead of failing (#717). The script
+  times one download from each mirror and puts any slower than 100 KB/s
+  behind the first that isn't, for that job only. A healthy first mirror
+  changes nothing; the run's log says which one it used.
 - The page server runs on port 1421. `LINGER_TEST_PORT=1431` (any free port)
   moves it, so a second copy of the repository, such as a git worktree, can
   run its browser tests while the first runs its own.

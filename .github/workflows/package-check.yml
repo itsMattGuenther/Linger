@@ -72,7 +72,9 @@ jobs:
         # gstreamer1.0-libav's plugin goes into the AppImage with the rest of
         # this machine's GStreamer plugins, for shared videos' sound; its
         # FFmpeg is scripts/appimage-ffmpeg.sh's, below (#358).
+        # scripts/apt-mirrors.sh steps past a crawling Ubuntu mirror (#717).
         run: |
+          scripts/apt-mirrors.sh
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
             librsvg2-dev libasound2-dev build-essential curl wget file libxdo-dev patchelf libarchive-tools nasm \

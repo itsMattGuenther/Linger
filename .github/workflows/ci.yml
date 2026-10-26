@@ -88,6 +88,7 @@ jobs:
         # A skipped test is a test nobody is running, so the runner gets
         # ffmpeg. The published image has had it since T-501.
         run: |
+          scripts/apt-mirrors.sh
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ffmpeg
       - name: fmt
@@ -324,6 +325,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: system webview deps
         run: |
+          scripts/apt-mirrors.sh
           sudo apt-get update
           # libasound2-dev is the microphone (cpal talks ALSA on Linux,
           # T-1402). Opus is built from vendored source with the runner's
@@ -386,6 +388,10 @@ jobs:
         # A squash merge leaves no trace in a branch's own commits, so the
         # script asks GitHub; a wrong answer would delete unmerged work.
         run: bash scripts/tidy-branches-test.sh
+      - name: a crawling Ubuntu mirror goes behind one that isn't
+        # Azure's mirror sent 40 KB/s without failing, and jobs ran out of
+        # time installing their build tools (#717).
+        run: bash scripts/apt-mirrors-test.sh
       - name: the Linux packages ask for the media plugins shared videos need
         # Without the AAC and H.264 decoders a shared video plays silent, or
         # not at all (#358).
