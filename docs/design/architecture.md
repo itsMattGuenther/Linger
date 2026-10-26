@@ -524,7 +524,11 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   conversation is still, rows within `MEASURE_AHEAD` above the screen that
   have never been drawn are drawn once and measured, in a frame and
   synchronously (`flushSync`) so no scroll can land between, and a later
-  glide meets only rows of known height. And on an iPhone, where WebKit stops
+  glide meets only rows of known height. Which rows were measured is the
+  conversation's own note (`measured`), not the virtualizer's size cache:
+  that keeps a size only when it differs from the estimate, so a row exactly
+  `ESTIMATE_PX` tall looked never measured and was drawn again at every stop,
+  about a hundred rows each time (#709). And on an iPhone, where WebKit stops
   a glide the page moves the scroll position in and the virtualizer so holds
   every correction until the scroll stops, older history that arrives while
   the conversation moves (a scroll, or a finger on it or just off it,

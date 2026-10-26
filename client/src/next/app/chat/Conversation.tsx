@@ -1,4 +1,4 @@
-import { defaultRangeExtractor, type Range, useVirtualizer, type Virtualizer } from "@tanstack/react-virtual";
+import { defaultRangeExtractor, measureElement, type Range, useVirtualizer, type Virtualizer } from "@tanstack/react-virtual";
 import type { CustomEmoji } from "../../../generated/CustomEmoji";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { flushSync } from "react-dom";
@@ -150,6 +150,8 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
   const rows = useMemo(() => chatRows(listed, pending, { atStart: atStart && !holding, leftOff }), [listed, pending, atStart, holding, leftOff]);
   const rowsNow = useRef(rows);
   rowsNow.current = rows;
+  const idNow = useRef(id);
+  idNow.current = id;
   const indexOf = useMemo(() => rowIndex(rows), [rows]);
   const indexNow = useRef(indexOf);
   indexNow.current = indexOf;
@@ -175,13 +177,21 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
   // out of sight, to be measured, and go again before the frame is painted
   // ("Measuring ahead", below, says when).
   const [aheadToo, setAheadToo] = useState(false);
+  /**
+   * Every row measured, by conversation and key. The virtualizer keeps a
+   * size only when it differs from the estimate, so a row exactly
+   * `ESTIMATE_PX` tall (a one-line message under the one before) looked
+   * never measured, and was drawn again to be measured at every stop:
+   * about a hundred rows each time (#709).
+   */
+  const measured = useRef(new Set<string>());
   /** Rows above `top` and near it that have never been drawn. */
   const unmeasuredAbove = useCallback((top: number) => {
     const sizes = measures.current?.itemSizeCache;
     const unmeasured: number[] = [];
     for (let index = Math.max(0, top - MEASURE_AHEAD); sizes && index < top; index += 1) {
       const key = rowsNow.current[index]?.key;
-      if (key !== undefined && !sizes.has(key)) unmeasured.push(index);
+      if (key !== undefined && !sizes.has(key) && !measured.current.has(`${idNow.current} ${key}`)) unmeasured.push(index);
     }
     return unmeasured;
   }, []);
@@ -229,6 +239,12 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
     directDomUpdates: true,
     directDomUpdatesMode: "position",
     rangeExtractor,
+    // Noted as measured whatever the size, for measuring ahead (above).
+    measureElement: (element, entry, instance) => {
+      const key = element.getAttribute("data-key");
+      if (key !== null) measured.current.add(`${idNow.current} ${key}`);
+      return measureElement(element, entry, instance);
+    },
   });
   measures.current = virtualizer;
   useResizeAnchor(scroller, virtualizer, id, rows.length, atEnd);
