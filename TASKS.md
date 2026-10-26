@@ -958,9 +958,10 @@ and not as a WebRTC track. Branch `feat/360-screen-sharing`. Numbers are `T-19xx
   driven by an injected script through its own screens: joined the test server by
   invite, joined voice, Share at 30 fps, the preview shown, hidden and shown again,
   Stop, with the menu staying shut; a watcher on the test server saw the screen at its
-  own 1280×720 the whole time. **Still to do:** Matt's whole 4K screen again with the
-  size fix, from a window behind others too. macOS is still Share-less: nobody has
-  tried its picker.
+  own 1280×720 the whole time. On 2026-10-26 Matt shared his whole 4K screen three
+  times, at 30 and 60 fps, with the preview hidden and shown: the watcher got
+  1920×1080 each time. **Still to do:** a share from a window behind others. macOS is
+  still Share-less: nobody has tried its picker.
 - ⬜ **T-1908 · The real check** — a Windows share watched on Linux, Windows, Android and an
   iPhone through the real server, at both speeds, for half an hour.
 - ⬜ **T-1909 · Streaming a game** — the computer's sound, the graphics card's encoder, later.
