@@ -129,6 +129,12 @@ export interface PaneHost {
    * an event on another server draws nothing here (#533).
    */
   among?: readonly string[];
+  /**
+   * A window with no voice bar of its own (a popped-out conversation): your
+   * share from it gets its box under the voice line (#360). Beside the list,
+   * the list's voice bar has it.
+   */
+  shareBox?: boolean;
 }
 
 export interface ConversationPane {
@@ -161,7 +167,7 @@ export interface ConversationPane {
  * name opens. The place that holds it decides which conversation shows and
  * what surrounds it.
  */
-export function useConversationPane({ apis, intend, active, find, show, firstSeed = null, firstMessage = null, voiceControl = askTheList, onTyped, among = NO_SERVERS }: PaneHost): ConversationPane {
+export function useConversationPane({ apis, intend, active, find, show, firstSeed = null, firstMessage = null, voiceControl = askTheList, onTyped, among = NO_SERVERS, shareBox = false }: PaneHost): ConversationPane {
   // A name in a conversation opens that person's card (PPL-6), the same card
   // the list shows, beside the name. Your own opens yours, as friends see it
   // (#271).
@@ -246,6 +252,7 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
     roomId: room ? roomId : null,
     intend,
     screensOn: active ? infos[active.server]?.screens === true : false,
+    shareBox,
   });
 
   const land = useLanding(api, roomId, state);

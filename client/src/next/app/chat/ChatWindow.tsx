@@ -88,7 +88,8 @@ function OwnWindow({ following }: { following: Following }) {
     (server: string, roomId: RoomId) => void intend({ kind: "open", server, roomId, conversation: "dm" }).catch(() => undefined),
     [intend],
   );
-  const view = useConversationPane({ apis, intend, active: gone ? null : tab, find, show, firstSeed, firstMessage });
+  // A window of its own: no voice bar, so your share from here gets its box here (#360).
+  const view = useConversationPane({ apis, intend, active: gone ? null : tab, find, show, firstSeed, firstMessage, shareBox: true });
   const { servers, goToMessage, askFocus, draftOf, tabItem } = view;
 
   const closeWindow = useCallback(() => {

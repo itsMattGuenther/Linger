@@ -295,6 +295,48 @@ test.describe("through the Linux app's shell", () => {
     expect(await page.evaluate(() => window.loop.shell_asked())).toContain("screen_share_preview");
   });
 
+  test("a share from a popped-out conversation has its box there: the shell's copy, who's watching, and Stop", async ({ page }) => {
+    await standIn(page);
+    await page.goto("/tests/fixtures/screen-loop.html?shell");
+    // A popped-out #general, you and Jules in its voice, and you share from it.
+    await page.evaluate((server) => window.loop.pane(server, "s-me", true), SERVER);
+    await page.evaluate(() => window.loop.voice(false));
+    await page.evaluate((server) => window.loop.share(server, "token", "s-me", 30), SERVER);
+    const box = page.getByRole("group", { name: "Your screen" });
+    await expect.poll(() => box.locator("img").getAttribute("src"), { timeout: 10_000 }).toMatch(/^blob:/);
+    await expect(box.getByRole("status")).toHaveText("Nobody's watching yet");
+    await page.evaluate(() => window.loop.voice(false, "s-me"));
+    await expect(box.getByRole("status")).toHaveText("Jules is watching");
+    // The eye stops the shell making the copy, as in the voice bar.
+    await box.getByRole("button", { name: "Show the preview" }).click();
+    await expect(box.locator("img")).toHaveCount(0);
+    expect(await page.evaluate(() => window.loop.shell_asked())).toContain("screen_share_preview");
+    await box.getByRole("button", { name: "Stop" }).click();
+    await expect(box).toHaveCount(0);
+    expect(await page.evaluate(() => window.loop.shell_asked())).toContain("screen_share_stop");
+  });
+
+  test("beside the list, a conversation leaves your share's box to the voice bar", async ({ page }) => {
+    await standIn(page);
+    await page.goto("/tests/fixtures/screen-loop.html?shell");
+    await page.evaluate((server) => window.loop.pane(server, "s-me", false), SERVER);
+    await page.evaluate(() => window.loop.voice(false));
+    await page.evaluate((server) => window.loop.share(server, "token", "s-me", 30), SERVER);
+    await expect.poll(() => page.evaluate(() => (window.loop.share_state() as { status?: string } | null)?.status)).toBe("sharing");
+    await expect(page.getByRole("group", { name: "Your screen" })).toHaveCount(0);
+  });
+
+  test("a share from a popped-out conversation that loses the screen says why there", async ({ page }) => {
+    await standIn(page);
+    await page.goto("/tests/fixtures/screen-loop.html?shell");
+    await page.evaluate((server) => window.loop.pane(server, "s-me", true), SERVER);
+    await page.evaluate(() => window.loop.voice(false));
+    await page.evaluate(() => window.loop.shell("fails"));
+    await page.evaluate((server) => window.loop.share(server, "token", "s-me", 30), SERVER);
+    await expect(page.getByRole("status", { name: "Why sharing stopped" })).toHaveText("Linger couldn't read the screen you picked, so sharing stopped.", { timeout: 10_000 });
+    await expect(page.getByRole("group", { name: "Your screen" })).toHaveCount(0);
+  });
+
   test("Stop while the shell's picker is open shares nothing when it answers", async ({ page }) => {
     await standIn(page);
     await page.goto("/tests/fixtures/screen-loop.html?shell");

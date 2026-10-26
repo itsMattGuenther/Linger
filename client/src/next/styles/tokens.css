@@ -260,6 +260,7 @@
   --voice-strip: 40px;
   --screen-stage-min: 120px; /* the shortest the shared screen above a conversation gets */
   --screen-talk-min: 160px; /* and the least it leaves the conversation under it */
+  --sharing-band-copy: 224px; /* your share's copy beside its words, under a popped-out conversation's voice line */
   --measure: 80ch; /* the longest a line of a search result runs; a message's words run to its time column (#334) */
   --message-indent: var(--space-4); /* a message's words, in from its sender's name (#295) */
   --media-max-w: 320px;

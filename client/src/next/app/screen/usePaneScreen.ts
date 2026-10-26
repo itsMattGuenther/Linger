@@ -4,14 +4,15 @@ import type { User } from "../../../generated/User";
 import type { AuthedApi } from "../../../lib/api";
 import type { GatewayState } from "../../../lib/gateway";
 import { hasWebCodecs, useSharesFromHere } from "../../../lib/screen/probe";
-import { useScreenShare } from "../../../lib/screen/share";
+import { useScreenShare, useShareStopped } from "../../../lib/screen/share";
 import { awaitNext, closeEnded, drawOn, startWatching, stopWatching, useScreenWatch, watchNext, watchOver } from "../../../lib/screen/watch";
 import { onPhone } from "../../core/phone";
-import { myScreen, seatedIn, shareBy, sharersIn, watchersOf } from "../../core/screens";
+import { myScreen, seatedIn, shareBy, sharersIn, shareStoppedWords, watchersOf, watchingWords } from "../../core/screens";
 import { startSharingHere, stopSharingEverywhere } from "../../core/screenStop";
 import type { Intent } from "../../core/share";
 import type { ChatPane } from "../chat/ChatView";
 import type { ShareControl } from "./ShareButton";
+import { previewOf } from "./SharingBox";
 
 /** How long a Watch waits for its voice seat before it gives up. */
 const SEAT_WAIT_MS = 15_000;
@@ -22,7 +23,9 @@ const SEAT_WAIT_MS = 15_000;
  * Watch, and Share. Watch joins voice first when you aren't in it, and the
  * screen opens once the server has given you a seat there. Leaving voice, or
  * moving it, closes the screen. A screen left open after its share ended
- * opens the same person's next share in that voice by itself.
+ * opens the same person's next share in that voice by itself. In a window
+ * with no voice bar of its own (`shareBox`), your share from it has its box
+ * under that voice's line: the copy, who's watching, the eye and Stop.
  */
 export function usePaneScreen({
   server,
@@ -31,6 +34,7 @@ export function usePaneScreen({
   roomId,
   intend,
   screensOn,
+  shareBox = false,
 }: {
   server: string | null;
   api: AuthedApi | null;
@@ -39,9 +43,12 @@ export function usePaneScreen({
   intend: (intent: Intent) => Promise<void>;
   /** The server passes screens on (`GET /server`'s `screens`). */
   screensOn: boolean;
+  /** This window has no voice bar: your share from it gets its box here. */
+  shareBox?: boolean;
 }): ChatPane["screen"] | undefined {
   const watch = useScreenWatch();
   const share = useScreenShare();
+  const shareStopped = useShareStopped();
   // A Watch pressed outside voice, waiting for its seat.
   const [pending, setPending] = useState<{ server: string; roomId: RoomId; target: string; who: string; at: number } | null>(null);
 
@@ -119,6 +126,18 @@ export function usePaneScreen({
             onStop: stopSharingEverywhere,
           }
         : undefined;
+    // Your share from this window, in this voice: its box, or why it ended.
+    const yoursHere = shareBox && (seatedHere || state.myVoice?.roomId === roomId);
+    const mineHere = yoursHere && share !== null && share.server === server ? share : null;
+    const box = mineHere
+      ? {
+          preview: previewOf(mineHere),
+          watching: watchingWords(me === null ? [] : watchersOf(state, roomId, me).flatMap((id) => users.get(id)?.display_name ?? [])),
+          starting: mineHere.status !== "sharing",
+          onStop: stopSharingEverywhere,
+        }
+      : undefined;
+    const stopped = yoursHere && share === null && shareStopped?.server === server ? (shareStoppedWords(shareStopped.why) ?? undefined) : undefined;
     const stage = shownHere
       ? {
           sharer: users.get(shownHere.who) ?? null,
@@ -142,6 +161,8 @@ export function usePaneScreen({
       sharing,
       watch: others.length > 0 ? { sharers: others, watching: watchOver(shownHere?.status) ? null : (shownHere?.target ?? null), onWatch } : undefined,
       share: shareControl,
+      ...(box ? { box } : {}),
+      ...(stopped ? { stopped } : {}),
     };
-  }, [server, state, roomId, screensOn, watch, share, api, intend, seatedHere, canShare]);
+  }, [server, state, roomId, screensOn, watch, share, shareStopped, shareBox, api, intend, seatedHere, canShare]);
 }

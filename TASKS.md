@@ -936,7 +936,9 @@ and not as a WebRTC track. Branch `feat/360-screen-sharing`. Numbers are `T-19xx
   2026-10-26), once they've stopped: a watch that ended while they still share
   doesn't come back, or two windows would take it from each other.
 - 🟡 **T-1905 · The screens** — built and in the browser tests
-  (`next-screen.spec.ts`). **Still to do:** look at it in the real Linux and
+  (`next-screen.spec.ts`). A share from a popped-out conversation has its box under
+  that window's voice line, which has no voice bar (Matt, 2026-10-26), and says there
+  why it ended by itself. **Still to do:** look at it in the real Linux and
   Windows apps.
 - 🟡 **T-1906 · Watching on a phone** — the layout is built and tested at phone size.
   **Still to do:** an Android phone and an iPhone watching for real (an iPhone

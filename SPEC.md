@@ -1301,8 +1301,9 @@ watching" (§4.2).
 conversation and its message box carrying on underneath; the line between them drags,
 and **Full screen** fills the monitor. On a phone it sits at the top of the room, and
 turning the phone sideways fills the screen with it. The person sharing sees a small copy
-of what everybody sees, beside **Stop**, in the voice bar; Stop is in the tray menu too,
-for when a slide show covers the app.
+of what everybody sees, beside **Stop**, in the voice bar, or under the voice line of a
+conversation popped out into its own window when they share from there; Stop is in the
+tray menu too, for when a slide show covers the app.
 
 **No sound from the computer yet.** The person sharing talks through their microphone as
 usual. A video playing on a shared screen plays silently for the people watching. The

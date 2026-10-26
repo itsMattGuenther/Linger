@@ -714,7 +714,11 @@ at a screen's shape (16:9, the picture fitted inside on
 `--surface-backdrop`), then "Sharing your screen", the `preview` eye (an
 `IconButton`, pressed while the copy shows) and Stop, then who is watching.
 The eye hides the copy and keeps it hidden for next time, on that computer:
-hidden, the computer stops making it.
+hidden, the computer stops making it. Shared from a popped-out conversation,
+which has no voice bar, the box is a band under its voice line
+(`layout="band"`): the copy `--sharing-band-copy` wide beside the words, the
+eye and Stop on the right; hidden, one line as tall as the voice line. Why a
+share from there ended by itself takes the band's place for a while.
 Share is an `IconButton` with the `share` glyph beside Mute, Deafen and
 Leave; it asks 30 or 60 frames a second in a `Menu`, and is pressed while you
 share. Nothing about a share is drawn in the lamp but the pressed button: a

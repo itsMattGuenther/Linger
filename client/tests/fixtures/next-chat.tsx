@@ -29,7 +29,9 @@
  *   conversation, a slide drawn on its canvas; `waiting`, `unplayable` and
  *   `ended` the words in its place. `sharing`: you share. With `?voice=mine`
  *   the strip has Share, and an ended screen says their next share opens
- *   there. Watch, Share, Stop and closing go on `body[data-did]`.
+ *   there. `&box`, with `sharing`: you share from this window, a popped-out
+ *   one, so your box sits under the voice line, a slide in its copy.
+ *   `stopped`: your share from here ended by itself, and says why. Watch, Share, Stop and closing go on `body[data-did]`.
  * - `?raid`: forty-five more people in #general's voice (#197,
  *   next/raid.ts), and `window.chat.talk(ids)` says who is talking now.
  * - `?joins`: people joining voice (#473). In #general Jules joins, says
@@ -338,9 +340,22 @@ const keys: string[] = [];
 
 /** `?screen` (#360): what's shared in #general's voice, as the pane would say it. */
 const SCREEN = query.get("screen");
+/** Your share's copy, for `&box`: the slide, as a share's own picture would play it. */
+let slideStream: MediaStream | null = null;
+function slide(): MediaStream {
+  if (slideStream) return slideStream;
+  const canvas = document.createElement("canvas");
+  paintSlide(canvas);
+  slideStream = canvas.captureStream(1);
+  return slideStream;
+}
+
 function screenPane(inVoiceHere: boolean): ChatPane["screen"] {
   const showing = SCREEN === "watching" || SCREEN === "waiting" || SCREEN === "unplayable" || SCREEN === "ended" || SCREEN === "lost";
+  const boxHere = SCREEN === "sharing" && query.has("box") && inVoiceHere;
   return {
+    ...(boxHere ? { box: { preview: { kind: "stream" as const, stream: slide() }, watching: "Eli and Dave are watching", starting: false, onStop: () => note("stop sharing") } } : {}),
+    ...(SCREEN === "stopped" && inVoiceHere ? { stopped: "Linger couldn't read the screen you picked, so sharing stopped." } : {}),
     stage: showing
       ? {
           sharer: people.jules,

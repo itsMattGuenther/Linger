@@ -16,6 +16,52 @@
   min-width: 0;
 }
 
+/* Under a popped-out conversation's voice line (#360): a band, the copy
+   beside the words; hidden, one line as tall as the voice line. */
+.nx-sharing[data-layout="band"] {
+  flex: none;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--space-3-5);
+  padding: var(--space-2-5) var(--space-2) var(--space-2-5) var(--space-3-5);
+  border: 0;
+  border-bottom: 1px solid var(--hairline);
+  border-radius: 0;
+}
+
+.nx-sharing[data-layout="band"][data-copy="hidden"] {
+  align-items: center;
+  gap: var(--space-2);
+  box-sizing: border-box;
+  height: var(--voice-strip);
+  padding-block: 0;
+}
+
+.nx-sharing[data-layout="band"] .nx-sharing-preview {
+  flex: none;
+  width: var(--sharing-band-copy);
+}
+
+.nx-sharing-side {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-1-5);
+  min-width: 0;
+}
+
+.nx-sharing[data-layout="band"][data-copy="hidden"] .nx-sharing-words {
+  flex: none;
+}
+
+.nx-sharing[data-layout="band"][data-copy="hidden"] .nx-sharing-who {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* What everybody sees, across the box at a screen's shape, the picture
    fitted inside it whatever shape it is. */
 .nx-sharing-preview {

@@ -14,6 +14,7 @@ import { IconButton, Splitter, TabStrip, type TabItem, TitleBar } from "../../ki
 import { onPageFullscreenLeft, setWindowFull } from "../../core/fullscreen";
 import { onPhone } from "../../core/phone";
 import { ScreenStage, type StageProps } from "../screen/ScreenStage";
+import { SharingBox, type SharingBoxProps } from "../screen/SharingBox";
 import type { ShareControl } from "../screen/ShareButton";
 import { PaneBoundary } from "../Boundary";
 import { Composer, type ComposerProps } from "./Composer";
@@ -89,6 +90,10 @@ export interface ChatPane {
     sharing: ReadonlySet<string>;
     watch?: StripWatch;
     share?: ShareControl;
+    /** Your share from this window, which has no voice bar of its own: its box under the voice line. */
+    box?: SharingBoxProps;
+    /** Why your share from this window ended by itself, for a while, in the box's place. */
+    stopped?: string;
   };
   /** Everyone the pane may name, by id: authors, voice, typing. */
   people: ReadonlyMap<string, User>;
@@ -384,6 +389,13 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
                 watch={pane.screen?.watch}
                 share={pane.screen?.share}
               />
+            ) : null}
+            {pane.screen?.box ? (
+              <SharingBox {...pane.screen.box} layout="band" />
+            ) : pane.screen?.stopped ? (
+              <p className="nx-pane-share-stopped" role="status">
+                {pane.screen.stopped}
+              </p>
             ) : null}
             {stage ? (
               <>

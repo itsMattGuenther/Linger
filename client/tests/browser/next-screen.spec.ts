@@ -111,6 +111,44 @@ for (const [status, words] of [
   });
 }
 
+test("sharing from a popped-out window, your box sits under its voice line: a copy, who's watching, the eye and Stop", async ({ page }) => {
+  await chat(page, "?voice=mine&screen=sharing&box");
+  const strip = page.getByRole("group", { name: "Voice in this conversation" });
+  const box = page.getByRole("group", { name: "Your screen" });
+  await expect(box).toBeVisible();
+  // Under the voice line, above the conversation, never over it.
+  const line = await strip.boundingBox();
+  const shown = await box.boundingBox();
+  const log = await page.getByRole("log").boundingBox();
+  expect(line && shown && shown.y >= line.y + line.height - 1).toBe(true);
+  expect(shown && log && shown.y + shown.height <= log.y + 1).toBe(true);
+  // The copy plays beside the words, at a screen's shape.
+  const copy = box.locator("video");
+  await expect(copy).toBeVisible();
+  const frame = await box.locator(".nx-sharing-preview").boundingBox();
+  expect(frame && Math.abs(frame.width / frame.height - 16 / 9) < 0.05).toBe(true);
+  await expect(box.getByText("Sharing your screen")).toBeVisible();
+  await expect(box.getByRole("status")).toHaveText("Eli and Dave are watching");
+  // The eye hides it: one line, as tall as the voice line, the words still there.
+  await box.getByRole("button", { name: "Show the preview" }).click();
+  await expect(copy).toHaveCount(0);
+  await expect.poll(async () => Math.round((await box.boundingBox())?.height ?? 0)).toBe(Math.round(line?.height ?? -1));
+  await expect(box.getByRole("status")).toHaveText("Eli and Dave are watching");
+  await box.getByRole("button", { name: "Show the preview" }).click();
+  await expect(box.locator("video")).toBeVisible();
+  await box.getByRole("button", { name: "Stop" }).click();
+  await expect.poll(() => did(page)).toContain("stop sharing");
+});
+
+test("a share from a popped-out window that ended by itself says why under its voice line", async ({ page }) => {
+  await chat(page, "?voice=mine&screen=stopped");
+  const why = page.getByText("Linger couldn't read the screen you picked, so sharing stopped.");
+  await expect(why).toBeVisible();
+  const line = await page.getByRole("group", { name: "Voice in this conversation" }).boundingBox();
+  const said = await why.boundingBox();
+  expect(line && said && said.y >= line.y + line.height - 1).toBe(true);
+});
+
 test("out of voice, an ended screen only says they stopped: their next share opens only for somebody still there", async ({ page }) => {
   await chat(page, "?screen=ended");
   await expect(page.getByRole("region", { name: "Jules's screen" }).getByRole("status")).toHaveText("Jules stopped sharing.");

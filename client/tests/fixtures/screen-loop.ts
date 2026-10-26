@@ -213,7 +213,8 @@ function showBox(): void {
  * #general: you in its voice as the session `loop.pane` names, and Jules,
  * sharing or not as `loop.voice` says, the way the server's `voice.state`
  * would. `loop.pane_watch` presses Watch, `loop.pane_close` closes the
- * screen, and `loop.pane_state` reads it.
+ * screen, and `loop.pane_state` reads it. A popped-out one (`loop.pane`'s
+ * `own`) draws your share's box as the conversation does, or why it ended.
  */
 const ROOM = "r-general";
 let paneSession = "";
@@ -226,20 +227,21 @@ function hearVoice(heard: () => void): () => void {
   return () => voiceHeard.delete(heard);
 }
 
-function Pane({ baseUrl, token }: { baseUrl: string; token: string }) {
+function Pane({ baseUrl, token, own }: { baseUrl: string; token: string; own: boolean }) {
   const peers = useSyncExternalStore(hearVoice, () => voiceNow);
   const authed = useMemo(() => api(baseUrl, token), [baseUrl, token]);
   const state = useMemo<GatewayState>(
     () => ({ ...serverState(baseUrl), status: { kind: "ready", latency_ms: 1 }, me: people.matt, users: Object.values(people), sessionId: paneSession, voice: { [ROOM]: peers } }),
     [baseUrl, peers],
   );
-  const pane = usePaneScreen({ server: baseUrl, api: authed, state, roomId: ROOM, intend: async () => undefined, screensOn: true });
+  const pane = usePaneScreen({ server: baseUrl, api: authed, state, roomId: ROOM, intend: async () => undefined, screensOn: true, shareBox: own });
   useEffect(() => {
     paneNow = pane;
   }, [pane]);
   // The page's canvas stands in for the screen's.
   useEffect(() => drawOn(watched instanceof HTMLCanvasElement ? watched : null), []);
-  return null;
+  if (pane?.box) return createElement(SharingBox, { ...pane.box, layout: "band" });
+  return pane?.stopped ? createElement("p", { role: "status", "aria-label": "Why sharing stopped" }, pane.stopped) : null;
 }
 
 /** A share made by `loop.feed`, while it runs. */
@@ -262,8 +264,8 @@ declare global {
       share_stopped: () => unknown;
       feed: (baseUrl: string, sessionId: string) => void;
       unfeed: () => void;
-      pane: (baseUrl: string, sessionId: string) => void;
-      voice: (julesShares: boolean) => void;
+      pane: (baseUrl: string, sessionId: string, own?: boolean) => void;
+      voice: (julesShares: boolean, julesWatches?: string) => void;
       pane_watch: (session: string) => void;
       pane_close: () => void;
       pane_state: () => { status: string | null; opensNext: boolean };
@@ -350,16 +352,16 @@ window.loop = {
     if (fed.encoder.state !== "closed") fed.encoder.close();
     fed = null;
   },
-  pane: (baseUrl, sessionId) => {
+  pane: (baseUrl, sessionId, own = false) => {
     paneSession = sessionId;
     const place = document.createElement("div");
     document.body.append(place);
-    createRoot(place).render(createElement(Pane, { baseUrl, token: "token" }));
+    createRoot(place).render(createElement(Pane, { baseUrl, token: "token", own }));
   },
-  voice: (julesShares) => {
+  voice: (julesShares, julesWatches) => {
     voiceNow = [
       { session_id: paneSession, user_id: people.matt.id },
-      { session_id: "s-jules", user_id: people.jules.id, ...(julesShares ? { screen: { fps: 30 as const } } : {}) },
+      { session_id: "s-jules", user_id: people.jules.id, ...(julesShares ? { screen: { fps: 30 as const } } : {}), ...(julesWatches ? { watching: julesWatches } : {}) },
     ];
     for (const heard of voiceHeard) heard();
   },
