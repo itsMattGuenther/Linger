@@ -931,7 +931,10 @@ and not as a WebRTC track. Branch `feat/360-screen-sharing`. Numbers are `T-19xx
   checks the installed app's WebView2 in the package check: the picker, the track
   processor, VP8 at 1080p60, shown and minimized.
 - ✅ **T-1904 · Watching in the app** — `lib/screen/watch.ts`; Chromium and WebKit
-  play a share through a real server, and in the browser tests.
+  play a share through a real server, and in the browser tests. A screen left open
+  after its share ended opens the same person's next share there by itself (Matt,
+  2026-10-26), once they've stopped: a watch that ended while they still share
+  doesn't come back, or two windows would take it from each other.
 - 🟡 **T-1905 · The screens** — built and in the browser tests
   (`next-screen.spec.ts`). **Still to do:** look at it in the real Linux and
   Windows apps.

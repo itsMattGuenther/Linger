@@ -9,16 +9,24 @@
  * which captures and encodes the screen itself: Tauri's calls are answered
  * here, and the "shell" sends VP8 frames of the canvas on its channel, as
  * GStreamer would. `loop.shell` says how the next share through it goes.
+ *
+ * `loop.pane` runs a conversation's screens as the app does
+ * (`usePaneScreen`), with the room's voice as `loop.voice` says it.
  */
 import { mockIPC } from "@tauri-apps/api/mocks";
-import { createElement } from "react";
+import { createElement, useEffect, useMemo, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
+import type { VoicePeer } from "../../src/generated/VoicePeer";
 import { SharingBox } from "../../src/next/app/screen/SharingBox";
+import { usePaneScreen } from "../../src/next/app/screen/usePaneScreen";
+import type { ChatPane } from "../../src/next/app/chat/ChatView";
 import { AuthedApi, type TokenSource } from "../../src/lib/api";
+import { type GatewayState, serverState } from "../../src/lib/gateway";
 import { currentShare, currentShareStopped, startSharing, stopSharing } from "../../src/lib/screen/share";
 import { currentWatch, drawOn, startWatching, stopWatching } from "../../src/lib/screen/watch";
 import type { ScreenFps } from "../../src/lib/screen/presets";
 import { packFrame } from "../../src/lib/screen/frames";
+import { people } from "./next/evening";
 
 /** The colour the fake screen shows now, as CSS. */
 let colour = "#ff0000";
@@ -200,6 +208,43 @@ function showBox(): void {
   createRoot(place).render(createElement(SharingBox, { preview, watching: "", starting: false, onStop: () => stopSharing() }));
 }
 
+/**
+ * A conversation's screens as the app runs them (`usePaneScreen`), in
+ * #general: you in its voice as the session `loop.pane` names, and Jules,
+ * sharing or not as `loop.voice` says, the way the server's `voice.state`
+ * would. `loop.pane_watch` presses Watch, `loop.pane_close` closes the
+ * screen, and `loop.pane_state` reads it.
+ */
+const ROOM = "r-general";
+let paneSession = "";
+let voiceNow: VoicePeer[] = [];
+const voiceHeard = new Set<() => void>();
+let paneNow: ChatPane["screen"] | undefined;
+
+function hearVoice(heard: () => void): () => void {
+  voiceHeard.add(heard);
+  return () => voiceHeard.delete(heard);
+}
+
+function Pane({ baseUrl, token }: { baseUrl: string; token: string }) {
+  const peers = useSyncExternalStore(hearVoice, () => voiceNow);
+  const authed = useMemo(() => api(baseUrl, token), [baseUrl, token]);
+  const state = useMemo<GatewayState>(
+    () => ({ ...serverState(baseUrl), status: { kind: "ready", latency_ms: 1 }, me: people.matt, users: Object.values(people), sessionId: paneSession, voice: { [ROOM]: peers } }),
+    [baseUrl, peers],
+  );
+  const pane = usePaneScreen({ server: baseUrl, api: authed, state, roomId: ROOM, intend: async () => undefined, screensOn: true });
+  useEffect(() => {
+    paneNow = pane;
+  }, [pane]);
+  // The page's canvas stands in for the screen's.
+  useEffect(() => drawOn(watched instanceof HTMLCanvasElement ? watched : null), []);
+  return null;
+}
+
+/** A share made by `loop.feed`, while it runs. */
+let fed: { socket: WebSocket; timer: number; encoder: VideoEncoder } | null = null;
+
 declare global {
   interface Window {
     loop: {
@@ -216,6 +261,12 @@ declare global {
       share_state: () => unknown;
       share_stopped: () => unknown;
       feed: (baseUrl: string, sessionId: string) => void;
+      unfeed: () => void;
+      pane: (baseUrl: string, sessionId: string) => void;
+      voice: (julesShares: boolean) => void;
+      pane_watch: (session: string) => void;
+      pane_close: () => void;
+      pane_state: () => { status: string | null; opensNext: boolean };
       watch_state: () => unknown;
       pixel: () => number[];
     };
@@ -277,7 +328,7 @@ window.loop = {
       if (said.op === "keyframe") key = true;
     });
     let tick = 0;
-    window.setInterval(() => {
+    const timer = window.setInterval(() => {
       if (!context || !wanted) return;
       tick += 1;
       context.fillStyle = colour;
@@ -289,7 +340,32 @@ window.loop = {
       key = false;
       frame.close();
     }, 33);
+    fed = { socket, timer, encoder };
   },
+  // The fed share stops, as Stop does: its socket closes.
+  unfeed: () => {
+    if (!fed) return;
+    window.clearInterval(fed.timer);
+    fed.socket.close(1000);
+    if (fed.encoder.state !== "closed") fed.encoder.close();
+    fed = null;
+  },
+  pane: (baseUrl, sessionId) => {
+    paneSession = sessionId;
+    const place = document.createElement("div");
+    document.body.append(place);
+    createRoot(place).render(createElement(Pane, { baseUrl, token: "token" }));
+  },
+  voice: (julesShares) => {
+    voiceNow = [
+      { session_id: paneSession, user_id: people.matt.id },
+      { session_id: "s-jules", user_id: people.jules.id, ...(julesShares ? { screen: { fps: 30 as const } } : {}) },
+    ];
+    for (const heard of voiceHeard) heard();
+  },
+  pane_watch: (session) => paneNow?.watch?.onWatch(session),
+  pane_close: () => paneNow?.stage?.onClose(),
+  pane_state: () => ({ status: paneNow?.stage?.status ?? null, opensNext: paneNow?.stage?.opensNext ?? false }),
   watch_state: () => currentWatch(),
   pixel: () => {
     if (!(watched instanceof HTMLCanvasElement)) return [];

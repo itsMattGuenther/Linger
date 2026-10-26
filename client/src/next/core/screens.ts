@@ -21,6 +21,11 @@ export function sharersIn(state: GatewayState, roomId: RoomId): Sharer[] {
   return voicePeersIn(state, roomId).flatMap((peer) => (peer.screen ? [{ session: peer.session_id, userId: peer.user_id, fps: peer.screen.fps }] : []));
 }
 
+/** `userId`'s share in a room's voice, not this connection's own: its session, or null. */
+export function shareBy(state: GatewayState, roomId: RoomId, userId: string): string | null {
+  return sharersIn(state, roomId).find((one) => one.userId === userId && one.session !== state.sessionId)?.session ?? null;
+}
+
 /** Who is watching `session`'s share, as people, each once, in the server's order. */
 export function watchersOf(state: GatewayState, roomId: RoomId, session: string): string[] {
   const seen = new Set<string>();

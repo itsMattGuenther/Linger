@@ -12,7 +12,9 @@ const SERVER = "http://screen.test";
 /**
  * The server's part, as far as one share and one watcher need it.
  * `restart()` drops both sockets the way a restarting server does; once
- * back, it has no seat for anybody, as a restarted server hasn't.
+ * back, it has no seat for anybody, as a restarted server hasn't. A share
+ * that stops tells its watcher there's nothing to show, keeping its socket,
+ * and `endWatch(code)` ends the watch as the server would.
  */
 async function standIn(page: Page) {
   let share: WebSocketRoute | null = null;
@@ -41,6 +43,11 @@ async function standIn(page: Page) {
       if (said.op === "share") {
         share = socket;
         socket.send(JSON.stringify({ op: "want", codecs: [] }));
+        socket.onClose(() => {
+          if (share !== socket) return;
+          share = null;
+          watch?.send(JSON.stringify({ op: "showing", target: null, codec: null }));
+        });
       } else if (said.op === "watch") {
         watch = socket;
         socket.send(JSON.stringify({ op: "showing", target: said.target, codec: "vp8" }));
@@ -49,7 +56,10 @@ async function standIn(page: Page) {
       }
     });
   });
-  return { asked, restart };
+  const endWatch = async (code: number) => {
+    await watch?.close({ code, reason: "ended" });
+  };
+  return { asked, restart, endWatch };
 }
 
 async function colour(page: Page): Promise<number[]> {
@@ -90,6 +100,67 @@ test("a share plays on a watcher in this engine, and follows what it shows", asy
   await page.evaluate(() => window.loop.paint("#0000ff"));
   await expect.poll(() => colour(page).then((got) => near(got, [0, 0, 255, 255])), { timeout: 15_000 }).toBe(true);
   expect(await page.evaluate(() => window.loop.watch_state())).toMatchObject({ status: "showing", width: 640, height: 360 });
+});
+
+test("a screen left open opens the same person's next share by itself, and a closed one stays closed", async ({ page }) => {
+  const { asked } = await standIn(page);
+  await page.goto("/tests/fixtures/screen-loop.html");
+  const watches = () => asked.filter((op) => op === "watch").length;
+  const shares = () => asked.filter((op) => op === "share").length;
+  const state = () => page.evaluate(() => window.loop.pane_state());
+  // Jules shares in #general's voice, where you are, and you press Watch.
+  await page.evaluate((server) => window.loop.feed(server, "s-jules"), SERVER);
+  await expect.poll(shares).toBe(1);
+  await page.evaluate((server) => window.loop.pane(server, "s-watcher"), SERVER);
+  await page.evaluate(() => window.loop.voice(true));
+  await page.evaluate(() => window.loop.pane_watch("s-jules"));
+  await page.evaluate(() => window.loop.paint("#ff0000"));
+  await expect.poll(() => colour(page).then((got) => near(got, [255, 0, 0, 255])), { timeout: 15_000 }).toBe(true);
+
+  // Jules stops, to pick another window: the screen stays, saying so.
+  await page.evaluate(() => window.loop.unfeed());
+  await page.evaluate(() => window.loop.voice(false));
+  await expect.poll(state).toEqual({ status: "ended", opensNext: true });
+
+  // Jules shares again: it opens on the same screen with nobody pressing Watch.
+  await page.evaluate(() => window.loop.paint("#0000ff"));
+  await page.evaluate((server) => window.loop.feed(server, "s-jules"), SERVER);
+  await expect.poll(shares).toBe(2);
+  await page.evaluate(() => window.loop.voice(true));
+  await expect.poll(() => colour(page).then((got) => near(got, [0, 0, 255, 255])), { timeout: 15_000 }).toBe(true);
+  expect(await state()).toEqual({ status: "showing", opensNext: false });
+  expect(watches()).toBe(2);
+
+  // Stopped again and the screen closed: the next share doesn't open it.
+  await page.evaluate(() => window.loop.unfeed());
+  await page.evaluate(() => window.loop.voice(false));
+  await expect.poll(state).toEqual({ status: "ended", opensNext: true });
+  await page.evaluate(() => window.loop.pane_close());
+  await expect.poll(state).toEqual({ status: null, opensNext: false });
+  await page.evaluate((server) => window.loop.feed(server, "s-jules"), SERVER);
+  await expect.poll(shares).toBe(3);
+  await page.evaluate(() => window.loop.voice(true));
+  await page.waitForTimeout(1000);
+  expect(await state()).toEqual({ status: null, opensNext: false });
+  expect(watches()).toBe(2);
+});
+
+test("a watch that ends while its person still shares doesn't come back by itself", async ({ page }) => {
+  const { asked, endWatch } = await standIn(page);
+  await page.goto("/tests/fixtures/screen-loop.html");
+  await page.evaluate((server) => window.loop.feed(server, "s-jules"), SERVER);
+  await page.evaluate((server) => window.loop.pane(server, "s-watcher"), SERVER);
+  await page.evaluate(() => window.loop.voice(true));
+  await page.evaluate(() => window.loop.pane_watch("s-jules"));
+  await expect.poll(() => page.evaluate(() => window.loop.pane_state().status), { timeout: 15_000 }).toBe("showing");
+  // Another window of yours watches instead (4006): Jules never stopped, so
+  // this one stays over, or two windows would take it from each other.
+  await endWatch(4006);
+  await expect.poll(() => page.evaluate(() => window.loop.pane_state().status)).toBe("ended");
+  await page.evaluate(() => window.loop.voice(true));
+  await page.waitForTimeout(1000);
+  expect(await page.evaluate(() => window.loop.pane_state().status)).toBe("ended");
+  expect(asked.filter((op) => op === "watch")).toHaveLength(1);
 });
 
 test("when the server restarts, a share and a watcher end saying the connection went", async ({ page }) => {

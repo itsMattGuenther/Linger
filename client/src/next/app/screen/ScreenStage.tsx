@@ -11,6 +11,8 @@ export interface StageProps {
   /** Who else is watching it, not you. */
   others: readonly User[];
   status: ScreenWatchState["status"];
+  /** Over, and you're still in that voice: their next share opens here (#360). */
+  opensNext?: boolean;
   /** Filling the monitor. */
   full: boolean;
   onFull: (full: boolean) => void;
@@ -33,7 +35,7 @@ function namesOf(people: readonly User[]): string {
  * and the picture as big as the space allows with its shape kept. Until the
  * picture comes, and when it can't or has stopped, it says so in its place.
  */
-export function ScreenStage({ sharer, others, status, full, onFull, onClose, onCanvas }: StageProps) {
+export function ScreenStage({ sharer, others, status, opensNext = false, full, onFull, onClose, onCanvas }: StageProps) {
   const whose = sharer?.display_name ?? "Somebody";
   // Escape leaves full screen, as everywhere else.
   useEffect(() => {
@@ -49,7 +51,7 @@ export function ScreenStage({ sharer, others, status, full, onFull, onClose, onC
     status === "unplayable"
       ? `This device can't play ${whose}'s screen.`
       : status === "ended"
-        ? `${whose} stopped sharing.`
+        ? `${whose} stopped sharing.${opensNext ? " If they share again, it opens here." : ""}`
         : status === "lost"
           ? `Lost the connection to ${whose}'s screen.`
           : `Waiting for ${whose}'s screen…`;

@@ -896,6 +896,11 @@ watch one at a time, and the voice line has a Watch for each. On a phone the
 screen sits at the top of the room, and turning the phone sideways fills the
 screen with it.
 
+When somebody stops sharing, their screen stays open saying so. If they share
+again while it's still open, say to pick another window or the other speed,
+it opens there by itself, so nobody has to press Watch again. Close the screen
+and it stays closed.
+
 There's no sound from the computer yet: talk through your microphone as
 usual, and a video playing in your slides plays silently for the people
 watching. Like voice, a shared screen goes through the host's server, which

@@ -5,9 +5,9 @@ import type { AuthedApi } from "../../../lib/api";
 import type { GatewayState } from "../../../lib/gateway";
 import { hasWebCodecs, useSharesFromHere } from "../../../lib/screen/probe";
 import { useScreenShare } from "../../../lib/screen/share";
-import { closeEnded, drawOn, startWatching, stopWatching, useScreenWatch, watchOver } from "../../../lib/screen/watch";
+import { awaitNext, closeEnded, drawOn, startWatching, stopWatching, useScreenWatch, watchNext, watchOver } from "../../../lib/screen/watch";
 import { onPhone } from "../../core/phone";
-import { myScreen, seatedIn, sharersIn, watchersOf } from "../../core/screens";
+import { myScreen, seatedIn, shareBy, sharersIn, watchersOf } from "../../core/screens";
 import { startSharingHere, stopSharingEverywhere } from "../../core/screenStop";
 import type { Intent } from "../../core/share";
 import type { ChatPane } from "../chat/ChatView";
@@ -21,7 +21,8 @@ const SEAT_WAIT_MS = 15_000;
  * pane: the share this window shows above the conversation, who shares,
  * Watch, and Share. Watch joins voice first when you aren't in it, and the
  * screen opens once the server has given you a seat there. Leaving voice, or
- * moving it, closes the screen.
+ * moving it, closes the screen. A screen left open after its share ended
+ * opens the same person's next share in that voice by itself.
  */
 export function usePaneScreen({
   server,
@@ -69,6 +70,20 @@ export function usePaneScreen({
     if (watchHere && !stillSeated && pending === null && !watchOver(watch?.status)) stopWatching();
   }, [watchHere, stillSeated, pending, watch?.status]);
 
+  // An ended screen still open: once its person has stopped sharing, their
+  // next share here opens on it, while you're still in that voice.
+  const over = watchHere && watchOver(watch.status);
+  const theirs = over && state !== null ? shareBy(state, watch.place, watch.who) : null;
+  const awaitsNext = over && watch.awaitsNext === true;
+  useEffect(() => {
+    if (!over || pending !== null) return;
+    if (theirs === null) {
+      awaitNext();
+      return;
+    }
+    if (awaitsNext && stillSeated && server && api && state?.sessionId) void watchNext({ server, api, sessionId: state.sessionId, target: theirs });
+  }, [over, theirs, awaitsNext, stillSeated, pending, server, api, state?.sessionId]);
+
   return useMemo(() => {
     if (!server || !state || roomId === null || !screensOn || !hasWebCodecs()) return undefined;
     const users = new Map(state.users.map((user) => [user.id, user]));
@@ -114,6 +129,7 @@ export function usePaneScreen({
               return user ? [user] : [];
             }),
           status: shownHere.status,
+          opensNext: watchOver(shownHere.status) && seatedIn(state, shownHere.place),
           onClose: () => {
             stopWatching();
             closeEnded();

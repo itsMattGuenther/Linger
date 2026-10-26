@@ -705,7 +705,8 @@ their styled name, who else is watching in muted words (names, never a
 number), and Full screen and Stop watching on the right; then the picture on
 `--surface-backdrop`, as big as there's room for with its shape kept. Until
 the picture comes, and when it can't or has stopped, a muted line says so in
-its place. It is `--screen-stage-min` tall at least and leaves the
+its place; stopped, while you're still in that voice, it adds that their next
+share opens here. It is `--screen-stage-min` tall at least and leaves the
 conversation `--screen-talk-min`; full screen it fills the window, which
 fills the monitor. Your own share sits in the voice bar instead
 (`app/screen/SharingBox.tsx`): a copy of what everybody sees across the box

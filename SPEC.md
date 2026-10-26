@@ -1288,6 +1288,10 @@ every share to a ceiling, whatever an app asks for.
 press **Watch**, and Watch joins the room's voice first if you weren't in it: watching
 somebody's screen is being in the room with them, and everybody watching shows up in
 voice. You watch one screen at a time. Up to three people in a room can share at once.
+A screen whose share has ended stays open, saying so, until you close it; if the same
+person shares again in that voice while it's open and you're still there, their new
+share opens on it, so somebody who stops to pick another window or speed doesn't leave
+everybody pressing Watch again.
 
 **Who's watching is names, never a number.** The person sharing sees who is watching, and
 so does everybody else in that voice: "Matt, Eli and Dave are watching", never "3

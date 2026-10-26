@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { VoicePeer } from "../../generated/VoicePeer";
 import { serverState } from "../../lib/gateway";
-import { myScreen, seatedIn, sharersIn, shareStoppedWords, sharingPeople, watchersOf, watchingWords } from "./screens";
+import { myScreen, seatedIn, shareBy, sharersIn, shareStoppedWords, sharingPeople, watchersOf, watchingWords } from "./screens";
 
 function withVoice(peers: VoicePeer[], session = "s-me") {
   return { ...serverState("https://screens.example"), sessionId: session, voice: { "r-1": peers }, myVoice: null };
@@ -28,6 +28,13 @@ describe("who shares and who watches (#360)", () => {
   it("names each watcher once, however many of their computers watch", () => {
     expect(watchersOf(state, "r-1", "s-jules")).toEqual(["u-eli"]);
     expect(watchersOf(state, "r-1", "s-dave")).toEqual(["u-me"]);
+  });
+
+  it("finds a person's share in a room's voice, never this connection's own, for an ended screen to open", () => {
+    expect(shareBy(state, "r-1", "u-jules")).toBe("s-jules");
+    expect(shareBy(state, "r-1", "u-eli")).toBeNull();
+    expect(shareBy(state, "r-elsewhere", "u-jules")).toBeNull();
+    expect(shareBy(withVoice(peers, "s-jules"), "r-1", "u-jules")).toBeNull();
   });
 
   it("marks everybody sharing anywhere, for their rows", () => {

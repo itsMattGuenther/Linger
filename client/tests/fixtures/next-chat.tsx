@@ -28,7 +28,8 @@
  *   the strip offers Watch. `watching`: the screen shows above the
  *   conversation, a slide drawn on its canvas; `waiting`, `unplayable` and
  *   `ended` the words in its place. `sharing`: you share. With `?voice=mine`
- *   the strip has Share. Watch, Share, Stop and closing go on `body[data-did]`.
+ *   the strip has Share, and an ended screen says their next share opens
+ *   there. Watch, Share, Stop and closing go on `body[data-did]`.
  * - `?raid`: forty-five more people in #general's voice (#197,
  *   next/raid.ts), and `window.chat.talk(ids)` says who is talking now.
  * - `?joins`: people joining voice (#473). In #general Jules joins, says
@@ -345,6 +346,7 @@ function screenPane(inVoiceHere: boolean): ChatPane["screen"] {
           sharer: people.jules,
           others: [people.eli],
           status: SCREEN === "watching" ? "showing" : SCREEN,
+          opensNext: (SCREEN === "ended" || SCREEN === "lost") && inVoiceHere,
           onClose: () => note("stop watching"),
           onCanvas: paintSlide,
         }

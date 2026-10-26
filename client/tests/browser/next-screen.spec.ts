@@ -100,7 +100,7 @@ test("the line between the screen and the conversation moves it, and the convers
 for (const [status, words] of [
   ["waiting", "Waiting for Jules's screen…"],
   ["unplayable", "This device can't play Jules's screen."],
-  ["ended", "Jules stopped sharing."],
+  ["ended", "Jules stopped sharing. If they share again, it opens here."],
   ["lost", "Lost the connection to Jules's screen."],
 ] as const) {
   test(`until the picture comes, and when it can't, the screen says so: ${status}`, async ({ page }) => {
@@ -110,6 +110,11 @@ for (const [status, words] of [
     await expect(stage.getByRole("img")).toBeHidden();
   });
 }
+
+test("out of voice, an ended screen only says they stopped: their next share opens only for somebody still there", async ({ page }) => {
+  await chat(page, "?screen=ended");
+  await expect(page.getByRole("region", { name: "Jules's screen" }).getByRole("status")).toHaveText("Jules stopped sharing.");
+});
 
 test("the list marks the room and the person sharing, and says so in words", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 900 });

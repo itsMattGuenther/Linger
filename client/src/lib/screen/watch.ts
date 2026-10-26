@@ -30,6 +30,11 @@ export interface ScreenWatchState {
   /** The picture's own size, once there is one. */
   width: number;
   height: number;
+  /**
+   * Over, and the person sharing has stopped sharing since: their next
+   * share in that voice opens on this screen (`watchNext`).
+   */
+  awaitsNext?: boolean;
 }
 
 let shown: ScreenWatchState | null = null;
@@ -331,4 +336,26 @@ export function watchOver(status: ScreenWatchState["status"] | undefined): boole
 /** Forget an ended watch, when its screen is closed. */
 export function closeEnded(): void {
   if (!running && shown) publish(null);
+}
+
+/**
+ * The person whose share this window's ended screen showed has stopped
+ * sharing (#360): their next share in that voice opens on it, so somebody
+ * who stops to pick another window or speed doesn't leave everybody
+ * pressing Watch again. Only once they've stopped: a watch that ended while
+ * they still share (another window of yours took it) doesn't come back by
+ * itself, or two windows would take it from each other for ever. Closing
+ * the screen forgets it.
+ */
+export function awaitNext(): void {
+  if (shown && watchOver(shown.status) && shown.awaitsNext !== true) publish({ ...shown, awaitsNext: true });
+}
+
+/** They've shared again, as `target`: watch it on the screen still open, once. */
+export async function watchNext(options: { server: string; api: AuthedApi; sessionId: string; target: string }): Promise<void> {
+  if (shown?.awaitsNext !== true || shown.server !== options.server) return;
+  const { place, who } = shown;
+  // Taken before the watch starts, which can wait a moment for the player.
+  publish({ ...shown, awaitsNext: false });
+  await startWatching({ ...options, place, who });
 }
