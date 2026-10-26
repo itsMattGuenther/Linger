@@ -953,9 +953,14 @@ and not as a WebRTC track. Branch `feat/360-screen-sharing`. Numbers are `T-19xx
   recommended in the .deb and .rpm, #377). The AppImage doesn't share: its bundled
   GStreamer has no PipeWire source, and a bundled PipeWire could disagree with the
   computer's. Checked on Matt's Omarchy desktop (a window, then his whole 4K screen,
-  30 and 60 fps) and in a container with sway's portal. **Still to do:** the
-  whole-screen share again with the size fix, from a window behind others too. macOS
-  is still Share-less: nobody has tried its picker.
+  30 and 60 fps) and in a container with sway's portal. On 2026-10-25 the real app
+  (a debug build with its pages inside) ran in that container on a virtual display,
+  driven by an injected script through its own screens: joined the test server by
+  invite, joined voice, Share at 30 fps, the preview shown, hidden and shown again,
+  Stop, with the menu staying shut; a watcher on the test server saw the screen at its
+  own 1280×720 the whole time. **Still to do:** Matt's whole 4K screen again with the
+  size fix, from a window behind others too. macOS is still Share-less: nobody has
+  tried its picker.
 - ⬜ **T-1908 · The real check** — a Windows share watched on Linux, Windows, Android and an
   iPhone through the real server, at both speeds, for half an hour.
 - ⬜ **T-1909 · Streaming a game** — the computer's sound, the graphics card's encoder, later.
