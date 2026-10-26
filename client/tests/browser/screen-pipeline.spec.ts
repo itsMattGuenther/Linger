@@ -132,3 +132,83 @@ test("a screen that never sends a picture stops sharing and says so", async ({ p
   await expect.poll(() => page.evaluate(() => window.loop.share_stopped())).toBe("no-frames");
   expect(await page.evaluate(() => window.loop.share_state())).toBeNull();
 });
+
+// The Linux app shares through its shell (T-1907, src-tauri/src/screen_shell.rs),
+// played here by the test page (`?shell`): the shell's frames go out on the
+// same screen socket, and a watcher plays them. Each engine says it's the
+// Linux app's: Playwright's WebKit otherwise says it's Safari on a Mac.
+test.describe("through the Linux app's shell", () => {
+  test.use({ userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15" });
+
+  test("on Linux a screen shared through the shell plays on a watcher, and follows what the screen shows", async ({ page }) => {
+    const { asked } = await standIn(page);
+    await page.goto("/tests/fixtures/screen-loop.html?shell");
+    await page.evaluate((server) => window.loop.share(server, "token", "s-sharer", 60), SERVER);
+    await page.evaluate((server) => window.loop.watch(server, "token", "s-watcher", "s-sharer"), SERVER);
+    await page.evaluate(() => window.loop.paint("#ff0000"));
+    await expect.poll(() => colour(page).then((got) => near(got, [255, 0, 0, 255])), { timeout: 15_000 }).toBe(true);
+    await page.evaluate(() => window.loop.paint("#0000ff"));
+    await expect.poll(() => colour(page).then((got) => near(got, [0, 0, 255, 255])), { timeout: 15_000 }).toBe(true);
+    expect(asked).toEqual(["share", "watch"]);
+    // The page never asked its engine for the screen; the shell was asked,
+    // and for a key frame when somebody started watching.
+    const told = await page.evaluate(() => window.loop.shell_asked());
+    expect(told.slice(0, 1)).toEqual(["screen_share_start"]);
+    expect(told).toContain("screen_share_keyframe");
+    await page.evaluate(() => window.loop.stop());
+    expect(await page.evaluate(() => window.loop.shell_asked())).toContain("screen_share_stop");
+    expect(await page.evaluate(() => window.loop.share_state())).toBeNull();
+  });
+
+  test("through the shell, a closed picker says nothing, and one with nothing to encode says so", async ({ page }) => {
+    await standIn(page);
+    await page.goto("/tests/fixtures/screen-loop.html?shell");
+    await page.evaluate(() => window.loop.shell("declined"));
+    await page.evaluate((server) => window.loop.share(server, "token", "s-sharer", 30), SERVER);
+    expect(await page.evaluate(() => window.loop.share_stopped())).toBeNull();
+    expect(await page.evaluate(() => window.loop.share_state())).toBeNull();
+    await page.evaluate(() => window.loop.shell("no-encoder"));
+    await page.evaluate((server) => window.loop.share(server, "token", "s-sharer", 30), SERVER);
+    expect(await page.evaluate(() => window.loop.share_stopped())).toBe("no-encoder");
+    expect(await page.evaluate(() => window.loop.share_state())).toBeNull();
+  });
+
+  test("a share through the shell that loses the screen stops and says it couldn't read it", async ({ page }) => {
+    await standIn(page);
+    await page.goto("/tests/fixtures/screen-loop.html?shell");
+    await page.evaluate(() => window.loop.shell("fails"));
+    await page.evaluate((server) => window.loop.share(server, "token", "s-sharer", 30), SERVER);
+    await expect.poll(() => page.evaluate(() => window.loop.share_stopped()), { timeout: 10_000 }).toBe("no-frames");
+    expect(await page.evaluate(() => window.loop.share_state())).toBeNull();
+    expect(await page.evaluate(() => window.loop.shell_asked())).toContain("screen_share_stop");
+  });
+
+  test("through the shell, your share's copy shows the shell's pictures, and hidden the shell stops making them", async ({ page }) => {
+    await standIn(page);
+    await page.goto("/tests/fixtures/screen-loop.html?shell");
+    await page.evaluate((server) => window.loop.share(server, "token", "s-sharer", 30), SERVER);
+    await page.evaluate(() => window.loop.box());
+    const box = page.getByRole("group", { name: "Your screen" });
+    const picture = box.locator("img");
+    await expect.poll(() => picture.getAttribute("src"), { timeout: 10_000 }).toMatch(/^blob:/);
+    expect(await picture.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
+    await box.getByRole("button", { name: "Show the preview" }).click();
+    await expect(picture).toHaveCount(0);
+    expect(await page.evaluate(() => window.loop.shell_asked())).toContain("screen_share_preview");
+  });
+
+  test("Stop while the shell's picker is open shares nothing when it answers", async ({ page }) => {
+    await standIn(page);
+    await page.goto("/tests/fixtures/screen-loop.html?shell");
+    await page.evaluate(() => window.loop.shell("waits"));
+    const sharing = page.evaluate((server) => window.loop.share(server, "token", "s-sharer", 30), SERVER);
+    await expect.poll(() => page.evaluate(() => (window.loop.share_state() as { status?: string } | null)?.status)).toBe("picking");
+    await page.evaluate(() => window.loop.stop());
+    expect(await page.evaluate(() => window.loop.share_state())).toBeNull();
+    await page.evaluate(() => window.loop.pick());
+    await sharing;
+    expect(await page.evaluate(() => window.loop.share_state())).toBeNull();
+    // The share it picked was stopped at once.
+    expect((await page.evaluate(() => window.loop.shell_asked())).at(-1)).toBe("screen_share_stop");
+  });
+});

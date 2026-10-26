@@ -105,12 +105,13 @@ Consequences:
    (PROTOCOL §8, "Screen sharing"); a watching page plays them with WebCodecs onto a
    canvas. That works the same in WebView2, WebKitGTK (which has WebCodecs but no
    WebRTC), Android's web view and the iPhone's, and keeps video off voice's
-   forwarding thread. `client/src/lib/screen/` holds it; the Rust side has no part
-   but the tray's Stop and, on Linux, two switches (`screen_capture.rs`): a yes to
-   WebKitGTK's request for a screen, which wry leaves unanswered and WebKitGTK then
-   refuses, and WebKitGTK's track processor turned on, which it offers only in a
-   worker (`lib/screen/reader.worker.ts`). `docs/decisions.md` has why it isn't a
-   WebRTC track.
+   forwarding thread. `client/src/lib/screen/` holds it. The Rust side has the
+   tray's Stop and, on Linux only, the capture itself (`screen_shell.rs`):
+   WebKitGTK can't turn a shared screen into pictures on many computers, so the
+   shell asks the desktop's ScreenCast portal, encodes the PipeWire stream with
+   GStreamer, and hands the page finished VP8 frames on a Tauri channel, which the
+   page sends like its own. `docs/decisions.md` has why it isn't a WebRTC track,
+   and why Linux captures in the shell.
 3. Avoid CSS features newer than ~2023 without checking WebKitGTK support. `oklch()` is
    supported and is required by §4.5 of the spec; verify it in the target WebKitGTK
    version during M0.

@@ -12,17 +12,21 @@ The desktop app needs system libraries: a webview, ALSA headers for the
 microphone, cmake for the bundled Opus codec, the GStreamer plugins for sound
 and for shared videos (libav decodes their AAC sound and H.264 picture; without
 it a video plays silent, or not at all, #358), and the appindicator library for the tray icon (without it the app runs, but
-closing the list quits instead of hiding it in the tray).
+closing the list quits instead of hiding it in the tray). Sharing a screen on
+Linux (#360) needs GStreamer's headers to build and its PipeWire plugin to run:
+the shell reads the screen the desktop's portal hands over and encodes it
+there (`src-tauri/src/screen_shell/linux.rs`).
 
 ```bash
 # Debian/Ubuntu
 sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev \
                  libayatana-appindicator3-dev librsvg2-dev libasound2-dev cmake \
                  gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-pulseaudio \
-                 gstreamer1.0-libav
+                 gstreamer1.0-libav gstreamer1.0-pipewire \
+                 libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
 # Arch
 sudo pacman -S webkit2gtk-4.1 gtk3 librsvg alsa-lib cmake gst-plugins-base gst-plugins-good \
-               gst-libav libayatana-appindicator
+               gst-libav gst-plugin-pipewire libayatana-appindicator
 ```
 
 The server needs one thing: ffmpeg, to take videos and sound files. It copies

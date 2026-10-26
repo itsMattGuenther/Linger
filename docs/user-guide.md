@@ -875,7 +875,12 @@ portal: GNOME, KDE Plasma, Hyprland and sway each have one. If Linger says
 your computer didn't give it a screen, or couldn't read the one you picked,
 check that PipeWire's GStreamer plugin is installed (`gst-plugin-pipewire` on
 Arch, `gstreamer1.0-pipewire` on Debian and Ubuntu, `pipewire-gstreamer` on
-Fedora), along with your desktop's `xdg-desktop-portal` package.
+Fedora), along with your desktop's `xdg-desktop-portal` package. The AppImage
+doesn't share a screen yet; the Arch package, the .deb and the .rpm do.
+
+The box in the voice bar shows a copy of what everybody sees. The eye beside
+Stop hides it, and it stays hidden next time on that computer: with it
+hidden, your computer doesn't make the copy at all.
 
 **Showing a PowerPoint?** Share **Entire screen**, then start the slide show.
 Sharing just the PowerPoint window can come out black, because the slide show

@@ -231,6 +231,11 @@ interface Live {
 }
 
 /** A screen to share in the test page (#360): a slide that ticks, played as a stream. */
+/** The fake screen as your share's preview. */
+function previewOf(stream: MediaStream | null): { kind: "stream"; stream: MediaStream } | null {
+  return stream ? { kind: "stream", stream } : null;
+}
+
 let fakeScreenStream: MediaStream | null = null;
 function fakeScreen(): MediaStream | null {
   if (fakeScreenStream) return fakeScreenStream;
@@ -339,7 +344,7 @@ function OneServer() {
                       unavailable: SCREEN === "full" ? "Three people are sharing here already." : undefined,
                       onShare: (fps: number) => note(`share:${fps}`),
                       onStop: () => note("stop sharing"),
-                      box: SCREEN === "sharing" ? { preview: fakeScreen(), watching: "Eli and Jules are watching", starting: false } : null,
+                      box: SCREEN === "sharing" ? { preview: previewOf(fakeScreen()), watching: "Eli and Jules are watching", starting: false } : null,
                       // `=stopped`: your last share didn't start, and the bar says why.
                       stopped: SCREEN === "stopped" ? "Three people are sharing here already, so yours didn't start." : null,
                     },

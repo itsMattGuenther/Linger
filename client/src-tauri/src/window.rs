@@ -46,12 +46,9 @@ pub fn create(app: &App) -> tauri::Result<()> {
         // dropped files come through the shell (`dropped.rs`, #673).
         let mut config = config.clone();
         config.drag_drop_enabled = crate::dropped::THROUGH_THE_SHELL;
-        let _window = WebviewWindowBuilder::from_config(app, &config)?
+        WebviewWindowBuilder::from_config(app, &config)?
             .decorations(config.decorations && decorated)
             .build()?;
-        // The list's voice bar shares a screen (#360).
-        #[cfg(target_os = "linux")]
-        crate::screen_capture::allow(&_window);
     }
     Ok(())
 }
@@ -256,11 +253,7 @@ pub async fn next_open_conversation(
     .min_inner_size(360.0, 360.0)
     .decorations(false)
     .build()
-    .map(|_window| {
-        // A conversation's voice strip shares a screen too (#360).
-        #[cfg(target_os = "linux")]
-        crate::screen_capture::allow(&_window);
-    })
+    .map(|_| ())
     .map_err(|e| e.to_string())
 }
 
@@ -457,9 +450,11 @@ pub fn on_event(window: &tauri::Window, event: &tauri::WindowEvent) {
             }
         }
     }
-    // A voice message being recorded in a window that's gone goes with it (#401).
+    // A voice message being recorded in a window that's gone goes with it
+    // (#401), and so does a screen it was sharing (#360).
     if matches!(event, tauri::WindowEvent::Destroyed) {
         crate::clip::forget(window.app_handle(), window.label());
+        crate::screen_shell::forget(window.app_handle(), window.label());
         if let Ok(mut unseen) = UNSEEN.lock() {
             unseen.remove(window.label());
         }

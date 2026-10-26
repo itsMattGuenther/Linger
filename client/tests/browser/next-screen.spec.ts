@@ -39,6 +39,8 @@ test("in voice, Share asks which speed and starts at the one picked", async ({ p
   }
   await menu.getByRole("menuitem", { name: "Smooth motion, 60 fps" }).click();
   await expect.poll(() => did(page)).toContain("share:60");
+  // Picking closes it: left open, it came back when the share ended.
+  await expect(menu).toBeHidden();
 });
 
 test("while you share, Share is lit and stops it", async ({ page }) => {
@@ -119,11 +121,18 @@ test("the list marks the room and the person sharing, and says so in words", asy
   await expect(page.getByRole("button", { name: /^Eli, .*sharing their screen/ })).toHaveCount(0);
 });
 
-test("your share in the voice bar: a small copy, who's watching by name, and Stop", async ({ page }) => {
+test("your share in the voice bar: a copy, who's watching by name, and Stop", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 900 });
   await page.goto("/tests/fixtures/next-list.html?voice&screen=sharing");
   const box = page.getByRole("group", { name: "Your screen" });
   await expect(box.getByText("Sharing your screen")).toBeVisible();
+  // The copy runs across the box at a screen's shape.
+  const copy = box.locator("video");
+  await expect(copy).toBeVisible();
+  const size = await copy.boundingBox();
+  const across = await box.boundingBox();
+  expect((size?.width ?? 0) / (across?.width ?? 1)).toBeGreaterThan(0.85);
+  expect(Math.abs((size?.width ?? 0) / (size?.height ?? 1) - 16 / 9)).toBeLessThan(0.05);
   await expect(box.getByRole("status")).toHaveText("Eli and Jules are watching");
   await box.getByRole("button", { name: "Stop" }).click();
   // The list page writes what was pressed on `body[data-opened]`.
@@ -150,4 +159,21 @@ test("a share that ended by itself says why in the voice bar", async ({ page }) 
   const bar = page.getByRole("region", { name: /^In voice in #general/ });
   await expect(bar.getByRole("status")).toHaveText("Three people are sharing here already, so yours didn't start.");
   await expect(bar.getByRole("group", { name: "Your screen" })).toHaveCount(0);
+});
+
+test("the eye hides your share's copy and shows it again, and it stays as you left it", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.goto("/tests/fixtures/next-list.html?voice&screen=sharing");
+  const box = page.getByRole("group", { name: "Your screen" });
+  const eye = box.getByRole("button", { name: "Show the preview" });
+  await expect(eye).toHaveAttribute("aria-pressed", "true");
+  await expect(box.locator("video")).toBeVisible();
+  await eye.click();
+  await expect(eye).toHaveAttribute("aria-pressed", "false");
+  // Hidden is gone, not just out of sight: nothing plays it.
+  await expect(box.locator("video")).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole("group", { name: "Your screen" }).locator("video")).toHaveCount(0);
+  await page.getByRole("group", { name: "Your screen" }).getByRole("button", { name: "Show the preview" }).click();
+  await expect(page.getByRole("group", { name: "Your screen" }).locator("video")).toBeVisible();
 });

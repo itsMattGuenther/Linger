@@ -38,8 +38,8 @@ mod phone_save;
 mod phone_sound;
 #[cfg(any(mobile, test))]
 mod phone_text;
-#[cfg(target_os = "linux")]
-mod screen_capture;
+#[cfg(desktop)]
+mod screen_shell;
 mod secrets;
 #[cfg(desktop)]
 pub mod sounds;
@@ -350,6 +350,7 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
         .manage(voice_commands::VoiceEngines::default())
         .manage(std::sync::Arc::new(sounds::Sounds::default()))
         .manage(clip::Clips::default())
+        .manage(screen_shell::ScreenShares::default())
         .manage(talk_key::TalkKeyWatch::default())
         .manage(dropped::Dropped::default())
         // The window is built here, not from the config, so it can leave the
@@ -402,7 +403,12 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
             dropped::dropped_file,
             clip::clip_start,
             clip::clip_stop,
-            clip::clip_cancel
+            clip::clip_cancel,
+            screen_shell::screen_share_available,
+            screen_shell::screen_share_start,
+            screen_shell::screen_share_keyframe,
+            screen_shell::screen_share_preview,
+            screen_shell::screen_share_stop
         ])
 }
 

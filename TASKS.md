@@ -938,21 +938,24 @@ and not as a WebRTC track. Branch `feat/360-screen-sharing`. Numbers are `T-19xx
 - 🟡 **T-1906 · Watching on a phone** — the layout is built and tested at phone size.
   **Still to do:** an Android phone and an iPhone watching for real (an iPhone
   before iOS 16.4 has no WebCodecs, and offers no Watch).
-- 🟡 **T-1907 · Sharing from Linux and macOS** — **Linux built 2026-10-25.** The shell
-  (`src-tauri/src/screen_capture.rs`) says yes to WebKitGTK's request for a screen and
-  nothing else (wry leaves `permission-request` unanswered, and WebKitGTK refuses an
-  unanswered one), and turns on WebKitGTK's `MediaStreamTrackProcessing` feature, looked
-  up at run time since it arrived in 2.42. WebKitGTK offers the track processor only in a
-  worker, so the page hands a copy of the screen's track to `lib/screen/reader.worker.ts`
-  and gets frames back; Share is offered on Linux once that worker says it can read
-  (`sharesFromHere`). A picker that fails or a screen with no picture in 8 s stops and
-  says so. The packages bring PipeWire's GStreamer plugin (required on Arch, recommended
-  in the .deb and .rpm, #377). Checked in WebKitGTK 2.54.2 in a container: the permission
-  answer opens a real ScreenCast portal (sway's) and the worker gets the PipeWire stream;
-  but there WebKit couldn't turn the GPU's frames into pictures (its GL upload refused the
-  DMA-BUF), a limit of that container or not, so **still to do:** a share from Matt's
-  Linux desktop, from a window behind others too. macOS is still Share-less: nobody has
-  tried its picker.
+- 🟡 **T-1907 · Sharing from Linux and macOS** — **Linux works, from Matt's desktop
+  (2026-10-25).** WebKitGTK couldn't do it: it reads a shared screen only as GPU buffers
+  (DMA-BUF), and on Matt's two-GPU machine and in a container it never turned them into
+  a picture. So on Linux the shell captures the screen itself
+  (`src-tauri/src/screen_shell.rs`, `screen_shell/linux.rs`): the desktop's ScreenCast
+  portal picks it, GStreamer reads the PipeWire stream in ordinary memory, scales it to
+  fit 1080p and encodes VP8, and the page gets finished frames on a Tauri channel and
+  sends them on the screen socket as usual (`lib/screen/shell.ts`). The size is asked
+  for by name: asked as a range, Hyprland's portal gave a 4K monitor at 2×2. A preview
+  of 480×270 JPEGs at 4 a second comes on another channel, made only while shown. Share
+  is offered on Linux once the shell says the portal and GStreamer's PipeWire and VP8
+  plugins are there. The packages bring PipeWire's GStreamer plugin (required on Arch,
+  recommended in the .deb and .rpm, #377). The AppImage doesn't share: its bundled
+  GStreamer has no PipeWire source, and a bundled PipeWire could disagree with the
+  computer's. Checked on Matt's Omarchy desktop (a window, then his whole 4K screen,
+  30 and 60 fps) and in a container with sway's portal. **Still to do:** the
+  whole-screen share again with the size fix, from a window behind others too. macOS
+  is still Share-less: nobody has tried its picker.
 - ⬜ **T-1908 · The real check** — a Windows share watched on Linux, Windows, Android and an
   iPhone through the real server, at both speeds, for half an hour.
 - ⬜ **T-1909 · Streaming a game** — the computer's sound, the graphics card's encoder, later.

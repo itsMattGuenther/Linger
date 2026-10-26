@@ -6,7 +6,7 @@ import { Chip, IconButton, MarkerCrowd, Name, VoiceGlyph } from "../../kit";
 import { markerFor } from "../markers";
 import { useTalkSeats } from "../useTalkSeats";
 import { ShareButton, type ShareControl } from "../screen/ShareButton";
-import { SharingBox } from "../screen/SharingBox";
+import { type SharePreview, SharingBox } from "../screen/SharingBox";
 import { EveryoneCard } from "./EveryoneCard";
 import "./VoiceDock.css";
 import { serverColor } from "./ServerSection";
@@ -76,7 +76,7 @@ export interface VoiceDockProps {
    * there is one. Left out where you can't: a phone, a server without it.
    */
   share?: ShareControl & {
-    box: { preview: MediaStream | null; watching: string; starting: boolean } | null;
+    box: { preview: SharePreview | null; watching: string; starting: boolean } | null;
     /** Why your last share ended by itself, said for a while: the room was full, the line dropped. */
     stopped?: string | null;
   };

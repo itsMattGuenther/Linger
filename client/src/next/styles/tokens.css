@@ -258,8 +258,6 @@
   --emoji-picker-h: 380px;
   --pane-head: 40px;
   --voice-strip: 40px;
-  --screen-thumb-w: 64px; /* your own small copy of the screen you share (#360), 16:9 */
-  --screen-thumb-h: 36px;
   --screen-stage-min: 120px; /* the shortest the shared screen above a conversation gets */
   --screen-talk-min: 160px; /* and the least it leaves the conversation under it */
   --measure: 80ch; /* the longest a line of a search result runs; a message's words run to its time column (#334) */

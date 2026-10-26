@@ -106,6 +106,15 @@ describe("privacy, from the source", () => {
     expect(uses(SCREEN, /\.label\b|getSettings\(|getCapabilities\(|getConstraints\(|displaySurface|\.deviceId\b|CaptureController|getDisplayMediaSet|desktopCapturer/)).toEqual([]);
     // The one call that asks for a screen is the system's own picker.
     expect(uses(SHIPPED, /getDisplayMedia\(/).map((line) => line.split(":")[0])).toEqual(["src/lib/screen/share.ts"]);
+    // On Linux the shell asks the desktop's portal instead (T-1907), in one
+    // file, and of the stream it's given reads only where its pictures come
+    // from (the PipeWire node) and how big it is, to send it at the right
+    // size: not where it sits, what kind of thing it is, or its ids.
+    expect(uses(RUST, /screencast::/).map((line) => line.split(":")[0])).toEqual(["src-tauri/src/screen_shell/linux.rs"]);
+    const portal = RUST.filter((file) => rel(file) === "src-tauri/src/screen_shell/linux.rs");
+    expect(uses(portal, /\.(position|source_type|mapping_id|restore_token|restore_data)\(\)|stream\.id\(\)/)).toEqual([]);
+    expect(uses(portal, /pipe_wire_node_id\(\)/)).toHaveLength(1);
+    expect(uses(portal, /stream\.size\(\)/)).toHaveLength(1);
   });
 
   it("never sees the whole keyboard: only the one talk key, only in voice (PRIV-2, #500)", () => {
@@ -127,9 +136,10 @@ describe("privacy, from the source", () => {
     ]);
     const crates = readFileSync(join(SHELL, "Cargo.toml"), "utf8");
     expect(crates).not.toMatch(/^(rdev|device_query|device-query|inputbot|global-hotkey|tauri-plugin-global-shortcut|livesplit-hotkey|willhook|multiinput|evdev|evdev-rs|input|uinput|keyboard-query|mki)\s*=/m);
-    // The desktop's portal for global shortcuts and nothing else of it: not
-    // input capture, remote desktop or screen casting.
-    expect(featuresOf(crates, "ashpd")).toEqual(["async-io", "global_shortcuts"]);
+    // The desktop's portal for global shortcuts, and for screen casting
+    // since sharing a screen (#360, its own test above): never input capture
+    // or remote desktop.
+    expect(featuresOf(crates, "ashpd")).toEqual(["async-io", "global_shortcuts", "screencast"]);
     // Every dependency is a one-line table, so the checks above read all of it.
     expect(crates).not.toMatch(/\.(windows-sys|ashpd)\]/);
   });

@@ -291,6 +291,40 @@ fn only_the_chat_windows_and_the_list_window_record_a_voice_message() {
     }
 }
 
+#[test]
+fn only_the_chat_windows_and_the_list_window_share_a_screen() {
+    // A screen is shared from voice (#360), which only those windows show:
+    // Settings, Search and Media never get the desktop's picker.
+    const SHARE: [&str; 5] = [
+        "screen_share_available",
+        "screen_share_start",
+        "screen_share_keyframe",
+        "screen_share_preview",
+        "screen_share_stop",
+    ];
+    for (file, windows, commands) in granted() {
+        if !SHARE.iter().any(|command| commands.contains(*command)) {
+            continue;
+        }
+        assert!(
+            windows
+                .iter()
+                .all(|window| window == "main" || window == "chat-*"),
+            "{file} grants sharing a screen to {windows:?}"
+        );
+    }
+    for window in ["main", "chat-*"] {
+        let theirs: BTreeSet<String> = granted()
+            .into_iter()
+            .filter(|(_, windows, _)| windows.iter().any(|one| one == window))
+            .flat_map(|(_, _, commands)| commands)
+            .collect();
+        for command in SHARE {
+            assert!(theirs.contains(command), "{window} can't {command}");
+        }
+    }
+}
+
 /// The notification plugin's permissions a capability file names, plain or
 /// with a scope, as written (`notification:…`).
 fn notification_permissions(text: &str) -> BTreeSet<String> {

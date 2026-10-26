@@ -103,10 +103,6 @@ libc = "0.2"
 # Already in the tree through wry; named here so startup can ask which
 # WebKitGTK it is about to run before GTK exists (#187).
 webkit2gtk-sys = "2.0"
-# Already in the tree through wry, at wry's version and features; named here
-# so a window can say yes to WebKitGTK's request for a screen and turn its
-# track processor on (#360, `screen_capture.rs`).
-webkit2gtk = { version = "2.0", features = ["v2_40"] }
 # Already in the tree through Tauri and wry, which draw every window with
 # it; named here so the message box can read an image off the clipboard,
 # which WebKitGTK never shows the page (#276, `clipboard.rs`).
@@ -116,7 +112,14 @@ gtk = "0.18"
 # the notifications already use, and through its async-io side as they do, so
 # zbus is built no differently. `global_shortcuts` and nothing else: no other
 # portal, and `privacy.test.ts` refuses any other feature.
-ashpd = { version = "0.13", default-features = false, features = ["async-io", "global_shortcuts"] }
+ashpd = { version = "0.13", default-features = false, features = ["async-io", "global_shortcuts", "screencast"] }
+# A shared screen on Linux (#360, `screen_shell/linux.rs`): the desktop's
+# screen-sharing portal hands it over on PipeWire, and the system's GStreamer
+# reads and encodes it. 0.21 is the release built on glib 0.18, the glib GTK
+# and WebKitGTK already bring, so no second glib comes with it: about 440 KB
+# in a release build (2026-10-25). Only the core and appsink, no plugin crates.
+gstreamer = "0.21"
+gstreamer-app = "0.21"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3", features = ["apple-native"] }

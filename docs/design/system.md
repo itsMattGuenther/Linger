@@ -708,8 +708,12 @@ the picture comes, and when it can't or has stopped, a muted line says so in
 its place. It is `--screen-stage-min` tall at least and leaves the
 conversation `--screen-talk-min`; full screen it fills the window, which
 fills the monitor. Your own share sits in the voice bar instead
-(`app/screen/SharingBox.tsx`): a `--screen-thumb-w` × `--screen-thumb-h` copy
-of what everybody sees, "Sharing your screen", Stop, and who is watching.
+(`app/screen/SharingBox.tsx`): a copy of what everybody sees across the box
+at a screen's shape (16:9, the picture fitted inside on
+`--surface-backdrop`), then "Sharing your screen", the `preview` eye (an
+`IconButton`, pressed while the copy shows) and Stop, then who is watching.
+The eye hides the copy and keeps it hidden for next time, on that computer:
+hidden, the computer stops making it.
 Share is an `IconButton` with the `share` glyph beside Mute, Deafen and
 Leave; it asks 30 or 60 frames a second in a `Menu`, and is pressed while you
 share. Nothing about a share is drawn in the lamp but the pressed button: a

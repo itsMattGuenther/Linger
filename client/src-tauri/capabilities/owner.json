@@ -46,6 +46,11 @@
     "allow-dropped-file",
     "allow-clip-start",
     "allow-clip-stop",
-    "allow-clip-cancel"
+    "allow-clip-cancel",
+    "allow-screen-share-available",
+    "allow-screen-share-start",
+    "allow-screen-share-keyframe",
+    "allow-screen-share-preview",
+    "allow-screen-share-stop"
   ]
 }

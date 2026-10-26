@@ -1670,14 +1670,16 @@ VP8 is the one everything plays.
 **The limits are the server's.** The rate, the frame size and the three-at-once cap are
 enforced by the server, not only asked of the app.
 
-**On Linux, frames are read in a worker** (T-1907, added the same day). WebKitGTK has
-`getDisplayMedia` and WebCodecs, but refuses the screen until the app answers its
-permission request, which wry leaves unanswered, and keeps its track processor behind a
-feature switch and inside workers. The shell answers yes for a screen and nothing else,
-and turns the switch on; the page reads frames in a worker. The other way, playing the
-screen in a hidden video and taking its picture on a timer, works only while the window
-is in front: WebKit stops playing a video nobody can see, and a slide show covers Linger.
-It is kept as the last resort for an engine with neither.
+**On Linux, the shell captures the screen** (T-1907, the same day). WebKitGTK has
+`getDisplayMedia` and WebCodecs, but reads a shared screen only as GPU buffers, and on
+Matt's desktop (two GPUs) and in a container it couldn't turn one into a picture; no
+switch of WebKit's changes how it reads them. So the Linux app's shell asks the
+desktop's ScreenCast portal itself and runs the stream through the system's GStreamer:
+read in ordinary memory, which every portal can give, scaled to fit 1080p, encoded as
+VP8. The page gets the finished frames and sends them on the screen socket like its
+own, so the server, the watchers and the share's rules are the same. GStreamer is
+already there for WebKitGTK; its Rust bindings add about 440 KB. A share sends VP8
+only, as on a Windows computer with no hardware H.264.
 
 **What wasn't taken.** An in-app picker listing windows with their names and pictures
 (hard rule 2: Linger uses the system's picker and never sees a name). Preview pictures of

@@ -1,10 +1,10 @@
 import { useSyncExternalStore } from "react";
 import type { ScreenCodec } from "../../generated/ScreenCodec";
 import type { AuthedApi } from "../api";
-import { packFrame } from "./frames";
+import { packFrame, readFrame } from "./frames";
 import { encoderConfig, fitWithin, KEYFRAME_EVERY_MS, SCREEN_SPEEDS, type ScreenFps, type ScreenSpeed } from "./presets";
 import { canPickScreen, makeable } from "./probe";
-import { openReader, readsHere } from "./reader";
+import { captureInShell, sharesThroughShell, type ShellCapture } from "./shell";
 import { closingOf, openScreenSocket, readSaid, RETRIES, retryAfter, type ScreenClosing } from "./socket";
 
 /**
@@ -15,6 +15,11 @@ import { closingOf, openScreenSocket, readSaid, RETRIES, retryAfter, type Screen
  *
  * One share at a time, from this window. What everybody sees about it comes
  * from `voice.state`, the server's word; this is the window's own end.
+ *
+ * Where the pictures come from depends on the app: the page's own track,
+ * encoded here with WebCodecs (Windows), or the desktop shell, which picks,
+ * reads and encodes the screen itself and hands over finished frames (Linux,
+ * `shell.ts`). The socket, the watchers and the endings are the same.
  */
 
 /** Why a share ended when it wasn't Stop. */
@@ -25,8 +30,10 @@ export interface ScreenShareState {
   fps: ScreenFps;
   /** Asking the system, connecting, or sending. */
   status: "picking" | "starting" | "sharing";
-  /** What everybody sees, for your own small copy of it. */
+  /** What everybody sees, for your own copy of it (the page's own share). */
   preview: MediaStream | null;
+  /** The shell's preview pictures come instead (`onPreviewPicture`, Linux). */
+  pictures: boolean;
 }
 
 /** The share as this window holds it, or null. */
@@ -82,8 +89,58 @@ export function clearShareStopped(): void {
   for (const listener of listeners) listener();
 }
 
+/**
+ * Whether your share's preview is shown, on this computer, for every share
+ * from now on: hidden, the page's preview stops playing and the shell's
+ * stops being made, which is less for the computer to do (#360).
+ */
+const PREVIEW_KEY = "linger.next.sharePreview";
+let previewShown = readPreviewShown();
+const previewListeners = new Set<() => void>();
+
+function readPreviewShown(): boolean {
+  try {
+    return localStorage.getItem(PREVIEW_KEY) !== "hidden";
+  } catch {
+    return true;
+  }
+}
+
+/** Whether your share's preview is shown. */
+export function usePreviewShown(): boolean {
+  return useSyncExternalStore(subscribePreview, () => previewShown);
+}
+
+function subscribePreview(listener: () => void): () => void {
+  previewListeners.add(listener);
+  return () => previewListeners.delete(listener);
+}
+
+/** Show your share's preview, or hide it; kept for next time. */
+export function setPreviewShown(shown: boolean): void {
+  previewShown = shown;
+  try {
+    if (shown) localStorage.removeItem(PREVIEW_KEY);
+    else localStorage.setItem(PREVIEW_KEY, "hidden");
+  } catch {
+    // Not kept; it still holds until the app closes.
+  }
+  if (running?.source.kind === "shell") running.source.capture.preview(shown);
+  for (const listener of previewListeners) listener();
+}
+
+const pictureListeners = new Set<(picture: ArrayBuffer) => void>();
+
+/** Each of the shell's preview pictures (JPEG) as it comes, while the preview is shown. */
+export function onPreviewPicture(listener: (picture: ArrayBuffer) => void): () => void {
+  pictureListeners.add(listener);
+  return () => pictureListeners.delete(listener);
+}
+
 /** The share running in this window. */
 let running: Sharing | null = null;
+/** The picker this window has open, until it answers; Stop forgets it. */
+let picking: object | null = null;
 
 /**
  * Share your screen on `server` at `fps`. Call it straight from the click:
@@ -94,6 +151,12 @@ let running: Sharing | null = null;
 export async function startSharing(options: { server: string; api: AuthedApi; sessionId: string; fps: ScreenFps }): Promise<void> {
   running?.finish(null);
   lastStop = null;
+  const ask = {};
+  picking = ask;
+  if (sharesThroughShell()) {
+    await startInShell(options, ask);
+    return;
+  }
   if (!canPickScreen()) {
     stopped(options.server, "no-picker");
     publish(null);
@@ -101,15 +164,17 @@ export async function startSharing(options: { server: string; api: AuthedApi; se
   }
   const speed = SCREEN_SPEEDS[options.fps];
   // Asked before anything is awaited, inside the press (see above).
-  const picking = navigator.mediaDevices.getDisplayMedia({
+  const asked = navigator.mediaDevices.getDisplayMedia({
     video: { frameRate: { ideal: speed.fps, max: speed.fps }, width: { max: speed.maxWidth }, height: { max: speed.maxHeight } },
     audio: false,
   });
-  publish({ server: options.server, fps: options.fps, status: "picking", preview: null });
+  publish({ server: options.server, fps: options.fps, status: "picking", preview: null, pictures: false });
   let stream: MediaStream;
   try {
-    stream = await picking;
+    stream = await asked;
   } catch (error) {
+    if (picking !== ask) return;
+    picking = null;
     publish(null);
     // Closed, or turned down by the person: nothing to say. Anything else
     // is the computer failing to hand a screen over (on Linux, no screen
@@ -120,6 +185,12 @@ export async function startSharing(options: { server: string; api: AuthedApi; se
   }
   const track = stream.getVideoTracks()[0];
   const made = await makeable(options.fps);
+  if (picking !== ask) {
+    // Stopped while the picker was open.
+    for (const each of stream.getTracks()) each.stop();
+    return;
+  }
+  picking = null;
   if (!track || made.codecs.length === 0) {
     for (const each of stream.getTracks()) each.stop();
     stopped(options.server, "no-encoder");
@@ -127,14 +198,42 @@ export async function startSharing(options: { server: string; api: AuthedApi; se
     return;
   }
   track.contentHint = speed.hint === "detail" ? "detail" : "motion";
-  const sharing = new Sharing(options.server, options.api, options.sessionId, speed, stream, track, made.codecs, made.hardware);
+  const sharing = new Sharing(options.server, options.api, options.sessionId, speed, { kind: "track", stream, track }, made.codecs, made.hardware);
   running = sharing;
-  publish({ server: options.server, fps: options.fps, status: "starting", preview: stream });
+  publish({ server: options.server, fps: options.fps, status: "starting", preview: stream, pictures: false });
   sharing.start();
 }
 
-/** Stop sharing, from Stop or the tray. */
+/**
+ * Share through the desktop shell (Linux): its picker is the desktop's own
+ * too, opened by the shell, so nothing here waits on the press. It sends
+ * VP8 only, as the page does where the graphics card makes no H.264.
+ */
+async function startInShell(options: { server: string; api: AuthedApi; sessionId: string; fps: ScreenFps }, ask: object): Promise<void> {
+  publish({ server: options.server, fps: options.fps, status: "picking", preview: null, pictures: false });
+  const capture = await captureInShell(options.fps, previewShown);
+  if (picking !== ask) {
+    if (typeof capture !== "string") capture.stop();
+    return;
+  }
+  picking = null;
+  if (typeof capture === "string") {
+    publish(null);
+    if (capture !== "declined") stopped(options.server, capture);
+    return;
+  }
+  const sharing = new Sharing(options.server, options.api, options.sessionId, SCREEN_SPEEDS[options.fps], { kind: "shell", capture }, ["vp8"], new Set());
+  running = sharing;
+  publish({ server: options.server, fps: options.fps, status: "starting", preview: null, pictures: true });
+  sharing.start();
+}
+
+/** Stop sharing, from Stop or the tray; a picker still open is forgotten. */
 export function stopSharing(): void {
+  if (picking !== null) {
+    picking = null;
+    if (shown?.status === "picking") publish(null);
+  }
   running?.finish(null);
 }
 
@@ -178,6 +277,12 @@ function trackProcessor(): TrackProcessorClass | null {
   return typeof found === "function" ? (found as TrackProcessorClass) : null;
 }
 
+/**
+ * Where a share's pictures come from: the page's own track, encoded here,
+ * or the desktop shell's frames, encoded there.
+ */
+type Source = { kind: "track"; stream: MediaStream; track: MediaStreamTrack } | { kind: "shell"; capture: ShellCapture };
+
 class Sharing {
   #socket: WebSocket | null = null;
   #attempts = 0;
@@ -190,14 +295,15 @@ class Sharing {
   #seen = false;
   #firstFrameTimer = 0;
   #stopReading: (() => void) | null = null;
+  /** The shell's frames go out from a key frame on, after one is skipped. */
+  #shellWaitsForKey = true;
 
   constructor(
     readonly server: string,
     readonly api: AuthedApi,
     readonly sessionId: string,
     readonly speed: ScreenSpeed,
-    readonly stream: MediaStream,
-    readonly track: MediaStreamTrack,
+    readonly source: Source,
     public codecs: ScreenCodec[],
     readonly hardware: ReadonlySet<ScreenCodec>,
   ) {}
@@ -206,10 +312,22 @@ class Sharing {
     this.#firstFrameTimer = window.setTimeout(() => {
       if (!this.#seen) this.finish("no-frames");
     }, FIRST_FRAME_MS);
+    const source = this.source;
+    if (source.kind === "shell") {
+      source.capture.onFrame = (frame) => this.shellFrame(frame);
+      source.capture.onPicture = (picture) => {
+        if (!this.#done) for (const listener of pictureListeners) listener(picture);
+      };
+      // The screen went (a shared window closed), or the shell couldn't read it.
+      source.capture.onEnded = (why) => this.finish(why === "gone" ? null : "no-frames");
+      this.#stopReading = () => source.capture.stop();
+      void this.connect();
+      return;
+    }
     // The system's own "Stop sharing" ends it as Stop does.
-    this.track.addEventListener("ended", () => this.finish(null), { once: true });
+    source.track.addEventListener("ended", () => this.finish(null), { once: true });
     void this.connect();
-    this.read();
+    this.read(source.track);
   }
 
   async connect(): Promise<void> {
@@ -266,8 +384,14 @@ class Sharing {
       this.#wanted = wanted;
       if (shown?.status !== "sharing" && shown?.server === this.server) publish({ ...shown, status: "sharing" });
       // Somebody new is watching: they needn't wait for the screen to change.
-      if (this.#latest) for (const codec of wanted) this.encode(codec, this.#latest, true);
+      if (this.source.kind === "shell") {
+        if (wanted.length > 0) this.source.capture.keyframe();
+      } else if (this.#latest) for (const codec of wanted) this.encode(codec, this.#latest, true);
     } else if (said.op === "keyframe" && (said.codec === "vp8" || said.codec === "avc1")) {
+      if (this.source.kind === "shell") {
+        this.source.capture.keyframe();
+        return;
+      }
       const held = this.#encoders.get(said.codec);
       if (held) held.wantKey = true;
       // A screen that isn't changing sends no frames, so the last one is sent again as a key frame.
@@ -275,11 +399,32 @@ class Sharing {
     }
   }
 
+  /**
+   * A frame from the shell, already encoded and in the socket's shape. One
+   * skipped (the line to the server behind) leaves the frames after it
+   * nothing to build on, so they wait for the next key frame, asked for now.
+   */
+  shellFrame(frame: ArrayBuffer): void {
+    const read = readFrame(frame);
+    if (!read || this.#done) return;
+    this.#seen = true;
+    const socket = this.#socket;
+    if (!socket || socket.readyState !== WebSocket.OPEN || !this.#wanted.includes(read.codec)) return;
+    if (this.#shellWaitsForKey && !read.key) return;
+    if (socket.bufferedAmount > MOST_WAITING) {
+      this.#shellWaitsForKey = true;
+      if (this.source.kind === "shell") this.source.capture.keyframe();
+      return;
+    }
+    this.#shellWaitsForKey = false;
+    socket.send(frame);
+  }
+
   /** Take frames from the track as they come. */
-  read(): void {
+  read(track: MediaStreamTrack): void {
     const Processor = trackProcessor();
     if (Processor) {
-      const reader = new Processor({ track: this.track }).readable.getReader();
+      const reader = new Processor({ track }).readable.getReader();
       this.#stopReading = () => void reader.cancel().catch(() => undefined);
       const pump = async () => {
         while (!this.#done) {
@@ -291,65 +436,24 @@ class Sharing {
       void pump();
       return;
     }
-    void this.readInWorker().then((reading) => {
-      if (!reading && !this.#done) this.readFromVideo();
-    });
+    this.readFromVideo(track);
   }
 
   /**
-   * Take frames in a worker (`reader.worker.ts`), where WebKitGTK has its
-   * track processor: a copy of the track goes there, so the small copy of
-   * the screen beside Stop keeps playing here. False when there's no track
-   * processor there, or the engine can't hand a track over.
+   * An engine with no track processor (none Share is offered in yet): the
+   * track plays in a video nobody sees, and its picture is taken at the
+   * share's speed. The video is in the page, out of sight, since an engine
+   * may not play one that isn't; a screen that isn't changing is the same
+   * picture again, which costs next to nothing to send. A page out of sight
+   * may stop playing it, so this is the last way, not the first.
    */
-  async readInWorker(): Promise<boolean> {
-    const worker = openReader();
-    if (!worker) return false;
-    if (!(await readsHere(worker)) || this.#done) {
-      worker.terminate();
-      return false;
-    }
-    const copy = this.track.clone();
-    try {
-      worker.postMessage({ op: "read", track: copy }, [copy]);
-    } catch {
-      copy.stop();
-      worker.terminate();
-      return false;
-    }
-    worker.addEventListener("message", (event: MessageEvent<unknown>) => {
-      const said = event.data;
-      if (typeof said !== "object" || said === null || !("op" in said)) return;
-      if (said.op === "frame" && "frame" in said && said.frame instanceof VideoFrame) {
-        this.frame(said.frame);
-        worker.postMessage({ op: "took" });
-      } else if (said.op === "ended") {
-        // The screen went (the desktop's own Stop, or the picture lost).
-        this.finish(null);
-      }
-    });
-    this.#stopReading = () => {
-      worker.postMessage({ op: "stop" });
-      worker.terminate();
-    };
-    return true;
-  }
-
-  /**
-   * An engine with no track processor anywhere (Safari on a Mac): the track
-   * plays in a video nobody sees, and its picture is taken at the share's
-   * speed. The video is in the page, out of sight, since an engine may not
-   * play one that isn't; a screen that isn't changing is the same picture
-   * again, which costs next to nothing to send. A page out of sight may stop
-   * playing it, so this is the last way, not the first.
-   */
-  readFromVideo(): void {
+  readFromVideo(track: MediaStreamTrack): void {
     const video = document.createElement("video");
     video.muted = true;
     video.playsInline = true;
     video.setAttribute("aria-hidden", "true");
     Object.assign(video.style, { position: "fixed", left: "0", top: "0", width: "1px", height: "1px", opacity: "0", pointerEvents: "none" });
-    video.srcObject = this.stream;
+    video.srcObject = new MediaStream([track]);
     document.body.append(video);
     let timer = 0;
     this.#stopReading = () => {
@@ -491,7 +595,7 @@ class Sharing {
     this.#encoders.clear();
     this.#latest?.close();
     this.#latest = null;
-    for (const each of this.stream.getTracks()) each.stop();
+    if (this.source.kind === "track") for (const each of this.source.stream.getTracks()) each.stop();
     const socket = this.#socket;
     this.#socket = null;
     socket?.close(1000);

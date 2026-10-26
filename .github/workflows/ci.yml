@@ -328,8 +328,10 @@ jobs:
           # libasound2-dev is the microphone (cpal talks ALSA on Linux,
           # T-1402). Opus is built from vendored source with the runner's
           # cmake, so no libopus package is needed here or anywhere.
+          # The GStreamer headers are a shared screen's (#360, screen_shell/linux.rs).
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
-            libayatana-appindicator3-dev librsvg2-dev libasound2-dev
+            libayatana-appindicator3-dev librsvg2-dev libasound2-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
       - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master, 2026-10-09
         with:
           toolchain: stable

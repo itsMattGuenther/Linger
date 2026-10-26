@@ -74,6 +74,7 @@ export const ICON_NAMES = [
   "share",
   "fullscreen",
   "windowed",
+  "preview",
 ] as const;
 
 export type IconName = (typeof ICON_NAMES)[number];
@@ -96,6 +97,12 @@ export const ICON_PATHS: Record<IconName, ReactElement> = {
   fullscreen: (
     <>
       <path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  // Your share's preview, shown or hidden (#360): an eye.
+  preview: (
+    <>
+      <path d="M1.6 8s2.3-4.3 6.4-4.3S14.4 8 14.4 8s-2.3 4.3-6.4 4.3S1.6 8 1.6 8z" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinejoin="round" /><circle cx="8" cy="8" r="1.9" stroke="currentColor" strokeWidth="1.4" fill="none" />
     </>
   ),
   windowed: (

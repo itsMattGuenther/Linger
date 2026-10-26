@@ -99,6 +99,7 @@ import type { InVoice } from "../chat/VoiceStrip";
 import { VoiceDock, type VoiceDockProps } from "./VoiceDock";
 import { useSharesFromHere } from "../../../lib/screen/probe";
 import { type ScreenShareState, useScreenShare, useShareStopped } from "../../../lib/screen/share";
+import type { SharePreview } from "../screen/SharingBox";
 import { myScreen, sharersIn, shareStoppedWords, watchersOf, watchingWords } from "../../core/screens";
 import { startSharingHere, stopSharingEverywhere } from "../../core/screenStop";
 import { ApiError, PublicApi, TransportError } from "../../../lib/api";
@@ -1714,8 +1715,14 @@ function shareOf(state: GatewayState, server: string, roomId: string, api: Serve
       void startSharingHere({ server, api, sessionId: state.sessionId, fps });
     },
     onStop: stopSharingEverywhere,
-    box: sharing ? { preview: sharingHere ? here.preview : null, watching: watchingWords(watchers), starting: sharingHere && here.status !== "sharing" } : null,
+    box: sharing ? { preview: sharingHere ? previewOf(here) : null, watching: watchingWords(watchers), starting: sharingHere && here.status !== "sharing" } : null,
   };
+}
+
+/** Your share's preview, from this window's share: its own picture, or the shell's pictures. */
+function previewOf(here: ScreenShareState): SharePreview | null {
+  if (here.preview) return { kind: "stream", stream: here.preview };
+  return here.pictures ? { kind: "pictures" } : null;
 }
 
 function hostOf(baseUrl: string): string {

@@ -54,6 +54,11 @@ const COMMANDS: &[&str] = &[
     "clip_start",
     "clip_stop",
     "clip_cancel",
+    "screen_share_available",
+    "screen_share_start",
+    "screen_share_keyframe",
+    "screen_share_preview",
+    "screen_share_stop",
 ];
 
 fn main() {

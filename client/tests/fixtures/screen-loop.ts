@@ -4,7 +4,16 @@
  * is a canvas that changes colour, so a test reads the colour that arrived.
  * Browser tests point the sockets at a stand-in for the server
  * (`page.routeWebSocket`); `scripts/screen-loop.mjs` at a real one.
+ *
+ * `?shell` plays the Linux app's shell (`src-tauri/src/screen_shell.rs`),
+ * which captures and encodes the screen itself: Tauri's calls are answered
+ * here, and the "shell" sends VP8 frames of the canvas on its channel, as
+ * GStreamer would. `loop.shell` says how the next share through it goes.
  */
+import { mockIPC } from "@tauri-apps/api/mocks";
+import { createElement } from "react";
+import { createRoot } from "react-dom/client";
+import { SharingBox } from "../../src/next/app/screen/SharingBox";
 import { AuthedApi, type TokenSource } from "../../src/lib/api";
 import { currentShare, currentShareStopped, startSharing, stopSharing } from "../../src/lib/screen/share";
 import { currentWatch, drawOn, startWatching, stopWatching } from "../../src/lib/screen/watch";
@@ -76,7 +85,120 @@ function api(baseUrl: string, token: string): AuthedApi {
   return new AuthedApi(baseUrl, source);
 }
 
+/**
+ * How the stand-in shell answers the next share: frames of the canvas
+ * ("ok"); the picker closed ("declined"); nothing it can encode
+ * ("no-encoder"); frames, then the screen lost a second in ("fails"); or
+ * the picker left open until `loop.pick()` answers it ("waits").
+ */
+let shellMode = "ok";
+/** What the page asked the stand-in shell, in order. */
+const shellAsked: string[] = [];
+let answerPicker: (() => void) | null = null;
+
+interface Internals {
+  runCallback: (id: number, data: unknown) => void;
+}
+
+/** A channel the page handed the shell, and how many messages it's had. */
+function channelOf(value: unknown): { id: number; sent: number } | null {
+  const id: unknown = typeof value === "object" && value !== null ? Reflect.get(value, "id") : null;
+  return typeof id === "number" ? { id, sent: 0 } : null;
+}
+
+function tell(channel: { id: number; sent: number }, message: unknown): void {
+  const internals = (window as unknown as { __TAURI_INTERNALS__: Internals }).__TAURI_INTERNALS__;
+  internals.runCallback(channel.id, { index: channel.sent, message });
+  channel.sent += 1;
+}
+
+/** Whether the stand-in shell's preview is on, as the page last said. */
+let shellPreview = false;
+
+/** The stand-in shell's share: the canvas, encoded as VP8, on `frames`, and as JPEG on `pictures` while its preview is on. */
+function shellShare(fps: number, frames: { id: number; sent: number }, pictures: { id: number; sent: number }, says: { id: number; sent: number }): () => void {
+  const canvas = document.createElement("canvas");
+  canvas.width = 640;
+  canvas.height = 360;
+  const context = canvas.getContext("2d");
+  let key = true;
+  const encoder = new VideoEncoder({
+    output: (chunk) => {
+      const bytes = new Uint8Array(chunk.byteLength);
+      chunk.copyTo(bytes);
+      tell(frames, packFrame("vp8", chunk.type === "key", chunk.timestamp, bytes));
+    },
+    error: () => undefined,
+  });
+  encoder.configure({ codec: "vp8", width: 640, height: 360, bitrate: 2_000_000, framerate: fps, latencyMode: "realtime" });
+  let tick = 0;
+  const timer = window.setInterval(() => {
+    if (!context || encoder.state !== "configured") return;
+    tick += 1;
+    context.fillStyle = colour;
+    context.fillRect(0, 0, 640, 360);
+    context.fillStyle = "#000000";
+    context.fillRect(tick % 600, 0, 8, 8);
+    const frame = new VideoFrame(canvas, { timestamp: tick * 33_333 });
+    encoder.encode(frame, { keyFrame: key });
+    key = false;
+    frame.close();
+  }, 33);
+  const keyframe = () => {
+    key = true;
+  };
+  shellKeyframe = keyframe;
+  if (shellMode === "fails") window.setTimeout(() => tell(says, { op: "ended", why: "failed" }), 1_000);
+  const previews = window.setInterval(() => {
+    if (!shellPreview) return;
+    canvas.toBlob((blob) => void blob?.arrayBuffer().then((bytes) => tell(pictures, bytes)), "image/jpeg");
+  }, 250);
+  return () => {
+    window.clearInterval(timer);
+    window.clearInterval(previews);
+    if (encoder.state !== "closed") encoder.close();
+  };
+}
+let shellKeyframe: () => void = () => undefined;
+let shellStop: (() => void) | null = null;
+
+if (new URLSearchParams(location.search).has("shell")) {
+  (window as unknown as { isTauri: boolean }).isTauri = true;
+  mockIPC(async (command, args) => {
+    shellAsked.push(command);
+    if (command === "screen_share_available") return true;
+    if (command === "screen_share_keyframe") shellKeyframe();
+    if (command === "screen_share_preview") shellPreview = typeof args === "object" && args !== null && Reflect.get(args, "shown") === true;
+    if (command === "screen_share_stop") {
+      shellStop?.();
+      shellStop = null;
+    }
+    if (command !== "screen_share_start") return null;
+    const given = typeof args === "object" && args !== null ? args : {};
+    const frames = channelOf(Reflect.get(given, "frames"));
+    const pictures = channelOf(Reflect.get(given, "pictures"));
+    shellPreview = Reflect.get(given, "shown") === true;
+    const says = channelOf(Reflect.get(given, "says"));
+    const fps: unknown = Reflect.get(given, "fps");
+    if (shellMode === "waits") await new Promise<void>((answer) => (answerPicker = answer));
+    if (shellMode === "declined" || shellMode === "no-encoder") throw shellMode;
+    if (!frames || !pictures || !says || typeof fps !== "number") throw "no-screen";
+    shellStop = shellShare(fps, frames, pictures, says);
+    return null;
+  });
+}
+
 const watched = document.getElementById("watched");
+
+/** Your share's box, as the voice bar shows it, for the preview: `loop.box()`. */
+function showBox(): void {
+  const place = document.createElement("div");
+  place.style.width = "320px";
+  document.body.append(place);
+  const share = currentShare();
+  const preview = share?.preview ? { kind: "stream" as const, stream: share.preview } : share?.pictures ? { kind: "pictures" as const } : null;
+  createRoot(place).render(createElement(SharingBox, { preview, watching: "", starting: false, onStop: () => stopSharing() }));
+}
 
 declare global {
   interface Window {
@@ -85,6 +207,10 @@ declare global {
       watch: (baseUrl: string, token: string, sessionId: string, target: string) => Promise<void>;
       paint: (css: string) => void;
       busy: (on: boolean) => void;
+      shell: (mode: string) => void;
+      shell_asked: () => string[];
+      pick: () => void;
+      box: () => void;
       picker: (says: string | null) => void;
       stop: () => void;
       share_state: () => unknown;
@@ -108,6 +234,12 @@ window.loop = {
   busy: (on) => {
     busy = on;
   },
+  shell: (mode) => {
+    shellMode = mode;
+  },
+  shell_asked: () => [...shellAsked],
+  pick: () => answerPicker?.(),
+  box: showBox,
   picker: (says) => {
     picker = says;
   },
