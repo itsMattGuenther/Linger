@@ -257,6 +257,17 @@ try {
   if (started.status === "sharing") {
     // 3. Three seconds shown, then three minimized: frames keep coming.
     const read = () => page.evaluate(() => ({ frames: window.__lingerScreenCheck.frames, vp8: { ...window.__lingerScreenCheck.vp8 }, avc: { ...window.__lingerScreenCheck.avc }, error: window.__lingerScreenCheck.error, size: window.__lingerScreenCheck.size }));
+    // Chromium sends a screen's picture only when the screen changes, and a
+    // runner's desktop can sit still for all three seconds (#715): a counter
+    // on the page keeps changing while it's shown.
+    await page.evaluate(() => {
+      const probe = document.getElementById("linger-screen-probe");
+      let n = 0;
+      window.__lingerScreenTick = window.setInterval(() => {
+        n += 1;
+        if (probe) probe.textContent = `share ${n}`;
+      }, 50);
+    });
     const at0 = await read();
     await sleep(3000);
     const shown = await read();
@@ -264,7 +275,10 @@ try {
     await sleep(3000);
     const minimized = await read();
     await win("restore", { hwnd });
-    await page.evaluate(() => { window.__lingerScreenCheck.stop = true; });
+    await page.evaluate(() => {
+      window.clearInterval(window.__lingerScreenTick);
+      window.__lingerScreenCheck.stop = true;
+    });
     await sleep(1000);
     const end = await read();
     const shownFrames = shown.frames - at0.frames;
