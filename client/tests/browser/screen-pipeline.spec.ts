@@ -133,6 +133,33 @@ test("a screen that never sends a picture stops sharing and says so", async ({ p
   expect(await page.evaluate(() => window.loop.share_state())).toBeNull();
 });
 
+// What hiding the preview broke on Linux (the whole share stopped, and a
+// share starting hidden never started), checked where the page shares for
+// itself (Windows): the copy is the page's own video of the screen.
+test("hiding your share's copy keeps the share going, and a share that starts hidden starts", async ({ page, browserName }) => {
+  test.skip(browserName === "webkit", "Playwright's WebKit can't read a screen the way the Linux app does");
+  await standIn(page);
+  await page.goto("/tests/fixtures/screen-loop.html");
+  await page.evaluate((server) => window.loop.share(server, "token", "s-sharer", 30), SERVER);
+  await page.evaluate((server) => window.loop.watch(server, "token", "s-watcher", "s-sharer"), SERVER);
+  await page.evaluate(() => window.loop.box());
+  const box = page.getByRole("group", { name: "Your screen" });
+  await expect(box.locator("video")).toHaveCount(1);
+  await page.evaluate(() => window.loop.paint("#ff0000"));
+  await expect.poll(() => colour(page).then((got) => near(got, [255, 0, 0, 255])), { timeout: 15_000 }).toBe(true);
+  await box.getByRole("button", { name: "Show the preview" }).click();
+  await expect(box.locator("video")).toHaveCount(0);
+  // Hidden, the screen still goes out: the watcher follows it.
+  await page.evaluate(() => window.loop.paint("#0000ff"));
+  await expect.poll(() => colour(page).then((got) => near(got, [0, 0, 255, 255])), { timeout: 15_000 }).toBe(true);
+  // A share started with it hidden starts, and plays.
+  await page.evaluate(() => window.loop.stop());
+  await page.evaluate((server) => window.loop.share(server, "token", "s-sharer", 30), SERVER);
+  await page.evaluate((server) => window.loop.watch(server, "token", "s-watcher", "s-sharer"), SERVER);
+  await page.evaluate(() => window.loop.paint("#ff0000"));
+  await expect.poll(() => colour(page).then((got) => near(got, [255, 0, 0, 255])), { timeout: 15_000 }).toBe(true);
+});
+
 // The Linux app shares through its shell (T-1907, src-tauri/src/screen_shell.rs),
 // played here by the test page (`?shell`): the shell's frames go out on the
 // same screen socket, and a watcher plays them. Each engine says it's the
