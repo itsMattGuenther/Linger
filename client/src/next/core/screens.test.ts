@@ -55,6 +55,8 @@ describe("a share that ended by itself (#360)", () => {
     expect(shareStoppedWords("room-full")).toMatch(/Three people are sharing here already/);
     expect(shareStoppedWords("dropped")).toMatch(/connection to the server dropped/);
     expect(shareStoppedWords("bad-hello")).toMatch(/may need an update/);
+    // Turned off by the host while you shared: said once, not tried again.
+    expect(shareStoppedWords("off")).toMatch(/screen sharing turned off/);
     for (const quiet of ["ended", "replaced", "not-in-voice", "nothing-to-watch"] as const) expect(shareStoppedWords(quiet)).toBeNull();
   });
 });

@@ -75,6 +75,8 @@ export function shareStoppedWords(why: ShareStopped): string | null {
       return "This app can't ask for a screen on this computer.";
     case "bad-hello":
       return "The server didn't take the share. It may need an update.";
+    case "off":
+      return "This server has screen sharing turned off.";
     case "not-in-voice":
     case "nothing-to-watch":
     case "replaced":

@@ -17,7 +17,7 @@ export function openScreenSocket(baseUrl: string, hello: ScreenHello): WebSocket
 }
 
 /** What closing codes the server uses mean, for the person (PROTOCOL §8). */
-export type ScreenClosing = "not-signed-in" | "not-in-voice" | "room-full" | "nothing-to-watch" | "bad-hello" | "replaced" | "ended" | "dropped";
+export type ScreenClosing = "not-signed-in" | "not-in-voice" | "room-full" | "nothing-to-watch" | "bad-hello" | "replaced" | "ended" | "off" | "dropped";
 
 export function closingOf(code: number): ScreenClosing {
   switch (code) {
@@ -35,6 +35,8 @@ export function closingOf(code: number): ScreenClosing {
       return "replaced";
     case 4007:
       return "ended";
+    case 4008:
+      return "off";
     default:
       return "dropped";
   }

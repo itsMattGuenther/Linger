@@ -5,7 +5,7 @@ import type { AuthedApi } from "../../../lib/api";
 import type { GatewayState } from "../../../lib/gateway";
 import { hasWebCodecs, sharesFromHere } from "../../../lib/screen/probe";
 import { useScreenShare } from "../../../lib/screen/share";
-import { closeEnded, drawOn, startWatching, stopWatching, useScreenWatch } from "../../../lib/screen/watch";
+import { closeEnded, drawOn, startWatching, stopWatching, useScreenWatch, watchOver } from "../../../lib/screen/watch";
 import { onPhone } from "../../core/phone";
 import { myScreen, seatedIn, sharersIn, watchersOf } from "../../core/screens";
 import { startSharingHere, stopSharingEverywhere } from "../../core/screenStop";
@@ -65,7 +65,7 @@ export function usePaneScreen({
   const watchHere = watch !== null && watch.server === server;
   const stillSeated = watchHere && state !== null && seatedIn(state, watch.place);
   useEffect(() => {
-    if (watchHere && !stillSeated && pending === null && watch?.status !== "ended") stopWatching();
+    if (watchHere && !stillSeated && pending === null && !watchOver(watch?.status)) stopWatching();
   }, [watchHere, stillSeated, pending, watch?.status]);
 
   return useMemo(() => {
@@ -123,7 +123,7 @@ export function usePaneScreen({
     return {
       stage,
       sharing,
-      watch: others.length > 0 ? { sharers: others, watching: shownHere?.status === "ended" ? null : (shownHere?.target ?? null), onWatch } : undefined,
+      watch: others.length > 0 ? { sharers: others, watching: watchOver(shownHere?.status) ? null : (shownHere?.target ?? null), onWatch } : undefined,
       share: shareControl,
     };
   }, [server, state, roomId, screensOn, watch, share, api, intend, seatedHere]);

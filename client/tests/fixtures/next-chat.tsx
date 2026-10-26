@@ -338,7 +338,7 @@ const keys: string[] = [];
 /** `?screen` (#360): what's shared in #general's voice, as the pane would say it. */
 const SCREEN = query.get("screen");
 function screenPane(inVoiceHere: boolean): ChatPane["screen"] {
-  const showing = SCREEN === "watching" || SCREEN === "waiting" || SCREEN === "unplayable" || SCREEN === "ended";
+  const showing = SCREEN === "watching" || SCREEN === "waiting" || SCREEN === "unplayable" || SCREEN === "ended" || SCREEN === "lost";
   return {
     stage: showing
       ? {
@@ -353,7 +353,7 @@ function screenPane(inVoiceHere: boolean): ChatPane["screen"] {
     watch:
       SCREEN === "sharing"
         ? undefined
-        : { sharers: [{ session: "s-jules", user: people.jules }], watching: showing && SCREEN !== "ended" ? "s-jules" : null, onWatch: (session) => note(`watch:${session}`) },
+        : { sharers: [{ session: "s-jules", user: people.jules }], watching: showing && SCREEN !== "ended" && SCREEN !== "lost" ? "s-jules" : null, onWatch: (session) => note(`watch:${session}`) },
     share: inVoiceHere ? { sharing: SCREEN === "sharing", onShare: (fps) => note(`share:${fps}`), onStop: () => note("stop sharing") } : undefined,
   };
 }

@@ -99,6 +99,7 @@ for (const [status, words] of [
   ["waiting", "Waiting for Jules's screen…"],
   ["unplayable", "This device can't play Jules's screen."],
   ["ended", "Jules stopped sharing."],
+  ["lost", "Lost the connection to Jules's screen."],
 ] as const) {
   test(`until the picture comes, and when it can't, the screen says so: ${status}`, async ({ page }) => {
     await chat(page, `?voice=mine&screen=${status}`);

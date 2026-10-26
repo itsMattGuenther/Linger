@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import type { User } from "../../../generated/User";
-import type { ScreenWatchState } from "../../../lib/screen/watch";
+import { type ScreenWatchState, watchOver } from "../../../lib/screen/watch";
 import { onPhone } from "../../core/phone";
 import { Icon, IconButton, Name } from "../../kit";
 import "./ScreenStage.css";
@@ -44,12 +44,15 @@ export function ScreenStage({ sharer, others, status, full, onFull, onClose, onC
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [full, onFull]);
+  const over = watchOver(status);
   const words =
     status === "unplayable"
       ? `This device can't play ${whose}'s screen.`
       : status === "ended"
         ? `${whose} stopped sharing.`
-        : `Waiting for ${whose}'s screen…`;
+        : status === "lost"
+          ? `Lost the connection to ${whose}'s screen.`
+          : `Waiting for ${whose}'s screen…`;
   const size = onPhone() ? "lg" : "md";
   return (
     <section className="nx-stage" data-full={full ? "yes" : undefined} aria-label={`${whose}'s screen`}>
@@ -63,10 +66,10 @@ export function ScreenStage({ sharer, others, status, full, onFull, onClose, onC
         </span>
         {others.length > 0 ? <span className="nx-stage-others">with {namesOf(others)} watching</span> : null}
         <span className="nx-stage-gap" />
-        {status === "ended" ? null : (
+        {over ? null : (
           <IconButton icon={full ? "windowed" : "fullscreen"} label={full ? "Leave full screen" : "Full screen"} shortcut={full ? "Esc" : undefined} size={size} onClick={() => onFull(!full)} />
         )}
-        <IconButton icon="close" label={status === "ended" ? "Close" : "Stop watching"} size={size} onClick={onClose} />
+        <IconButton icon="close" label={over ? "Close" : "Stop watching"} size={size} onClick={onClose} />
       </div>
       <div className="nx-stage-pic">
         <canvas ref={onCanvas} className="nx-stage-canvas" hidden={status !== "showing"} role="img" aria-label={`${whose}'s screen`} />

@@ -71,6 +71,11 @@ export function useShareStopped(): { server: string; why: ShareStopped } | null 
   return useSyncExternalStore(subscribe, () => lastStop);
 }
 
+/** Why the last share ended by itself, outside React (tests). */
+export function currentShareStopped(): { server: string; why: ShareStopped } | null {
+  return lastStop;
+}
+
 export function clearShareStopped(): void {
   lastStop = null;
   for (const listener of listeners) listener();
@@ -220,7 +225,10 @@ class Sharing {
         window.setTimeout(() => void this.connect(), wait);
         return;
       }
-      this.finish(why === "replaced" ? null : why);
+      // Back after a drop to a server that has no seat for this session (a
+      // restart forgets them all): the connection is what went, so say so.
+      const lost = this.#attempts > 0 && (why === "not-in-voice" || why === "ended");
+      this.finish(why === "replaced" ? null : lost ? "dropped" : why);
     });
   }
 

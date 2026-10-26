@@ -23,9 +23,10 @@ export interface ScreenWatchState {
   target: string;
   /**
    * Connecting; waiting for its first picture; showing it; a share this
-   * device can't play; or the share having ended.
+   * device can't play; the share having ended; or the connection to the
+   * server lost, and not got back.
    */
-  status: "connecting" | "waiting" | "showing" | "unplayable" | "ended";
+  status: "connecting" | "waiting" | "showing" | "unplayable" | "ended" | "lost";
   /** The picture's own size, once there is one. */
   width: number;
   height: number;
@@ -159,7 +160,9 @@ class Watching {
         return;
       }
       // Left voice, the share gone, another window watching instead: over.
-      this.end("ended");
+      // After a drop it's the connection that went, whatever the server
+      // says when it's back (a restart forgets every seat), so it says that.
+      this.end(why === "dropped" || this.#attempts > 0 ? "lost" : "ended");
     });
   }
 
@@ -300,7 +303,7 @@ class Watching {
     if (this.#pending && this.#drawing === 0) this.#drawing = requestAnimationFrame(() => this.#draw());
   }
 
-  end(status: "ended"): void {
+  end(status: "ended" | "lost"): void {
     if (shown?.server === this.server) publish({ ...shown, status });
     this.finish(false);
   }
@@ -318,6 +321,11 @@ class Watching {
     if (running === this) running = null;
     if (clear && shown?.server === this.server) publish(null);
   }
+}
+
+/** Whether a watch is over: its screen stays, saying why, until it's closed. */
+export function watchOver(status: ScreenWatchState["status"] | undefined): boolean {
+  return status === "ended" || status === "lost";
 }
 
 /** Forget an ended watch, when its screen is closed. */
