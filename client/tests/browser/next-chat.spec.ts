@@ -924,9 +924,12 @@ test.describe("reading and arriving", () => {
   });
 
   // Every message row formats its full date once per render, for the tooltip
-  // on its time, and nothing else in the chat window uses that format.
-  // Counting those calls counts row renders without instrumenting the app.
-  test("scrolling re-renders only the rows coming into view (PERF-2, #170)", async ({ page }) => {
+  // on its time, and nothing else in the chat window uses that format, so
+  // counting those calls counts row renders without instrumenting the app.
+  // Rows going onto the page are counted apart: a row drawn because it came
+  // into view, or drawn out of sight to be measured (#698), renders as it
+  // goes in (twice, in StrictMode). What's left over is rows re-rendered.
+  async function scrollCounting(page: Page, pauseMs: number) {
     await page.addInitScript(() => {
       const format = Object.getOwnPropertyDescriptor(Intl.DateTimeFormat.prototype, "format");
       if (!format?.get) throw new Error("Intl.DateTimeFormat#format is not a getter here");
@@ -949,31 +952,71 @@ test.describe("reading and arriving", () => {
     await log(page).evaluate((element) => element.scrollBy({ top: -600 }));
     // Let the scroll and the rows' measuring settle before counting.
     await page.waitForTimeout(800);
-    const result = await page.evaluate(async () => {
+    return page.evaluate(async (pauseMs) => {
       const scroller = document.querySelector<HTMLElement>(".nx-conv-scroll");
-      if (!scroller) throw new Error("no scroller");
+      const rows = document.querySelector<HTMLElement>(".nx-conv-rows");
+      if (!scroller || !rows) throw new Error("no scroller");
       const drawn = () => new Set([...document.querySelectorAll<HTMLElement>("[data-message]")].map((row) => row.dataset.message));
       const before = drawn();
+      // Each message row put on the page, as often as it was.
+      const added: string[] = [];
+      const take = (records: MutationRecord[]) => {
+        for (const record of records) {
+          for (const node of record.addedNodes) {
+            const id = node instanceof HTMLElement ? node.querySelector<HTMLElement>("[data-message]")?.dataset.message : undefined;
+            if (id) added.push(id);
+          }
+        }
+      };
+      const watching = new MutationObserver(take);
+      watching.observe(rows, { childList: true });
       const counted = window as unknown as { rowRenders?: number };
       counted.rowRenders = 0;
       const startTop = scroller.scrollTop;
-      // Twenty-five small wheel-sized steps: each re-renders the list, and
-      // only a handful of rows come into view across all of them.
+      // Twenty-five small wheel-sized steps, each a frame apart or, with
+      // `pauseMs`, further apart than the virtualizer calls stopping.
       const seen = new Set(before);
       for (let step = 0; step < 25; step += 1) {
-        await new Promise((resolve) => requestAnimationFrame(resolve));
+        await new Promise((resolve) => (pauseMs > 0 ? window.setTimeout(resolve, pauseMs) : requestAnimationFrame(resolve)));
         scroller.scrollTop -= 4;
         for (const id of drawn()) seen.add(id);
       }
       await new Promise((resolve) => requestAnimationFrame(resolve));
       for (const id of drawn()) seen.add(id);
-      return { renders: counted.rowRenders ?? 0, arrived: seen.size - before.size, moved: startTop - scroller.scrollTop, drawn: before.size };
-    });
+      take(watching.takeRecords());
+      watching.disconnect();
+      return {
+        renders: counted.rowRenders ?? 0,
+        mounts: added.length,
+        mounted: new Set(added).size,
+        arrived: seen.size - before.size,
+        drawn: before.size,
+        moved: startTop - scroller.scrollTop,
+      };
+    }, pauseMs);
+  }
+
+  test("scrolling re-renders only the rows coming into view (PERF-2, #170)", async ({ page }) => {
+    const result = await scrollCounting(page, 0);
     expect(result.moved, "the log actually scrolled").toBeGreaterThan(40);
-    // Unmemoized, every drawn row re-renders on every step: 25 × the drawn
-    // rows. A minute tick can re-render the drawn rows once, hence the
-    // allowance.
-    expect(result.renders).toBeLessThanOrEqual(result.arrived + result.drawn + 5);
+    expect(result.drawn).toBeGreaterThan(10);
+    // Unmemoized, every drawn row re-renders on every step: 25 times each.
+    // Beyond the rows going in, a minute's tick can re-render the drawn rows
+    // once, twice over in StrictMode.
+    expect(result.renders).toBeLessThanOrEqual(2 * result.mounts + 2 * result.drawn);
+  });
+
+  test("scrolling in steps far apart measures each row above once, re-rendering none (#709)", async ({ page }) => {
+    // Steps further apart than the virtualizer's 150 ms are scrolling that
+    // stopped and started again, as on a busy computer: each stop draws the
+    // unmeasured rows above to measure them (#698). Rows exactly the
+    // estimate's height never counted as measured, so every stop drew the
+    // same hundred again, which also failed PERF-2 at random (182 against 48).
+    const result = await scrollCounting(page, 200);
+    expect(result.moved).toBeGreaterThan(40);
+    expect(result.renders).toBeLessThanOrEqual(2 * result.mounts + 2 * result.drawn);
+    // A row goes in to be measured once, and once more if it then came into view.
+    expect(result.mounts).toBeLessThanOrEqual(result.mounted + result.arrived);
   });
 
   test("a new message while you read older ones does not move what you're reading", async ({ page }) => {
