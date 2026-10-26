@@ -427,6 +427,10 @@ Voice.
   are its rooms, DMs and people, in the order above. You choose the order of
   the servers, and it never reshuffles by activity. A long server's header
   stays pinned while you scroll through it.
+- **Every server starts folded** when Linger opens, so the list shows all
+  of them at once, and you open the one you want. What you open or fold
+  stays that way until Linger closes. The first server used to open by
+  itself and push the others out of sight (#712).
 - **A folded server still shows its lights.** The header carries:
   - the server's color;
   - its name, bold when something inside is new;

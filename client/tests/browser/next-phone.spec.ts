@@ -827,12 +827,15 @@ test.describe("one tap opens a row, on an iPhone's rule for taps (#704)", () => 
     expect(await hoverOnly(page)).toEqual([]);
   });
 
-  test("one tap folds a server, whose ⋯ never shows for it", async ({ page }) => {
+  test("one tap opens a server and one folds it, whose ⋯ never shows for it", async ({ page }) => {
     await open(page, "?shell=phone");
     await settled(page);
     await iPhoneTaps(page);
     const server = page.locator(".nx-srv").first();
     const toggle = server.locator(".nx-srv-toggle");
+    // Every server starts folded (#712).
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await toggle.tap();
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
     await toggle.tap();
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
@@ -1060,7 +1063,8 @@ test.describe("a row held with a finger raises its actions from the bottom (#704
     await page.waitForTimeout(300);
     await expect(sheet(page).locator(".k-menu-head")).toHaveText(name);
     await expect(items(page)).toHaveText(["Quiet", "Move down"]);
-    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    // Held, not tapped: it stays as it started, folded (#712).
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(await sticksOut(page), "the sheet").toEqual([]);
     await sheet(page).getByRole("menuitemcheckbox", { name: "Quiet" }).tap();
     await expect(sheet(page)).toHaveCount(0);

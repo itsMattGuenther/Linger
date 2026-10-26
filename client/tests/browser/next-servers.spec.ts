@@ -26,14 +26,18 @@ async function words(locator: Locator): Promise<string> {
   return (await locator.innerText()).replace(/\s+/g, " ").trim();
 }
 
-test("one list, a section per server in your order, the first open and the rest folded", async ({ page }) => {
+test("one list, a section per server in your order, all folded until you open the one you want (#712)", async ({ page }) => {
   await open(page);
   await expect(page.locator(".k-titlebar")).toContainText("Linger");
   await expect(page.locator(".nx-srv")).toHaveCount(3);
   const names = await page.locator(".nx-srv-name").allInnerTexts();
   expect(names).toEqual(["The Good Company", "Ashen Lanterns", "Casa da Ribeira"]);
-  await expect(toggle(page, "The Good Company")).toHaveAttribute("aria-expanded", "true");
-  await expect(toggle(page, "Ashen Lanterns")).toHaveAttribute("aria-expanded", "false");
+  // The first no longer opens by itself and buries the rest: every header shows.
+  for (const name of names) await expect(toggle(page, name)).toHaveAttribute("aria-expanded", "false");
+  for (const name of names) await expect(toggle(page, name)).toBeInViewport();
+  await toggle(page, "Ashen Lanterns").click();
+  await expect(toggle(page, "Ashen Lanterns")).toHaveAttribute("aria-expanded", "true");
+  await expect(toggle(page, "The Good Company")).toHaveAttribute("aria-expanded", "false");
   await expect(toggle(page, "Casa da Ribeira")).toHaveAttribute("aria-expanded", "false");
   // The top card keeps only what's true everywhere: you, and whether you're away.
   const you = page.getByRole("region", { name: "You" });
@@ -44,7 +48,7 @@ test("one list, a section per server in your order, the first open and the rest 
 });
 
 test("a folded server still shows its lights: one plain line about what's happening there", async ({ page }) => {
-  await open(page, "&folded");
+  await open(page);
   expect(await words(lineOf(page, "The Good Company"))).toBe("Eli and Jules in #general");
   // Seven of 60: far from full, so nothing is said about room (a count would be a counter).
   expect(await words(lineOf(page, "Ashen Lanterns"))).toBe("#raid-night in voice");
@@ -57,7 +61,7 @@ test("a folded server still shows its lights: one plain line about what's happen
 });
 
 test("never shows a number, in any header or line", async ({ page }) => {
-  for (const options of ["&folded", "&open", "&folded&quiet", "&folded&voice"]) {
+  for (const options of ["", "&open", "&quiet", "&voice"]) {
     await open(page, options);
     const texts = await page.locator(".nx-srv-top").allInnerTexts();
     expect(texts.length).toBe(3);
@@ -69,10 +73,10 @@ test("never shows a number, in any header or line", async ({ page }) => {
 test("a server's name is bold when something inside is new, and never while it's quiet", async ({ page }) => {
   const weights = () =>
     page.locator(".nx-srv-name").evaluateAll((names) => names.map((name) => Number(getComputedStyle(name).fontWeight)));
-  await open(page, "&folded");
+  await open(page);
   // All three hold something new.
   expect(await weights()).toEqual([700, 700, 700]);
-  await open(page, "&folded&quiet");
+  await open(page, "&quiet");
   expect(await weights()).toEqual([700, 500, 700]);
   await expect(toggle(page, "Ashen Lanterns")).toHaveAccessibleName("Ashen Lanterns, quiet");
   await expect(toggle(page, "Casa da Ribeira")).toHaveAccessibleName("Casa da Ribeira, something new");
@@ -80,7 +84,7 @@ test("a server's name is bold when something inside is new, and never while it's
 });
 
 test("a folded server with a DM you haven't read is lit and says so, even while it's quiet (#291)", async ({ page }) => {
-  await open(page, "&folded");
+  await open(page);
   // The Good Company holds an unread DM (Jules); its toggle is lit and says so in words, not a number.
   await expect(toggle(page, "The Good Company")).toHaveAttribute("data-lit", "yes");
   await expect(toggle(page, "The Good Company")).toHaveAccessibleName(/^The Good Company, a DM for you/);
@@ -95,7 +99,7 @@ test("a folded server with a DM you haven't read is lit and says so, even while 
 });
 
 test("folds and unfolds by click and by keyboard, and each server's lists say whose they are", async ({ page }) => {
-  await open(page, "&folded");
+  await open(page);
   await expect(page.getByRole("list", { name: "Rooms on Ashen Lanterns" })).toHaveCount(0);
   await toggle(page, "Ashen Lanterns").focus();
   await page.keyboard.press("Enter");
@@ -116,7 +120,7 @@ test("folds and unfolds by click and by keyboard, and each server's lists say wh
 });
 
 test("the server menu: Quiet, and moving a server up and down, with focus back on its button", async ({ page }) => {
-  await open(page, "&folded");
+  await open(page);
   const menuButton = (name: string) => page.getByRole("button", { name: `${name} options` });
 
   // The first can't move up, the last can't move down.
@@ -203,7 +207,7 @@ test("headers and lines sit on the list's grid: names start with every other nam
 });
 
 test("nothing is cut off at the list's width: long words end in an ellipsis", async ({ page }) => {
-  for (const options of ["&open", "&folded", "&folded&voice"]) {
+  for (const options of ["&open", "", "&voice"]) {
     await open(page, options);
     const clipped = await page.locator(".nx-srv-name, .nx-srv-line-text, .nx-you-text, .nx-voice-server-name").evaluateAll((all) =>
       all
@@ -218,7 +222,7 @@ test("nothing is cut off at the list's width: long words end in an ellipsis", as
 
 test.describe("away, with a choice of servers", () => {
   test("goes away where it's ticked, says where, and comes back from there", async ({ page }) => {
-    await open(page, "&folded");
+    await open(page);
     await page.getByRole("button", { name: "Away" }).click();
     const editor = page.getByRole("dialog", { name: "Away message" });
     const boxes = editor.getByRole("checkbox");
@@ -245,7 +249,7 @@ test.describe("away, with a choice of servers", () => {
   });
 
   test("a server that refuses says why under its own name, and the rest still go away", async ({ page }) => {
-    await open(page, "&folded&awayfail");
+    await open(page, "&awayfail");
     await page.getByRole("button", { name: "Away" }).click();
     const editor = page.getByRole("dialog", { name: "Away message" });
     await editor.getByRole("button", { name: "I'm away" }).click();
@@ -255,7 +259,7 @@ test.describe("away, with a choice of servers", () => {
   });
 
   test("with nothing ticked there's nowhere to go away", async ({ page }) => {
-    await open(page, "&folded");
+    await open(page);
     await page.getByRole("button", { name: "Away" }).click();
     const editor = page.getByRole("dialog", { name: "Away message" });
     for (const box of await editor.getByRole("checkbox").all()) await box.click();
@@ -263,7 +267,7 @@ test.describe("away, with a choice of servers", () => {
   });
 
   test("the editor with its servers fits inside the list window", async ({ page }) => {
-    await open(page, "&folded");
+    await open(page);
     await page.getByRole("button", { name: "Away" }).click();
     const box = await page.getByRole("dialog", { name: "Away message" }).boundingBox();
     expect(box).toBeTruthy();
@@ -275,7 +279,7 @@ test.describe("away, with a choice of servers", () => {
 });
 
 test("your status on one server changes from that server's line", async ({ page }) => {
-  await open(page, "&folded");
+  await open(page);
   await toggle(page, "Casa da Ribeira").click();
   await section(page, "Casa da Ribeira").getByRole("button", { name: /Change your status here/ }).click();
   const field = page.getByRole("textbox", { name: "Your status as Matt" });
@@ -288,7 +292,7 @@ test("your status on one server changes from that server's line", async ({ page 
 });
 
 test("in voice, the voice bar says which server", async ({ page }) => {
-  await open(page, "&folded&voice");
+  await open(page, "&voice");
   const bar = page.getByRole("region", { name: "In voice in #general on The Good Company" });
   await expect(bar.locator(".nx-voice-server")).toHaveText("The Good Company");
 });

@@ -432,6 +432,8 @@ test("a half-typed line outlasts its tab and a restart, and goes once it's sent 
 test("with several servers, a tab carries its server's stripe and name, and the header says which", async ({ page }) => {
   await page.setViewportSize({ width: 1120, height: 820 });
   await open(page, "");
+  // Every server starts folded (#712): open each as you'd go to it.
+  await page.locator(".nx-srv-toggle").nth(0).click();
   await page.getByRole("list", { name: "Rooms on The Good Company" }).getByRole("button", { name: /^#general\b/ }).click();
   await page.locator(".nx-srv-toggle").nth(1).click();
   await page.getByRole("list", { name: "Rooms on Ashen Lanterns" }).getByRole("button").first().click();

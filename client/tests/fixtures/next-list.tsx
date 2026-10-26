@@ -7,9 +7,9 @@
  * Open it with `pnpm exec vite` at /tests/fixtures/next-list.html. The
  * window is the list's real size: 340 wide by 820 tall.
  *
- * `?servers`: the prototype's three servers (next/servers.ts), the first
- * open and the others folded; `&folded` starts them all folded, `&open` all
- * open, `&quiet` makes Ashen Lanterns quiet, `&awayfail` has Casa da
+ * `?servers`: the prototype's three servers (next/servers.ts), all folded
+ * as the app starts them (#712); `&first` opens the first and leaves the
+ * others folded, `&open` opens them all, `&quiet` makes Ashen Lanterns quiet, `&awayfail` has Casa da
  * Ribeira refuse to save an away message.
  *
  * `?away`: you're away; `&back` has you back at the computer, still away
@@ -455,7 +455,7 @@ function Servers() {
   return (
     <ListView
       servers={listings}
-      folded={query.has("folded") ? order : query.has("open") ? [] : undefined}
+      folded={query.has("first") ? order.slice(1) : query.has("open") ? [] : undefined}
       onQuiet={(id, on) => {
         note(`quiet:${id}:${on}`);
         setQuiet((held) => {
