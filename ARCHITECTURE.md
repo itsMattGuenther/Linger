@@ -106,7 +106,11 @@ Consequences:
    canvas. That works the same in WebView2, WebKitGTK (which has WebCodecs but no
    WebRTC), Android's web view and the iPhone's, and keeps video off voice's
    forwarding thread. `client/src/lib/screen/` holds it; the Rust side has no part
-   but the tray's Stop. `docs/decisions.md` has why it isn't a WebRTC track.
+   but the tray's Stop and, on Linux, two switches (`screen_capture.rs`): a yes to
+   WebKitGTK's request for a screen, which wry leaves unanswered and WebKitGTK then
+   refuses, and WebKitGTK's track processor turned on, which it offers only in a
+   worker (`lib/screen/reader.worker.ts`). `docs/decisions.md` has why it isn't a
+   WebRTC track.
 3. Avoid CSS features newer than ~2023 without checking WebKitGTK support. `oklch()` is
    supported and is required by §4.5 of the spec; verify it in the target WebKitGTK
    version during M0.

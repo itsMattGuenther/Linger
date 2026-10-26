@@ -73,6 +73,10 @@ export function shareStoppedWords(why: ShareStopped): string | null {
       return "This computer can't make the video Linger sends, so it can't share.";
     case "no-picker":
       return "This app can't ask for a screen on this computer.";
+    case "no-screen":
+      return "This computer didn't give Linger a screen to share.";
+    case "no-frames":
+      return "Linger couldn't read the screen you picked, so sharing stopped.";
     case "bad-hello":
       return "The server didn't take the share. It may need an update.";
     case "off":

@@ -97,7 +97,7 @@ import { arrivalsBetween, CARD_EVERY_MS, cardsHushed, CHIME_EVERY_MS, due, loadA
 import { loadSoundPrefs, playSound } from "../../../lib/sound";
 import type { InVoice } from "../chat/VoiceStrip";
 import { VoiceDock, type VoiceDockProps } from "./VoiceDock";
-import { sharesFromHere } from "../../../lib/screen/probe";
+import { useSharesFromHere } from "../../../lib/screen/probe";
 import { type ScreenShareState, useScreenShare, useShareStopped } from "../../../lib/screen/share";
 import { myScreen, sharersIn, shareStoppedWords, watchersOf, watchingWords } from "../../core/screens";
 import { startSharingHere, stopSharingEverywhere } from "../../core/screenStop";
@@ -840,6 +840,7 @@ function Servers({
   const shareHere = useScreenShare();
   const shareStopped = useShareStopped();
   // The tray's Stop sharing (#360): on while you share, from any window.
+  const canShare = useSharesFromHere(voiceServer !== null && infos[voiceServer]?.screens === true && !onPhone());
   const traySharing = (voiceState ? (myScreen(voiceState)?.sharing ?? false) : false) || (shareHere !== null && shareHere.server === voiceServer);
   const trayVoice = useRef<(action: string) => void>(() => undefined);
   trayVoice.current = (action) => {
@@ -887,13 +888,13 @@ function Servers({
 
   const voice = useMemo(() => {
     if (!voiceState || voiceServer === null) return undefined;
-    const screensOn = infos[voiceServer]?.screens === true && !onPhone() && sharesFromHere();
+    const screensOn = infos[voiceServer]?.screens === true && !onPhone() && canShare;
     const dock = voiceDock(voiceState, talkingNow(voiceState), voiceServer, talkKey, screensOn ? { api: apisRef.current.get(voiceServer) ?? null, share: shareHere, stopped: shareStopped?.server === voiceServer ? shareStoppedWords(shareStopped.why) : null } : null);
     if (!dock || !several) return dock;
     const info = infos[voiceServer];
     const inVoice = voiceState.myVoice ? (voiceState.voice[voiceState.myVoice.roomId]?.length ?? 0) : 0;
     return { ...dock, server: { name: info?.name ?? hostOf(voiceServer), accent: info?.accent_key ?? null, seats: seatsWords(inVoice) } };
-  }, [voiceState, voiceServer, several, infos, talkKey, shareHere, shareStopped]);
+  }, [voiceState, voiceServer, several, infos, talkKey, shareHere, shareStopped, canShare]);
 
   // On the phone a conversation, Media or Search covers the list and its
   // voice bar, so your voice comes with them, as a line under the title (#429).

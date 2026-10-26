@@ -938,18 +938,21 @@ and not as a WebRTC track. Branch `feat/360-screen-sharing`. Numbers are `T-19xx
 - 🟡 **T-1906 · Watching on a phone** — the layout is built and tested at phone size.
   **Still to do:** an Android phone and an iPhone watching for real (an iPhone
   before iOS 16.4 has no WebCodecs, and offers no Watch).
-- ⬜ **T-1907 · Sharing from Linux and macOS** — the desktop's own picker (the ScreenCast
-  portal on Linux), with WebKitGTK's encoder. Share is offered on Windows only until then
-  (`lib/screen/probe.ts` `sharesFromHere`). **Found 2026-10-25:** wry answers no
-  WebKitGTK `permission-request` but the clipboard's, and an unanswered one is refused,
-  so the shell must allow a display-capture request (from the page's own press only)
-  before the portal's picker can open. And WebKit has no
-  video track processor, so `share.ts` reads the screen through a hidden video; in
-  Playwright's WebKit a page in the background never plays that video
-  (`readyState` stays 0), so a share from a Linger window behind others could
-  stall. Turn on WebKitGTK's `MediaStreamTrackProcessing` feature in the shell
-  (wry's `with_webview`, `webkit_settings_set_feature_enabled`) before Linux
-  sharing ships, and check a share from a window that isn't in front.
+- 🟡 **T-1907 · Sharing from Linux and macOS** — **Linux built 2026-10-25.** The shell
+  (`src-tauri/src/screen_capture.rs`) says yes to WebKitGTK's request for a screen and
+  nothing else (wry leaves `permission-request` unanswered, and WebKitGTK refuses an
+  unanswered one), and turns on WebKitGTK's `MediaStreamTrackProcessing` feature, looked
+  up at run time since it arrived in 2.42. WebKitGTK offers the track processor only in a
+  worker, so the page hands a copy of the screen's track to `lib/screen/reader.worker.ts`
+  and gets frames back; Share is offered on Linux once that worker says it can read
+  (`sharesFromHere`). A picker that fails or a screen with no picture in 8 s stops and
+  says so. The packages bring PipeWire's GStreamer plugin (required on Arch, recommended
+  in the .deb and .rpm, #377). Checked in WebKitGTK 2.54.2 in a container: the permission
+  answer opens a real ScreenCast portal (sway's) and the worker gets the PipeWire stream;
+  but there WebKit couldn't turn the GPU's frames into pictures (its GL upload refused the
+  DMA-BUF), a limit of that container or not, so **still to do:** a share from Matt's
+  Linux desktop, from a window behind others too. macOS is still Share-less: nobody has
+  tried its picker.
 - ⬜ **T-1908 · The real check** — a Windows share watched on Linux, Windows, Android and an
   iPhone through the real server, at both speeds, for half an hour.
 - ⬜ **T-1909 · Streaming a game** — the computer's sound, the graphics card's encoder, later.

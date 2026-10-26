@@ -97,7 +97,7 @@ This is not an attempt to build a better platform. It's an attempt to not need o
 - **Voice messages**: record a clip in the message box, hear it back, then
   send it or throw it away. Up to five minutes.
 - **Screen sharing** in voice: share a screen or one window from the Windows
-  app at 30 or 60 frames a second, and everybody in that voice can watch it
+  or Linux app at 30 or 60 frames a second, and everybody in that voice can watch it
   above the conversation, on a computer or a phone. Your system's own picker
   chooses what's shared, and Linger never learns a window's name. No sound
   from the computer yet, and it's never recorded. Cameras aren't a feature.

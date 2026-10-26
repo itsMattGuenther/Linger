@@ -51,3 +51,11 @@ test("the .rpm recommends them, rather than requiring a name other RPM distribut
   assert.ok(linux.rpm.recommends.includes("gstreamer1-plugin-libav"), "rpm recommends lacks gstreamer1-plugin-libav");
   assert.ok(!linux.rpm.depends.some((name) => /libav/.test(name)), "rpm requires libav outright");
 });
+
+test("each package brings PipeWire's GStreamer plugin, which sharing a screen on Linux reads it through (#360)", () => {
+  assert.ok(archDepends(pkgbuild).includes("gst-plugin-pipewire"), "PKGBUILD depends lacks gst-plugin-pipewire");
+  // Recommended in the .deb and .rpm, for the reason above: an in-app update
+  // can't fetch it (#377). Without it, Share says the computer gave no screen.
+  assert.ok(linux.deb.recommends.includes("gstreamer1.0-pipewire"), "deb recommends lacks gstreamer1.0-pipewire");
+  assert.ok(linux.rpm.recommends.includes("pipewire-gstreamer"), "rpm recommends lacks pipewire-gstreamer");
+});

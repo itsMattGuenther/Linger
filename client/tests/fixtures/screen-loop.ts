@@ -49,7 +49,21 @@ function fakeScreen(): MediaStream {
   return canvas.captureStream(big ? 60 : 30);
 }
 
-Object.defineProperty(navigator.mediaDevices, "getDisplayMedia", { value: async () => fakeScreen(), configurable: true });
+/**
+ * What the picker does next: hands over the fake screen; hands over a
+ * screen that never draws a picture ("blank"); or fails with an error of
+ * that name, as a closed picker or a computer with no screen portal does.
+ */
+let picker: string | null = null;
+
+Object.defineProperty(navigator.mediaDevices, "getDisplayMedia", {
+  value: async () => {
+    if (picker === "blank") return document.createElement("canvas").captureStream(0);
+    if (picker !== null) throw new DOMException("the picker failed", picker);
+    return fakeScreen();
+  },
+  configurable: true,
+});
 
 function api(baseUrl: string, token: string): AuthedApi {
   const source: TokenSource = {
@@ -71,6 +85,7 @@ declare global {
       watch: (baseUrl: string, token: string, sessionId: string, target: string) => Promise<void>;
       paint: (css: string) => void;
       busy: (on: boolean) => void;
+      picker: (says: string | null) => void;
       stop: () => void;
       share_state: () => unknown;
       share_stopped: () => unknown;
@@ -92,6 +107,9 @@ window.loop = {
   },
   busy: (on) => {
     busy = on;
+  },
+  picker: (says) => {
+    picker = says;
   },
   stop: () => {
     stopSharing();

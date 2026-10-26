@@ -3,7 +3,7 @@ import type { RoomId } from "../../../generated/RoomId";
 import type { User } from "../../../generated/User";
 import type { AuthedApi } from "../../../lib/api";
 import type { GatewayState } from "../../../lib/gateway";
-import { hasWebCodecs, sharesFromHere } from "../../../lib/screen/probe";
+import { hasWebCodecs, useSharesFromHere } from "../../../lib/screen/probe";
 import { useScreenShare } from "../../../lib/screen/share";
 import { closeEnded, drawOn, startWatching, stopWatching, useScreenWatch, watchOver } from "../../../lib/screen/watch";
 import { onPhone } from "../../core/phone";
@@ -45,6 +45,7 @@ export function usePaneScreen({
   const [pending, setPending] = useState<{ server: string; roomId: RoomId; target: string; who: string; at: number } | null>(null);
 
   const seatedHere = state !== null && roomId !== null && seatedIn(state, roomId);
+  const canShare = useSharesFromHere(seatedHere && screensOn && !onPhone());
   useEffect(() => {
     if (!pending || !api || !state || server !== pending.server || state.sessionId === null) return;
     if (seatedIn(state, pending.roomId)) {
@@ -92,7 +93,7 @@ export function usePaneScreen({
     };
     const iShare = (mine?.roomId === roomId && mine.sharing) || (share !== null && share.server === server);
     const shareControl: ShareControl | undefined =
-      seatedHere && !onPhone() && sharesFromHere()
+      seatedHere && canShare
         ? {
             sharing: iShare,
             unavailable: !iShare && sharers.length >= 3 ? "Three people are sharing here already." : undefined,
@@ -126,5 +127,5 @@ export function usePaneScreen({
       watch: others.length > 0 ? { sharers: others, watching: watchOver(shownHere?.status) ? null : (shownHere?.target ?? null), onWatch } : undefined,
       share: shareControl,
     };
-  }, [server, state, roomId, screensOn, watch, share, api, intend, seatedHere]);
+  }, [server, state, roomId, screensOn, watch, share, api, intend, seatedHere, canShare]);
 }

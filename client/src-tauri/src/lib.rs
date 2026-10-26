@@ -38,6 +38,8 @@ mod phone_save;
 mod phone_sound;
 #[cfg(any(mobile, test))]
 mod phone_text;
+#[cfg(target_os = "linux")]
+mod screen_capture;
 mod secrets;
 #[cfg(desktop)]
 pub mod sounds;

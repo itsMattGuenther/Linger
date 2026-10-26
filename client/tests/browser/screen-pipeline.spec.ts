@@ -61,11 +61,12 @@ function near(got: number[], want: number[]): boolean {
 }
 
 test("a screen shared here plays on a watcher here, and follows what the screen shows", async ({ page, browserName }) => {
-  // Sharing from WebKit (Linux and macOS) is T-1907: there the screen is read
-  // through a hidden video, which WebKit doesn't play in a page in the
-  // background, so with other tests running at once it often never starts.
-  // Watching in WebKit is the next test.
-  test.skip(browserName === "webkit", "sharing from WebKit is T-1907");
+  // The Linux app reads the screen in a worker, with the track processor its
+  // shell turns on (T-1907, `reader.worker.ts`, tested on its own). Playwright's
+  // WebKit has none there, so it would read through the hidden video, a way
+  // the app only falls back to, and one WebKit doesn't play in a page in the
+  // background. Watching in WebKit is the next test.
+  test.skip(browserName === "webkit", "Playwright's WebKit can't read a screen the way the Linux app does");
   const { asked } = await standIn(page);
   await page.goto("/tests/fixtures/screen-loop.html");
   await page.evaluate((server) => window.loop.share(server, "token", "s-sharer", 30), SERVER);
@@ -103,4 +104,31 @@ test("when the server restarts, a share and a watcher end saying the connection 
   await expect.poll(() => page.evaluate(() => window.loop.share_stopped()), { timeout: 10_000 }).toBe("dropped");
   expect(await page.evaluate(() => window.loop.share_state())).toBeNull();
   await expect.poll(() => page.evaluate(() => (window.loop.watch_state() as { status?: string } | null)?.status), { timeout: 10_000 }).toBe("lost");
+});
+
+test("a picker that fails says the computer gave no screen; one closed by the person says nothing", async ({ page }) => {
+  await standIn(page);
+  await page.goto("/tests/fixtures/screen-loop.html");
+  await page.evaluate(() => window.loop.picker("NotAllowedError"));
+  await page.evaluate((server) => window.loop.share(server, "token", "s-sharer", 30), SERVER);
+  expect(await page.evaluate(() => window.loop.share_stopped())).toBeNull();
+  expect(await page.evaluate(() => window.loop.share_state())).toBeNull();
+  // A desktop with no screen portal, say (T-1907).
+  await page.evaluate(() => window.loop.picker("NotFoundError"));
+  await page.evaluate((server) => window.loop.share(server, "token", "s-sharer", 30), SERVER);
+  expect(await page.evaluate(() => window.loop.share_stopped())).toBe("no-screen");
+  expect(await page.evaluate(() => window.loop.share_state())).toBeNull();
+});
+
+test("a screen that never sends a picture stops sharing and says so", async ({ page }) => {
+  await standIn(page);
+  await page.clock.install();
+  await page.goto("/tests/fixtures/screen-loop.html");
+  await page.evaluate(() => window.loop.picker("blank"));
+  await page.evaluate((server) => window.loop.share(server, "token", "s-sharer", 30), SERVER);
+  // Connected, and saying it shares, with nothing going out.
+  await expect.poll(() => page.evaluate(() => (window.loop.share_state() as { status?: string } | null)?.status)).toBe("sharing");
+  await page.clock.fastForward(9_000);
+  await expect.poll(() => page.evaluate(() => window.loop.share_stopped())).toBe("no-frames");
+  expect(await page.evaluate(() => window.loop.share_state())).toBeNull();
 });

@@ -867,8 +867,15 @@ window. Linger never sees that list, and never learns the name of what you
 picked: everybody sees "Jules is sharing their screen", never what it is. The
 voice bar then shows a small copy of what everybody sees, who is watching, by
 name, and **Stop**. Stop is in the tray menu too, for when a slide show covers
-everything. Sharing works from the Windows app for now; Linux and macOS come
-next. A phone watches but doesn't share.
+everything. Sharing works from the Windows and Linux apps; macOS comes later.
+A phone watches but doesn't share.
+
+**On Linux**, your desktop asks what to share through its screen-sharing
+portal: GNOME, KDE Plasma, Hyprland and sway each have one. If Linger says
+your computer didn't give it a screen, or couldn't read the one you picked,
+check that PipeWire's GStreamer plugin is installed (`gst-plugin-pipewire` on
+Arch, `gstreamer1.0-pipewire` on Debian and Ubuntu, `pipewire-gstreamer` on
+Fedora), along with your desktop's `xdg-desktop-portal` package.
 
 **Showing a PowerPoint?** Share **Entire screen**, then start the slide show.
 Sharing just the PowerPoint window can come out black, because the slide show

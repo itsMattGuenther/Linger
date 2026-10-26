@@ -1,5 +1,7 @@
+import { useSyncExternalStore } from "react";
 import type { ScreenCodec } from "../../generated/ScreenCodec";
 import { CODEC_STRING, decoderConfig, encoderConfig, SCREEN_SPEEDS, type ScreenFps } from "./presets";
+import { openReader, readsHere } from "./reader";
 
 /**
  * What this app can make and play (PROTOCOL §8, "The server picks the
@@ -30,13 +32,61 @@ async function supported(test: () => Promise<{ supported?: boolean }>): Promise<
 }
 
 /**
- * Whether this app shares from here (SPEC §4.20): the Windows app, for now.
- * Linux's WebKitGTK refuses the picker unless the shell answers its
- * permission request, and reads a window behind others too slowly (T-1907);
- * macOS comes with it. Elsewhere Share isn't offered; watching is.
+ * Whether a worker here can read a screen (`reader.worker.ts`): null until
+ * one has said. Asked once, the first time Share might be offered, which is
+ * in a room's voice, long after the shell has turned the track processor on.
+ */
+let workerReads: boolean | null = null;
+let askingWorker = false;
+const workerListeners = new Set<() => void>();
+
+function askWorker(): void {
+  if (askingWorker) return;
+  askingWorker = true;
+  const worker = openReader();
+  if (!worker) {
+    workerReads = false;
+    return;
+  }
+  void readsHere(worker).then((reads) => {
+    worker.terminate();
+    workerReads = reads;
+    for (const listener of workerListeners) listener();
+  });
+}
+
+/**
+ * Whether this app shares from here (SPEC §4.20): the Windows app, and the
+ * Linux app where a worker can read the screen, which needs the shell to
+ * have answered WebKitGTK's permission request and turned its track
+ * processor on (T-1907). A Mac isn't offered it yet: nobody has tried its
+ * picker. Elsewhere Share isn't offered; watching is.
  */
 export function sharesFromHere(): boolean {
-  return canPickScreen() && hasWebCodecs() && typeof navigator !== "undefined" && /\bWindows\b/.test(navigator.userAgent);
+  if (!canPickScreen() || !hasWebCodecs() || typeof navigator === "undefined") return false;
+  const agent = navigator.userAgent;
+  if (/\bWindows\b/.test(agent)) return true;
+  if (!/\bLinux\b/.test(agent) || /\bAndroid\b/.test(agent)) return false;
+  askWorker();
+  return workerReads === true;
+}
+
+/**
+ * `sharesFromHere`, for a screen, drawn again once the worker has said;
+ * false without asking until Share is `wanted` (in voice, on a server that
+ * passes screens on).
+ */
+export function useSharesFromHere(wanted: boolean): boolean {
+  return useSyncExternalStore(subscribeWorker, wanted ? sharesFromHere : notWanted);
+}
+
+function notWanted(): boolean {
+  return false;
+}
+
+function subscribeWorker(listener: () => void): () => void {
+  workerListeners.add(listener);
+  return () => workerListeners.delete(listener);
 }
 
 /** The formats this app can play. */
@@ -86,6 +136,8 @@ export function makeable(fps: ScreenFps): Promise<{ codecs: ScreenCodec[]; hardw
 export function forgetProbes(): void {
   plays = null;
   makes.clear();
+  workerReads = null;
+  askingWorker = false;
 }
 
 export { CODEC_STRING };

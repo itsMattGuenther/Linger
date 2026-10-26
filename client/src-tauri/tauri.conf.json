@@ -69,7 +69,7 @@
           "gstreamer1.0-plugins-good",
           "gstreamer1.0-pulseaudio"
         ],
-        "recommends": ["libayatana-appindicator3-1", "gstreamer1.0-libav"]
+        "recommends": ["libayatana-appindicator3-1", "gstreamer1.0-libav", "gstreamer1.0-pipewire"]
       },
       "rpm": {
         "desktopTemplate": "linux/linger.desktop.hbs",
@@ -83,7 +83,7 @@
           "/usr/lib64/gstreamer-1.0/libgstpulseaudio.so",
           "/usr/lib64/gstreamer-1.0/libgstvpx.so"
         ],
-        "recommends": ["libayatana-appindicator-gtk3", "gstreamer1-plugin-libav"]
+        "recommends": ["libayatana-appindicator-gtk3", "gstreamer1-plugin-libav", "pipewire-gstreamer"]
       }
     },
     "windows": {

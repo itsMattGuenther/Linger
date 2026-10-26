@@ -57,6 +57,9 @@ describe("a share that ended by itself (#360)", () => {
     expect(shareStoppedWords("bad-hello")).toMatch(/may need an update/);
     // Turned off by the host while you shared: said once, not tried again.
     expect(shareStoppedWords("off")).toMatch(/screen sharing turned off/);
+    // The computer handed over no screen, or no pictures of it (T-1907).
+    expect(shareStoppedWords("no-screen")).toMatch(/didn't give Linger a screen/);
+    expect(shareStoppedWords("no-frames")).toMatch(/couldn't read the screen you picked/);
     for (const quiet of ["ended", "replaced", "not-in-voice", "nothing-to-watch"] as const) expect(shareStoppedWords(quiet)).toBeNull();
   });
 });

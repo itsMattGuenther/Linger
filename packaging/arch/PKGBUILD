@@ -27,6 +27,9 @@ depends=(
   # The decoders for the sound (AAC) and picture (H.264) most shared videos
   # are made of: without them a video plays silent, or not at all (#358).
   'gst-libav'
+  # PipeWire's GStreamer plugin: the screen a person shares comes from the
+  # desktop's screen portal over PipeWire (#360).
+  'gst-plugin-pipewire'
   'gtk3'
   'libsoup3'
   'webkit2gtk-4.1'

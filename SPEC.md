@@ -1267,10 +1267,11 @@ Anybody in a room's voice can share their whole screen or one window, and anybod
 in that voice can watch: slides, a document, some code, a game. It came off §2's
 anti-goals that day. Cameras didn't: there is no video of people.
 
-**From the Windows app first; every app watches.** The first version shares from the
-Windows app, where the friends who asked for it are. Linux and macOS share next, each
-through its own desktop's picker. Phones watch and never share. Watching works
-everywhere Linger runs: Windows, Linux, macOS, Android and iPhone.
+**From Windows and Linux first; every app watches.** The first version shares from the
+Windows app, where the friends who asked for it are, and from the Linux app, through
+the desktop's own screen-sharing portal (GNOME, KDE Plasma, Hyprland and sway each have
+one). macOS shares later. Phones watch and never share. Watching works everywhere Linger
+runs: Windows, Linux, macOS, Android and iPhone.
 
 **The system's own picker, never Linger's.** Share opens the operating system's own
 "choose what to share" window, which the system draws, not Linger. Linger receives only

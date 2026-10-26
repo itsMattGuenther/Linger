@@ -4,6 +4,7 @@ import type { AuthedApi } from "../api";
 import { packFrame } from "./frames";
 import { encoderConfig, fitWithin, KEYFRAME_EVERY_MS, SCREEN_SPEEDS, type ScreenFps, type ScreenSpeed } from "./presets";
 import { canPickScreen, makeable } from "./probe";
+import { openReader, readsHere } from "./reader";
 import { closingOf, openScreenSocket, readSaid, RETRIES, retryAfter, type ScreenClosing } from "./socket";
 
 /**
@@ -17,7 +18,7 @@ import { closingOf, openScreenSocket, readSaid, RETRIES, retryAfter, type Screen
  */
 
 /** Why a share ended when it wasn't Stop. */
-export type ShareStopped = ScreenClosing | "no-picker" | "no-encoder";
+export type ShareStopped = ScreenClosing | "no-picker" | "no-encoder" | "no-screen" | "no-frames";
 
 export interface ScreenShareState {
   server: string;
@@ -108,9 +109,13 @@ export async function startSharing(options: { server: string; api: AuthedApi; se
   let stream: MediaStream;
   try {
     stream = await picking;
-  } catch {
-    // The picker was closed, or the system said no: nothing to say.
+  } catch (error) {
     publish(null);
+    // Closed, or turned down by the person: nothing to say. Anything else
+    // is the computer failing to hand a screen over (on Linux, no screen
+    // portal or no PipeWire for it), which is said.
+    const declined = error instanceof DOMException && (error.name === "NotAllowedError" || error.name === "AbortError");
+    if (!declined) stopped(options.server, "no-screen");
     return;
   }
   const track = stream.getVideoTracks()[0];
@@ -137,6 +142,14 @@ export function stopSharing(): void {
 export function sharingOn(server: string): boolean {
   return running !== null && shown?.server === server;
 }
+
+/**
+ * How long a share waits for the screen's first picture before it stops and
+ * says so: an engine that hands over a screen but no pictures of it (a
+ * desktop whose screen portal and web engine don't agree) would otherwise
+ * say "Sharing your screen" with nothing going out.
+ */
+const FIRST_FRAME_MS = 8_000;
 
 /** How much may wait in the socket before frames are skipped: about two seconds at 6 Mbit/s. */
 const MOST_WAITING = 1_500_000;
@@ -174,6 +187,8 @@ class Sharing {
   #lastFrameAt = Number.NEGATIVE_INFINITY;
   #fails = new Map<ScreenCodec, number[]>();
   #done = false;
+  #seen = false;
+  #firstFrameTimer = 0;
   #stopReading: (() => void) | null = null;
 
   constructor(
@@ -188,6 +203,9 @@ class Sharing {
   ) {}
 
   start(): void {
+    this.#firstFrameTimer = window.setTimeout(() => {
+      if (!this.#seen) this.finish("no-frames");
+    }, FIRST_FRAME_MS);
     // The system's own "Stop sharing" ends it as Stop does.
     this.track.addEventListener("ended", () => this.finish(null), { once: true });
     void this.connect();
@@ -273,11 +291,59 @@ class Sharing {
       void pump();
       return;
     }
-    // An engine without a track processor (WebKitGTK, Safari on a Mac): the
-    // track plays in a video nobody sees, and its picture is taken at the
-    // share's speed. The video is in the page, out of sight, since an engine
-    // may not play one that isn't; a screen that isn't changing is the same
-    // picture again, which costs next to nothing to send.
+    void this.readInWorker().then((reading) => {
+      if (!reading && !this.#done) this.readFromVideo();
+    });
+  }
+
+  /**
+   * Take frames in a worker (`reader.worker.ts`), where WebKitGTK has its
+   * track processor: a copy of the track goes there, so the small copy of
+   * the screen beside Stop keeps playing here. False when there's no track
+   * processor there, or the engine can't hand a track over.
+   */
+  async readInWorker(): Promise<boolean> {
+    const worker = openReader();
+    if (!worker) return false;
+    if (!(await readsHere(worker)) || this.#done) {
+      worker.terminate();
+      return false;
+    }
+    const copy = this.track.clone();
+    try {
+      worker.postMessage({ op: "read", track: copy }, [copy]);
+    } catch {
+      copy.stop();
+      worker.terminate();
+      return false;
+    }
+    worker.addEventListener("message", (event: MessageEvent<unknown>) => {
+      const said = event.data;
+      if (typeof said !== "object" || said === null || !("op" in said)) return;
+      if (said.op === "frame" && "frame" in said && said.frame instanceof VideoFrame) {
+        this.frame(said.frame);
+        worker.postMessage({ op: "took" });
+      } else if (said.op === "ended") {
+        // The screen went (the desktop's own Stop, or the picture lost).
+        this.finish(null);
+      }
+    });
+    this.#stopReading = () => {
+      worker.postMessage({ op: "stop" });
+      worker.terminate();
+    };
+    return true;
+  }
+
+  /**
+   * An engine with no track processor anywhere (Safari on a Mac): the track
+   * plays in a video nobody sees, and its picture is taken at the share's
+   * speed. The video is in the page, out of sight, since an engine may not
+   * play one that isn't; a screen that isn't changing is the same picture
+   * again, which costs next to nothing to send. A page out of sight may stop
+   * playing it, so this is the last way, not the first.
+   */
+  readFromVideo(): void {
     const video = document.createElement("video");
     video.muted = true;
     video.playsInline = true;
@@ -311,6 +377,13 @@ class Sharing {
   }
 
   frame(frame: VideoFrame): void {
+    // A picture with no size is no picture (WebKit hands one over when it
+    // can't read the screen), and no encoder takes it.
+    if (frame.displayWidth === 0 || frame.displayHeight === 0) {
+      frame.close();
+      return;
+    }
+    this.#seen = true;
     const now = performance.now();
     // No faster than the speed it was started at.
     if (this.#done || now - this.#lastFrameAt < 800 / this.speed.fps) {
@@ -412,6 +485,7 @@ class Sharing {
   finish(why: ShareStopped | null): void {
     if (this.#done) return;
     this.#done = true;
+    window.clearTimeout(this.#firstFrameTimer);
     this.#stopReading?.();
     for (const held of this.#encoders.values()) closeEncoder(held);
     this.#encoders.clear();
