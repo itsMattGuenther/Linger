@@ -20,6 +20,7 @@ public static class LingerWindowProbe {
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
   [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
   [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr hdc, uint flags);
@@ -129,6 +130,13 @@ while ($null -ne ($line = [Console]::In.ReadLine())) {
       # WM_CLOSE, as the desktop's close does. Linger closes the list to the tray.
       'close' { @{ done = [LingerWindowProbe]::PostMessage((Handle $cmd.hwnd), 0x10, [IntPtr]::Zero, [IntPtr]::Zero) } }
       'capture' { Capture (Handle $cmd.hwnd) $cmd.path $cmd.how }
+      # Escape pressed and let go, to whatever has the keyboard: a person
+      # closing a dialog (the screen picker, windows-screen-check.mjs).
+      'escape' {
+        [LingerWindowProbe]::keybd_event(0x1B, 0, 0, [UIntPtr]::Zero)
+        [LingerWindowProbe]::keybd_event(0x1B, 0, 2, [UIntPtr]::Zero)
+        @{ done = $true }
+      }
       default { throw "unknown op $($cmd.op)" }
     }
     [Console]::Out.WriteLine('LINGER-REPLY ' + ($reply | ConvertTo-Json -Compress -Depth 4))

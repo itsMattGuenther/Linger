@@ -10,6 +10,9 @@
 //   graphics card, so it's reported, not required).
 // - Frames keep coming and encoding with the window minimized: a slide show
 //   covers Linger, and the share mustn't stop when it does.
+// - Then again without the test switch, as a person meets it: a press opens
+//   WebView2's own picker (a picture of it is kept), and Escape closes it
+//   with the share refused, which Share takes as nothing to say.
 //
 // Nothing goes to a server: the screen socket and the server are
 // crates/linger-server/tests/screen.rs and scripts/screen-loop.mjs. What
@@ -72,13 +75,17 @@ const appName = basename(exe);
 const policyKeys = [];
 let app;
 let browser;
-try {
+
+/**
+ * Start the installed app under the test policy, with `switches` added to
+ * WebView2's own, and find its list window's page and window.
+ */
+async function launch(switches, profile, logName) {
   // HKLM app-specific WebView2 policy, as the other checks set it, removed
-  // after. The two capture switches are Chromium's own for tests: the
-  // picker chooses the whole screen by itself, which a person does by hand.
+  // after.
   for (const [setting, value] of [
-    ["AdditionalBrowserArguments", `--remote-debugging-port=${port} --auto-select-desktop-capture-source="Entire screen" --enable-usermedia-screen-capturing`],
-    ["UserDataFolder", resolve(output, "profile")],
+    ["AdditionalBrowserArguments", `--remote-debugging-port=${port} ${switches}`.trim()],
+    ["UserDataFolder", resolve(output, profile)],
   ]) {
     const key = `HKLM\\Software\\Policies\\Microsoft\\Edge\\WebView2\\${setting}`;
     assert.notEqual(spawnSync("reg", ["query", key, "/v", appName], { stdio: "ignore" }).status,
@@ -87,7 +94,7 @@ try {
     assert.equal(changed.status, 0, changed.stderr);
     policyKeys.push(key);
   }
-  const log = openSync(resolve(output, "app.log"), "w");
+  const log = openSync(resolve(output, logName), "w");
   app = spawn(resolve(exe), [], { stdio: ["ignore", log, log] });
   closeSync(log);
   let launchError;
@@ -116,6 +123,52 @@ try {
     if (!hwnd) await sleep(250);
   }
   assert(hwnd, "The installed app never showed a window");
+  return { page, hwnd };
+}
+
+/** Stop the app and take the test policy away. */
+async function shutDown() {
+  if (browser) await browser.close().catch(() => undefined);
+  browser = undefined;
+  if (app?.pid) {
+    spawnSync("taskkill", ["/pid", String(app.pid), "/T", "/F"], { stdio: "ignore" });
+    if (app.exitCode === null) await new Promise((settle) => { app.once("exit", settle); setTimeout(settle, 10000); });
+  }
+  app = undefined;
+  for (const key of policyKeys.splice(0)) {
+    const removed = spawnSync("reg", ["delete", key, "/v", appName, "/f"], { encoding: "utf8" });
+    if (removed.status !== 0) verdict("the test policy is removed", false, { key, stderr: removed.stderr });
+  }
+}
+
+/** A button on the page that asks for a screen as Share does, from a press. */
+async function addProbe(page, onScreen) {
+  await page.evaluate(() => {
+    window.__lingerScreenCheck = { status: "waiting", error: null, frames: 0, vp8: { chunks: 0, bytes: 0, keys: 0 }, avc: { chunks: 0, bytes: 0, keys: 0 }, size: null, stop: false };
+    const button = document.createElement("button");
+    button.id = "linger-screen-probe";
+    button.textContent = "share";
+    Object.assign(button.style, { position: "fixed", left: "0", top: "0", zIndex: "99999" });
+    document.body.append(button);
+  });
+  await page.evaluate(onScreen);
+}
+
+async function statusAfterPress(page) {
+  // A real press, through the debugging port, so the page has a person's press.
+  await page.click("#linger-screen-probe");
+  for (let attempt = 0; attempt < 120; attempt++) {
+    const status = await page.evaluate(() => window.__lingerScreenCheck.status);
+    if (status !== "waiting") break;
+    await sleep(250);
+  }
+  return page.evaluate(() => ({ ...window.__lingerScreenCheck }));
+}
+
+try {
+  // The two capture switches are Chromium's own for tests: the picker
+  // chooses the whole screen by itself, which a person does by hand.
+  const { page, hwnd } = await launch(`--auto-select-desktop-capture-source="Entire screen" --enable-usermedia-screen-capturing`, "profile", "app.log");
 
   // 1. What this WebView2 has.
   const has = await page.evaluate(async () => {
@@ -145,15 +198,9 @@ try {
   // 2. Share as Share does: from a press, read through the track processor,
   // encoded as VP8 (and H.264 when the runner makes it), counted. Nothing
   // about what was picked is read.
-  await page.evaluate(() => {
-    const check = { status: "waiting", error: null, frames: 0, vp8: { chunks: 0, bytes: 0, keys: 0 }, avc: { chunks: 0, bytes: 0, keys: 0 }, size: null, stop: false };
-    window.__lingerScreenCheck = check;
-    const button = document.createElement("button");
-    button.id = "linger-screen-probe";
-    button.textContent = "share";
-    Object.assign(button.style, { position: "fixed", left: "0", top: "0", zIndex: "99999" });
-    document.body.append(button);
-    button.addEventListener("click", () => {
+  await addProbe(page, () => {
+    const check = window.__lingerScreenCheck;
+    document.getElementById("linger-screen-probe").addEventListener("click", () => {
       navigator.mediaDevices
         .getDisplayMedia({ video: { frameRate: { ideal: 60, max: 60 }, width: { max: 1920 }, height: { max: 1080 } }, audio: false })
         .then(async (stream) => {
@@ -204,14 +251,7 @@ try {
         });
     });
   });
-  // A real press, through the debugging port, so the page has a person's press.
-  await page.click("#linger-screen-probe");
-  for (let attempt = 0; attempt < 120; attempt++) {
-    const status = await page.evaluate(() => window.__lingerScreenCheck.status);
-    if (status !== "waiting") break;
-    await sleep(250);
-  }
-  const started = await page.evaluate(() => ({ ...window.__lingerScreenCheck }));
+  const started = await statusAfterPress(page);
   verdict("the picker answers a press with a screen", started.status === "sharing", started);
 
   if (started.status === "sharing") {
@@ -239,16 +279,46 @@ try {
 } catch (error) {
   verdict("the check ran to the end", false, { error: error instanceof Error ? error.message : String(error) });
 } finally {
-  if (browser) await browser.close().catch(() => undefined);
-  if (app?.pid) {
-    spawnSync("taskkill", ["/pid", String(app.pid), "/T", "/F"], { stdio: "ignore" });
-    if (app.exitCode === null) await new Promise((settle) => { app.once("exit", settle); setTimeout(settle, 10000); });
+  await shutDown();
+}
+
+// 4. As a person meets it, without the test switch: the press opens
+// WebView2's picker and waits on the person; Escape closes it, and the share
+// is refused, which lib/screen/share.ts takes as nothing to say.
+try {
+  const { page, hwnd } = await launch("", "profile-picker", "app-picker.log");
+  await addProbe(page, () => {
+    const check = window.__lingerScreenCheck;
+    document.getElementById("linger-screen-probe").addEventListener("click", () => {
+      navigator.mediaDevices
+        .getDisplayMedia({ video: true, audio: false })
+        .then((stream) => {
+          check.status = "sharing";
+          for (const each of stream.getTracks()) each.stop();
+        })
+        .catch((error) => {
+          check.status = "refused";
+          check.error = error instanceof DOMException ? error.name : String(error);
+        });
+    });
+  });
+  await page.click("#linger-screen-probe");
+  await sleep(3000);
+  const open = await page.evaluate(() => ({ ...window.__lingerScreenCheck }));
+  const picture = await win("capture", { hwnd, path: resolve(output, "picker.png"), how: "screen" });
+  verdict("a press opens the picker, which waits on the person", open.status === "waiting", { open, picture: { width: picture.width, height: picture.height } });
+  await win("escape");
+  let closed = open;
+  for (let attempt = 0; attempt < 40 && closed.status === "waiting"; attempt++) {
+    await sleep(250);
+    closed = await page.evaluate(() => ({ ...window.__lingerScreenCheck }));
   }
+  verdict("Escape closes the picker and the share is refused, not left hanging", closed.status === "refused" && (closed.error === "NotAllowedError" || closed.error === "AbortError"), closed);
+} catch (error) {
+  verdict("the picker check ran to the end", false, { error: error instanceof Error ? error.message : String(error) });
+} finally {
+  await shutDown();
   helper.stdin.end();
-  for (const key of policyKeys) {
-    const removed = spawnSync("reg", ["delete", key, "/v", appName, "/f"], { encoding: "utf8" });
-    if (removed.status !== 0) verdict("the test policy is removed", false, { key, stderr: removed.stderr });
-  }
 }
 
 await writeFile(resolve(output, "result.json"), JSON.stringify(results, null, 2));
