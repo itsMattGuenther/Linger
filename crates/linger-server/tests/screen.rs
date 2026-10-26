@@ -362,7 +362,8 @@ async fn the_server_says_whether_it_passes_screens_on() {
 async fn a_host_can_turn_screens_off() {
     // LINGER_SCREENS=off (#360): voice carries on, nobody shares, and the
     // app is told so in GET /server before anybody tries.
-    let (server, host, room) = common::voice_server_tuned("quiet", |config| config.screens = false).await;
+    let (server, host, room) =
+        common::voice_server_tuned("quiet", |config| config.screens = false).await;
     let room = room.id.to_string();
     let info: Value = reqwest::Client::new()
         .get(server.url("/server"))
