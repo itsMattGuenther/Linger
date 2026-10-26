@@ -894,7 +894,9 @@ voice, and the room's voice line offers **Watch**. Watch joins that room's
 voice first if you weren't in it, since watching is being there, and the
 screen opens above the room's conversation, which carries on underneath. Drag
 the line between them to give either more room, or press **Full screen**
-(Escape to come back). Up to three people can share in a room at once; you
+(Escape to come back). **F** does the same, and gives the screen back, as long
+as the cursor isn't in the message box, and so does a double-click on the
+picture. If F is your push-to-talk key, it stays push to talk. Up to three people can share in a room at once; you
 watch one at a time, and the voice line has a Watch for each. On a phone the
 screen sits at the top of the room, and turning the phone sideways fills the
 screen with it.

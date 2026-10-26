@@ -702,7 +702,8 @@ height of what's above.
 A shared screen above a conversation (#360, `app/screen/ScreenStage.tsx`): a
 40px bar like the voice line, with the `screen` glyph, whose screen it is by
 their styled name, who else is watching in muted words (names, never a
-number), and Full screen and Stop watching on the right; then the picture on
+number), and Full screen (F, or a double-click on the picture) and Stop
+watching on the right; then the picture on
 `--surface-backdrop`, as big as there's room for with its shape kept. Until
 the picture comes, and when it can't or has stopped, a muted line says so in
 its place; stopped, while you're still in that voice, it adds that their next

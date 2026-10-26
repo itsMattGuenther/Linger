@@ -1299,7 +1299,8 @@ watching" (§4.2).
 
 **Where it shows.** Watching puts the screen above the room's conversation, with the
 conversation and its message box carrying on underneath; the line between them drags,
-and **Full screen** fills the monitor. On a phone it sits at the top of the room, and
+and **Full screen** fills the monitor (or **F**, when you aren't typing, or a double-click
+on the picture). On a phone it sits at the top of the room, and
 turning the phone sideways fills the screen with it. The person sharing sees a small copy
 of what everybody sees, beside **Stop**, in the voice bar, or under the voice line of a
 conversation popped out into its own window when they share from there; Stop is in the

@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import type { User } from "../../../generated/User";
+import { loadVoicePrefs } from "../../../lib/voice";
 import { type ScreenWatchState, watchOver } from "../../../lib/screen/watch";
+import { isFullScreenKey, typingIn } from "../../core/keys";
 import { onPhone } from "../../core/phone";
 import { Icon, IconButton, Name } from "../../kit";
 import "./ScreenStage.css";
@@ -34,9 +36,11 @@ function namesOf(people: readonly User[]): string {
  * A): whose it is and who else is watching, Full screen and Stop watching,
  * and the picture as big as the space allows with its shape kept. Until the
  * picture comes, and when it can't or has stopped, it says so in its place.
+ * F or a double-click on the picture fills the monitor and gives it back.
  */
 export function ScreenStage({ sharer, others, status, opensNext = false, full, onFull, onClose, onCanvas }: StageProps) {
   const whose = sharer?.display_name ?? "Somebody";
+  const over = watchOver(status);
   // Escape leaves full screen, as everywhere else.
   useEffect(() => {
     if (!full) return;
@@ -46,7 +50,17 @@ export function ScreenStage({ sharer, others, status, opensNext = false, full, o
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [full, onFull]);
-  const over = watchOver(status);
+  // F does what Full screen does, while there's a screen to fill.
+  useEffect(() => {
+    if (over) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !isFullScreenKey(event, typingIn(document.activeElement), loadVoicePrefs().pushToTalkKey)) return;
+      event.preventDefault();
+      onFull(!full);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [full, onFull, over]);
   const words =
     status === "unplayable"
       ? `This device can't play ${whose}'s screen.`
@@ -69,11 +83,11 @@ export function ScreenStage({ sharer, others, status, opensNext = false, full, o
         {others.length > 0 ? <span className="nx-stage-others">with {namesOf(others)} watching</span> : null}
         <span className="nx-stage-gap" />
         {over ? null : (
-          <IconButton icon={full ? "windowed" : "fullscreen"} label={full ? "Leave full screen" : "Full screen"} shortcut={full ? "Esc" : undefined} size={size} onClick={() => onFull(!full)} />
+          <IconButton icon={full ? "windowed" : "fullscreen"} label={full ? "Leave full screen" : "Full screen"} shortcut={full ? "Esc" : fullKey()} size={size} onClick={() => onFull(!full)} />
         )}
         <IconButton icon="close" label={over ? "Close" : "Stop watching"} size={size} onClick={onClose} />
       </div>
-      <div className="nx-stage-pic">
+      <div className="nx-stage-pic" onDoubleClick={over ? undefined : () => onFull(!full)}>
         <canvas ref={onCanvas} className="nx-stage-canvas" hidden={status !== "showing"} role="img" aria-label={`${whose}'s screen`} />
         {status === "showing" ? null : (
           <p className="nx-stage-words" role="status">
@@ -83,4 +97,9 @@ export function ScreenStage({ sharer, others, status, opensNext = false, full, o
       </div>
     </section>
   );
+}
+
+/** F, named after Full screen, unless it's the push-to-talk key or there's no keyboard. */
+function fullKey(): string | undefined {
+  return onPhone() || loadVoicePrefs().pushToTalkKey === "KeyF" ? undefined : "F";
 }

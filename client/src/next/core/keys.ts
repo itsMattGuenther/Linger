@@ -1,3 +1,5 @@
+import { isTalkKey } from "./talkKey";
+
 /**
  * The chat window's keyboard shortcuts (docs/design/buddy-list.md,
  * "Conversations: tabs or windows"; parity KEY-1): what a key press asks
@@ -31,6 +33,22 @@ export function isSearchKey(press: KeyPress): boolean {
 /** Ctrl+, opens Settings from any window (docs/design/buddy-list.md, "Settings"). */
 export function isSettingsKey(press: KeyPress): boolean {
   return press.ctrlKey && !press.altKey && !press.metaKey && !press.shiftKey && press.key === ",";
+}
+
+/**
+ * F fills the monitor with the screen you're watching, and gives it back
+ * (#360): F alone, not held down, never while you type, and never when it's
+ * your push-to-talk key (`talkKey`, a key code), which keeps the microphone.
+ */
+export function isFullScreenKey(press: KeyPress & { code: string; repeat: boolean }, typing: boolean, talkKey: string): boolean {
+  if (typing || press.repeat || press.ctrlKey || press.altKey || press.metaKey || press.shiftKey) return false;
+  if (isTalkKey(press, talkKey)) return false;
+  return press.key === "f" || press.key === "F";
+}
+
+/** Whether the focus is somewhere you type: a field, a box, or anything editable. */
+export function typingIn(focused: Element | null): boolean {
+  return focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement || focused instanceof HTMLSelectElement || (focused instanceof HTMLElement && focused.isContentEditable);
 }
 
 /**

@@ -79,6 +79,41 @@ test("Full screen fills the window and Escape leaves it", async ({ page }) => {
   await expect(stage).not.toHaveAttribute("data-full", "yes");
 });
 
+test("F and a double-click on the picture fill the window and give it back, and F typed in the box is just a letter", async ({ page }) => {
+  await chat(page, "?voice=mine&screen=watching");
+  const stage = page.getByRole("region", { name: "Jules's screen" });
+  const full = stage.getByRole("button", { name: "Full screen" });
+  await expect(full).toHaveAttribute("aria-keyshortcuts", "F");
+  // The cursor in the message box: F is typed, and the screen stays put.
+  const box = page.getByLabel("Message in #general");
+  await box.click();
+  await page.keyboard.press("f");
+  await expect(box).toHaveValue("f");
+  await expect(stage).not.toHaveAttribute("data-full", "yes");
+  // Out of the box, F fills the window, and F again gives it back.
+  await box.evaluate((node: HTMLElement) => node.blur());
+  await page.keyboard.press("f");
+  await expect(stage).toHaveAttribute("data-full", "yes");
+  await page.keyboard.press("f");
+  await expect(stage).not.toHaveAttribute("data-full", "yes");
+  // A double-click on the picture does the same.
+  const picture = stage.getByRole("img", { name: "Jules's screen" });
+  await picture.dblclick();
+  await expect(stage).toHaveAttribute("data-full", "yes");
+  await picture.dblclick();
+  await expect(stage).not.toHaveAttribute("data-full", "yes");
+});
+
+test("with F as your push-to-talk key, F keeps the microphone and leaves the screen alone", async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("linger.voice.pushToTalkKey", "KeyF"));
+  await chat(page, "?voice=mine&screen=watching");
+  const stage = page.getByRole("region", { name: "Jules's screen" });
+  await expect(stage.getByRole("button", { name: "Full screen" })).not.toHaveAttribute("aria-keyshortcuts", "F");
+  await page.keyboard.press("f");
+  await page.waitForTimeout(200);
+  await expect(stage).not.toHaveAttribute("data-full", "yes");
+});
+
 test("the line between the screen and the conversation moves it, and the conversation keeps room", async ({ page }) => {
   await chat(page, "?voice=mine&screen=watching");
   const line = page.getByRole("separator", { name: "Space between the screen and the conversation" });

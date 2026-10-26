@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isSearchKey, isSettingsKey, type KeyPress, tabCommand } from "./keys";
+import { isFullScreenKey, isSearchKey, isSettingsKey, type KeyPress, tabCommand } from "./keys";
 
 function press(key: string, held: Partial<Omit<KeyPress, "key">> = {}): KeyPress {
   return { key, ctrlKey: false, shiftKey: false, altKey: false, metaKey: false, ...held };
@@ -13,6 +13,25 @@ describe("the Settings shortcut", () => {
     }
     // And it is never mistaken for a tab command.
     expect(tabCommand(press(",", { ctrlKey: true }))).toBeNull();
+  });
+});
+
+describe("the full screen shortcut (#360)", () => {
+  const f = (key: string, held: Partial<Omit<KeyPress, "key">> = {}, repeat = false) => ({ ...press(key, held), code: "KeyF", repeat });
+  it("is F alone, either case, and nothing else", () => {
+    expect(isFullScreenKey(f("f"), false, "ControlRight")).toBe(true);
+    expect(isFullScreenKey(f("F"), false, "ControlRight")).toBe(true);
+    for (const other of [f("f", { ctrlKey: true }), f("f", { shiftKey: true }), f("f", { altKey: true }), f("f", { metaKey: true }), { ...press("g"), code: "KeyG", repeat: false }]) {
+      expect(isFullScreenKey(other, false, "ControlRight")).toBe(false);
+    }
+    // Ctrl+F stays whatever else it is.
+    expect(tabCommand(press("f", { ctrlKey: true }))).toBeNull();
+  });
+
+  it("does nothing held down, while you type, or when F is your push-to-talk key", () => {
+    expect(isFullScreenKey(f("f", {}, true), false, "ControlRight")).toBe(false);
+    expect(isFullScreenKey(f("f"), true, "ControlRight")).toBe(false);
+    expect(isFullScreenKey(f("f"), false, "KeyF")).toBe(false);
   });
 });
 
