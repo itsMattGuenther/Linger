@@ -42,6 +42,9 @@ describe("a share's size and settings", () => {
 
   it("asks less at 30 frames a second than at 60, and H.264 in Annex B", () => {
     expect(SCREEN_SPEEDS[30].bitrate).toBeLessThan(SCREEN_SPEEDS[60].bitrate);
+    // Low quality is 720p and High 1080p (#732), as the Linux shell's are.
+    expect([SCREEN_SPEEDS[30].maxWidth, SCREEN_SPEEDS[30].maxHeight, SCREEN_SPEEDS[30].bitrate]).toEqual([1280, 720, 2_500_000]);
+    expect([SCREEN_SPEEDS[60].maxWidth, SCREEN_SPEEDS[60].maxHeight, SCREEN_SPEEDS[60].bitrate]).toEqual([1920, 1080, 6_000_000]);
     // The server's ceiling is 10 Mbit/s; both stay well under it.
     expect(SCREEN_SPEEDS[60].bitrate).toBeLessThanOrEqual(6_000_000);
     const avc = encoderConfig("avc1", SCREEN_SPEEDS[60], 1920, 1080, true);

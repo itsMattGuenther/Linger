@@ -868,10 +868,16 @@ says the microphone stopped, and you join again.
 
 While you're in a room's voice, the voice bar and the room's voice line have
 **Share your screen** (a monitor with an arrow going up), beside Mute, Deafen
-and Leave. Pick a speed:
+and Leave. Pick how it looks:
 
-- **Sharp text, 30 fps** for slides, documents and code;
-- **Smooth motion, 60 fps** for scrolling, videos or a game.
+- **High quality** (1080p, 60 fps), the best picture: for slides, documents,
+  code, scrolling and video. Pick this one to present.
+- **Low quality** (720p, 30 fps), lighter on everybody's connection and on
+  your computer: for a slow connection, or when lots of people are watching.
+
+A window smaller than that is sent at its own size. A whole screen bigger than
+1080p, a 4K one, is scaled down to fit, so to make small text readable, share
+one window rather than the whole screen.
 
 Then your computer's own window asks what to share: your whole screen or one
 window. Linger never sees that list, and never learns the name of what you

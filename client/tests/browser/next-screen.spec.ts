@@ -32,12 +32,16 @@ test("in voice, Share asks which speed and starts at the one picked", async ({ p
   const strip = page.getByRole("group", { name: "Voice in this conversation" });
   await strip.getByRole("button", { name: "Share your screen" }).click();
   const menu = page.getByRole("menu", { name: "Share your screen" });
-  await expect(menu.getByRole("menuitem")).toHaveText(["Sharp text, 30 fps", "Smooth motion, 60 fps"]);
+  // Named for how they look, the size and speed on a second line (#732), the best first.
+  const items = menu.getByRole("menuitem");
+  await expect(items).toHaveCount(2);
+  await expect(items.nth(0)).toHaveAccessibleName("High quality, 1080p, 60 fps");
+  await expect(items.nth(1)).toHaveAccessibleName("Low quality, 720p, 30 fps");
   // The words fit the menu: none is cut short.
-  for (const item of await menu.getByRole("menuitem").all()) {
-    expect(await item.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+  for (const line of await menu.locator(".k-menu-text, .k-menu-detail").all()) {
+    expect(await line.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
   }
-  await menu.getByRole("menuitem", { name: "Smooth motion, 60 fps" }).click();
+  await menu.getByRole("menuitem", { name: "High quality, 1080p, 60 fps" }).click();
   await expect.poll(() => did(page)).toContain("share:60");
   // Picking closes it: left open, it came back when the share ended.
   await expect(menu).toBeHidden();
@@ -177,7 +181,7 @@ test("sharing from a popped-out window, your box sits under its voice line: a co
 
 // Your share went black for a while (lib/screen/black.ts): said under it
 // until it stops, in the danger color.
-const WENT_BLACK = "Your share went black for everybody watching. Shared one window for a slide show? Stop, then share your entire screen.";
+const WENT_BLACK = "Everyone watching saw a black screen. If you're showing slides, stop sharing, then share again and pick Entire screen. PowerPoint plays a slide show in a window of its own, so sharing only the PowerPoint window comes out black.";
 
 /** Whether `said` is in the danger color, as the app's other problems are. */
 async function inDanger(said: Locator): Promise<boolean> {

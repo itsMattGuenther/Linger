@@ -4,10 +4,12 @@ import type { ScreenCodec } from "../../generated/ScreenCodec";
 export type ScreenFps = 30 | 60;
 
 /**
- * What each speed asks of the encoder (PROTOCOL §8). Both fit 1920×1080. At
- * 30 the picture keeps its sharpness and gives up frames when there's a lot
- * to send, for slides and code; at 60 it keeps its frames, for motion. The
- * server holds every share to 10 Mbit/s whatever these say.
+ * What each speed asks of the encoder (PROTOCOL §8), offered as Low and High
+ * quality (#732). Low fits 1280×720 at 30, lighter on every line and on the
+ * sharer's computer, and keeps its sharpness over its frames; High fits
+ * 1920×1080 at 60 and keeps its frames, for motion. A smaller window is sent
+ * at its own size either way. The server holds every share to 10 Mbit/s
+ * whatever these say.
  */
 export interface ScreenSpeed {
   fps: ScreenFps;
@@ -20,7 +22,7 @@ export interface ScreenSpeed {
 }
 
 export const SCREEN_SPEEDS: Readonly<Record<ScreenFps, ScreenSpeed>> = {
-  30: { fps: 30, maxWidth: 1920, maxHeight: 1080, bitrate: 4_500_000, hint: "detail" },
+  30: { fps: 30, maxWidth: 1280, maxHeight: 720, bitrate: 2_500_000, hint: "detail" },
   60: { fps: 60, maxWidth: 1920, maxHeight: 1080, bitrate: 6_000_000, hint: "motion" },
 };
 

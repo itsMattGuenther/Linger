@@ -268,8 +268,8 @@ test("hiding your share's copy keeps the share going, and a share that starts hi
 // A slide show runs in a window of its own, so PowerPoint's window, shared,
 // comes out black (lib/screen/black.ts). Where the page shares for itself
 // (Windows), it looks at a small copy once a second.
-const WENT_BLACK = "Your share went black for everybody watching. Shared one window for a slide show? Stop, then share your entire screen.";
-const NOTICE = { title: "Your share is black", body: "Everybody watching sees black. Shared one window for a slide show? Stop, then share your entire screen." };
+const WENT_BLACK = "Everyone watching saw a black screen. If you're showing slides, stop sharing, then share again and pick Entire screen. PowerPoint plays a slide show in a window of its own, so sharing only the PowerPoint window comes out black.";
+const NOTICE = { title: "Everyone watching sees a black screen", body: "If you're showing slides, stop sharing and share your entire screen, not just the PowerPoint window." };
 
 const wentBlack = (page: Page) => page.evaluate(() => (window.loop.share_state() as { wentBlack?: boolean } | null)?.wentBlack ?? null);
 

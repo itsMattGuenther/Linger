@@ -2086,8 +2086,8 @@ past it are dropped, and its watchers wait for the next key frame. The apps aim 
 
 | Speed | Size | Rate the app asks of its encoder |
 |---|---|---|
-| 30 | Fits 1920×1080 | up to 4.5 Mbit/s, sharpness kept over frames |
-| 60 | Fits 1920×1080 | up to 6 Mbit/s, frames kept over sharpness |
+| 30 (Low quality) | Fits 1280×720 | up to 2.5 Mbit/s, sharpness kept over frames |
+| 60 (High quality) | Fits 1920×1080 | up to 6 Mbit/s, frames kept over sharpness |
 
 **Still there.** A screen that isn't changing sends nothing and a watcher asks nothing,
 so the server says `alive` on every screen socket every `SCREEN_ALIVE_MS` (5 s), and

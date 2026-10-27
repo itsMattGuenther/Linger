@@ -1002,6 +1002,14 @@ and not as a WebRTC track. Branch `feat/360-screen-sharing`. Numbers are `T-19xx
   reproduced in WebKitGTK 2.54.1 in a container with the machine's GPUs passed in. The
   #730 setting was confirmed by hand on the RTX 4090 machine. **Still to do:** the same
   watch through a release, on both machines.
+- ✅ **T-1912 · Share's words, said plainly** (2026-10-27, #731, #732) — the black-share
+  line and notice are whole sentences, saying what the watchers see, then what to do,
+  then why: a presenter read the old ones out and they didn't come across. Share's
+  choices are **High quality** (1080p, 60 fps) and **Low quality** (720p, 30 fps, 2.5
+  Mbit/s), each with its size and speed on a second line (the kit `Menu`'s new
+  `detail`). "Sharp text" had promised a sharpness a whole 4K screen, scaled to 1080p,
+  never had. The page and the Linux shell keep the same sizes (`presets.ts`,
+  `screen_shell/linux.rs` `speed`).
 - ⬜ **T-1909 · Streaming a game** — the computer's sound, the graphics card's encoder, later.
 
 ---

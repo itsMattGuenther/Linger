@@ -517,7 +517,9 @@ message's Reply, Edit and Delete.
   (lessons L-11). A window too short for it either way gives it the side with
   more room, and it scrolls.
 - **Items** are 32px, with an optional icon, and `tone="danger"` for a
-  destructive one. A step that needs confirming (delete) swaps the items for
+  destructive one. An optional `detail` puts a second line under the label
+  in `--text-meta`, `--text-muted`, and makes the item `--row-2` tall: Share's
+  "High quality" over "1080p, 60 fps". Its name is both lines. A step that needs confirming (delete) swaps the items for
   the confirm pair rather than opening a second menu.
 - **Keyboard:** it opens with its first item focused. Arrows, Home and End
   move and wrap, Enter chooses, Escape and Tab close. A click anywhere else
@@ -724,7 +726,8 @@ that has gone black for a while (#722, `lib/screen/black.ts`) says so in
 `--text-danger` meta text, as a problem: in the box under who is watching,
 and on a line of its own under the band, until that share stops.
 Share is an `IconButton` with the `share` glyph beside Mute, Deafen and
-Leave; it asks 30 or 60 frames a second in a `Menu`, and is pressed while you
+Leave; it offers High quality and Low quality in a `Menu`, each with its size
+and speed as the item's `detail`, and is pressed while you
 share. Nothing about a share is drawn in the lamp but the pressed button: a
 screen being shared isn't something new for you.
 

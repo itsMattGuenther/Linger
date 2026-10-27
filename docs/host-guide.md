@@ -477,8 +477,9 @@ sends a copy to each person watching. It needs nothing set up. It travels on
 the server's own address, the one the app already uses, so it doesn't need
 UDP 3479 and works through the proxy in front of the server.
 
-What it costs is upload: about 1.5 to 6 Mbps for each person watching, less
-for a still slide and more for a game at 60 frames a second. Eight people
+What it costs is upload: up to about 2.5 Mbps for each person watching a
+share at Low quality (720p, 30 frames a second), and 6 Mbps at High quality
+(1080p, 60 frames a second), less for a still slide. Eight people
 watching a presentation for an hour is roughly 7 GB of data out; a game shared
 at 60 frames a second to eight people is closer to 20 GB an hour. Your server
 holds every share to 10 Mbps whatever an app sends, and a room to three shares

@@ -68,6 +68,6 @@ export class BlackWatch {
 
 /** The desktop notice, said once a share: a slide show covers the app, so the box alone isn't seen. */
 export const BLACK_NOTICE = {
-  title: "Your share is black",
-  body: "Everybody watching sees black. Shared one window for a slide show? Stop, then share your entire screen.",
+  title: "Everyone watching sees a black screen",
+  body: "If you're showing slides, stop sharing and share your entire screen, not just the PowerPoint window.",
 } as const;

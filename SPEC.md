@@ -1291,13 +1291,20 @@ small copy of what it sends, about once a second, only for whether it's black, o
 computer: nothing is kept or sent, and nothing asks what the picture is, or whether a
 window or the whole screen was picked. Black for five seconds, the share's box says so
 until that share stops, since leaving the show brings the window back, and a desktop
-notice says it once: "Shared one window for a slide show? Stop, then share your entire
-screen." A black slide held that long on a whole screen says so too, once.
+notice says it once: "Everyone watching sees a black screen. If you're showing slides,
+stop sharing and share your entire screen, not just the PowerPoint window." Both are
+whole sentences, saying what the people watching see, then what to do, then why: the
+person sharing often reads them out (#731). A black slide held that long on a whole
+screen says so too, once.
 
-**Two speeds**, picked when you start: **30 frames a second** for slides, documents and
-code, sharpest for text; and **60 frames a second** for motion, scrolling, video or a
-game. Both are up to 1080p; a bigger screen is scaled to fit. The host's server holds
-every share to a ceiling, whatever an app asks for.
+**Two choices**, picked when you start, named for how they look, with their size and
+speed under the name (#732): **High quality** (1080p, 60 fps), the best picture, for
+slides, motion and video alike, offered first; and **Low quality** (720p, 30 fps),
+lighter on everybody's connection, the host's server and the sharing computer. A bigger screen is scaled to fit, and
+a smaller window is sent at its own size. The labels say the size because a whole 4K
+screen at 1080p is half as sharp as the screen itself: to make small text readable,
+share one window. The host's server holds every share to a ceiling, whatever an app
+asks for.
 
 **Watching is a choice, and it's being there.** Nothing is sent to anybody until they
 press **Watch**, and Watch joins the room's voice first if you weren't in it: watching
@@ -1329,8 +1336,8 @@ computer's own sound comes with streaming a game, later (#360).
 the host's server, which passes a copy to each person watching and keeps nothing. It
 travels on the same secure connection the app already has with the server, not voice's
 port, so it works on networks that block voice. Each person watching costs the host
-roughly 1.5 to 6 Mbps of upload while they watch, depending on what's on the screen and
-the speed. **The host's server could see a shared screen**, the same way it could hear
+up to about 2.5 Mbps of upload while they watch at Low quality and 6 Mbps at High,
+less while the screen is still. **The host's server could see a shared screen**, the same way it could hear
 voice (§4.14). It isn't end-to-end encrypted, and Linger never says it is.
 
 **Never recorded, never kept.** No copy on the server, no preview pictures, no recordings,

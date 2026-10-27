@@ -10,8 +10,8 @@
 //! is the point of doing it here: WebKitGTK reads a shared screen only as GPU
 //! buffers, and on a computer with two GPUs, or none it can use for this, it
 //! can't turn them into pictures (T-1907 in TASKS.md). Every portal can hand
-//! over ordinary memory. The pictures are scaled to fit 1080p, held to the
-//! share's speed, and encoded the way the page encodes them
+//! over ordinary memory. The pictures are scaled to fit the share's size
+//! (720p at 30 frames a second, 1080p at 60), held to the share's speed, and encoded the way the page encodes them
 //! (`client/src/lib/screen/presets.ts`): VP8 in real time at the same bits a
 //! second, a key frame at least every ten seconds.
 
@@ -171,6 +171,9 @@ pub fn can_encode() -> bool {
 pub struct Speed {
     pub fps: u32,
     pub bits_per_second: u32,
+    /// The largest picture sent, as for the page's shares.
+    pub max_width: u32,
+    pub max_height: u32,
     /// libvpx's speed for real time: higher is less work for a little less
     /// sharpness. A 60 fps share does twice the frames in the same time.
     pub effort: i32,
@@ -181,21 +184,22 @@ pub fn speed(fps: u8) -> Option<Speed> {
     match fps {
         30 => Some(Speed {
             fps: 30,
-            bits_per_second: 4_500_000,
+            bits_per_second: 2_500_000,
+            max_width: 1280,
+            max_height: 720,
             effort: 8,
         }),
         60 => Some(Speed {
             fps: 60,
             bits_per_second: 6_000_000,
+            max_width: 1920,
+            max_height: 1080,
             effort: 12,
         }),
         _ => None,
     }
 }
 
-/// The largest picture sent, as for the page's shares.
-pub const MAX_WIDTH: u32 = 1920;
-pub const MAX_HEIGHT: u32 = 1080;
 /// The preview: your own small copy of what's sent, beside Stop, a few
 /// times a second (`client/src/next/app/screen/SharingBox.tsx`).
 const PREVIEW_WIDTH: u32 = 480;
@@ -261,13 +265,13 @@ const STILL_EVERY_MS: u32 = 500;
 /// sent one picture in all (sway's portal, 2026-10-25).
 const BUFFERS: u32 = 8;
 
-/// The size a share is sent at, from how big the portal says the stream is.
-/// A portal that doesn't say gets the largest, and the picture is fitted
-/// into it with borders.
-pub fn sent_size(stream: Option<(u32, u32)>) -> (u32, u32) {
+/// The size a share is sent at, from how big the portal says the stream is
+/// and the share's speed. A portal that doesn't say gets the speed's
+/// largest, and the picture is fitted into it with borders.
+pub fn sent_size(stream: Option<(u32, u32)>, speed: Speed) -> (u32, u32) {
     match stream {
-        Some((width, height)) => fit(width, height, MAX_WIDTH, MAX_HEIGHT),
-        None => (MAX_WIDTH, MAX_HEIGHT),
+        Some((width, height)) => fit(width, height, speed.max_width, speed.max_height),
+        None => (speed.max_width, speed.max_height),
     }
 }
 
@@ -417,7 +421,7 @@ impl Capture {
         E: Fn(Ended) + Send + Sync + 'static,
     {
         let threads = std::thread::available_parallelism().map_or(2, |count| count.get().min(8));
-        let size = sent_size(picked.size);
+        let size = sent_size(picked.size, speed);
         let preview = gst::init().is_ok() && have(&PREVIEW_ELEMENTS);
         let text = pipeline_text(
             picked.remote.as_raw_fd(),
@@ -653,9 +657,18 @@ mod tests {
 
     #[test]
     fn the_two_speeds_match_the_pages() {
-        // presets.ts: 30 fps at 4.5 Mbit/s, 60 at 6.
-        assert_eq!(speed(30).map(|s| s.bits_per_second), Some(4_500_000));
-        assert_eq!(speed(60).map(|s| s.bits_per_second), Some(6_000_000));
+        // presets.ts: Low quality, 720p at 30 fps and 2.5 Mbit/s; High
+        // quality, 1080p at 60 fps and 6 (#732).
+        let low = speed(30).expect("30");
+        assert_eq!(
+            (low.bits_per_second, low.max_width, low.max_height),
+            (2_500_000, 1280, 720)
+        );
+        let high = speed(60).expect("60");
+        assert_eq!(
+            (high.bits_per_second, high.max_width, high.max_height),
+            (6_000_000, 1920, 1080)
+        );
         assert_eq!(speed(24), None);
         assert_eq!(speed(0), None);
     }
@@ -716,15 +729,22 @@ mod tests {
     }
 
     #[test]
-    fn a_big_screen_is_sent_at_1080p_its_shape_kept_and_a_small_one_as_it_is() {
-        assert_eq!(sent_size(Some((3840, 2160))), (1920, 1080));
-        assert_eq!(sent_size(Some((2560, 1440))), (1920, 1080));
+    fn a_big_screen_is_sent_at_the_speeds_size_its_shape_kept_and_a_small_one_as_it_is() {
+        let high = speed(60).expect("60");
+        assert_eq!(sent_size(Some((3840, 2160)), high), (1920, 1080));
+        assert_eq!(sent_size(Some((2560, 1440)), high), (1920, 1080));
         // An ultrawide keeps its shape, and the numbers stay even.
-        assert_eq!(sent_size(Some((3440, 1440))), (1920, 804));
-        assert_eq!(sent_size(Some((1896, 1040))), (1896, 1040));
-        assert_eq!(sent_size(Some((801, 601))), (800, 600));
-        // A portal that doesn't say: the largest, fitted with borders.
-        assert_eq!(sent_size(None), (1920, 1080));
+        assert_eq!(sent_size(Some((3440, 1440)), high), (1920, 804));
+        assert_eq!(sent_size(Some((1896, 1040)), high), (1896, 1040));
+        assert_eq!(sent_size(Some((801, 601)), high), (800, 600));
+        // Low quality fits 720p (#732); a small window is still its own size.
+        let low = speed(30).expect("30");
+        assert_eq!(sent_size(Some((3840, 2160)), low), (1280, 720));
+        assert_eq!(sent_size(Some((1920, 1080)), low), (1280, 720));
+        assert_eq!(sent_size(Some((801, 601)), low), (800, 600));
+        // A portal that doesn't say: the speed's largest, fitted with borders.
+        assert_eq!(sent_size(None, high), (1920, 1080));
+        assert_eq!(sent_size(None, low), (1280, 720));
         assert_eq!(fit(0, 0, 1920, 1080), (1920, 1080));
     }
 

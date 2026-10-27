@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import type { ScreenFps } from "../../../lib/screen/presets";
+import { SHARE_CHOICES } from "../../core/screens";
 import { type ControlSize, IconButton, Menu, type MenuAnchor } from "../../kit";
 
 /** Share, in the voice bar and the room's voice line (SPEC §4.20, #360). */
@@ -54,8 +55,8 @@ export function ShareButton({ control, size }: { control: ShareControl; size: Co
           // Closed as a speed is picked: the menu doesn't close itself, and
           // one left open came back when the share ended.
           items={[
-            { id: "30", label: "Sharp text, 30 fps", icon: "share", onSelect: () => pick(30) },
-            { id: "60", label: "Smooth motion, 60 fps", icon: "share", onSelect: () => pick(60) },
+            { id: "60", ...SHARE_CHOICES[60], icon: "share", onSelect: () => pick(60) },
+            { id: "30", ...SHARE_CHOICES[30], icon: "share", onSelect: () => pick(30) },
           ]}
         />
       ) : null}

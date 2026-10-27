@@ -74,6 +74,20 @@
   white-space: nowrap;
 }
 
+/* An item with a second line (`detail`): two lines tall, the second in meta text. */
+.k-menu-item[data-detail="yes"] {
+  height: var(--row-2);
+}
+
+.k-menu-detail {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  font-weight: 400;
+}
+
 /* An on/off item that's on: a tick at the end, in the lamp. */
 .k-menu-tick {
   display: grid;
@@ -122,4 +136,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* A sheet's row with a second line: as tall as its two lines need, never
+   shorter than a two-line row. */
+.k-menu[data-sheet="yes"] .k-menu-item[data-detail="yes"] {
+  height: auto;
+  min-height: var(--row-2);
+  padding-block: var(--space-1);
 }

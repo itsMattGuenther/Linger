@@ -1,5 +1,6 @@
 import type { RoomId } from "../../generated/RoomId";
 import { type GatewayState, voicePeersIn } from "../../lib/gateway";
+import type { ScreenFps } from "../../lib/screen/presets";
 import type { ShareStopped } from "../../lib/screen/share";
 
 /**
@@ -62,12 +63,23 @@ export function watchingWords(names: readonly string[]): string {
 }
 
 /**
+ * Share's two choices (#732), named for what they look like, with the size
+ * and speed on a second line: "Sharp text" promised a sharpness a whole 4K
+ * screen, scaled to fit, never had.
+ */
+export const SHARE_CHOICES: Readonly<Record<ScreenFps, { label: string; detail: string }>> = {
+  30: { label: "Low quality", detail: "720p, 30 fps" },
+  60: { label: "High quality", detail: "1080p, 60 fps" },
+};
+
+/**
  * Your share's box, once your share has gone black for a while
  * (`lib/screen/black.ts`): said until that share stops, since leaving the
  * slide show that made it black brings the window back, and with it the box,
  * too late to see it while it was black.
  */
-export const WENT_BLACK_WORDS = "Your share went black for everybody watching. Shared one window for a slide show? Stop, then share your entire screen.";
+export const WENT_BLACK_WORDS =
+  "Everyone watching saw a black screen. If you're showing slides, stop sharing, then share again and pick Entire screen. PowerPoint plays a slide show in a window of its own, so sharing only the PowerPoint window comes out black.";
 
 /**
  * Why a share ended by itself, in words for the voice bar (#360); null when

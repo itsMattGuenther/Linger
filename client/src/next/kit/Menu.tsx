@@ -23,6 +23,12 @@ export interface MenuItem {
    * choosing it does nothing.
    */
   unavailable?: string;
+  /**
+   * A second line under the label, in meta text, saying what the choice is:
+   * Share's "720p, 30 fps". The item grows to two lines' height, and its
+   * name is both lines.
+   */
+  detail?: string;
   onSelect: () => void;
 }
 
@@ -157,6 +163,8 @@ export function Menu({
           data-kit="MenuItem"
           data-kit-control=""
           data-tone={item.tone}
+          data-detail={item.detail && !item.unavailable ? "yes" : undefined}
+          aria-label={item.detail && !item.unavailable ? `${item.label}, ${item.detail}` : undefined}
           tabIndex={-1}
           onClick={() => {
             if (!item.unavailable) item.onSelect();
@@ -165,7 +173,10 @@ export function Menu({
           <span className="k-menu-icon" aria-hidden="true">
             {item.icon ? <Icon name={item.icon} size="md" /> : null}
           </span>
-          <span className="k-menu-text">{item.unavailable ?? item.label}</span>
+          <span className="k-menu-text">
+            {item.unavailable ?? item.label}
+            {item.detail && !item.unavailable ? <span className="k-menu-detail">{item.detail}</span> : null}
+          </span>
           {item.checked ? (
             <span className="k-menu-tick" aria-hidden="true">
               <Icon name="check" size="sm" />
