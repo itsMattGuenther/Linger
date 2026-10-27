@@ -19,7 +19,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   },
 }));
 
-const { captureInShell, forgetShell, sharesThroughShell, shellShares } = await import("./shell");
+const { captureInShell, forgetShell, sharesThroughShell, shellPlays, shellShares } = await import("./shell");
 
 const LINUX = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15";
 
@@ -121,5 +121,28 @@ describe("sharing through the shell", () => {
       shell.answer = () => Promise.reject(answer);
       expect(await captureInShell(30, true)).toBe(refused);
     }
+  });
+});
+
+describe("whether WebKit can play a screen here (#729)", () => {
+  it("is asked of the shell once, on Linux", async () => {
+    shell.answer = (command) => Promise.resolve(command === "screen_watch_available");
+    expect(await shellPlays()).toBe(true);
+    expect(await shellPlays()).toBe(true);
+    expect(shell.calls.filter((call) => call.command === "screen_watch_available")).toHaveLength(1);
+  });
+
+  it("is no where the shell says WebKit draws on the CPU, or doesn't answer: a wrong yes aborts the window", async () => {
+    shell.answer = () => Promise.resolve(false);
+    expect(await shellPlays()).toBe(false);
+    forgetShell();
+    shell.answer = () => Promise.reject(new Error("no such command"));
+    expect(await shellPlays()).toBe(false);
+  });
+
+  it("is yes without asking away from the Linux app", async () => {
+    vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/141.0" });
+    expect(await shellPlays()).toBe(true);
+    expect(shell.calls).toHaveLength(0);
   });
 });

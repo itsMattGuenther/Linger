@@ -1,14 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // What the Linux app's shell says (`shell.ts`), stood in for.
-const shell = vi.hoisted(() => ({ through: false, shares: null as boolean | null }));
+const shell = vi.hoisted(() => ({ through: false, shares: null as boolean | null, plays: true }));
 vi.mock("./shell", () => ({
   sharesThroughShell: () => shell.through,
   shellShares: () => shell.shares,
+  shellPlays: () => Promise.resolve(shell.plays),
   onShellAnswer: () => () => undefined,
 }));
 
-const { forgetProbes, sharesFromHere } = await import("./probe");
+const { forgetProbes, playable, sharesFromHere } = await import("./probe");
 
 /** An engine with the picker and WebCodecs, under a user agent. */
 function engine(userAgent: string): void {
@@ -25,6 +26,7 @@ afterEach(() => {
   forgetProbes();
   shell.through = false;
   shell.shares = null;
+  shell.plays = true;
 });
 
 describe("where Share is offered (SPEC §4.20, #360)", () => {
@@ -63,5 +65,38 @@ describe("where Share is offered (SPEC §4.20, #360)", () => {
   it("isn't an engine without the picker or WebCodecs, even on Windows", () => {
     vi.stubGlobal("navigator", { userAgent: "Windows NT 10.0", mediaDevices: {} });
     expect(sharesFromHere()).toBe(false);
+  });
+});
+
+describe("what the app plays (SPEC §4.20)", () => {
+  /** WebCodecs whose decoder plays everything, counting what it's asked. */
+  function decoder(): { asked: string[] } {
+    const asked: string[] = [];
+    engine(LINUX);
+    vi.stubGlobal(
+      "VideoDecoder",
+      Object.assign(function VideoDecoder() {}, {
+        isConfigSupported: (config: { codec: string }) => {
+          asked.push(config.codec);
+          return Promise.resolve({ supported: true });
+        },
+      }),
+    );
+    return { asked };
+  }
+
+  it("is what WebKit's decoder says it plays", async () => {
+    const { asked } = decoder();
+    shell.through = true;
+    expect(await playable()).toEqual(["avc1", "vp8"]);
+    expect(asked).toEqual(["avc1.42E02A", "vp8"]);
+  });
+
+  it("is nothing where the Linux shell says WebKit would abort building a decoder, which is then never asked (#729)", async () => {
+    const { asked } = decoder();
+    shell.through = true;
+    shell.plays = false;
+    expect(await playable()).toEqual([]);
+    expect(asked).toEqual([]);
   });
 });

@@ -55,6 +55,7 @@ const COMMANDS: &[&str] = &[
     "clip_stop",
     "clip_cancel",
     "screen_share_available",
+    "screen_watch_available",
     "screen_share_start",
     "screen_share_keyframe",
     "screen_share_preview",

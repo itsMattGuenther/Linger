@@ -1457,7 +1457,10 @@ from before the GTX 16 and RTX series (a GTX 980 or 1080, say) need NVIDIA's
 older "legacy" driver, the 580 branch. With that driver, on a GTX 980 Ti, Linger
 closed when one of its windows was resized while another was open (#229).
 Releases after 0.4.2 notice that driver and draw without the graphics card,
-which stops it. Typing may feel a beat behind. On 0.4.2, or on any computer
+which stops it. Typing may feel a beat behind. It also means that computer
+can't watch a shared screen, since playing one needs the graphics card: the
+screen says "This device can't play Jules's screen" (#729). Watch on a phone
+instead. On 0.4.2, or on any computer
 where Linger closes the same way, start it with GTK's graphics-card drawing
 turned off:
 

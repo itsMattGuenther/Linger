@@ -414,6 +414,7 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
             clip::clip_stop,
             clip::clip_cancel,
             screen_shell::screen_share_available,
+            screen_shell::screen_watch_available,
             screen_shell::screen_share_start,
             screen_shell::screen_share_keyframe,
             screen_shell::screen_share_preview,

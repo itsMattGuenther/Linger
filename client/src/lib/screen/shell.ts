@@ -63,10 +63,31 @@ export function onShellAnswer(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
+let plays: Promise<boolean> | null = null;
+
+/**
+ * Whether WebKit can play a shared screen here (#729); true away from the
+ * Linux app. Where the shell has WebKit draw without the GPU (`GDK_GL=disable`
+ * on NVIDIA's legacy driver, #229), WebKitGTK's WebCodecs aborts the page
+ * the moment it builds a decoder, `isConfigSupported` included, and nothing a
+ * page can try shows it first: WebGL still works there. The shell knows what
+ * it set, so it's asked, once. No answer counts as no: a wrong yes costs the
+ * window.
+ */
+export function shellPlays(): Promise<boolean> {
+  if (!sharesThroughShell()) return Promise.resolve(true);
+  plays ??= invoke<unknown>("screen_watch_available").then(
+    (said) => said === true,
+    () => false,
+  );
+  return plays;
+}
+
 /** For tests: ask again. */
 export function forgetShell(): void {
   available = null;
   asking = false;
+  plays = null;
 }
 
 function refusal(error: unknown): ShellRefused {

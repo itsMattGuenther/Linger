@@ -368,6 +368,35 @@ test.describe("through the Linux app's shell", () => {
     expect(await page.evaluate(() => window.loop.share_state())).toBeNull();
   });
 
+  test("where the shell has WebKit draw without the GPU, Watch says this device can't play, and no decoder is built (#729)", async ({ page }) => {
+    const { asked } = await standIn(page);
+    // In the real app, building one there aborts the whole page.
+    await page.addInitScript(() => {
+      const built: string[] = [];
+      Reflect.set(window, "decodersBuilt", built);
+      const Real = window.VideoDecoder;
+      const Counted = function (this: unknown, init: VideoDecoderInit) {
+        built.push("new");
+        return new Real(init);
+      };
+      Object.assign(Counted, {
+        isConfigSupported: (config: VideoDecoderConfig) => {
+          built.push(`asked ${config.codec}`);
+          return Real.isConfigSupported(config);
+        },
+      });
+      Reflect.set(window, "VideoDecoder", Counted);
+    });
+    await page.goto("/tests/fixtures/screen-loop.html?shell&cpu");
+    await page.evaluate((server) => window.loop.share(server, "token", "s-sharer", 30), SERVER);
+    await page.evaluate((server) => window.loop.watch(server, "token", "s-watcher", "s-sharer"), SERVER);
+    await expect.poll(() => page.evaluate(() => (window.loop.watch_state() as { status?: string } | null)?.status)).toBe("unplayable");
+    expect(await page.evaluate(() => Reflect.get(window, "decodersBuilt"))).toEqual([]);
+    expect(await page.evaluate(() => window.loop.shell_asked())).toContain("screen_watch_available");
+    // Nothing is asked of the server for a screen it can't play.
+    expect(asked).toEqual(["share"]);
+  });
+
   test("through the shell, a closed picker says nothing, and one with nothing to encode says so", async ({ page }) => {
     await standIn(page);
     await page.goto("/tests/fixtures/screen-loop.html?shell");

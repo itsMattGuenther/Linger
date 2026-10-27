@@ -1272,7 +1272,11 @@ anti-goals that day. Cameras didn't: there is no video of people.
 Windows app, where the friends who asked for it are, and from the Linux app, through
 the desktop's own screen-sharing portal (GNOME, KDE Plasma, Hyprland and sway each have
 one). macOS shares later. Phones watch and never share. Watching works everywhere Linger
-runs: Windows, Linux, macOS, Android and iPhone.
+runs: Windows, Linux, macOS, Android and iPhone. The one exception is a Linux computer where
+Linger draws without the graphics card (NVIDIA's legacy driver, #229): WebKit's video
+player there needs the card, and building one would crash the window, so its screen says
+the computer can't play it, without trying (#729). The Linux app plays shared screens with
+GStreamer's software decoders, since WebKit can't drive the hardware ones (#730).
 
 **The system's own picker, never Linger's.** Share opens the operating system's own
 "choose what to share" window, which the system draws, not Linger. Linger receives only

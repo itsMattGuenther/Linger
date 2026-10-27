@@ -41,6 +41,7 @@
     "allow-clip-stop",
     "allow-clip-cancel",
     "allow-screen-share-available",
+    "allow-screen-watch-available",
     "allow-screen-share-start",
     "allow-screen-share-keyframe",
     "allow-screen-share-preview",

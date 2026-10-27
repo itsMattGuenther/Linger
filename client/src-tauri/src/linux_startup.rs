@@ -33,6 +33,35 @@ const FORCE_SHM: &str = "WEBKIT_DMABUF_RENDERER_FORCE_SHM";
 /// which makes the window's requests, inherits it from here. libsoup reads
 /// any value as on, `0` included. Set by [`configure`] (#646).
 const FORCE_HTTP1: &str = "SOUP_FORCE_HTTP1";
+/// GStreamer's rank changes, `name:rank` pairs, read by each process when its
+/// GStreamer starts; WebKit's page process inherits them from here. Later
+/// pairs win. Set by [`configure`] (#730).
+const FEATURE_RANK: &str = "GST_PLUGIN_FEATURE_RANK";
+/// The hardware H.264 and VP8 decoders, kept out of WebKit's way (#730).
+///
+/// WebKitGTK's WebCodecs decoder takes the highest-ranked GStreamer decoder
+/// for a format, so with one of these installed it takes that, and in 2.54
+/// hands it input it refuses: VP8 caps with no picture size, which NVIDIA's
+/// `nvvp8dec` rejects, and H.264 labelled `avc` without its `codec_data`
+/// although a screen share's chunks are Annex B, which `nvh264dec` and
+/// VA-API's `vah264dec` reject. Every chunk then fails, and the screen says
+/// "This device can't play". `prefer-software` from the page doesn't steer
+/// it. The `nv` and `va` ones were measured; the rest are the same kind of
+/// element given the same caps. Ranked out, these leave `vp8dec` and
+/// `avdec_h264`, which played every frame on the same machines, at a few
+/// percent of a core for 1080p. Other formats, a chat's HEVC or AV1 video,
+/// keep their hardware decoders.
+const HARDWARE_DECODERS: [&str; 9] = [
+    "nvh264dec",
+    "nvvp8dec",
+    "vah264dec",
+    "vavp8dec",
+    "vaapih264dec",
+    "vaapivp8dec",
+    "qsvh264dec",
+    "qsvvp8dec",
+    "vulkanh264dec",
+];
 
 fn backend(
     value: Option<&OsStr>,
@@ -191,6 +220,28 @@ fn running_lock(state: &Path) -> io::Result<Option<fs::File>> {
     }
 }
 
+/// [`FEATURE_RANK`] with [`HARDWARE_DECODERS`] ranked out, then whatever
+/// somebody set (`theirs`), which comes later and so wins (#730).
+fn decoder_ranks(theirs: Option<&OsStr>) -> std::ffi::OsString {
+    let ours = HARDWARE_DECODERS
+        .map(|decoder| format!("{decoder}:NONE"))
+        .join(",");
+    let mut ranks = std::ffi::OsString::from(&ours);
+    // A copy this one started inherits them already.
+    let theirs = theirs.map(|theirs| match theirs.to_str() {
+        Some(text) => std::ffi::OsString::from(
+            text.strip_prefix(ours.as_str())
+                .map_or(text, |rest| rest.strip_prefix(',').unwrap_or(rest)),
+        ),
+        None => theirs.to_owned(),
+    });
+    if let Some(theirs) = theirs.filter(|theirs| !theirs.is_empty()) {
+        ranks.push(",");
+        ranks.push(theirs);
+    }
+    ranks
+}
+
 /// Whether WebKit reads this `WEBKIT_DMABUF_RENDERER_DISABLE_GBM` as off: any
 /// value but `0`, the empty one included.
 fn gbm_disabled(value: Option<&OsStr>) -> bool {
@@ -317,6 +368,13 @@ pub fn configure() -> Result<(), &'static str> {
     if std::env::var_os(FORCE_HTTP1).is_none() {
         std::env::set_var(FORCE_HTTP1, "1");
     }
+    // A shared screen is decoded by WebKit through GStreamer, which picks a
+    // hardware decoder WebKit can't drive (#730). Somebody's own ranks come
+    // after these, so theirs still win.
+    std::env::set_var(
+        FEATURE_RANK,
+        decoder_ranks(std::env::var_os(FEATURE_RANK).as_deref()),
+    );
     ignore_terminal_hangup();
     if let Err(err) = install_appimage_menu_entry(&chosen) {
         eprintln!("Linger couldn't add itself to the application menu: {err}");
@@ -539,6 +597,34 @@ mod tests {
             assert!(backend(Some(OsStr::new(invalid)), None).is_err());
         }
         assert!(backend(Some(OsStr::from_bytes(&[0xff])), None).is_err());
+    }
+
+    #[test]
+    fn webkit_never_takes_a_hardware_h264_or_vp8_decoder_unless_somebody_says() {
+        let ours = decoder_ranks(None);
+        let ours = ours.to_str().expect("ascii");
+        // The ones measured refusing WebKit's input (#730), ranked out of its reach.
+        for decoder in ["nvh264dec", "nvvp8dec", "vah264dec", "vavp8dec"] {
+            assert!(
+                ours.split(',')
+                    .any(|pair| pair == format!("{decoder}:NONE")),
+                "{decoder} isn't ranked out"
+            );
+        }
+        // Only decoders: the share's own `vp8enc` and the software decoders stay.
+        assert!(ours.split(',').all(|pair| pair.ends_with("dec:NONE")));
+        assert_eq!(decoder_ranks(Some(OsStr::new(""))), OsStr::new(ours));
+        // Somebody's own ranks come after, so theirs win.
+        assert_eq!(
+            decoder_ranks(Some(OsStr::new("nvh264dec:MAX"))),
+            OsStr::new(&format!("{ours},nvh264dec:MAX"))
+        );
+        // A copy this one started inherits them, and doesn't say them twice.
+        assert_eq!(decoder_ranks(Some(OsStr::new(ours))), OsStr::new(ours));
+        assert_eq!(
+            decoder_ranks(Some(OsStr::new(&format!("{ours},vp8dec:MAX")))),
+            OsStr::new(&format!("{ours},vp8dec:MAX"))
+        );
     }
 
     #[test]

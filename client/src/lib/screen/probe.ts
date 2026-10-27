@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { ScreenCodec } from "../../generated/ScreenCodec";
 import { CODEC_STRING, decoderConfig, encoderConfig, SCREEN_SPEEDS, type ScreenFps } from "./presets";
-import { onShellAnswer, sharesThroughShell, shellShares } from "./shell";
+import { onShellAnswer, sharesThroughShell, shellPlays, shellShares } from "./shell";
 
 /**
  * What this app can make and play (PROTOCOL §8, "The server picks the
@@ -57,11 +57,15 @@ function notWanted(): boolean {
   return false;
 }
 
-/** The formats this app can play. */
+/**
+ * The formats this app can play: none where the Linux shell says WebKit
+ * would abort on building a decoder (#729), which is then never asked.
+ */
 export function playable(): Promise<ScreenCodec[]> {
   if (!plays) {
     plays = (async () => {
       if (!hasWebCodecs()) return [];
+      if (!(await shellPlays())) return [];
       const found: ScreenCodec[] = [];
       for (const codec of ["avc1", "vp8"] as const) {
         if (await supported(() => VideoDecoder.isConfigSupported(decoderConfig(codec)))) found.push(codec);

@@ -4,7 +4,8 @@
 // Runs the unchanged package on a private virtual display with an empty profile
 // and no account, injects client/scripts/next-smoke-probe.js through the same
 // test-only GTK module the audio check uses, and waits for its verdict. Then it
-// checks WebKit's network process speaks HTTP/1.1 only (#646). Requires cc,
+// checks WebKit's network process speaks HTTP/1.1 only (#646), and that its web
+// process keeps the hardware H.264 and VP8 decoders out (#730). Requires cc,
 // pkg-config, WebKitGTK/GStreamer headers, Xvfb and D-Bus. The Windows
 // version of this check is client/scripts/windows-next-check.mjs.
 //
@@ -166,6 +167,40 @@ async function checkHttp1() {
   return [...libraries].map((library) => basename(library));
 }
 
+/**
+ * A shared screen is decoded in WebKit's web process, by GStreamer's
+ * highest-ranked decoder. Linger ranks the hardware H.264 and VP8 ones out,
+ * since WebKit hands them input they refuse and the screen says "This device
+ * can't play" (#730). So every web process must have them in
+ * `GST_PLUGIN_FEATURE_RANK`.
+ */
+async function checkDecoderRanks() {
+  let pages = [];
+  for (let attempt = 0; attempt < 50 && pages.length === 0; attempt++) {
+    if (attempt > 0) await sleep(100);
+    pages = descendants(app.pid).filter((pid) => {
+      try {
+        return readFileSync(`/proc/${pid}/comm`, "utf8").trim() === "WebKitWebProces";
+      } catch {
+        return false;
+      }
+    });
+  }
+  if (pages.length === 0) throw new Error("No WebKit web process under the app");
+  for (const pid of pages) {
+    const ranks = readFileSync(`/proc/${pid}/environ`, "utf8")
+      .split("\0")
+      .find((entry) => entry.startsWith("GST_PLUGIN_FEATURE_RANK="));
+    const pairs = (ranks ?? "").slice("GST_PLUGIN_FEATURE_RANK=".length).split(",");
+    for (const decoder of ["nvh264dec", "nvvp8dec", "vah264dec", "vavp8dec"]) {
+      if (!pairs.includes(`${decoder}:NONE`)) {
+        throw new Error(`WebKit's web process (${pid}) can decode a shared screen with ${decoder}, which refuses WebKit's input (#730)`);
+      }
+    }
+  }
+  return pages.length;
+}
+
 let failure = null;
 try {
   let result = null;
@@ -186,6 +221,8 @@ try {
   console.log(`PASS ${basename(program)}: the Buddy list starts in the packaged WebView: ${JSON.stringify(result.checks)}`);
   const libraries = await checkHttp1();
   console.log(`PASS ${basename(program)}: WebKit's network process speaks HTTP/1.1 only (${libraries.join(", ")})`);
+  const pages = await checkDecoderRanks();
+  console.log(`PASS ${basename(program)}: WebKit's web process${pages === 1 ? "" : "es"} decode shared screens in software (#730)`);
 } catch (error) {
   failure = error;
 } finally {

@@ -990,6 +990,18 @@ and not as a WebRTC track. Branch `feat/360-screen-sharing`. Numbers are `T-19xx
   has the two-monitor tip. **Still to do:** share PowerPoint's window from Windows and
   start the show, to see that WebView2 sends black (the warning) and not a picture that
   stops changing (no warning).
+- 🟡 **T-1911 · Watching in the real Linux app** (2026-10-27, #729, #730) — the first
+  real watch from one Linux app to another failed two ways, and neither had been tried:
+  the browser tests run Playwright's own WebKit, and the real-app check had no GPU
+  decoders and a Chromium watcher. With NVIDIA's or VA-API's decoders installed, WebKitGTK
+  took them and fed them input they refuse (#730). Startup now ranks the hardware H.264 and
+  VP8 decoders out (`GST_PLUGIN_FEATURE_RANK`, `linux_startup.rs`), checked in the
+  packaged app's web process by `linux-next-check.mjs`. On NVIDIA's legacy driver, with
+  `GDK_GL=disable`, building any WebCodecs decoder aborted the page (#729). The shell
+  now says so (`screen_watch_available`), and `playable()` never asks there. Both were
+  reproduced in WebKitGTK 2.54.1 in a container with the machine's GPUs passed in. The
+  #730 setting was confirmed by hand on the RTX 4090 machine. **Still to do:** the same
+  watch through a release, on both machines.
 - ⬜ **T-1909 · Streaming a game** — the computer's sound, the graphics card's encoder, later.
 
 ---

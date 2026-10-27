@@ -192,6 +192,8 @@ if (new URLSearchParams(location.search).has("shell")) {
     if (command === "show_notification") notices.push(args);
     if (command === "plugin:event|emit_to" && typeof args === "object" && args !== null) shellAsked.push(`emit_to ${String(Reflect.get(args, "event"))}`);
     if (command === "screen_share_available") return true;
+    // `?cpu`: the shell had WebKit draw without the GPU, where building a decoder aborts the page (#729).
+    if (command === "screen_watch_available") return !new URLSearchParams(location.search).has("cpu");
     if (command === "screen_share_keyframe") shellKeyframe();
     if (command === "screen_share_preview") shellPreview = typeof args === "object" && args !== null && Reflect.get(args, "shown") === true;
     if (command === "screen_share_stop") {

@@ -13,6 +13,8 @@
 //! On Windows and macOS the page shares by itself, and these say there's
 //! nothing here.
 
+#[cfg(target_os = "linux")]
+use std::ffi::OsStr;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use serde::Serialize;
@@ -63,6 +65,46 @@ pub async fn screen_share_available() -> bool {
     }
     #[cfg(not(target_os = "linux"))]
     false
+}
+
+/// Whether the page can play a shared screen: not where WebKit draws pages
+/// on the CPU, since its WebCodecs then aborts the page the moment it builds
+/// a decoder (#729), and the page can't tell beforehand
+/// (`client/src/lib/screen/shell.ts` `shellPlays`). Asking opens nothing.
+#[tauri::command]
+pub async fn screen_watch_available() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        !draws_on_cpu(
+            std::env::var_os(crate::desktop_entry::GDK_GL).as_deref(),
+            std::env::var_os(DISABLE_DMABUF).as_deref(),
+        )
+    }
+    #[cfg(not(target_os = "linux"))]
+    true
+}
+
+/// WebKit's switch back to drawing pages without its DMA-BUF renderer, on
+/// for any value but `0`. Linger never sets it.
+#[cfg(target_os = "linux")]
+const DISABLE_DMABUF: &str = "WEBKIT_DISABLE_DMABUF_RENDERER";
+
+/// Whether WebKit draws this process's pages on the CPU, with no shared GL
+/// display: GTK's GL off (`disable` among `GDK_GL`'s flags, set by
+/// `linux_startup` on NVIDIA's legacy driver, #229, or by hand), or WebKit's
+/// DMA-BUF renderer off. WebKitGTK 2.54's WebCodecs decoder hands GStreamer
+/// that display's GL context, and with none there it hits a release assert
+/// (`PlatformDisplay::sharedDisplay`). Both were measured aborting (#729).
+/// GTK reads `GDK_GL` as debug flags: any case, split on `:;, `, and `all`
+/// is every flag.
+#[cfg(target_os = "linux")]
+fn draws_on_cpu(gdk_gl: Option<&OsStr>, disable_dmabuf: Option<&OsStr>) -> bool {
+    let gl_off = gdk_gl.and_then(OsStr::to_str).is_some_and(|flags| {
+        flags
+            .split([':', ';', ',', ' ', '\t'])
+            .any(|flag| flag.eq_ignore_ascii_case("disable") || flag.eq_ignore_ascii_case("all"))
+    });
+    gl_off || disable_dmabuf.is_some_and(|value| value != OsStr::new("0"))
 }
 
 /// Share a screen at `fps`: the desktop's picker opens, and once something
@@ -238,5 +280,25 @@ mod tests {
         // `lib/screen/shell.ts`: { op: "looks", black }.
         let said = serde_json::to_value(ShareSays::Looks { black: true }).expect("json");
         assert_eq!(said, serde_json::json!({ "op": "looks", "black": true }));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_screen_isnt_played_where_webkit_draws_on_the_cpu() {
+        fn on(value: &str) -> Option<&OsStr> {
+            Some(OsStr::new(value))
+        }
+        // The GPU path, the usual case: nothing set, or GTK's other GL flags.
+        assert!(!draws_on_cpu(None, None));
+        assert!(!draws_on_cpu(on("gles"), None));
+        assert!(!draws_on_cpu(on(""), None));
+        assert!(!draws_on_cpu(None, on("0")));
+        // GTK's GL off: what `linux_startup` sets on NVIDIA's legacy driver (#229).
+        assert!(draws_on_cpu(on("disable"), None));
+        assert!(draws_on_cpu(on("gles,DISABLE"), None));
+        assert!(draws_on_cpu(on("all"), None));
+        // WebKit's DMA-BUF renderer off, by hand, with any value but 0.
+        assert!(draws_on_cpu(None, on("1")));
+        assert!(draws_on_cpu(None, on("")));
     }
 }
