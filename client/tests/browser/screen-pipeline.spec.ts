@@ -377,7 +377,12 @@ test("without the shell, a watcher plays a share's sound with the page's own dec
   await page.goto("/tests/fixtures/screen-loop.html");
   const engine = await page.evaluate(async () => {
     if (typeof AudioEncoder !== "function" || typeof AudioDecoder !== "function") return false;
-    return (await AudioDecoder.isConfigSupported({ codec: "opus", sampleRate: 48_000, numberOfChannels: 2 })).supported === true;
+    const opus = { codec: "opus", sampleRate: 48_000, numberOfChannels: 2 };
+    try {
+      return (await AudioDecoder.isConfigSupported(opus)).supported === true && (await AudioEncoder.isConfigSupported(opus)).supported === true;
+    } catch {
+      return false;
+    }
   });
   test.skip(!engine, "this engine has no WebCodecs Opus to make or play the sound with");
   // Jules shares with the computer's sound, made here as real Opus.
