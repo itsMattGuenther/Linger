@@ -221,7 +221,10 @@ fn activate() -> windows::core::Result<IAudioClient> {
         },
     };
     let size = u32::try_from(std::mem::size_of::<AUDIOCLIENT_ACTIVATION_PARAMS>()).unwrap_or(0);
-    let blob = PROPVARIANT {
+    // Never dropped: windows' PROPVARIANT clears itself on drop, and a
+    // cleared blob is freed, which here is `params` on the stack. Freed, it
+    // corrupted the heap (CI's Windows runner, 2026-10-27).
+    let blob = ManuallyDrop::new(PROPVARIANT {
         Anonymous: PROPVARIANT_0 {
             Anonymous: ManuallyDrop::new(PROPVARIANT_0_0 {
                 vt: VT_BLOB,
@@ -236,7 +239,7 @@ fn activate() -> windows::core::Result<IAudioClient> {
                 },
             }),
         },
-    };
+    });
     let (tx, rx) = mpsc::channel();
     let handler: IActivateAudioInterfaceCompletionHandler = Activated(tx).into();
     // SAFETY: `blob` and the `params` it points at live until the answer
@@ -245,7 +248,7 @@ fn activate() -> windows::core::Result<IAudioClient> {
         ActivateAudioInterfaceAsync(
             VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
             &IAudioClient::IID,
-            Some(&raw const blob),
+            Some(std::ptr::from_ref::<PROPVARIANT>(&blob)),
             &handler,
         )?
     };

@@ -125,6 +125,12 @@ impl Packetizer {
 /// or the same one again: what it held has been played, or guessed at.
 const LATE_MICROS: u64 = 10_000;
 
+/// A packet this far before where the last one ended isn't late: its share
+/// started again (the same person sharing again, its clock new), and it's
+/// played. Nothing arrives a second late on a socket that drops what's
+/// behind.
+const RESTART_MICROS: u64 = 1_000_000;
+
 /// The longest gap guessed at rather than left as a pause: three packets.
 /// Past it nothing was sent, which is a pause (the sharer's computer went
 /// quiet), and the player starts again from the next sound.
@@ -154,9 +160,15 @@ impl Listener {
     pub fn hear(&mut self, micros: u64, opus: &[u8]) -> Vec<i16> {
         let mut out = Vec::new();
         if let Some(next) = self.next {
-            if micros + LATE_MICROS < next {
+            if micros + RESTART_MICROS < next {
+                // Far before the last: a new share, whose clock started
+                // again, not a late packet. It plays from here.
+                self.next = None;
+            } else if micros + LATE_MICROS < next {
                 return out;
             }
+        }
+        if let Some(next) = self.next {
             let gap = micros.saturating_sub(next);
             if (PACKET_MICROS / 2..=CONCEAL_MICROS).contains(&gap) {
                 for _ in 0..(gap + PACKET_MICROS / 2) / PACKET_MICROS {
@@ -304,5 +316,12 @@ mod tests {
         // A pause longer than a few packets isn't filled in.
         let later = listener.hear(packets[9].micros + 1_000_000, &packets[0].opus);
         assert_eq!(later.len(), PACKET_SAMPLES);
+        // The share started again, its clock from nought: played, not taken as late.
+        let again = listener.hear(0, &packets[0].opus);
+        assert_eq!(again.len(), PACKET_SAMPLES);
+        assert_eq!(
+            listener.hear(20_000, &packets[1].opus).len(),
+            PACKET_SAMPLES
+        );
     }
 }

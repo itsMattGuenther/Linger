@@ -58,8 +58,9 @@ pub struct ScreenSounds {
 struct Capturing {
     /// The window that started it, and the only one it answers.
     window: String,
+    /// Held, never read: dropping it stops the capture.
     #[cfg(windows)]
-    capture: windows::Capture,
+    _capture: windows::Capture,
 }
 
 fn lock<T>(held: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -118,7 +119,7 @@ pub async fn screen_sound_start(
         }
         let before = lock(&app.state::<ScreenSounds>().capturing).replace(Capturing {
             window: label,
-            capture,
+            _capture: capture,
         });
         if let Some(before) = before {
             let _ = tokio::task::spawn_blocking(move || drop(before)).await;
