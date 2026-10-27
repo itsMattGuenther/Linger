@@ -213,6 +213,20 @@ test("a share from a popped-out window that went black says so under its band, a
   expect(await under()).toBe(true);
 });
 
+test("your own slow line says so over the foot of the picture, and nothing's said otherwise (#360)", async ({ page }) => {
+  await chat(page, "?voice=mine&screen=watching&behind");
+  const stage = page.getByRole("region", { name: "Jules's screen" });
+  const said = stage.getByRole("status");
+  await expect(said).toHaveText("Your connection is slow, so Jules's screen is behind.");
+  // Over the picture, at its foot, inside it.
+  const picture = await stage.locator(".nx-stage-pic").boundingBox();
+  const at = await said.boundingBox();
+  expect(picture && at && at.x >= picture.x && at.x + at.width <= picture.x + picture.width + 1).toBe(true);
+  expect(picture && at && at.y > picture.y + picture.height / 2 && at.y + at.height <= picture.y + picture.height).toBe(true);
+  await chat(page, "?voice=mine&screen=watching");
+  await expect(page.getByRole("region", { name: "Jules's screen" }).getByRole("status")).toHaveCount(0);
+});
+
 test("a share from a popped-out window that ended by itself says why under its voice line", async ({ page }) => {
   await chat(page, "?voice=mine&screen=stopped");
   const why = page.getByText("Linger couldn't read the screen you picked, so sharing stopped.");

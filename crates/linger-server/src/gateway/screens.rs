@@ -49,6 +49,8 @@ pub enum Closing {
     Ended = 4007,
     /// This server doesn't pass screens on: no voice, or `LINGER_SCREENS=off`.
     Off = 4008,
+    /// Too many screen sockets started in a minute (`RATE_SCREEN_HELLO`).
+    Busy = 4009,
 }
 
 impl Closing {
@@ -121,6 +123,12 @@ impl Watch {
     fn has_room(&self) -> bool {
         self.line.frames.capacity() > 0
             && self.line.queued.load(Ordering::Relaxed) < MAX_SCREEN_WATCH_BYTES / 2
+    }
+
+    /// Its own line couldn't keep up and it was skipped forward: the app
+    /// says so on its screen, the slowness being its own (#360).
+    fn tell_behind(&self) {
+        let _ = self.line.says.send(ToWatch::Say(ScreenWatchSays::Behind));
     }
 }
 
@@ -586,8 +594,10 @@ impl Screens {
             }
             if watch.line.queued.load(Ordering::Relaxed) + frame.len() > MAX_SCREEN_WATCH_BYTES {
                 // Too much waiting for it already, however few frames: it
-                // waits for a key frame, asked for once it has room.
+                // waits for a key frame, asked for once it has room, and is
+                // told its picture was behind.
                 watch.gated = true;
+                watch.tell_behind();
                 continue;
             }
             match watch.line.frames.try_send(frame.clone()) {
@@ -597,8 +607,9 @@ impl Screens {
                 }
                 Err(mpsc::error::TrySendError::Full(_)) => {
                     // It fell behind: skip it forward to the next key frame,
-                    // asked for once it has room.
+                    // asked for once it has room, and tell it so.
                     watch.gated = true;
+                    watch.tell_behind();
                 }
                 Err(mpsc::error::TrySendError::Closed(_)) => {}
             }
@@ -905,6 +916,17 @@ mod tests {
         assert_eq!(quick_got, 101);
         // No key frame was asked for on its behalf: it could take none.
         assert_eq!(sharer.heard(), vec![]);
+        // It was told its picture was behind, again at each key frame it
+        // couldn't take; `quick` heard nothing of it.
+        let behind = |says: &mut mpsc::UnboundedReceiver<ToWatch>| {
+            let mut told = 0;
+            while let Ok(said) = says.try_recv() {
+                told += usize::from(matches!(said, ToWatch::Say(ScreenWatchSays::Behind)));
+            }
+            told
+        };
+        assert!(behind(&mut stuck.says) >= 1);
+        assert_eq!(behind(&mut quick.says), 0);
         // Once it has read what it holds, one is asked for, and it carries on from it.
         assert_eq!(stuck.got(), SCREEN_WATCH_QUEUE);
         assert!(screens.frame_at("s", sharer.socket, &frame(VP8, false, 10), at(101)));

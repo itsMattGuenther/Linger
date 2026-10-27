@@ -4,4 +4,4 @@ import type { ScreenCodec } from "./ScreenCodec";
 /**
  * What the server asks of a sharing app.
  */
-export type ScreenShareSays = { "op": "want", codecs: Array<ScreenCodec>, } | { "op": "keyframe", codec: ScreenCodec, };
+export type ScreenShareSays = { "op": "want", codecs: Array<ScreenCodec>, } | { "op": "keyframe", codec: ScreenCodec, } | { "op": "alive" };

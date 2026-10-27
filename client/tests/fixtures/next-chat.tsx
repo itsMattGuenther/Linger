@@ -361,6 +361,7 @@ function screenPane(inVoiceHere: boolean): ChatPane["screen"] {
           sharer: people.jules,
           others: [people.eli],
           status: SCREEN === "watching" ? "showing" : SCREEN,
+          behind: query.has("behind"),
           opensNext: (SCREEN === "ended" || SCREEN === "lost") && inVoiceHere,
           onClose: () => note("stop watching"),
           onCanvas: paintSlide,

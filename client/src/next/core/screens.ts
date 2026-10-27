@@ -94,6 +94,8 @@ export function shareStoppedWords(why: ShareStopped): string | null {
       return "The server didn't take the share. It may need an update.";
     case "off":
       return "This server has screen sharing turned off.";
+    case "busy":
+      return "Sharing was started too many times in a minute. Try again in a moment.";
     case "not-in-voice":
     case "nothing-to-watch":
     case "replaced":

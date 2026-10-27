@@ -4,7 +4,7 @@ import type { AuthedApi } from "../api";
 import { readFrame } from "./frames";
 import { decoderConfig } from "./presets";
 import { playable } from "./probe";
-import { closingOf, openScreenSocket, readSaid, RETRIES, retryAfter } from "./socket";
+import { closingOf, onSilence, openScreenSocket, readSaid, RETRIES, retryAfter } from "./socket";
 
 /**
  * Watching somebody's screen (SPEC §4.20, PROTOCOL §8, #360), in the window
@@ -35,7 +35,16 @@ export interface ScreenWatchState {
    * share in that voice opens on this screen (`watchNext`).
    */
   awaitsNext?: boolean;
+  /**
+   * This window's line couldn't keep up, and the server skipped it forward
+   * (`behind`): its picture is behind. Said for a while after the server
+   * last said so, on this screen alone; the person sharing isn't told.
+   */
+  behind?: boolean;
 }
+
+/** How long the screen says it's behind after the server last said so. */
+export const BEHIND_SAID_MS = 6_000;
 
 let shown: ScreenWatchState | null = null;
 const listeners = new Set<() => void>();
@@ -72,6 +81,9 @@ export async function startWatching(options: { server: string; api: AuthedApi; s
   }
   running?.finish();
   const decode = await playable();
+  // Watch pressed again while this one waited for the player: the later
+  // press is the one that counts, and this one's watch goes first.
+  running?.finish();
   // Nothing it can play: say so, rather than ask the server for nothing.
   if (decode.length === 0) {
     running = null;
@@ -153,30 +165,39 @@ class Watching {
       if (event.data instanceof ArrayBuffer) this.frame(event.data);
       else this.said(event.data);
     });
-    socket.addEventListener("close", (event) => {
-      if (this.#socket !== socket || this.#done) return;
-      this.#socket = null;
-      const why = closingOf(event.code);
-      if (why === "dropped" && this.#attempts < RETRIES) {
-        const wait = retryAfter(this.#attempts);
-        this.#attempts += 1;
-        this.#waitingForKey = true;
-        window.setTimeout(() => void this.connect(), wait);
-        return;
-      }
-      // You left voice (4007), or another of your windows watches instead
-      // (4006): the screen goes, as Close would, rather than say they
-      // stopped sharing, which they didn't. A share that ends says so
-      // itself (`showing` with no target).
-      if (this.#attempts === 0 && (why === "ended" || why === "replaced")) {
-        this.finish();
-        return;
-      }
-      // The share gone before it was watched: over. After a drop it's the
-      // connection that went, whatever the server says when it's back (a
-      // restart forgets every seat), so it says that.
-      this.end(why === "dropped" || this.#attempts > 0 ? "lost" : "ended");
+    socket.addEventListener("close", (event) => this.closed(socket, event.code));
+    // Nothing from the server, not even its `alive`: the line died without
+    // closing, and the picture would sit there as if the screen were still.
+    onSilence(socket, () => {
+      this.closed(socket, 1006);
+      socket.close();
     });
+  }
+
+  /** `socket` closed with `code`, or went silent: try again after a drop, or end. */
+  closed(socket: WebSocket, code: number): void {
+    if (this.#socket !== socket || this.#done) return;
+    this.#socket = null;
+    const why = closingOf(code);
+    if (why === "dropped" && this.#attempts < RETRIES) {
+      const wait = retryAfter(this.#attempts);
+      this.#attempts += 1;
+      this.#waitingForKey = true;
+      window.setTimeout(() => void this.connect(), wait);
+      return;
+    }
+    // You left voice (4007), or another of your windows watches instead
+    // (4006): the screen goes, as Close would, rather than say they
+    // stopped sharing, which they didn't. A share that ends says so
+    // itself (`showing` with no target).
+    if (this.#attempts === 0 && (why === "ended" || why === "replaced")) {
+      this.finish();
+      return;
+    }
+    // The share gone before it was watched: over. After a drop it's the
+    // connection that went, whatever the server says when it's back (a
+    // restart forgets every seat), so it says that, as for too many tries.
+    this.end(why === "dropped" || why === "busy" || this.#attempts > 0 ? "lost" : "ended");
   }
 
   /** Watch another share, on the same socket. */
@@ -189,10 +210,33 @@ class Watching {
     publish(this.#state("connecting"));
     const socket = this.#socket;
     if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ op: "watch", target }));
+    else if (socket && socket.readyState === WebSocket.CONNECTING) {
+      // Its hello, sent once it opens, names the share before: one that
+      // names this one goes instead, or the screen said whose it was over
+      // somebody else's picture.
+      this.#socket = null;
+      socket.close();
+      void this.connect();
+    }
+  }
+
+  #behindTimer = 0;
+
+  /** The server skipped this window forward: its picture is behind, said for a while. */
+  #behind(): void {
+    window.clearTimeout(this.#behindTimer);
+    if (shown?.server === this.server && shown.behind !== true) publish({ ...shown, behind: true });
+    this.#behindTimer = window.setTimeout(() => {
+      if (!this.#done && shown?.server === this.server && shown.behind === true) publish({ ...shown, behind: false });
+    }, BEHIND_SAID_MS);
   }
 
   said(data: unknown): void {
     const said = readSaid(data);
+    if (said?.op === "behind") {
+      this.#behind();
+      return;
+    }
     if (!said || said.op !== "showing") return;
     this.#attempts = 0;
     const target = typeof said.target === "string" ? said.target : null;
@@ -317,13 +361,20 @@ class Watching {
   }
 
   end(status: "ended" | "lost"): void {
-    if (shown?.server === this.server) publish({ ...shown, status });
+    if (running === this && shown?.server === this.server) publish({ ...shown, status });
     this.finish(false);
   }
 
+  /**
+   * Stop. Only the watch that's running says anything to the screens: one
+   * another took over ends quietly, or it cleared the screen the newer one
+   * was showing.
+   */
   finish(clear = true): void {
     if (this.#done) return;
     this.#done = true;
+    const mine = running === this;
+    window.clearTimeout(this.#behindTimer);
     if (this.#drawing !== 0) cancelAnimationFrame(this.#drawing);
     this.#closeDecoder();
     this.#pending?.close();
@@ -331,8 +382,8 @@ class Watching {
     const socket = this.#socket;
     this.#socket = null;
     socket?.close(1000);
-    if (running === this) running = null;
-    if (clear && shown?.server === this.server) publish(null);
+    if (mine) running = null;
+    if (clear && mine && shown?.server === this.server) publish(null);
   }
 }
 

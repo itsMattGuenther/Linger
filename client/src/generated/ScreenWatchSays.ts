@@ -4,4 +4,4 @@ import type { ScreenCodec } from "./ScreenCodec";
 /**
  * What the server tells a watching app.
  */
-export type ScreenWatchSays = { "op": "showing", target: string | null, codec: ScreenCodec | null, };
+export type ScreenWatchSays = { "op": "showing", target: string | null, codec: ScreenCodec | null, } | { "op": "alive" } | { "op": "behind" };

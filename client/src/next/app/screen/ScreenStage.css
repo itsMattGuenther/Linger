@@ -55,6 +55,7 @@
 }
 
 .nx-stage-pic {
+  position: relative;
   display: flex;
   flex: 1;
   align-items: center;
@@ -85,6 +86,26 @@
   margin: 0;
   font-size: var(--text-control);
   color: var(--text-muted);
+}
+
+/* Your own line behind (#360): over the picture's foot, small, until it
+   catches up, in full screen too. The slowness is yours alone. */
+.nx-stage-slow {
+  position: absolute;
+  bottom: var(--space-4);
+  left: 50%;
+  max-width: calc(100% - 2 * var(--space-4));
+  margin: 0;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-popover);
+  box-shadow: var(--shadow-notice);
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+  color: var(--text-secondary);
+  text-align: center;
+  transform: translateX(-50%);
 }
 
 /* On the phone (SPEC §4.15): the screen across the top at its own shape,

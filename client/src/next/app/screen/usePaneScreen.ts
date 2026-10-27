@@ -149,6 +149,7 @@ export function usePaneScreen({
               return user ? [user] : [];
             }),
           status: shownHere.status,
+          behind: shownHere.behind === true,
           opensNext: watchOver(shownHere.status) && seatedIn(state, shownHere.place),
           onClose: () => {
             stopWatching();

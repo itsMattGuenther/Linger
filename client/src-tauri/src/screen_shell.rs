@@ -129,6 +129,14 @@ pub async fn screen_share_start(
                 return Err("no-encoder".into());
             }
         };
+        // The window that asked closed while the picker was open: its
+        // `forget` has been and gone, so nothing would stop this one.
+        if app.get_webview_window(window.label()).is_none() {
+            if let Some(picked) = capture.stop() {
+                picked.close().await;
+            }
+            return Err("no-screen".into());
+        }
         // Another start finished while the picker was open: that one goes.
         let before = lock(&app.state::<ScreenShares>()).replace(Running {
             window: window.label().to_string(),

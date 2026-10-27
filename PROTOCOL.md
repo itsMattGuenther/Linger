@@ -2009,6 +2009,7 @@ A hello that doesn't pass closes the socket with a code and nothing else happens
 | 4006 | Another socket took over this session's share or watching |
 | 4007 | The share or the watching ended: the seat left voice, or the session ended |
 | 4008 | This server doesn't pass screens on: it carries no voice, or its host set `LINGER_SCREENS=off` |
+| 4009 | Too many screen sockets started by that person in a minute (`RATE_SCREEN_HELLO`) |
 
 **Frames are binary messages**, the same shape both ways: a 12-byte header, then one
 encoded frame as WebCodecs made it (`EncodedVideoChunk`).
@@ -2023,7 +2024,10 @@ encoded frame as WebCodecs made it (`EncodedVideoChunk`).
 
 The server reads bytes 0–2 and passes the message on as it came. Anything else on a share
 socket is dropped, as is a frame over `MAX_SCREEN_FRAME_BYTES` (1 MiB), one with an
-unknown version or format, or one in a format the server didn't ask for.
+unknown version or format, or one in a format the server didn't ask for. The socket
+itself takes messages up to `MAX_SCREEN_MESSAGE_BYTES` (2 MiB), so a frame over the
+limit is dropped rather than closing the share; a sharing app doesn't send one, and makes
+its next frame a key frame.
 
 **The server picks the formats** (#360). For each share it works out, from its watchers'
 `decode` and the sharer's `encode`:
@@ -2042,9 +2046,12 @@ With nobody watching the sharer is asked for nothing, and makes nothing.
 type ScreenShareSays =
   | { op: "want"; codecs: ScreenCodec[] }      // make exactly these from now on; [] is nothing
   | { op: "keyframe"; codec: ScreenCodec }    // make the next frame of this format a key frame
+  | { op: "alive" }                            // still here (below)
 // To a watch socket
 type ScreenWatchSays =
   | { op: "showing"; target: string | null; codec: ScreenCodec | null }
+  | { op: "alive" }                            // still here (below)
+  | { op: "behind" }                           // your line couldn't keep up: skipped forward
 // From a watch socket
 type ScreenWatchAsks =
   | { op: "watch"; target: string; decode?: ScreenCodec[] }   // watch another share here
@@ -2082,18 +2089,33 @@ past it are dropped, and its watchers wait for the next key frame. The apps aim 
 | 30 | Fits 1920×1080 | up to 4.5 Mbit/s, sharpness kept over frames |
 | 60 | Fits 1920×1080 | up to 6 Mbit/s, frames kept over sharpness |
 
+**Still there.** A screen that isn't changing sends nothing and a watcher asks nothing,
+so the server says `alive` on every screen socket every `SCREEN_ALIVE_MS` (5 s), and
+sends a WebSocket ping, which web engines answer by themselves. A socket that has
+answered nothing for `SCREEN_ALIVE_MISSED` of those (30 s), a pong included, or whose
+sending has been stuck as long, is taken as gone: its share or watching ends as if it had
+closed. An app that has heard nothing on a screen socket for 15 s, `alive` included,
+takes its line as dropped and connects again, as after any drop. A line that died without
+closing otherwise looked, for minutes, like a still slide.
+
+**Behind.** A watcher skipped forward because its own line couldn't keep up (its queue
+full, or its bytes) is told `behind`, and its app says so on its screen for a while.
+Nobody else is told: not the sharer, whose share isn't what's slow, and not the room.
+
 **Ending.** A share ends when its socket closes, its session leaves voice or ends, or a
 newer share takes over; watching ends the same way, or when the share does. A session
 leaving voice closes both its sockets (4007). Nothing of either outlives its seat, and
-neither survives a server restart, as voice doesn't.
+neither survives a server restart, as voice doesn't. A seat that leaves voice in the
+moment between a hello's check and the share or watching starting is checked again once
+it has started, and closes it (4002).
 
 **Hard rule 2 holds here too.** Nothing in a hello, a frame or `voice.state` names a
 window or an application; the operating system's picker is the app's only way to choose
 what to share, and its choice reaches the app as pictures alone.
 
-**Limits.** Hellos are rate-limited per person (`RATE_SCREEN_HELLO`), and `watch` and
-`keyframe` messages per socket (`RATE_SCREEN_ASK`). A text message over 2 KiB closes the
-socket (4005).
+**Limits.** Hellos are rate-limited per person (`RATE_SCREEN_HELLO`, past which the
+socket closes with 4009), and `watch` and `keyframe` messages per socket
+(`RATE_SCREEN_ASK`). A text message over 2 KiB closes the socket (4005).
 
 ### Fan-out rules
 

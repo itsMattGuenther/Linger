@@ -13,6 +13,8 @@ export interface StageProps {
   /** Who else is watching it, not you. */
   others: readonly User[];
   status: ScreenWatchState["status"];
+  /** Your line can't keep up and the picture is behind: said on your screen alone (#360). */
+  behind?: boolean;
   /** Over, and you're still in that voice: their next share opens here (#360). */
   opensNext?: boolean;
   /** Filling the monitor. */
@@ -36,9 +38,11 @@ function namesOf(people: readonly User[]): string {
  * A): whose it is and who else is watching, Full screen and Stop watching,
  * and the picture as big as the space allows with its shape kept. Until the
  * picture comes, and when it can't or has stopped, it says so in its place.
+ * Your line not keeping up says so over the picture's foot, the slowness
+ * being yours: the person sharing and everybody else are told nothing.
  * F or a double-click on the picture fills the monitor and gives it back.
  */
-export function ScreenStage({ sharer, others, status, opensNext = false, full, onFull, onClose, onCanvas }: StageProps) {
+export function ScreenStage({ sharer, others, status, behind = false, opensNext = false, full, onFull, onClose, onCanvas }: StageProps) {
   const whose = sharer?.display_name ?? "Somebody";
   const over = watchOver(status);
   // Escape leaves full screen, as everywhere else.
@@ -94,6 +98,11 @@ export function ScreenStage({ sharer, others, status, opensNext = false, full, o
             {words}
           </p>
         )}
+        {status === "showing" && behind ? (
+          <p className="nx-stage-slow" role="status">
+            Your connection is slow, so {whose}'s screen is behind.
+          </p>
+        ) : null}
       </div>
     </section>
   );

@@ -32,6 +32,7 @@ import { startSharingHere } from "../../src/next/core/screenStop";
 import { currentWatch, drawOn, startWatching, stopWatching } from "../../src/lib/screen/watch";
 import type { ScreenFps } from "../../src/lib/screen/presets";
 import { packFrame } from "../../src/lib/screen/frames";
+import { screenSilence } from "../../src/lib/screen/socket";
 import { people } from "./next/evening";
 
 /** The colour the fake screen shows now, as CSS. */
@@ -285,7 +286,8 @@ declare global {
       voice: (julesShares: boolean, julesWatches?: string) => void;
       pane_watch: (session: string) => void;
       pane_close: () => void;
-      pane_state: () => { status: string | null; opensNext: boolean };
+      pane_state: () => { status: string | null; opensNext: boolean; behind: boolean };
+      silence: (ms: number) => void;
       watch_state: () => unknown;
       pixel: () => number[];
     };
@@ -385,7 +387,10 @@ window.loop = {
   },
   pane_watch: (session) => paneNow?.watch?.onWatch(session),
   pane_close: () => paneNow?.stage?.onClose(),
-  pane_state: () => ({ status: paneNow?.stage?.status ?? null, opensNext: paneNow?.stage?.opensNext ?? false }),
+  pane_state: () => ({ status: paneNow?.stage?.status ?? null, opensNext: paneNow?.stage?.opensNext ?? false, behind: paneNow?.stage?.behind ?? false }),
+  silence: (ms) => {
+    screenSilence.ms = ms;
+  },
   watch_state: () => currentWatch(),
   pixel: () => {
     if (!(watched instanceof HTMLCanvasElement)) return [];

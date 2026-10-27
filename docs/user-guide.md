@@ -925,6 +925,12 @@ screen sits at the top of the room, and turning the phone sideways fills the
 screen with it. Leave the app for more than half a minute and the phone
 stops watching, so it isn't using your data for a screen nobody sees.
 
+If your own connection can't keep up, the screen you're watching says so
+("Your connection is slow, so Jules's screen is behind") until it catches up.
+It's said to you alone: Jules and everybody else watching are fine. A
+connection that drops without a word is noticed within about fifteen seconds, and
+Linger connects again by itself.
+
 When somebody stops sharing, their screen stays open saying so. If they share
 again while it's still open, say to pick another window or the other speed,
 it opens there by itself, so nobody has to press Watch again. Close the screen

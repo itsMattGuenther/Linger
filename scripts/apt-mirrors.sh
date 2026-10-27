@@ -8,10 +8,14 @@
 # and on 2026-10-26 Azure's didn't fail: it took 13 s to answer and then sent
 # about 40 KB/s, and three jobs spent their whole time limit installing build
 # tools (#717). This downloads one index, about 1.8 MB, from each mirror in
-# turn until one sends it at 100 KB/s or better. Any that came before it go to
-# the back of the list. A healthy first mirror, the usual case, costs one
-# download of under a second and changes nothing. The packages are the same
-# from every mirror, and apt checks their signatures whichever one sent them.
+# turn, and then one package the index names, until one sends both at
+# 100 KB/s or better. Any that came before it go to the back of the list. The
+# package too, since on the same day's nightly Azure's mirror sent its index
+# at 57 MB/s and then every package at a few kilobytes a second: the index is
+# the one file every runner asks for, and it was quick. A healthy first
+# mirror, the usual case, costs two downloads of under a second and changes
+# nothing. The packages are the same from every mirror, and apt checks their
+# signatures whichever one sent them.
 #
 # It never fails the step. A list it can't read, or no mirror passing, leaves
 # the list as it was.
@@ -51,22 +55,38 @@ while IFS= read -r line || [[ -n $line ]]; do
   if [[ $line == \#* ]]; then comments+=("$line"); else mirrors+=("$line"); fi
 done < "$list"
 
-# Downloads the index from one mirror. Prints how it went; fails if it was
-# slower than min_speed or didn't come.
-try() {
-  local url=$1 speed status
-  speed=$(curl -fsS -o /dev/null --connect-timeout 5 --max-time 30 \
+held=$(mktemp) || held=/dev/null
+gone() { if [[ $held != /dev/null ]]; then rm -f "$held"; fi; }
+trap gone EXIT
+# Downloads one file from one mirror, into `held`. Prints how it went;
+# fails if it was slower than min_speed or didn't come.
+fetch() {
+  local url=$1 path=$2 speed status
+  speed=$(curl -fsS -o "$held" --connect-timeout 5 --max-time 30 \
     --speed-limit "$min_speed" --speed-time "$speed_time" \
-    -w '%{speed_download}' "${url%/}/$probe" 2>/dev/null)
+    -w '%{speed_download}' "${url%/}/$path" 2>/dev/null)
   status=$?
   speed=${speed%%[.,]*}
   speed=$(( ${speed:-0} / 1000 ))
   case $status in
     0) echo "${speed} KB/s" ;;
     28) echo "slower than $((min_speed / 1000)) KB/s"; return 1 ;;
-    22) echo "doesn't have $probe"; return 1 ;;
+    22) echo "doesn't have $path"; return 1 ;;
     *) echo "didn't answer (curl $status)"; return 1 ;;
   esac
+}
+# The index from one mirror, then a package it names of a few hundred
+# kilobytes, the first such. An index that names none passes on its own.
+try() {
+  local url=$1 index package
+  index=$(fetch "$url" "$probe") || { echo "$index"; return 1; }
+  package=$(gzip -dc "$held" 2>/dev/null | awk '
+    /^Filename: / { file = $2 }
+    /^Size: / && $2 >= 300000 && $2 <= 3000000 && file != "" { print file; exit }')
+  if [[ -z $package ]]; then echo "$index"; return 0; fi
+  local got
+  got=$(fetch "$url" "$package") || { echo "its index $index, but a package $got"; return 1; }
+  echo "$index, a package $got"
 }
 
 host() { local rest=${1#*://}; echo "${rest%%[/[:space:]]*}"; }
@@ -109,7 +129,7 @@ for line in "${ordered[@]}"; do
 done
 
 tmp=$(mktemp) || { echo "apt-mirrors: can't write a new list, so it stays as it is"; exit 0; }
-trap 'rm -f "$tmp"' EXIT
+trap 'rm -f "$tmp"; gone' EXIT
 printf '%s\n' "${out[@]}" > "$tmp"
 if [[ -w $(dirname "$list") ]]; then as=(); else as=(sudo); fi
 # A new file renamed over the old one: apt never reads half a list.

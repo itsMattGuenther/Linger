@@ -1335,8 +1335,11 @@ share, and ends watching it; leaving voice closes the screen you were watching. 
 out of sight for half a minute stops watching.
 
 **A slow connection gets fewer frames, not a frozen room.** When somebody's connection
-can't keep up, they get fewer frames until it does, and nobody else's picture waits for
-them.
+can't keep up, they get fewer frames until it does, and their screen says so ("Your
+connection is slow, so Jules's screen is behind"): the slowness is theirs, so the person
+sharing isn't told, and nobody else's picture waits for
+them. A connection that dies without closing is noticed within half a minute, and the
+app connects again by itself.
 
 **Voice follows the room, and so does this.** Only the people in that room's voice can
 watch, so a share in a DM's call is as private as the DM (§4.13).

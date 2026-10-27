@@ -64,6 +64,8 @@ describe("a share that ended by itself (#360)", () => {
     expect(shareStoppedWords("bad-hello")).toMatch(/may need an update/);
     // Turned off by the host while you shared: said once, not tried again.
     expect(shareStoppedWords("off")).toMatch(/screen sharing turned off/);
+    // Too many tries in a minute says so, not that the server may need an update.
+    expect(shareStoppedWords("busy")).toBe("Sharing was started too many times in a minute. Try again in a moment.");
     // The computer handed over no screen, or no pictures of it (T-1907).
     expect(shareStoppedWords("no-screen")).toMatch(/didn't give Linger a screen/);
     expect(shareStoppedWords("no-frames")).toMatch(/couldn't read the screen you picked/);

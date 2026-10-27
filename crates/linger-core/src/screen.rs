@@ -124,6 +124,9 @@ pub enum ScreenShareSays {
     Want { codecs: Vec<ScreenCodec> },
     /// Make the next frame of this format a key frame.
     Keyframe { codec: ScreenCodec },
+    /// Still here, every `SCREEN_ALIVE_MS`: an app that hears nothing for
+    /// a while takes the line as dropped and connects again.
+    Alive,
 }
 
 /// What the server tells a watching app.
@@ -137,6 +140,12 @@ pub enum ScreenWatchSays {
         target: Option<String>,
         codec: Option<ScreenCodec>,
     },
+    /// Still here, every `SCREEN_ALIVE_MS`, as for a share.
+    Alive,
+    /// This watcher's line couldn't keep up, and it was skipped forward to
+    /// the next key frame: its picture was behind. Its own, nobody else's,
+    /// and the share's never.
+    Behind,
 }
 
 /// What a watching app can ask, once it is watching.
@@ -237,6 +246,18 @@ mod tests {
         assert_eq!(
             showing,
             serde_json::json!({"op": "showing", "target": null, "codec": null})
+        );
+        assert_eq!(
+            serde_json::to_value(ScreenShareSays::Alive).expect("json"),
+            serde_json::json!({"op": "alive"})
+        );
+        assert_eq!(
+            serde_json::to_value(ScreenWatchSays::Alive).expect("json"),
+            serde_json::json!({"op": "alive"})
+        );
+        assert_eq!(
+            serde_json::to_value(ScreenWatchSays::Behind).expect("json"),
+            serde_json::json!({"op": "behind"})
         );
     }
 

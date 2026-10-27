@@ -382,3 +382,111 @@ async fn a_host_can_turn_screens_off() {
     let mut ws = screen(&server, share_hello(&host.access_token, &session, 30)).await;
     assert_eq!(closed_with(&mut ws).await, Some(4008));
 }
+
+/// Read until the server says it's still there, answering its pings as the
+/// web engines do; false if it doesn't within five seconds.
+async fn hears_alive(ws: &mut Ws) -> bool {
+    let until = tokio::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        match tokio::time::timeout_at(until, ws.next()).await {
+            Ok(Some(Ok(WsMessage::Text(text)))) => {
+                let said: Value = serde_json::from_str(text.as_str()).expect("valid json");
+                if said["op"] == "alive" {
+                    return true;
+                }
+            }
+            Ok(Some(Ok(_))) => {}
+            _ => return false,
+        }
+    }
+}
+
+#[tokio::test]
+async fn a_screen_socket_hears_it_is_still_there_and_one_that_stops_answering_is_let_go() {
+    const ALIVE: Duration = Duration::from_millis(200);
+    let (server, host, room) =
+        common::voice_server_tuned("porch", |config| config.screen_alive = ALIVE).await;
+    let room = room.id.to_string();
+    let eli = common::join_member(&server, &host.access_token, "eli").await;
+    let (mut host_gw, host_session) = gateway(&server, &host.access_token).await;
+    let (mut eli_gw, eli_session) = gateway(&server, &eli.access_token).await;
+    join_voice(&mut host_gw, &room).await;
+    join_voice(&mut eli_gw, &room).await;
+    drain(&mut host_gw, SETTLE).await;
+    let mut share = screen(&server, share_hello(&host.access_token, &host_session, 30)).await;
+    assert_eq!(recv_json(&mut share).await["op"], "want");
+    let mut watch = screen(
+        &server,
+        watch_hello(&eli.access_token, &eli_session, &host_session),
+    )
+    .await;
+    assert_eq!(recv_json(&mut watch).await["op"], "showing");
+    // Both hear it's still there, though nothing else is said: a still
+    // screen sends nothing, and a watcher asks nothing.
+    assert!(hears_alive(&mut share).await);
+    assert!(hears_alive(&mut watch).await);
+    drain(&mut host_gw, SETTLE).await;
+    // Eli's line dies without closing: nothing is read from the watch
+    // socket any more, so no ping is answered. The share goes on answering.
+    // Within half a minute's worth of the server's asks (here a little over
+    // a second) the watch is let go, and the room is told Eli isn't watching.
+    let until =
+        tokio::time::Instant::now() + ALIVE * (linger_core::limits::SCREEN_ALIVE_MISSED + 3);
+    while let Ok(Some(Ok(_))) = tokio::time::timeout_at(until, share.next()).await {}
+    let frames = drain(&mut host_gw, SETTLE).await;
+    let eli_now = peer(&frames, &room, &eli_session).expect("eli in voice.state");
+    assert!(eli_now["watching"].is_null(), "{eli_now:?}");
+    // The share, which answered, carries on.
+    assert!(hears_alive(&mut share).await);
+    drop(watch);
+}
+
+#[tokio::test]
+async fn a_frame_over_the_biggest_is_dropped_and_the_share_carries_on() {
+    let (server, host, room) = common::voice_server_with_room("studio").await;
+    let room = room.id.to_string();
+    let eli = common::join_member(&server, &host.access_token, "eli").await;
+    let (mut host_gw, host_session) = gateway(&server, &host.access_token).await;
+    let (mut eli_gw, eli_session) = gateway(&server, &eli.access_token).await;
+    join_voice(&mut host_gw, &room).await;
+    join_voice(&mut eli_gw, &room).await;
+    drain(&mut host_gw, SETTLE).await;
+    let mut share = screen(&server, share_hello(&host.access_token, &host_session, 30)).await;
+    assert_eq!(recv_json(&mut share).await["op"], "want");
+    let mut watch = screen(
+        &server,
+        watch_hello(&eli.access_token, &eli_session, &host_session),
+    )
+    .await;
+    assert_eq!(recv_json(&mut watch).await["op"], "showing");
+    // A key frame a byte over the biggest goes nowhere, and closes nothing.
+    let mut big = frame(1, true, 9);
+    big.resize(linger_core::limits::MAX_SCREEN_FRAME_BYTES + 1, 9);
+    share
+        .send(WsMessage::Binary(big.into()))
+        .await
+        .expect("sent");
+    share
+        .send(WsMessage::Binary(frame(1, true, 5).into()))
+        .await
+        .expect("still open");
+    let got = next_binary(&mut watch).await;
+    assert_eq!(got.len(), frame(1, true, 5).len());
+    assert_eq!(got[12], 5);
+}
+
+#[tokio::test]
+async fn too_many_screen_sockets_in_a_minute_says_so_rather_than_a_bad_hello() {
+    let (server, host, room) = common::voice_server_with_room("busy").await;
+    let room = room.id.to_string();
+    let (mut host_gw, host_session) = gateway(&server, &host.access_token).await;
+    join_voice(&mut host_gw, &room).await;
+    drain(&mut host_gw, SETTLE).await;
+    let (allowed, _) = linger_core::limits::RATE_SCREEN_HELLO;
+    for _ in 0..allowed {
+        let mut ws = screen(&server, share_hello(&host.access_token, &host_session, 30)).await;
+        assert_eq!(recv_json(&mut ws).await["op"], "want");
+    }
+    let mut ws = screen(&server, share_hello(&host.access_token, &host_session, 30)).await;
+    assert_eq!(closed_with(&mut ws).await, Some(4009));
+}

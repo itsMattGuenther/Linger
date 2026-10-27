@@ -4,8 +4,11 @@
 # first mirror is healthy, or where none is, stays exactly as it was.
 #
 # A stand-in server on this machine plays every kind of mirror: /fast/ sends
-# the index at once; /slow/ sends a short one at 50 KB/s, so it would arrive
-# whole in four seconds and only the speed check stops it; /silent/ takes the
+# the index and the package it names at once; /slow/ sends a short index at
+# 50 KB/s, so it would arrive whole in four seconds and only the speed check
+# stops it; /slowpool/ sends its index at once and its package at 50 KB/s, as
+# Azure's did on 2026-10-26's nightly; /bare/ has an index naming no package
+# big enough to time, which passes on the index alone; /silent/ takes the
 # request and never answers; /missing/ has no index. A port with nothing on it
 # refuses the connection. No network needed.
 set -euo pipefail
@@ -18,23 +21,35 @@ trap '[ -n "$server" ] && kill "$server" 2>/dev/null; rm -rf "$work"' EXIT
 cat > "$work/mirror.mjs" <<'JS'
 import { createServer } from "node:http";
 import { writeFileSync } from "node:fs";
-const index = Buffer.alloc(2_000_000, 1);
-const server = createServer((req, res) => {
-  const kind = req.url.split("/")[1];
-  if (kind === "silent") return;
-  if (kind === "missing") return res.writeHead(404).end();
-  if (kind === "fast") return res.writeHead(200, { "content-length": index.length }).end(index);
-  const short = index.subarray(0, 200_000);
-  res.writeHead(200, { "content-length": short.length });
+import { gzipSync } from "node:zlib";
+// An index as apt's are: stanzas, a package's file and size in each. A small
+// one first, too small to time, then the one the script times.
+const stanza = (name, size) => `Package: ${name}\nFilename: pool/main/${name[0]}/${name}/${name}_1_amd64.deb\nSize: ${size}\n\n`;
+const named = gzipSync(stanza("tiny", 2_000) + stanza("libwebkit", 500_000) + "Description: padding\n".repeat(80_000));
+const bare = gzipSync(stanza("tiny", 2_000) + "Description: padding\n".repeat(80_000));
+const pkg = Buffer.alloc(500_000, 2);
+const drip = (res, bytes) => {
+  res.writeHead(200, { "content-length": bytes.length });
   let sent = 0;
-  const drip = setInterval(() => {
-    if (res.destroyed || sent >= short.length) {
-      clearInterval(drip);
+  const timer = setInterval(() => {
+    if (res.destroyed || sent >= bytes.length) {
+      clearInterval(timer);
       return res.end();
     }
-    res.write(short.subarray(sent, sent + 5000));
+    res.write(bytes.subarray(sent, sent + 5000));
     sent += 5000;
   }, 100);
+};
+const server = createServer((req, res) => {
+  const kind = req.url.split("/")[1];
+  const pool = req.url.includes("/pool/");
+  if (kind === "silent") return;
+  if (kind === "missing") return res.writeHead(404).end();
+  if (kind === "slow") return drip(res, Buffer.alloc(200_000, 1));
+  if (pool && kind === "slowpool") return drip(res, pkg);
+  if (pool) return res.writeHead(200, { "content-length": pkg.length }).end(pkg);
+  const index = kind === "bare" ? bare : named;
+  res.writeHead(200, { "content-length": index.length }).end(index);
 });
 server.listen(0, "127.0.0.1", () => writeFileSync(process.argv[2], String(server.address().port)));
 JS
@@ -79,6 +94,15 @@ says "a mirror without the index" "doesn't have dists/test"
 run "$refused/${tab}priority:1${tab}arch:amd64" "$at/fast/${tab}arch:amd64"
 leaves "other tags stay, and a line without a priority gets one" "$at/fast/${tab}arch:amd64${tab}priority:1" "$refused/${tab}priority:2${tab}arch:amd64"
 says "a refused connection" "didn't answer"
+
+run "$at/slowpool/${tab}priority:1" "$at/fast/${tab}priority:2"
+leaves "a mirror whose index comes at once and its packages crawl goes last" "$at/fast/${tab}priority:1" "$at/slowpool/${tab}priority:2"
+says "a mirror whose packages crawl" "but a package slower than 100 KB/s"
+says "a healthy mirror's package" ", a package "
+
+run "$at/bare/${tab}priority:1" "$at/fast/${tab}priority:2"
+leaves "an index naming nothing to time passes on its own" "$at/bare/${tab}priority:1" "$at/fast/${tab}priority:2"
+quiet "an index naming nothing to time" "::warning"
 
 run "# GitHub's" "" "$at/missing/${tab}priority:1" "$at/fast/${tab}priority:2"
 leaves "a comment stays and a blank line goes" "# GitHub's" "$at/fast/${tab}priority:1" "$at/missing/${tab}priority:2"

@@ -207,6 +207,19 @@ pub const MAX_SCREEN_WATCH_BYTES: usize = 4 * 1024 * 1024;
 pub const SCREEN_MAX_BITS_PER_SECOND: u64 = 10_000_000;
 /// What a share may send above that at once, for a key frame.
 pub const SCREEN_BURST_BYTES: u64 = 2 * 1024 * 1024;
+/// How often the server tells a screen socket it's still there (`alive`)
+/// and asks back (a WebSocket ping). A screen that isn't changing sends
+/// nothing and a watcher asks nothing, so without it a line that died
+/// without closing looked the same as a still slide, for minutes.
+pub const SCREEN_ALIVE_MS: u64 = 5_000;
+/// How many of those go by with nothing back, a pong included, before the
+/// server takes the socket as gone and lets its share or watching go: half a
+/// minute. The apps take half as long with nothing from the server.
+pub const SCREEN_ALIVE_MISSED: u32 = 6;
+/// What a screen socket lets in before it refuses the socket: twice the
+/// biggest frame, so a frame over `MAX_SCREEN_FRAME_BYTES` is dropped, as
+/// PROTOCOL §8 says, rather than ending the share.
+pub const MAX_SCREEN_MESSAGE_BYTES: usize = 2 * MAX_SCREEN_FRAME_BYTES;
 
 /// Gateway (PROTOCOL §8).
 pub const HEARTBEAT_INTERVAL_MS: u64 = 30_000;

@@ -56,7 +56,7 @@ describe("a share's size and settings", () => {
 
 describe("the screen socket's words", () => {
   it("reads the server's closing codes", () => {
-    expect([4001, 4002, 4003, 4004, 4005, 4006, 4007, 4008, 1006].map(closingOf)).toEqual([
+    expect([4001, 4002, 4003, 4004, 4005, 4006, 4007, 4008, 4009, 1006].map(closingOf)).toEqual([
       "not-signed-in",
       "not-in-voice",
       "room-full",
@@ -65,6 +65,7 @@ describe("the screen socket's words", () => {
       "replaced",
       "ended",
       "off",
+      "busy",
       "dropped",
     ]);
   });

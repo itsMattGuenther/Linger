@@ -16,8 +16,47 @@ export function openScreenSocket(baseUrl: string, hello: ScreenHello): WebSocket
   return socket;
 }
 
+/**
+ * How long a screen socket may hear nothing, not even the server's `alive`
+ * (every `SCREEN_ALIVE_MS`, 5 s), before its line counts as dropped and it
+ * connects again: three of them. A still screen sends nothing and a watcher
+ * asks nothing, so a line that died without closing looked, for minutes,
+ * like a still slide. Tests shorten it.
+ */
+export const screenSilence = { ms: 15_000 };
+
+/**
+ * Call `silent`, once, if `socket` hears nothing for `screenSilence.ms`
+ * from when it opens or last heard something. Stops by itself when the
+ * socket closes; answers how to stop it sooner.
+ */
+export function onSilence(socket: WebSocket, silent: () => void): () => void {
+  let heard = performance.now();
+  const hear = () => {
+    heard = performance.now();
+  };
+  const timer = window.setInterval(
+    () => {
+      if (performance.now() - heard < screenSilence.ms) return;
+      stop();
+      silent();
+    },
+    Math.min(1_000, screenSilence.ms / 3),
+  );
+  const stop = () => {
+    window.clearInterval(timer);
+    socket.removeEventListener("message", hear);
+    socket.removeEventListener("open", hear);
+    socket.removeEventListener("close", stop);
+  };
+  socket.addEventListener("message", hear);
+  socket.addEventListener("open", hear);
+  socket.addEventListener("close", stop);
+  return stop;
+}
+
 /** What closing codes the server uses mean, for the person (PROTOCOL §8). */
-export type ScreenClosing = "not-signed-in" | "not-in-voice" | "room-full" | "nothing-to-watch" | "bad-hello" | "replaced" | "ended" | "off" | "dropped";
+export type ScreenClosing = "not-signed-in" | "not-in-voice" | "room-full" | "nothing-to-watch" | "bad-hello" | "replaced" | "ended" | "off" | "busy" | "dropped";
 
 export function closingOf(code: number): ScreenClosing {
   switch (code) {
@@ -37,6 +76,8 @@ export function closingOf(code: number): ScreenClosing {
       return "ended";
     case 4008:
       return "off";
+    case 4009:
+      return "busy";
     default:
       return "dropped";
   }

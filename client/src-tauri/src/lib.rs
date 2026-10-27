@@ -363,6 +363,15 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
             Ok(())
         })
         .on_window_event(window::on_event)
+        // A page loaded again (Reload, on the screen a window shows when it
+        // can't draw) has no share of its own: one its last page started
+        // would run on with nothing to stop it (#360).
+        .on_page_load(|webview, payload| {
+            use tauri::Manager as _;
+            if matches!(payload.event(), tauri::webview::PageLoadEvent::Started) {
+                screen_shell::forget(webview.app_handle(), webview.label());
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             sessions_load,
             session_save,

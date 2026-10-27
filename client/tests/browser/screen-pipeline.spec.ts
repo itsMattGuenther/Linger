@@ -14,12 +14,16 @@ const SERVER = "http://screen.test";
  * `restart()` drops both sockets the way a restarting server does; once
  * back, it has no seat for anybody, as a restarted server hasn't. A share
  * that stops tells its watcher there's nothing to show, keeping its socket,
- * and `endWatch(code)` ends the watch as the server would.
+ * and `endWatch(code)` ends the watch as the server would. Each socket hears
+ * `alive` every second, as the server's say it's still there; `quiet()`
+ * stops that and everything else, a line that died without closing.
+ * `behind()` tells the watcher its line couldn't keep up.
  */
 async function standIn(page: Page) {
   let share: WebSocketRoute | null = null;
   let watch: WebSocketRoute | null = null;
   let restarted = false;
+  let silent = false;
   const asked: string[] = [];
   const restart = async () => {
     restarted = true;
@@ -27,7 +31,17 @@ async function standIn(page: Page) {
     await watch?.close({ code: 1012, reason: "restarting" });
   };
   await page.routeWebSocket(`${SERVER.replace("http", "ws")}/api/v1/screen`, (socket) => {
+    // Its own close handler is the share's, below; the page closing ends it.
+    const alive = setInterval(() => {
+      try {
+        if (!silent) socket.send(JSON.stringify({ op: "alive" }));
+      } catch {
+        clearInterval(alive);
+      }
+    }, 1_000);
+    page.once("close", () => clearInterval(alive));
     socket.onMessage((message) => {
+      if (silent) return;
       if (restarted) {
         // Not in voice: the restart forgot every session's seat.
         void socket.close({ code: 4002, reason: "not in voice" });
@@ -46,7 +60,8 @@ async function standIn(page: Page) {
         socket.onClose(() => {
           if (share !== socket) return;
           share = null;
-          watch?.send(JSON.stringify({ op: "showing", target: null, codec: null }));
+          // A line that died says nothing, this included.
+          if (!silent) watch?.send(JSON.stringify({ op: "showing", target: null, codec: null }));
         });
       } else if (said.op === "watch") {
         watch = socket;
@@ -59,7 +74,11 @@ async function standIn(page: Page) {
   const endWatch = async (code: number) => {
     await watch?.close({ code, reason: "ended" });
   };
-  return { asked, restart, endWatch };
+  const quiet = (on = true) => {
+    silent = on;
+  };
+  const behind = () => watch?.send(JSON.stringify({ op: "behind" }));
+  return { asked, restart, endWatch, quiet, behind };
 }
 
 async function colour(page: Page): Promise<number[]> {
@@ -120,7 +139,7 @@ test("a screen left open opens the same person's next share by itself, and a clo
   // Jules stops, to pick another window: the screen stays, saying so.
   await page.evaluate(() => window.loop.unfeed());
   await page.evaluate(() => window.loop.voice(false));
-  await expect.poll(state).toEqual({ status: "ended", opensNext: true });
+  await expect.poll(state).toMatchObject({ status: "ended", opensNext: true });
 
   // Jules shares again: it opens on the same screen with nobody pressing Watch.
   await page.evaluate(() => window.loop.paint("#0000ff"));
@@ -128,20 +147,20 @@ test("a screen left open opens the same person's next share by itself, and a clo
   await expect.poll(shares).toBe(2);
   await page.evaluate(() => window.loop.voice(true));
   await expect.poll(() => colour(page).then((got) => near(got, [0, 0, 255, 255])), { timeout: 15_000 }).toBe(true);
-  expect(await state()).toEqual({ status: "showing", opensNext: false });
+  expect(await state()).toMatchObject({ status: "showing", opensNext: false });
   expect(watches()).toBe(2);
 
   // Stopped again and the screen closed: the next share doesn't open it.
   await page.evaluate(() => window.loop.unfeed());
   await page.evaluate(() => window.loop.voice(false));
-  await expect.poll(state).toEqual({ status: "ended", opensNext: true });
+  await expect.poll(state).toMatchObject({ status: "ended", opensNext: true });
   await page.evaluate(() => window.loop.pane_close());
-  await expect.poll(state).toEqual({ status: null, opensNext: false });
+  await expect.poll(state).toMatchObject({ status: null, opensNext: false });
   await page.evaluate((server) => window.loop.feed(server, "s-jules"), SERVER);
   await expect.poll(shares).toBe(3);
   await page.evaluate(() => window.loop.voice(true));
   await page.waitForTimeout(1000);
-  expect(await state()).toEqual({ status: null, opensNext: false });
+  expect(await state()).toMatchObject({ status: null, opensNext: false });
   expect(watches()).toBe(2);
 });
 
@@ -280,6 +299,46 @@ test("a share that stays black is marked so until it stops, even once it's back,
   await page.evaluate(() => window.loop.stop());
   await page.evaluate((server) => window.loop.share(server, "token", "s-sharer", 30), SERVER);
   expect(await wentBlack(page)).toBe(false);
+});
+
+test("a watcher's own slow line says so on its screen, for a while, and nobody else's", async ({ page }) => {
+  const { behind } = await standIn(page);
+  await page.goto("/tests/fixtures/screen-loop.html");
+  await page.evaluate((server) => window.loop.feed(server, "s-jules"), SERVER);
+  await page.evaluate((server) => window.loop.pane(server, "s-watcher"), SERVER);
+  await page.evaluate(() => window.loop.voice(true));
+  await page.evaluate(() => window.loop.pane_watch("s-jules"));
+  await expect.poll(() => page.evaluate(() => window.loop.pane_state().status), { timeout: 15_000 }).toBe("showing");
+  expect(await page.evaluate(() => window.loop.pane_state().behind)).toBe(false);
+  // The server skipped this watcher forward: its line couldn't keep up.
+  behind();
+  await expect.poll(() => page.evaluate(() => window.loop.pane_state().behind)).toBe(true);
+  // It caught up: six seconds later, with nothing more said, the note goes.
+  await expect.poll(() => page.evaluate(() => window.loop.pane_state().behind), { timeout: 10_000 }).toBe(false);
+  expect(await page.evaluate(() => window.loop.pane_state().status)).toBe("showing");
+});
+
+test("a line that goes silent without closing is taken as dropped, and the share and the screen come back by themselves", async ({ page, browserName }) => {
+  test.skip(browserName === "webkit", "Playwright's WebKit can't read a screen the way the Linux app does");
+  const { asked, quiet } = await standIn(page);
+  await page.goto("/tests/fixtures/screen-loop.html");
+  await page.evaluate(() => window.loop.silence(1_500));
+  await page.evaluate((server) => window.loop.share(server, "token", "s-sharer", 30), SERVER);
+  await page.evaluate((server) => window.loop.watch(server, "token", "s-watcher", "s-sharer"), SERVER);
+  await page.evaluate(() => window.loop.paint("#ff0000"));
+  await expect.poll(() => colour(page).then((got) => near(got, [255, 0, 0, 255])), { timeout: 15_000 }).toBe(true);
+  // The line dies without closing: nothing more from the server, not even
+  // its alive, and nothing it's sent is answered. A still slide would look
+  // the same, and nothing would ever say otherwise.
+  quiet();
+  await page.waitForTimeout(2_500);
+  quiet(false);
+  // Both took it as dropped and said hello again; the picture follows the screen.
+  await expect.poll(() => asked.filter((op) => op === "share").length, { timeout: 15_000 }).toBe(2);
+  await expect.poll(() => asked.filter((op) => op === "watch").length, { timeout: 15_000 }).toBe(2);
+  await page.evaluate(() => window.loop.paint("#0000ff"));
+  await expect.poll(() => colour(page).then((got) => near(got, [0, 0, 255, 255])), { timeout: 15_000 }).toBe(true);
+  expect(await page.evaluate(() => (window.loop.share_state() as { status?: string } | null)?.status)).toBe("sharing");
 });
 
 // The Linux app shares through its shell (T-1907, src-tauri/src/screen_shell.rs),

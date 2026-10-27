@@ -2,11 +2,11 @@ import { useSyncExternalStore } from "react";
 import type { ScreenCodec } from "../../generated/ScreenCodec";
 import type { AuthedApi } from "../api";
 import { BlackWatch, LOOK_EVERY_MS, LOOK_HEIGHT, LOOK_WIDTH, looksBlack } from "./black";
-import { packFrame, readFrame } from "./frames";
+import { MAX_FRAME_BYTES, packFrame, readFrame } from "./frames";
 import { encoderConfig, fitWithin, KEYFRAME_EVERY_MS, SCREEN_SPEEDS, type ScreenFps, type ScreenSpeed } from "./presets";
 import { canPickScreen, makeable } from "./probe";
 import { captureInShell, sharesThroughShell, type ShellCapture } from "./shell";
-import { closingOf, openScreenSocket, readSaid, RETRIES, retryAfter, type ScreenClosing } from "./socket";
+import { closingOf, onSilence, openScreenSocket, readSaid, RETRIES, retryAfter, type ScreenClosing } from "./socket";
 
 /**
  * Sharing your screen (SPEC §4.20, PROTOCOL §8, #360), in the window where
@@ -375,21 +375,30 @@ class Sharing {
     socket.addEventListener("message", (event) => {
       if (this.#socket === socket) this.said(event.data);
     });
-    socket.addEventListener("close", (event) => {
-      if (this.#socket !== socket || this.#done) return;
-      this.#socket = null;
-      const why = closingOf(event.code);
-      if (why === "dropped" && this.#attempts < RETRIES) {
-        const wait = retryAfter(this.#attempts);
-        this.#attempts += 1;
-        window.setTimeout(() => void this.connect(), wait);
-        return;
-      }
-      // Back after a drop to a server that has no seat for this session (a
-      // restart forgets them all): the connection is what went, so say so.
-      const lost = this.#attempts > 0 && (why === "not-in-voice" || why === "ended");
-      this.finish(why === "replaced" ? null : lost ? "dropped" : why);
+    socket.addEventListener("close", (event) => this.closed(socket, event.code));
+    // Nothing from the server, not even its `alive`: the line died without
+    // closing, and this is a drop like any other.
+    onSilence(socket, () => {
+      this.closed(socket, 1006);
+      socket.close();
     });
+  }
+
+  /** `socket` closed with `code`, or went silent: try again after a drop, or end. */
+  closed(socket: WebSocket, code: number): void {
+    if (this.#socket !== socket || this.#done) return;
+    this.#socket = null;
+    const why = closingOf(code);
+    if (why === "dropped" && this.#attempts < RETRIES) {
+      const wait = retryAfter(this.#attempts);
+      this.#attempts += 1;
+      window.setTimeout(() => void this.connect(), wait);
+      return;
+    }
+    // Back after a drop to a server that has no seat for this session (a
+    // restart forgets them all): the connection is what went, so say so.
+    const lost = this.#attempts > 0 && (why === "not-in-voice" || why === "ended");
+    this.finish(why === "replaced" ? null : lost ? "dropped" : why);
   }
 
   said(data: unknown): void {
@@ -435,6 +444,12 @@ class Sharing {
     const socket = this.#socket;
     if (!socket || socket.readyState !== WebSocket.OPEN || !this.#wanted.includes(read.codec)) return;
     if (this.#shellWaitsForKey && !read.key) return;
+    // Bigger than the server passes on: not sent, and the next a key frame.
+    if (frame.byteLength > MAX_FRAME_BYTES) {
+      this.#shellWaitsForKey = true;
+      if (this.source.kind === "shell") this.source.capture.keyframe();
+      return;
+    }
     if (socket.bufferedAmount > MOST_WAITING) {
       this.#shellWaitsForKey = true;
       if (this.source.kind === "shell") this.source.capture.keyframe();
@@ -609,7 +624,14 @@ class Sharing {
     if (!socket || socket.readyState !== WebSocket.OPEN || !this.#wanted.includes(codec)) return;
     const bytes = new Uint8Array(chunk.byteLength);
     chunk.copyTo(bytes);
-    socket.send(packFrame(codec, chunk.type === "key", chunk.timestamp, bytes));
+    const packed = packFrame(codec, chunk.type === "key", chunk.timestamp, bytes);
+    // Bigger than the server passes on: not sent, and the next a key frame.
+    if (packed.byteLength > MAX_FRAME_BYTES) {
+      const held = this.#encoders.get(codec);
+      if (held) held.wantKey = true;
+      return;
+    }
+    socket.send(packed);
   }
 
   /**

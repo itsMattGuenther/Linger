@@ -15,6 +15,13 @@ import type { ScreenCodec } from "../../generated/ScreenCodec";
  */
 export const FRAME_VERSION = 1;
 export const FRAME_HEADER_BYTES = 12;
+/**
+ * The biggest frame the server passes on, header included
+ * (`MAX_SCREEN_FRAME_BYTES`); it drops one over it. A sharing app doesn't
+ * send one, and makes the next a key frame, the frames after it having
+ * nothing to build on.
+ */
+export const MAX_FRAME_BYTES = 1024 * 1024;
 
 const CODEC_BYTE: Readonly<Record<ScreenCodec, number>> = { vp8: 1, avc1: 2 };
 
