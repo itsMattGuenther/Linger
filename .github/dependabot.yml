@@ -7,7 +7,9 @@
 version: 2
 updates:
   - package-ecosystem: github-actions
-    directory: /
+    # The workflows, and the repository's own actions, which pin what they
+    # use the same way.
+    directories: ["/", "/.github/actions/*"]
     schedule:
       interval: monthly
     cooldown:

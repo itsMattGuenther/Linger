@@ -1,0 +1,52 @@
+name: Ubuntu packages, kept between runs
+description: >-
+  Installs Ubuntu packages through scripts/apt-install.sh, which gives every
+  download a time limit and moves past a mirror that crawls (#717), and keeps
+  the packages it fetched in GitHub's cache, so a later run installs them
+  from there without asking a mirror for them at all. A new copy is kept only
+  when the packages changed: a new version from Ubuntu, or another package
+  asked for. apt checks each package against the mirror's signed lists
+  wherever it came from, so a kept one can't be other than the one asked for.
+inputs:
+  packages:
+    description: The packages, separated by spaces.
+    required: true
+  cache:
+    description: The name this job's packages are kept under, one per list of packages.
+    required: true
+  recommends:
+    description: Whether what the packages recommend comes too, as apt does by default.
+    required: false
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - name: which Ubuntu this is
+      id: ubuntu
+      shell: bash
+      run: echo "release=$(. /etc/os-release && echo "$VERSION_CODENAME")-$(dpkg --print-architecture)" >> "$GITHUB_OUTPUT"
+    - name: the packages kept from an earlier run
+      id: kept
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/apt-debs
+        # Never this key itself: the newest copy whose name starts so.
+        key: apt-${{ inputs.cache }}-${{ steps.ubuntu.outputs.release }}-
+        restore-keys: apt-${{ inputs.cache }}-${{ steps.ubuntu.outputs.release }}-
+    - name: install
+      id: install
+      shell: bash
+      env:
+        PACKAGES: ${{ inputs.packages }}
+        RECOMMENDS: ${{ inputs.recommends }}
+      run: |
+        flags=()
+        if [[ $RECOMMENDS != true ]]; then flags+=(--no-recommends); fi
+        read -r -a packages <<< "$PACKAGES"
+        APT_DEBS="$HOME/.cache/apt-debs" "$GITHUB_WORKSPACE/scripts/apt-install.sh" "${flags[@]}" "${packages[@]}"
+    - name: keep them for the next run
+      if: steps.install.outputs.key != '' && steps.kept.outputs.cache-matched-key != format('apt-{0}-{1}-{2}', inputs.cache, steps.ubuntu.outputs.release, steps.install.outputs.key)
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/apt-debs
+        key: apt-${{ inputs.cache }}-${{ steps.ubuntu.outputs.release }}-${{ steps.install.outputs.key }}

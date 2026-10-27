@@ -32,9 +32,17 @@ function pinProblem(value) {
 }
 
 const root = new URL("../", import.meta.url);
-const workflows = readdirSync(new URL(".github/workflows/", root))
-  .filter((name) => /\.ya?ml$/.test(name))
-  .map((name) => ({ name, lines: readFileSync(new URL(`.github/workflows/${name}`, root), "utf8").split("\n") }));
+// The workflows, and the repository's own actions (.github/actions/*/action.yml),
+// whose steps pin what they use the same way.
+const workflows = [
+  ...readdirSync(new URL(".github/workflows/", root))
+    .filter((name) => /\.ya?ml$/.test(name))
+    .map((name) => ({ name, lines: readFileSync(new URL(`.github/workflows/${name}`, root), "utf8").split("\n") })),
+  ...readdirSync(new URL(".github/actions/", root)).map((dir) => ({
+    name: `actions/${dir}/action.yml`,
+    lines: readFileSync(new URL(`.github/actions/${dir}/action.yml`, root), "utf8").split("\n"),
+  })),
+];
 const uses = workflows.flatMap(({ name, lines }) =>
   lines.flatMap((line, at) => {
     const match = /^(\s*)(-\s+)?uses:\s*(.*)$/.exec(line);

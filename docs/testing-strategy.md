@@ -76,8 +76,8 @@ version check, and the tests of these scripts themselves
 `scripts/issue-label.test.mjs`, `scripts/action-pins.test.mjs`,
 `scripts/startup-time.test.mjs`,
 `python3 scripts/linux-audio-check.test.py`,
-`scripts/android-signing-test.sh`, `scripts/tidy-branches-test.sh`, and
-`scripts/apt-mirrors-test.sh`).
+`scripts/android-signing-test.sh`, `scripts/tidy-branches-test.sh`,
+`scripts/apt-mirrors-test.sh`, and `scripts/apt-install-test.sh`).
 
 **One required check.** GitHub requires only `all green` before a merge. It
 waits for every other `ci.yml` job and passes when each passed or was skipped
@@ -267,14 +267,29 @@ rules that came out of them:
   `scripts/playwright-image.test.mjs` checks it, so bump both together. It
   also checks those jobs say `shell: bash`: in a container GitHub runs steps
   with `sh` unless told otherwise, and their steps are bash.
-- **The jobs that still install Ubuntu packages** (ffmpeg for the server's
-  tests, WebKitGTK for the shell, the Linux build tools for the packages and
-  the release) run `scripts/apt-mirrors.sh` before `apt-get update`. GitHub's
+- **The jobs that install Ubuntu packages** (ffmpeg for the server's tests,
+  WebKitGTK for the shell, the Linux build tools for the packages and the
+  release) install them through `.github/actions/apt-install`. GitHub's
   runners try Azure's Ubuntu mirror first and only move on when it fails, and
-  on 2026-10-26 it crawled at 40 KB/s instead of failing (#717). The script
-  times one download from each mirror and puts any slower than 100 KB/s
-  behind the first that isn't, for that job only. A healthy first mirror
-  changes nothing; the run's log says which one it used.
+  on 2026-10-26 it crawled at a few KB/s instead of failing, three times that
+  day (#717). So:
+  - **The packages are kept between runs** in GitHub's cache, under the job's
+    name and the Ubuntu release, and a later run installs from there without
+    asking a mirror for them. A new copy is kept only when the packages
+    changed. Main's copies are the ones a pull request and a release start
+    from: the release's Linux build shares the package check's (`packages`),
+    which the nightly run keeps on main.
+  - **`scripts/apt-mirrors.sh` times each mirror first**, its index and one
+    package it names, and puts any slower than 100 KB/s behind the first that
+    isn't, for that job only. That night the index came at 57 MB/s and the
+    packages at a few KB/s.
+  - **`scripts/apt-install.sh` gives every fetch a time limit**: four minutes
+    for the lists, eight for the packages. One that runs out of time sends the
+    mirror it used to the back and is tried once more, from the next. Packages
+    are fetched first and installed after, so the limit never stops an
+    install half way.
+  A healthy first mirror and a kept copy change nothing; the run's log says
+  which mirror was used and whether the copy was.
 - The page server runs on port 1421. `LINGER_TEST_PORT=1431` (any free port)
   moves it, so a second copy of the repository, such as a git worktree, can
   run its browser tests while the first runs its own.

@@ -107,6 +107,17 @@ quiet "an index naming nothing to time" "::warning"
 run "# GitHub's" "" "$at/missing/${tab}priority:1" "$at/fast/${tab}priority:2"
 leaves "a comment stays and a blank line goes" "# GitHub's" "$at/fast/${tab}priority:1" "$at/missing/${tab}priority:2"
 
+# A download that ran out of time: the first goes back, untried, healthy as it looks.
+printf '%s\n' "$at/fast/${tab}priority:1" "$at/fast/${tab}priority:2" > "$APT_MIRRORS"
+cp "$APT_MIRRORS" "$work/before"
+out=$(bash scripts/apt-mirrors.sh --first-is-slow 2>&1) || fail "exited with $? on --first-is-slow"
+leaves "--first-is-slow sends the first to the back" "$at/fast/${tab}priority:1" "$at/fast/${tab}priority:2"
+says "--first-is-slow" "ran out of time downloading in this job"
+says "--first-is-slow" "::warning title=apt mirrors::"
+run "$at/fast/${tab}priority:1" "$at/slow/${tab}priority:2" "$at/fast/x/${tab}priority:3"
+out=$(bash scripts/apt-mirrors.sh --first-is-slow 2>&1) || fail "exited with $? on --first-is-slow"
+leaves "--first-is-slow, then the next to pass" "$at/fast/x/${tab}priority:1" "$at/fast/${tab}priority:2" "$at/slow/${tab}priority:3"
+
 none=("$at/slow/${tab}priority:1" "$at/missing/${tab}priority:2" "$refused/${tab}priority:3")
 run "${none[@]}"
 leaves "no mirror passing" "${none[@]}"

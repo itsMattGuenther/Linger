@@ -21,10 +21,17 @@
 # the list as it was.
 #
 #   scripts/apt-mirrors.sh
+#   scripts/apt-mirrors.sh --first-is-slow
+#
+# --first-is-slow takes the mirror at the top of the list as having failed,
+# without trying it: scripts/apt-install.sh says so when a download from it
+# ran out of time, which can start after this script's own check passed.
 #
 # APT_MIRRORS, APT_MIRROR_PROBE and APT_MIRROR_SPEED_TIME are for its test,
 # scripts/apt-mirrors-test.sh.
 set -uo pipefail
+first_is_slow=0
+if [[ ${1:-} == --first-is-slow ]]; then first_is_slow=1; fi
 
 list=${APT_MIRRORS:-/etc/apt/apt-mirrors.txt}
 min_speed=100000
@@ -94,6 +101,11 @@ host() { local rest=${1#*://}; echo "${rest%%[/[:space:]]*}"; }
 passed=-1 behind=()
 for i in "${!mirrors[@]}"; do
   url=${mirrors[i]%%[[:space:]]*}
+  if (( i == 0 && first_is_slow )); then
+    echo "apt-mirrors: $(host "$url"): ran out of time downloading in this job"
+    behind+=("${mirrors[i]}")
+    continue
+  fi
   if said=$(try "$url"); then
     echo "apt-mirrors: $(host "$url"): $said"
     passed=$i
