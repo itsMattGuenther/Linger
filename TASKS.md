@@ -26,6 +26,16 @@ default.
 
 ## How to run a task
 
+**0.5.2 release — prepared 2026-10-27, screen sharing.** Share your screen from
+Windows and Linux at 30 or 60 frames a second and watch from every app (#360,
+M16), with a share gone black saying so (#722) and a watcher's own slow line
+said to them alone; Settings changes who you are on each server (#719) and
+every server starts folded (#712); the away picker is a bank of six (#708); the
+iPhone app's first TestFlight fixes (#686–#704); a busy computer no longer
+throws the reader a page up (#716) or redraws a hundred rows at a pause (#709).
+Hosts: screen sharing needs the server updated; no database change. The CI
+keeps its Ubuntu packages between runs (#717). Notes in `docs/releases/0.5.2.md`.
+
 **0.5.1 release — prepared 2026-10-19, voice on the phone and account deletion.**
 The Android app joins voice rooms, and a locked phone stays in the call through
 the call bar (#429); anybody can delete their own account from either app (#650,
