@@ -222,7 +222,8 @@ export async function startSharing(options: { server: string; api: AuthedApi; se
 /**
  * Share through the desktop shell (Linux): its picker is the desktop's own
  * too, opened by the shell, so nothing here waits on the press. It sends
- * VP8 only, as the page does where the graphics card makes no H.264.
+ * the formats the shell makes: H.264 first where the graphics card makes
+ * it, then VP8, as the page does (#733).
  */
 async function startInShell(options: { server: string; api: AuthedApi; sessionId: string; fps: ScreenFps }, ask: object): Promise<void> {
   publish({ server: options.server, fps: options.fps, status: "picking", preview: null, pictures: false, wentBlack: false });
@@ -237,7 +238,8 @@ async function startInShell(options: { server: string; api: AuthedApi; sessionId
     if (capture !== "declined") stopped(options.server, capture);
     return;
   }
-  const sharing = new Sharing(options.server, options.api, options.sessionId, SCREEN_SPEEDS[options.fps], { kind: "shell", capture }, ["vp8"], new Set());
+  const hardware = new Set(capture.codecs.filter((codec) => codec === "avc1"));
+  const sharing = new Sharing(options.server, options.api, options.sessionId, SCREEN_SPEEDS[options.fps], { kind: "shell", capture }, capture.codecs, hardware);
   running = sharing;
   publish({ server: options.server, fps: options.fps, status: "starting", preview: null, pictures: true, wentBlack: false });
   sharing.start();
@@ -311,7 +313,7 @@ class Sharing {
   #firstFrameTimer = 0;
   #stopReading: (() => void) | null = null;
   /** The shell's frames go out from a key frame on, after one is skipped. */
-  #shellWaitsForKey = true;
+  #shellWaitsForKey = new Set<ScreenCodec>(["vp8", "avc1"]);
   /** Looked at for whether it has gone black (`black.ts`). */
   #black = new BlackWatch();
   #lookTimer = 0;
@@ -418,11 +420,13 @@ class Sharing {
       if (shown?.status !== "sharing" && shown?.server === this.server) publish({ ...shown, status: "sharing" });
       // Somebody new is watching: they needn't wait for the screen to change.
       if (this.source.kind === "shell") {
-        if (wanted.length > 0) this.source.capture.keyframe();
+        // The shell encodes only these from here on (#733).
+        this.source.capture.want(wanted);
+        for (const codec of wanted) this.source.capture.keyframe(codec);
       } else if (this.#latest) for (const codec of wanted) this.encode(codec, this.#latest, true);
     } else if (said.op === "keyframe" && (said.codec === "vp8" || said.codec === "avc1")) {
       if (this.source.kind === "shell") {
-        this.source.capture.keyframe();
+        this.source.capture.keyframe(said.codec);
         return;
       }
       const held = this.#encoders.get(said.codec);
@@ -443,19 +447,19 @@ class Sharing {
     this.#seen = true;
     const socket = this.#socket;
     if (!socket || socket.readyState !== WebSocket.OPEN || !this.#wanted.includes(read.codec)) return;
-    if (this.#shellWaitsForKey && !read.key) return;
+    if (this.#shellWaitsForKey.has(read.codec) && !read.key) return;
     // Bigger than the server passes on: not sent, and the next a key frame.
     if (frame.byteLength > MAX_FRAME_BYTES) {
-      this.#shellWaitsForKey = true;
-      if (this.source.kind === "shell") this.source.capture.keyframe();
+      this.#shellWaitsForKey.add(read.codec);
+      if (this.source.kind === "shell") this.source.capture.keyframe(read.codec);
       return;
     }
     if (socket.bufferedAmount > MOST_WAITING) {
-      this.#shellWaitsForKey = true;
-      if (this.source.kind === "shell") this.source.capture.keyframe();
+      this.#shellWaitsForKey.add(read.codec);
+      if (this.source.kind === "shell") this.source.capture.keyframe(read.codec);
       return;
     }
-    this.#shellWaitsForKey = false;
+    this.#shellWaitsForKey.delete(read.codec);
     socket.send(frame);
   }
 

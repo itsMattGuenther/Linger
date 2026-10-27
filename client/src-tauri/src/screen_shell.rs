@@ -17,6 +17,7 @@
 use std::ffi::OsStr;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
+use linger_core::screen::ScreenCodec;
 use serde::Serialize;
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Manager, Window};
@@ -109,9 +110,11 @@ fn draws_on_cpu(gdk_gl: Option<&OsStr>, disable_dmabuf: Option<&OsStr>) -> bool 
 
 /// Share a screen at `fps`: the desktop's picker opens, and once something
 /// is picked its frames come on `frames`, and the preview's JPEG pictures on
-/// `pictures` while it's `shown`. Refused with `declined` when the picker was
-/// closed, `no-screen` when the desktop gave none, and `no-encoder` when
-/// GStreamer couldn't read it.
+/// `pictures` while it's `shown`. Answers with the formats it makes, best
+/// first, for the share's hello: H.264 too where the graphics card makes it
+/// (#733). Each is encoded only once `screen_share_want` asks for it.
+/// Refused with `declined` when the picker was closed, `no-screen` when the
+/// desktop gave none, and `no-encoder` when GStreamer couldn't read it.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)] // Tauri hands each one over by name.
 pub async fn screen_share_start(
@@ -122,7 +125,7 @@ pub async fn screen_share_start(
     frames: Channel<InvokeResponseBody>,
     pictures: Channel<InvokeResponseBody>,
     says: Channel<ShareSays>,
-) -> Result<(), String> {
+) -> Result<Vec<ScreenCodec>, String> {
     #[cfg(target_os = "linux")]
     {
         let speed = linux::speed(fps).ok_or("not a speed")?;
@@ -179,6 +182,7 @@ pub async fn screen_share_start(
             }
             return Err("no-screen".into());
         }
+        let formats = capture.formats();
         // Another start finished while the picker was open: that one goes.
         let before = lock(&app.state::<ScreenShares>()).replace(Running {
             window: window.label().to_string(),
@@ -187,7 +191,7 @@ pub async fn screen_share_start(
         if let Some(before) = before {
             close(before).await;
         }
-        Ok(())
+        Ok(formats)
     }
     #[cfg(not(target_os = "linux"))]
     {
@@ -196,18 +200,33 @@ pub async fn screen_share_start(
     }
 }
 
-/// Make the next frame a key frame (somebody new is watching, or a watcher
-/// fell behind), for the share `window` started.
+/// Make the next frame of `codec` a key frame, or of every format it makes
+/// when there's none (somebody new is watching, or a watcher fell behind),
+/// for the share `window` started.
 #[tauri::command]
-pub async fn screen_share_keyframe(app: AppHandle, window: Window) {
+pub async fn screen_share_keyframe(app: AppHandle, window: Window, codec: Option<ScreenCodec>) {
     #[cfg(target_os = "linux")]
     if let Some(running) = lock(&app.state::<ScreenShares>()).as_ref() {
         if running.window == window.label() {
-            running.capture.keyframe();
+            running.capture.keyframe(codec);
         }
     }
     #[cfg(not(target_os = "linux"))]
-    let _ = (app, window);
+    let _ = (app, window, codec);
+}
+
+/// Encode the formats somebody watching the share `window` started wants,
+/// as the server said them (PROTOCOL §8, `want`), and stop encoding the rest.
+#[tauri::command]
+pub async fn screen_share_want(app: AppHandle, window: Window, codecs: Vec<ScreenCodec>) {
+    #[cfg(target_os = "linux")]
+    if let Some(running) = lock(&app.state::<ScreenShares>()).as_ref() {
+        if running.window == window.label() {
+            running.capture.want(&codecs);
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = (app, window, codecs);
 }
 
 /// Show the preview of the share `window` started, or hide it, which stops

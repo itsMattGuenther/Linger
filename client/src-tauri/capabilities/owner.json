@@ -51,6 +51,7 @@
     "allow-screen-watch-available",
     "allow-screen-share-start",
     "allow-screen-share-keyframe",
+    "allow-screen-share-want",
     "allow-screen-share-preview",
     "allow-screen-share-stop"
   ]

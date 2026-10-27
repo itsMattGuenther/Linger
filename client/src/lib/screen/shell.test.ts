@@ -86,6 +86,29 @@ describe("sharing through the shell", () => {
     expect(shell.calls.map((call) => call.command)).toEqual(["screen_share_start", "screen_share_keyframe", "screen_share_stop"]);
   });
 
+  it("offers what the shell makes, H.264 first where the card makes it, and passes on the formats wanted and which key frame (#733)", async () => {
+    shell.answer = (command) => Promise.resolve(command === "screen_share_start" ? ["avc1", "vp8", "a window's name"] : undefined);
+    const capture = await captureInShell(60, false);
+    if (typeof capture === "string") throw new Error(capture);
+    // What a share can send, in the shell's order; nothing else.
+    expect(capture.codecs).toEqual(["avc1", "vp8"]);
+    capture.want(["vp8"]);
+    capture.keyframe("vp8");
+    capture.keyframe();
+    expect(shell.calls.slice(1)).toEqual([
+      { command: "screen_share_want", args: { codecs: ["vp8"] } },
+      { command: "screen_share_keyframe", args: { codec: "vp8" } },
+      { command: "screen_share_keyframe", args: { codec: null } },
+    ]);
+  });
+
+  it("is a VP8 share where the shell says nothing it makes", async () => {
+    shell.answer = () => Promise.resolve(null);
+    const capture = await captureInShell(30, false);
+    if (typeof capture === "string") throw new Error(capture);
+    expect(capture.codecs).toEqual(["vp8"]);
+  });
+
   it("starts with the preview as you left it, hands over its pictures, and switches it", async () => {
     const capture = await captureInShell(30, false);
     if (typeof capture === "string") throw new Error(capture);

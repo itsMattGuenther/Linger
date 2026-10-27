@@ -906,6 +906,14 @@ Arch, `gstreamer1.0-pipewire` on Debian and Ubuntu, `pipewire-gstreamer` on
 Fedora), along with your desktop's `xdg-desktop-portal` package. The AppImage
 doesn't share a screen yet; the Arch package, the .deb and the .rpm do.
 
+Linger makes the picture with your graphics card's video encoder when it
+has one, which keeps the computer quiet: on a busy 4K screen that took about
+half the work of making it on the processor. NVIDIA's cards need nothing
+more. AMD's and Intel's need GStreamer's VA-API plugin (`gst-plugin-va` on
+Arch, `gstreamer1.0-plugins-bad` on Debian and Ubuntu). Without one, Linger
+makes the picture on the processor, as before. Nothing is encoded while
+nobody is watching.
+
 The box in the voice bar shows a copy of what everybody sees. The eye beside
 Stop hides it, and it stays hidden next time on that computer: with it
 hidden, your computer doesn't make the copy at all.

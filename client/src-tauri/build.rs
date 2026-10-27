@@ -58,6 +58,7 @@ const COMMANDS: &[&str] = &[
     "screen_watch_available",
     "screen_share_start",
     "screen_share_keyframe",
+    "screen_share_want",
     "screen_share_preview",
     "screen_share_stop",
 ];

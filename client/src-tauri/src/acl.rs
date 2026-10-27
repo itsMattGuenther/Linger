@@ -295,11 +295,12 @@ fn only_the_chat_windows_and_the_list_window_record_a_voice_message() {
 fn only_the_chat_windows_and_the_list_window_share_or_watch_a_screen() {
     // A screen is shared and watched from voice (#360), which only those
     // windows show: Settings, Search and Media never get the desktop's picker.
-    const SHARE: [&str; 6] = [
+    const SHARE: [&str; 7] = [
         "screen_share_available",
         "screen_watch_available",
         "screen_share_start",
         "screen_share_keyframe",
+        "screen_share_want",
         "screen_share_preview",
         "screen_share_stop",
     ];

@@ -1,14 +1,17 @@
 import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
+import type { ScreenCodec } from "../../generated/ScreenCodec";
 import type { ScreenFps } from "./presets";
 
 /**
  * A screen shared through the desktop shell (#360, SPEC §4.20, T-1907). On
  * Linux the shell asks the desktop's screen-sharing portal for the screen and
- * encodes it with the system's GStreamer (`src-tauri/src/screen_shell.rs`):
+ * encodes it with the system's GStreamer (`src-tauri/src/screen_shell.rs`),
+ * in H.264 on the graphics card where it can and VP8 otherwise (#733):
  * WebKitGTK reads a shared screen only as GPU buffers, and on many computers
  * can't turn those into pictures. This gives `share.ts` the shell's frames,
  * already in the screen socket's shape (`frames.ts`), and passes on what the
- * share asks of the shell: a key frame, and stop.
+ * share asks of the shell: the formats somebody watching wants, a key frame,
+ * and stop.
  */
 
 /** Why the shell gave no screen: the picker closed, none given, or none it can encode. */
@@ -23,7 +26,12 @@ export interface ShellCapture {
   onEnded: (why: "gone" | "failed") => void;
   /** About once a second: whether the share is black (`black.ts`). */
   onLooked: (black: boolean) => void;
-  keyframe(): void;
+  /** The formats it makes, best first, for the share's hello. */
+  codecs: ScreenCodec[];
+  /** Encode these and no others: what the server says the watchers want. */
+  want(codecs: ScreenCodec[]): void;
+  /** A key frame of `codec` next, or of every format without one. */
+  keyframe(codec?: ScreenCodec): void;
   /** Show the preview or hide it; hidden, the shell stops making it. */
   preview(shown: boolean): void;
   stop(): void;
@@ -116,7 +124,9 @@ export async function captureInShell(fps: ScreenFps, shown: boolean): Promise<Sh
     onPicture: () => undefined,
     onEnded: () => undefined,
     onLooked: () => undefined,
-    keyframe: () => void invoke("screen_share_keyframe").catch(() => undefined),
+    codecs: ["vp8"],
+    want: (codecs) => void invoke("screen_share_want", { codecs }).catch(() => undefined),
+    keyframe: (codec) => void invoke("screen_share_keyframe", { codec: codec ?? null }).catch(() => undefined),
     preview: (on) => void invoke("screen_share_preview", { shown: on }).catch(() => undefined),
     stop: () => void invoke("screen_share_stop").catch(() => undefined),
   };
@@ -136,7 +146,11 @@ export async function captureInShell(fps: ScreenFps, shown: boolean): Promise<Sh
     if (why) capture.onEnded(why);
   });
   try {
-    await invoke("screen_share_start", { fps, shown, frames, pictures, says });
+    const made = await invoke<unknown>("screen_share_start", { fps, shown, frames, pictures, says });
+    // What this share makes, as the shell said it, in its order; VP8 alone
+    // if it said nothing a share can send.
+    const codecs = Array.isArray(made) ? made.filter((codec): codec is ScreenCodec => codec === "avc1" || codec === "vp8") : [];
+    if (codecs.length > 0) capture.codecs = codecs;
     return capture;
   } catch (error) {
     return refusal(error);

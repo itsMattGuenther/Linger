@@ -1287,7 +1287,10 @@ runs: Windows, Linux, macOS, Android and iPhone. The one exception is a Linux co
 Linger draws without the graphics card (NVIDIA's legacy driver, #229): WebKit's video
 player there needs the card, and building one would crash the window, so its screen says
 the computer can't play it, without trying (#729). The Linux app plays shared screens with
-GStreamer's software decoders, since WebKit can't drive the hardware ones (#730).
+GStreamer's software decoders, since WebKit can't drive the hardware ones (#730). It makes
+them with the graphics card's H.264 encoder where GStreamer has one that works (NVIDIA's,
+or VA-API's for AMD and Intel), offered first as the Windows app offers it, and VP8 on the
+processor otherwise; each format only while somebody watching wants it (#733).
 
 **The system's own picker, never Linger's.** Share opens the operating system's own
 "choose what to share" window, which the system draws, not Linger. Linger receives only

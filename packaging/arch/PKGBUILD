@@ -36,7 +36,8 @@ depends=(
   'xdg-utils'
 )
 optdepends=('gnome-keyring: remember sign-ins between launches'
-            'libayatana-appindicator: keep Linger running in the tray')
+            'libayatana-appindicator: keep Linger running in the tray'
+            'gst-plugin-va: share your screen with an AMD or Intel graphics card, not the CPU')
 options=('!strip' '!debug')
 # The agent skills (#147) come from agents/ in this repository;
 # build-repo.sh copies them next to this file under these names.

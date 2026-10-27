@@ -195,6 +195,11 @@ if (new URLSearchParams(location.search).has("shell")) {
     // `?cpu`: the shell had WebKit draw without the GPU, where building a decoder aborts the page (#729).
     if (command === "screen_watch_available") return !new URLSearchParams(location.search).has("cpu");
     if (command === "screen_share_keyframe") shellKeyframe();
+    // What the share encodes, as the page passes on the server's want (#733).
+    if (command === "screen_share_want" && typeof args === "object" && args !== null) {
+      const codecs: unknown = Reflect.get(args, "codecs");
+      shellAsked.push(`want ${Array.isArray(codecs) ? codecs.join(",") : "?"}`);
+    }
     if (command === "screen_share_preview") shellPreview = typeof args === "object" && args !== null && Reflect.get(args, "shown") === true;
     if (command === "screen_share_stop") {
       shellStop?.();
@@ -211,7 +216,9 @@ if (new URLSearchParams(location.search).has("shell")) {
     if (shellMode === "declined" || shellMode === "no-encoder") throw shellMode;
     if (!frames || !pictures || !says || typeof fps !== "number") throw "no-screen";
     shellStop = shellShare(fps, frames, pictures, says);
-    return null;
+    // `?formats=avc1,vp8`: a shell whose graphics card makes H.264 (#733).
+    const formats = new URLSearchParams(location.search).get("formats");
+    return formats === null ? null : formats.split(",");
   });
 }
 

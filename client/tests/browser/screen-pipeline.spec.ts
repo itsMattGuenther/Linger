@@ -25,6 +25,8 @@ async function standIn(page: Page) {
   let restarted = false;
   let silent = false;
   const asked: string[] = [];
+  /** What each share's hello said it encodes. */
+  const offered: unknown[] = [];
   const restart = async () => {
     restarted = true;
     await share?.close({ code: 1012, reason: "restarting" });
@@ -52,9 +54,10 @@ async function standIn(page: Page) {
         if (socket === share) watch?.send(message);
         return;
       }
-      const said = JSON.parse(message) as { op: string; target?: string };
+      const said = JSON.parse(message) as { op: string; target?: string; encode?: unknown };
       asked.push(said.op);
       if (said.op === "share") {
+        offered.push(said.encode);
         share = socket;
         socket.send(JSON.stringify({ op: "want", codecs: [] }));
         socket.onClose(() => {
@@ -78,7 +81,7 @@ async function standIn(page: Page) {
     silent = on;
   };
   const behind = () => watch?.send(JSON.stringify({ op: "behind" }));
-  return { asked, restart, endWatch, quiet, behind };
+  return { asked, offered, restart, endWatch, quiet, behind };
 }
 
 async function colour(page: Page): Promise<number[]> {
@@ -395,6 +398,29 @@ test.describe("through the Linux app's shell", () => {
     expect(await page.evaluate(() => window.loop.shell_asked())).toContain("screen_watch_available");
     // Nothing is asked of the server for a screen it can't play.
     expect(asked).toEqual(["share"]);
+  });
+
+  test("through the shell, the hello offers what the shell makes, H.264 first, and the watchers' want reaches it (#733)", async ({ page }) => {
+    const { offered } = await standIn(page);
+    await page.goto("/tests/fixtures/screen-loop.html?shell&formats=avc1,vp8");
+    await page.evaluate((server) => window.loop.share(server, "token", "s-sharer", 60), SERVER);
+    await expect.poll(() => offered.length).toBe(1);
+    expect(offered).toEqual([["avc1", "vp8"]]);
+    // Nobody watching yet: the server wants nothing, and the shell encodes nothing.
+    await expect.poll(() => page.evaluate(() => window.loop.shell_asked())).toContain("want ");
+    // A watcher who plays VP8: the shell encodes it, and the picture plays.
+    await page.evaluate((server) => window.loop.watch(server, "token", "s-watcher", "s-sharer"), SERVER);
+    await expect.poll(() => page.evaluate(() => window.loop.shell_asked())).toContain("want vp8");
+    await page.evaluate(() => window.loop.paint("#ff0000"));
+    await expect.poll(() => colour(page).then((got) => near(got, [255, 0, 0, 255])), { timeout: 15_000 }).toBe(true);
+  });
+
+  test("through the shell, a shell that says nothing it makes is a VP8 share, as before (#733)", async ({ page }) => {
+    const { offered } = await standIn(page);
+    await page.goto("/tests/fixtures/screen-loop.html?shell");
+    await page.evaluate((server) => window.loop.share(server, "token", "s-sharer", 30), SERVER);
+    await expect.poll(() => offered.length).toBe(1);
+    expect(offered).toEqual([["vp8"]]);
   });
 
   test("through the shell, a closed picker says nothing, and one with nothing to encode says so", async ({ page }) => {

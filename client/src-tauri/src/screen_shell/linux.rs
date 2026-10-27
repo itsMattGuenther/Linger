@@ -1,5 +1,6 @@
 //! The screen itself, on Linux: the desktop's screen-sharing portal picks
-//! it, PipeWire carries it, and GStreamer turns it into VP8 (#360, T-1907).
+//! it, PipeWire carries it, and GStreamer turns it into H.264 on the
+//! graphics card where it can, and VP8 otherwise (#360, T-1907, #733).
 //!
 //! The portal (`org.freedesktop.portal.ScreenCast`) shows the desktop's own
 //! picker, and answers with a PipeWire stream of what was picked: a node to
@@ -11,9 +12,19 @@
 //! buffers, and on a computer with two GPUs, or none it can use for this, it
 //! can't turn them into pictures (T-1907 in TASKS.md). Every portal can hand
 //! over ordinary memory. The pictures are scaled to fit the share's size
-//! (720p at 30 frames a second, 1080p at 60), held to the share's speed, and encoded the way the page encodes them
-//! (`client/src/lib/screen/presets.ts`): VP8 in real time at the same bits a
-//! second, a key frame at least every ten seconds.
+//! (720p at 30 frames a second, 1080p at 60), held to the share's speed, and
+//! encoded the way the page encodes them (`client/src/lib/screen/presets.ts`):
+//! in real time at the same bits a second, a key frame at least every ten
+//! seconds. Each format is encoded only while somebody watching wants it.
+//!
+//! VP8 in software cost about 1.1 of a desktop CPU's cores for a busy 4K
+//! screen at 60 frames a second, more than everything else in the share
+//! together, and it spun the fans up (#733, measured 2026-10-27 through
+//! wlroots' portal: the share took 1.9 cores with VP8 and 1.0 with NVIDIA's
+//! encoder, which also kept to its 6 Mbit/s where VP8 managed 3.9). So H.264
+//! is made on the graphics card where GStreamer has an encoder for it that
+//! works (`h264_encoder`), and offered first, as the Windows app offers it;
+//! every app plays it since #730.
 
 use std::os::fd::{AsRawFd, OwnedFd};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -166,6 +177,95 @@ pub fn can_encode() -> bool {
     gst::init().is_ok() && have(&ELEMENTS)
 }
 
+/// The graphics card's H.264 encoders a share may use, best first:
+/// NVIDIA's (`gst-plugins-bad`'s nvcodec), then VA-API's, for AMD's and
+/// Intel's cards (`gst-plugin-va`). Both make Constrained Baseline with these
+/// settings, which every watcher's decoder is set up for (measured
+/// 2026-10-27 on an RTX 4090 and a Radeon 610M).
+const HARDWARE_H264: [&str; 2] = ["nvh264enc", "vah264enc"];
+
+/// The smallest picture the H.264 branch is used for: hardware encoders have
+/// a smallest size, NVIDIA's 160 by 64, and a share of a tiny window under
+/// one would fail where VP8 carries on.
+const SMALLEST_H264: (u32, u32) = (320, 180);
+
+/// Set once a share with the H.264 branch failed: the rest of this run
+/// shares in VP8, rather than fail the same way again.
+static H264_FAILED: AtomicBool = AtomicBool::new(false);
+
+/// One H.264 encoder's settings for `speed`: constant bits a second, no
+/// B-frames, its slowest-to-quickest knob at quickest, a key frame at least
+/// every `KEYFRAME_EVERY_S`.
+fn h264_settings(encoder: &str, speed: Speed) -> String {
+    let kbits = speed.bits_per_second / 1000;
+    let keys = speed.fps * KEYFRAME_EVERY_S;
+    if encoder == "nvh264enc" {
+        format!("nvh264enc name=avc1enc preset=low-latency-hq rc-mode=cbr bitrate={kbits} gop-size={keys} bframes=0 zerolatency=true")
+    } else {
+        format!("vah264enc name=avc1enc rate-control=cbr bitrate={kbits} key-int-max={keys} b-frames=0 target-usage=7")
+    }
+}
+
+/// The H.264 branch after the split: NV12, which the cards take, then
+/// Constrained Baseline in Annex B with its parameter sets on every key
+/// frame, as `ScreenCodec::Avc1` is. Its sink, like VP8's, doesn't hold the
+/// pipeline up for a first frame (`async=false`): a format nobody wants yet
+/// gets none, and the share stayed paused (2026-10-27).
+fn h264_branch(encoder: &str, speed: Speed) -> String {
+    format!(
+        " split. ! queue name=avc1 max-size-buffers=2 max-size-bytes=0 max-size-time=0 leaky=downstream \
+         ! videoconvert ! video/x-raw,format=NV12 \
+         ! {settings} ! video/x-h264,profile=constrained-baseline \
+         ! h264parse config-interval=-1 ! video/x-h264,stream-format=byte-stream,alignment=au \
+         ! appsink name=frames-avc1 sync=false async=false max-buffers=8 emit-signals=false",
+        settings = h264_settings(encoder, speed)
+    )
+}
+
+/// The first of `HARDWARE_H264` that really encodes here, found once a run
+/// by encoding a few frames with a share's own settings: an encoder
+/// GStreamer lists can still fail on the card, or its driver. None where
+/// there's none.
+pub fn h264_encoder() -> Option<&'static str> {
+    static FOUND: std::sync::OnceLock<Option<&'static str>> = std::sync::OnceLock::new();
+    let found = *FOUND.get_or_init(|| HARDWARE_H264.into_iter().find(|encoder| encodes(encoder)));
+    found.filter(|_| !H264_FAILED.load(Ordering::Relaxed))
+}
+
+/// Whether `encoder` makes H.264 frames from a share's branch, within a few
+/// seconds.
+fn encodes(encoder: &str) -> bool {
+    if gst::init().is_err() || gst::ElementFactory::find(encoder).is_none() || !have(&["h264parse"])
+    {
+        return false;
+    }
+    let Some(speed) = speed(60) else {
+        return false;
+    };
+    let text = format!(
+        "videotestsrc num-buffers=10 ! video/x-raw,format=I420,width=640,height=360,framerate=30/1 ! tee name=split{}",
+        h264_branch(encoder, speed)
+    );
+    let Ok(pipeline) = gst::parse_launch(&text).map(|element| element.downcast::<gst::Pipeline>())
+    else {
+        return false;
+    };
+    let Ok(pipeline) = pipeline else {
+        return false;
+    };
+    let made = pipeline
+        .by_name("frames-avc1")
+        .and_then(|element| element.downcast::<gst_app::AppSink>().ok())
+        .is_some_and(|sink| {
+            pipeline.set_state(gst::State::Playing).is_ok()
+                && sink
+                    .try_pull_sample(gst::ClockTime::from_seconds(5))
+                    .is_some()
+        });
+    let _ = pipeline.set_state(gst::State::Null);
+    made
+}
+
 /// One speed's settings, as `presets.ts` has them for the page.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Speed {
@@ -305,11 +405,12 @@ pub fn pipeline_text(
     threads: usize,
     size: (u32, u32),
     preview: bool,
+    h264: Option<&str>,
 ) -> String {
     let source = format!(
         "pipewiresrc fd={remote} path={node} do-timestamp=true keepalive-time={STILL_EVERY_MS} always-copy=true min-buffers={BUFFERS}"
     );
-    pipeline_from(&source, speed, threads, size, preview)
+    pipeline_from(&source, speed, threads, size, preview, h264)
 }
 
 /// The pipeline after its source: `pipeline_text`'s, or a test's.
@@ -319,6 +420,7 @@ fn pipeline_from(
     threads: usize,
     size: (u32, u32),
     preview: bool,
+    h264: Option<&str>,
 ) -> String {
     let (width, height) = size;
     let helpers = threads.min(4);
@@ -329,15 +431,20 @@ fn pipeline_from(
          ! videoscale n-threads={helpers} add-borders=true ! video/x-raw,width={width},height={height},pixel-aspect-ratio=1/1 \
          ! videoconvert n-threads={helpers} ! video/x-raw,format=I420 \
          ! tee name=split \
-         split. ! queue max-size-buffers=2 max-size-bytes=0 max-size-time=0 leaky=downstream \
+         split. ! queue name=vp8 max-size-buffers=2 max-size-bytes=0 max-size-time=0 leaky=downstream \
          ! vp8enc name=encoder deadline=1 cpu-used={effort} end-usage=cbr target-bitrate={bits} \
            keyframe-max-dist={keys} lag-in-frames=0 static-threshold=100 threads={threads} \
-         ! appsink name=frames sync=false max-buffers=8 emit-signals=false",
+         ! appsink name=frames sync=false async=false max-buffers=8 emit-signals=false",
         fps = speed.fps,
         effort = speed.effort,
         bits = speed.bits_per_second,
         keys = speed.fps * KEYFRAME_EVERY_S,
     );
+    // Made on the card where it can be (#733), and only for a picture big
+    // enough for its encoder.
+    if let Some(encoder) = h264.filter(|_| width >= SMALLEST_H264.0 && height >= SMALLEST_H264.1) {
+        text.push_str(&h264_branch(encoder, speed));
+    }
     if preview {
         let (small_width, small_height) = fit(width, height, PREVIEW_WIDTH, PREVIEW_HEIGHT);
         text.push_str(&format!(
@@ -387,11 +494,20 @@ pub struct Outlets<F, P, L, E> {
     pub ended: E,
 }
 
-/// A pipeline `Capture::run` started: its frames' sink, the preview's switch,
+/// One format a share sends: where its frames come out, and whether
+/// anybody watching wants it. Its branch drops every frame before the
+/// encoder while nobody does, so an unwatched format costs nothing (#733).
+struct Format {
+    codec: ScreenCodec,
+    frames: gst_app::AppSink,
+    wanted: Arc<AtomicBool>,
+}
+
+/// A pipeline `Capture::run` started: its formats, the preview's switch,
 /// and the thread watching its bus for an ending.
 struct Ran {
     pipeline: gst::Pipeline,
-    frames: gst_app::AppSink,
+    formats: Vec<Format>,
     switch: Option<Arc<AtomicBool>>,
     watching: std::thread::JoinHandle<()>,
 }
@@ -399,7 +515,7 @@ struct Ran {
 /// A share running: the picked screen through GStreamer.
 pub struct Capture {
     pipeline: gst::Pipeline,
-    frames: gst_app::AppSink,
+    formats: Vec<Format>,
     /// Whether the preview is shown, where there is one: its branch takes
     /// no frames while it isn't.
     preview: Option<Arc<AtomicBool>>,
@@ -423,6 +539,7 @@ impl Capture {
         let threads = std::thread::available_parallelism().map_or(2, |count| count.get().min(8));
         let size = sent_size(picked.size, speed);
         let preview = gst::init().is_ok() && have(&PREVIEW_ELEMENTS);
+        let h264 = h264_encoder();
         let text = pipeline_text(
             picked.remote.as_raw_fd(),
             picked.node,
@@ -430,11 +547,12 @@ impl Capture {
             threads,
             size,
             preview,
+            h264,
         );
         match Self::run(&text, size, outlets) {
             Ok(Ran {
                 pipeline,
-                frames,
+                formats,
                 switch,
                 watching,
             }) => {
@@ -442,7 +560,7 @@ impl Capture {
                 drop(watching);
                 let capture = Self {
                     pipeline,
-                    frames,
+                    formats,
                     preview: switch,
                     picked: Some(picked),
                 };
@@ -481,30 +599,70 @@ impl Capture {
                 .by_name(name)
                 .and_then(|element| element.downcast::<gst_app::AppSink>().ok())
         };
-        let frames = sink("frames").ok_or("no frames element")?;
         let Outlets {
             frame,
             picture,
             looked,
             ended,
         } = outlets;
-        frames.set_callbacks(
-            gst_app::AppSinkCallbacks::builder()
-                .new_sample(move |sink| {
-                    let sample = sink.pull_sample().map_err(|_| gst::FlowError::Eos)?;
-                    let Some(buffer) = sample.buffer() else {
-                        return Ok(gst::FlowSuccess::Ok);
-                    };
-                    let key = !buffer.flags().contains(gst::BufferFlags::DELTA_UNIT);
-                    let micros = buffer.pts().map_or(0, gst::ClockTime::useconds);
-                    let Ok(map) = buffer.map_readable() else {
-                        return Ok(gst::FlowSuccess::Ok);
-                    };
-                    frame(packed(key, micros, map.as_slice()));
-                    Ok(gst::FlowSuccess::Ok)
-                })
-                .build(),
-        );
+        let frame = Arc::new(frame);
+        // H.264 first where the card makes it: the order the hello says them in.
+        let mut formats = Vec::new();
+        for (codec, sink_name, branch) in [
+            (ScreenCodec::Avc1, "frames-avc1", "avc1"),
+            (ScreenCodec::Vp8, "frames", "vp8"),
+        ] {
+            let Some(frames) = sink(sink_name) else {
+                continue;
+            };
+            let frame = frame.clone();
+            frames.set_callbacks(
+                gst_app::AppSinkCallbacks::builder()
+                    .new_sample(move |sink| {
+                        let sample = sink.pull_sample().map_err(|_| gst::FlowError::Eos)?;
+                        let Some(buffer) = sample.buffer() else {
+                            return Ok(gst::FlowSuccess::Ok);
+                        };
+                        let key = !buffer.flags().contains(gst::BufferFlags::DELTA_UNIT);
+                        let micros = buffer.pts().map_or(0, gst::ClockTime::useconds);
+                        let Ok(map) = buffer.map_readable() else {
+                            return Ok(gst::FlowSuccess::Ok);
+                        };
+                        frame(packed(codec, key, micros, map.as_slice()));
+                        Ok(gst::FlowSuccess::Ok)
+                    })
+                    .build(),
+            );
+            // Nobody wants it until the page says so (`want`).
+            let wanted = Arc::new(AtomicBool::new(false));
+            if let Some(pad) = pipeline
+                .by_name(branch)
+                .and_then(|queue| queue.static_pad("sink"))
+            {
+                let asked = wanted.clone();
+                pad.add_probe(gst::PadProbeType::BUFFER, move |_, _| {
+                    if asked.load(Ordering::Relaxed) {
+                        gst::PadProbeReturn::Ok
+                    } else {
+                        gst::PadProbeReturn::Drop
+                    }
+                });
+            }
+            formats.push(Format {
+                codec,
+                frames,
+                wanted,
+            });
+        }
+        if !formats
+            .iter()
+            .any(|format| format.codec == ScreenCodec::Vp8)
+        {
+            return Err("no frames element".into());
+        }
+        let made_h264 = formats
+            .iter()
+            .any(|format| format.codec == ScreenCodec::Avc1);
         if let Some(pictures) = sink("pictures") {
             pictures.set_callbacks(
                 gst_app::AppSinkCallbacks::builder()
@@ -571,6 +729,11 @@ impl Capture {
                             break;
                         }
                         gst::MessageView::Error(error) => {
+                            // The card's encoder may be what failed: the
+                            // rest of this run shares in VP8 (#733).
+                            if made_h264 {
+                                H264_FAILED.store(true, Ordering::Relaxed);
+                            }
                             ended(Ended::Failed(error.error().to_string()));
                             break;
                         }
@@ -589,10 +752,28 @@ impl Capture {
         };
         Ok(Ran {
             pipeline,
-            frames,
+            formats,
             switch,
             watching,
         })
+    }
+
+    /// The formats this share makes, best first, as its hello says them.
+    pub fn formats(&self) -> Vec<ScreenCodec> {
+        self.formats.iter().map(|format| format.codec).collect()
+    }
+
+    /// Encode the formats somebody watching wants, and no others. One
+    /// started again begins with a key frame.
+    pub fn want(&self, codecs: &[ScreenCodec]) {
+        for format in &self.formats {
+            let wanted = codecs.contains(&format.codec);
+            if wanted && !format.wanted.swap(true, Ordering::Relaxed) {
+                Self::ask_key(&format.frames);
+            } else if !wanted {
+                format.wanted.store(false, Ordering::Relaxed);
+            }
+        }
     }
 
     /// Show the preview or hide it. Hidden, its pictures are dropped before
@@ -603,17 +784,25 @@ impl Capture {
         }
     }
 
-    /// Make the next frame a key frame: somebody new is watching, or a
-    /// watcher fell behind.
-    pub fn keyframe(&self) {
-        // GStreamer's own "force key unit" event, as gst-video builds it,
-        // sent up from the end of the pipeline to the encoder.
+    /// Make the next frame of `codec` a key frame, or of every format when
+    /// it's None: somebody new is watching, or a watcher fell behind.
+    pub fn keyframe(&self, codec: Option<ScreenCodec>) {
+        for format in &self.formats {
+            if codec.is_none_or(|codec| codec == format.codec) {
+                Self::ask_key(&format.frames);
+            }
+        }
+    }
+
+    /// GStreamer's own "force key unit" event, as gst-video builds it, sent
+    /// up from the end of a format's branch to its encoder.
+    fn ask_key(frames: &gst_app::AppSink) {
         let ask = gst::Structure::builder("GstForceKeyUnit")
             .field("running-time", u64::MAX)
             .field("all-headers", true)
             .field("count", 0u32)
             .build();
-        self.frames.send_event(gst::event::CustomUpstream::new(ask));
+        frames.send_event(gst::event::CustomUpstream::new(ask));
     }
 
     /// Stop reading and let the portal's session go. Returns the session to
@@ -639,12 +828,8 @@ impl Drop for Capture {
 }
 
 /// A frame in the screen socket's shape: the header, then the frame.
-pub fn packed(key: bool, micros: u64, data: &[u8]) -> Vec<u8> {
-    let head = ScreenFrameHead {
-        codec: ScreenCodec::Vp8,
-        key,
-    }
-    .write(micros);
+pub fn packed(codec: ScreenCodec, key: bool, micros: u64, data: &[u8]) -> Vec<u8> {
+    let head = ScreenFrameHead { codec, key }.write(micros);
     let mut out = Vec::with_capacity(head.len() + data.len());
     out.extend_from_slice(&head);
     out.extend_from_slice(data);
@@ -654,6 +839,201 @@ pub fn packed(key: bool, micros: u64, data: &[u8]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// What the page asks of a share once somebody watching plays VP8.
+    fn want_vp8(formats: &[Format]) {
+        for format in formats {
+            format
+                .wanted
+                .store(format.codec == ScreenCodec::Vp8, Ordering::Relaxed);
+        }
+    }
+
+    #[test]
+    fn h264_is_made_on_the_card_as_every_watcher_plays_it_and_only_for_a_big_enough_picture() {
+        let high = speed(60).expect("60");
+        let text = pipeline_text(1, 2, high, 4, (1920, 1080), false, Some("nvh264enc"));
+        // NVIDIA's encoder at High's 6 Mbit/s, a key frame every ten seconds,
+        // Constrained Baseline in Annex B with its parameter sets each key frame.
+        for part in [
+            "split. ! queue name=avc1 ",
+            "! videoconvert ! video/x-raw,format=NV12 ",
+            "! nvh264enc name=avc1enc preset=low-latency-hq rc-mode=cbr bitrate=6000 gop-size=600 bframes=0 zerolatency=true ",
+            "! video/x-h264,profile=constrained-baseline ",
+            "! h264parse config-interval=-1 ! video/x-h264,stream-format=byte-stream,alignment=au ",
+            "! appsink name=frames-avc1 ",
+        ] {
+            assert!(text.contains(part), "no {part:?} in {text}");
+        }
+        // VP8 stays, for whoever can't play H.264.
+        assert!(
+            text.contains("split. ! queue name=vp8 ") && text.contains("! vp8enc name=encoder ")
+        );
+        // VA-API's, for AMD's and Intel's cards, at Low's 2.5 Mbit/s.
+        let low = speed(30).expect("30");
+        let text = pipeline_text(1, 2, low, 4, (1280, 720), false, Some("vah264enc"));
+        assert!(text.contains("! vah264enc name=avc1enc rate-control=cbr bitrate=2500 key-int-max=300 b-frames=0 target-usage=7 "));
+        // A tiny window's picture is under the cards' smallest: VP8 alone.
+        assert!(
+            !pipeline_text(1, 2, low, 4, (300, 200), false, Some("nvh264enc")).contains("avc1")
+        );
+        assert!(
+            !pipeline_text(1, 2, low, 4, (640, 170), false, Some("nvh264enc")).contains("avc1")
+        );
+        // No encoder for it here: VP8 alone.
+        assert!(!pipeline_text(1, 2, high, 4, (1920, 1080), false, None).contains("avc1"));
+    }
+
+    /// Nothing's encoded until somebody watching wants it, and it stops when
+    /// nobody does: an unwatched share costs no encoding (#733). Skipped
+    /// where this computer's GStreamer lacks the elements.
+    #[test]
+    fn a_format_is_encoded_only_while_somebody_wants_it() {
+        use std::sync::atomic::AtomicUsize;
+        use std::time::Duration;
+        if gst::init().is_err() || !have(&ELEMENTS[1..]) || !have(&["videotestsrc"]) {
+            eprintln!("skipped: this GStreamer can't run a share's pipeline");
+            return;
+        }
+        let source = "videotestsrc is-live=true pattern=ball ! video/x-raw,width=640,height=360,framerate=30/1";
+        let text = pipeline_from(source, speed(30).expect("30"), 2, (640, 360), false, None);
+        let frames = Arc::new(AtomicUsize::new(0));
+        let counted = frames.clone();
+        let Ran {
+            pipeline,
+            formats,
+            switch,
+            ..
+        } = Capture::run(
+            &text,
+            (640, 360),
+            Outlets {
+                frame: move |_| {
+                    counted.fetch_add(1, Ordering::Relaxed);
+                },
+                picture: |_| {},
+                looked: |_| {},
+                ended: |_| {},
+            },
+        )
+        .expect("the pipeline runs");
+        let capture = Capture {
+            pipeline,
+            formats,
+            preview: switch,
+            picked: None,
+        };
+        assert_eq!(capture.formats(), [ScreenCodec::Vp8]);
+        let over = |wait: Duration| {
+            let before = frames.load(Ordering::Relaxed);
+            std::thread::sleep(wait);
+            frames.load(Ordering::Relaxed) - before
+        };
+        let wait = Duration::from_millis(1_200);
+        assert_eq!(over(wait), 0, "frames were encoded with nobody watching");
+        capture.want(&[ScreenCodec::Vp8]);
+        let watched = over(wait);
+        assert!(watched > 10, "wanted, only {watched} frames came");
+        capture.want(&[]);
+        let _ = over(Duration::from_millis(300));
+        assert_eq!(
+            over(wait),
+            0,
+            "frames were still encoded once nobody wanted them"
+        );
+        assert!(capture.stop().is_none());
+    }
+
+    /// The card's own H.264, where this computer has an encoder for it, as a
+    /// share runs: wanted, its frames come as H.264, a key frame first, and
+    /// VP8's don't; given up, they stop. Skipped elsewhere: CI's runners
+    /// have no graphics card.
+    #[test]
+    fn the_cards_h264_comes_when_wanted_a_key_frame_first() {
+        use std::sync::Mutex;
+        use std::time::Duration;
+        let Some(encoder) = h264_encoder() else {
+            eprintln!("skipped: no graphics card's H.264 encoder here");
+            return;
+        };
+        if !have(&["videotestsrc"]) {
+            eprintln!("skipped: no test picture");
+            return;
+        }
+        let source = "videotestsrc is-live=true pattern=ball ! video/x-raw,width=640,height=360,framerate=60/1";
+        let text = pipeline_from(
+            source,
+            speed(60).expect("60"),
+            2,
+            (640, 360),
+            false,
+            Some(encoder),
+        );
+        let seen: Arc<Mutex<Vec<ScreenFrameHead>>> = Arc::default();
+        let heard = seen.clone();
+        let Ran {
+            pipeline,
+            formats,
+            switch,
+            ..
+        } = Capture::run(
+            &text,
+            (640, 360),
+            Outlets {
+                frame: move |frame: Vec<u8>| {
+                    if let Some(head) = ScreenFrameHead::read(&frame) {
+                        heard
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .push(head);
+                    }
+                },
+                picture: |_| {},
+                looked: |_| {},
+                ended: |_| {},
+            },
+        )
+        .expect("the pipeline runs");
+        let capture = Capture {
+            pipeline,
+            formats,
+            preview: switch,
+            picked: None,
+        };
+        assert_eq!(capture.formats(), [ScreenCodec::Avc1, ScreenCodec::Vp8]);
+        capture.want(&[ScreenCodec::Avc1]);
+        std::thread::sleep(Duration::from_millis(1_500));
+        let heads = std::mem::take(
+            &mut *seen
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        );
+        assert!(heads.len() > 10, "{encoder}: only {} frames", heads.len());
+        assert!(
+            heads.iter().all(|head| head.codec == ScreenCodec::Avc1),
+            "{encoder}: {heads:?}"
+        );
+        assert!(
+            heads[0].key,
+            "{encoder}: the first frame wasn't a key frame"
+        );
+        capture.want(&[ScreenCodec::Vp8]);
+        std::thread::sleep(Duration::from_millis(300));
+        seen.lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clear();
+        std::thread::sleep(Duration::from_millis(1_000));
+        let heads = std::mem::take(
+            &mut *seen
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        );
+        assert!(
+            !heads.is_empty() && heads.iter().all(|head| head.codec == ScreenCodec::Vp8),
+            "{encoder}: {heads:?}"
+        );
+        assert!(capture.stop().is_none());
+    }
 
     #[test]
     fn the_two_speeds_match_the_pages() {
@@ -675,13 +1055,13 @@ mod tests {
 
     #[test]
     fn a_frame_is_packed_as_the_socket_reads_it() {
-        let frame = packed(true, 1_234_567, &[9, 8, 7]);
+        let frame = packed(ScreenCodec::Vp8, true, 1_234_567, &[9, 8, 7]);
         let head = ScreenFrameHead::read(&frame).expect("a header");
         assert_eq!(head.codec, ScreenCodec::Vp8);
         assert!(head.key);
         assert_eq!(&frame[frame.len() - 3..], &[9, 8, 7]);
         assert!(
-            !ScreenFrameHead::read(&packed(false, 0, &[1]))
+            !ScreenFrameHead::read(&packed(ScreenCodec::Vp8, false, 0, &[1]))
                 .expect("a header")
                 .key
         );
@@ -689,7 +1069,7 @@ mod tests {
 
     #[test]
     fn the_pipeline_reads_the_portals_stream_and_keeps_to_the_speed() {
-        let text = pipeline_text(42, 77, speed(60).expect("60"), 4, (1920, 1080), true);
+        let text = pipeline_text(42, 77, speed(60).expect("60"), 4, (1920, 1080), true, None);
         assert!(text.starts_with("pipewiresrc fd=42 path=77 "));
         // Named as a rate, which holds a stream with no rate of its own to it.
         assert!(text.contains("videorate drop-only=true ! video/x-raw,framerate=60/1"));
@@ -723,7 +1103,7 @@ mod tests {
 
     #[test]
     fn a_still_screen_keeps_sending_and_key_frames_come_often_enough() {
-        let text = pipeline_text(3, 4, speed(30).expect("30"), 2, (1280, 720), false);
+        let text = pipeline_text(3, 4, speed(30).expect("30"), 2, (1280, 720), false, None);
         assert!(text.contains(&format!("keepalive-time={STILL_EVERY_MS}")));
         assert!(text.contains("keyframe-max-dist=300"));
     }
@@ -758,7 +1138,7 @@ mod tests {
 
     #[test]
     fn the_preview_is_small_slow_and_switched_off_until_shown() {
-        let text = pipeline_text(1, 2, speed(30).expect("30"), 2, (1920, 1080), true);
+        let text = pipeline_text(1, 2, speed(30).expect("30"), 2, (1920, 1080), true, None);
         let preview = &text[text.find("queue name=preview").expect("a preview")..];
         // Switched at its start, not with a valve, which stopped the whole share.
         assert!(!text.contains("valve"));
@@ -769,7 +1149,7 @@ mod tests {
         assert!(preview.contains("appsink name=pictures sync=false async=false"));
         // Without the preview's elements, a share goes without one.
         assert!(
-            !pipeline_text(1, 2, speed(30).expect("30"), 2, (1920, 1080), false)
+            !pipeline_text(1, 2, speed(30).expect("30"), 2, (1920, 1080), false, None)
                 .contains("preview")
         );
     }
@@ -800,7 +1180,7 @@ mod tests {
     #[test]
     fn a_share_is_looked_at_small_and_once_a_second_with_its_preview_or_without() {
         for preview in [true, false] {
-            let text = pipeline_text(1, 2, speed(60).expect("60"), 2, (1920, 1080), preview);
+            let text = pipeline_text(1, 2, speed(60).expect("60"), 2, (1920, 1080), preview, None);
             let looks = &text[text.find("queue name=look ").expect("a look")..];
             assert!(looks.contains("framerate=1/1"));
             assert!(looks.contains("width=160,height=90"));
@@ -833,12 +1213,14 @@ mod tests {
             let source = format!(
                 "videotestsrc is-live=true pattern={pattern} ! video/x-raw,width=640,height=360,framerate=30/1"
             );
-            let text = pipeline_from(&source, speed(30).expect("30"), 2, (640, 360), true);
+            let text = pipeline_from(&source, speed(30).expect("30"), 2, (640, 360), true, None);
             let seen = Arc::new(Mutex::new(Vec::new()));
             let heard = seen.clone();
             let frames = Arc::new(AtomicUsize::new(0));
             let counted = frames.clone();
-            let Ran { pipeline, .. } = Capture::run(
+            let Ran {
+                pipeline, formats, ..
+            } = Capture::run(
                 &text,
                 (640, 360),
                 Outlets {
@@ -856,6 +1238,7 @@ mod tests {
                 },
             )
             .expect("the pipeline runs");
+            want_vp8(&formats);
             std::thread::sleep(Duration::from_millis(2_500));
             let _ = pipeline.set_state(gst::State::Null);
             let seen = seen
@@ -887,10 +1270,10 @@ mod tests {
             return;
         }
         let source = "videotestsrc is-live=true pattern=ball ! video/x-raw,width=640,height=360,framerate=30/1";
-        let text = pipeline_from(source, speed(30).expect("30"), 2, (640, 360), false);
+        let text = pipeline_from(source, speed(30).expect("30"), 2, (640, 360), false, None);
         let Ran {
             pipeline,
-            frames,
+            formats,
             switch,
             watching,
         } = Capture::run(
@@ -907,7 +1290,7 @@ mod tests {
         std::thread::sleep(Duration::from_millis(300));
         let capture = Capture {
             pipeline,
-            frames,
+            formats,
             preview: switch,
             picked: None,
         };
@@ -936,12 +1319,15 @@ mod tests {
             return;
         }
         let source = "videotestsrc is-live=true pattern=ball ! video/x-raw,width=640,height=360,framerate=30/1";
-        let text = pipeline_from(source, speed(30).expect("30"), 2, (640, 360), true);
+        let text = pipeline_from(source, speed(30).expect("30"), 2, (640, 360), true, None);
         let frames = Arc::new(AtomicUsize::new(0));
         let pictures = Arc::new(AtomicUsize::new(0));
         let (counted, shown) = (frames.clone(), pictures.clone());
         let Ran {
-            pipeline, switch, ..
+            pipeline,
+            switch,
+            formats,
+            ..
         } = Capture::run(
             &text,
             (640, 360),
@@ -957,6 +1343,7 @@ mod tests {
             },
         )
         .expect("the pipeline runs");
+        want_vp8(&formats);
         let switch = switch.expect("a preview");
         // Over a while, how many frames and pictures came: at 30 and 4 a
         // second, 45 and 6 in a second and a half, held to far less so a

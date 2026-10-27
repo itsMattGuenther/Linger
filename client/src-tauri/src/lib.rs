@@ -417,6 +417,7 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
             screen_shell::screen_watch_available,
             screen_shell::screen_share_start,
             screen_shell::screen_share_keyframe,
+            screen_shell::screen_share_want,
             screen_shell::screen_share_preview,
             screen_shell::screen_share_stop
         ])

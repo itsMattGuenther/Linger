@@ -1030,6 +1030,19 @@ and not as a WebRTC track. Branch `feat/360-screen-sharing`. Numbers are `T-19xx
   alone. Tests: `sound-events.test.ts`, `sound-player.test.ts`, `gateway.voice.test.ts`,
   `next-list-window.spec.ts`, `next-settings.spec.ts`, `chime-onset.spec.ts`. **Still to
   do:** hear it on a real share, with somebody pressing Watch from outside voice.
+- 🟡 **T-1914 · A Linux share made on the graphics card** (2026-10-27, #733) — sharing
+  from Linux spun the fans up. Measured through wlroots' portal on a busy 4K screen at
+  60 fps: the share took 1.9 cores, 1.1 of them VP8, and VP8 managed 3.9 of its 6
+  Mbit/s. The shell now finds a working H.264 encoder on the card once a run
+  (`nvh264enc`, `vah264enc`, `h264_encoder`) and offers H.264 first; the share then took
+  1.0 core and kept to 6 Mbit/s. Each format is encoded only while the server says a
+  watcher wants it (`screen_share_want`), so nothing is encoded with nobody watching.
+  A share whose card encoder fails goes back to VP8 for the rest of the run, and a
+  window too small for the card's encoder is VP8 alone. **Still to do:** asking the
+  portal for only the share's frame rate (`max-framerate`) saved 0.2 cores at Low
+  quality, but a range made wlroots' portal send 2 frames a second, so it needs a try
+  on Hyprland's portal first; and shrinking a 4K picture on the GPU for portals that
+  don't shrink it themselves.
 - ⬜ **T-1909 · Streaming a game** — the computer's sound, the graphics card's encoder, later.
 
 ---
