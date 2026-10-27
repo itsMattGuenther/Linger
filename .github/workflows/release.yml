@@ -55,7 +55,7 @@ jobs:
       - name: versions match the tag
         # On a manual run there is no tag to match, only the four files.
         run: scripts/version-check.sh "${{ github.ref_type == 'tag' && github.ref_name || '' }}"
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
       - run: corepack enable
@@ -72,7 +72,7 @@ jobs:
         # isn't the mate of the committed public key builds a green release that
         # no installed copy will accept.
         run: scripts/signing-preflight.sh
-      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: 21
@@ -151,7 +151,7 @@ jobs:
             gstreamer1.0-libav libunwind-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev xvfb
             xauth dbus-x11 pulseaudio pulseaudio-utils rpm libarchive-tools
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
       - run: corepack enable
@@ -160,7 +160,7 @@ jobs:
         with:
           toolchain: stable
           targets: ${{ matrix.rust-target }}
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: client/src-tauri
 
@@ -314,7 +314,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: scripts/windows-icon-check.ps1 -Bundle client/src-tauri/target/release/bundle -Output package-check
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: release-audio-${{ matrix.label }}
@@ -343,7 +343,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
       - name: normal download links, and the files named as before
@@ -374,7 +374,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
       - run: corepack enable
@@ -382,7 +382,7 @@ jobs:
         working-directory: client
         run: pnpm install --frozen-lockfile
       # Java 21: the Gradle in gen/android can't run on 25.
-      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: 21
@@ -390,7 +390,7 @@ jobs:
         with:
           toolchain: stable
           targets: aarch64-linux-android
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: client/src-tauri
       # The runner has the Android SDK and an NDK already.
