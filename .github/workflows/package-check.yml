@@ -156,6 +156,14 @@ jobs:
         # What the Arch and Omarchy package runs: the .deb's binary on Arch's
         # current WebKitGTK and GStreamer, which 0.5.2 shipped broken on.
         run: scripts/linux-arch-check.sh package-check/deb/usr/bin/linger-client package-check/arch
+      - name: The computer's sound is captured on Windows (#736)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        # Process loopback, leaving Linger out, started and read for a
+        # second, and the packets it makes; a runner with no audio engine
+        # says so and skips the reading. On the build above's profile, so
+        # little is built again.
+        run: cargo test --manifest-path client/src-tauri/Cargo.toml --lib screen_sound -- --nocapture
       - name: Windows upgrades preserve desktop shortcuts
         if: runner.os == 'Windows'
         shell: pwsh
