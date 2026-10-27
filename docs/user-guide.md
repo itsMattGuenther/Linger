@@ -890,6 +890,14 @@ too, just under its voice line. Stop is in the tray menu too, for when a slide
 show covers everything. Sharing works from the Windows and Linux apps; macOS comes later.
 A phone watches but doesn't share.
 
+When somebody starts watching, you hear a soft sound, different from somebody
+joining voice, so you know without looking at the box. Only you hear it, at
+most once a minute for each person, and nothing plays when somebody stops
+watching. If they pressed Watch from outside voice, you hear just this sound,
+not the join sound as well. It's on until you turn it off: **Settings → Sound &
+Voice → Someone starts watching your screen**. Quiet hours leave it on, like
+the voice sounds.
+
 **On Linux**, your desktop asks what to share through its screen-sharing
 portal: GNOME, KDE Plasma, Hyprland and sway each have one. If Linger says
 your computer didn't give it a screen, or couldn't read the one you picked,
@@ -1173,7 +1181,8 @@ screen; once it has moved to the notification center, clicking it just brings
 Linger up.
 
 For chimes, open **Settings → Sound & Voice**. Voice-session joins, leaves and
-moves, mute/deafen changes, DMs and knocks have sounds by default. Ordinary
+moves, mute/deafen changes, DMs, knocks and somebody starting to watch a screen
+you're sharing have sounds by default. Ordinary
 room-message sounds start off. Turn each category on or off, press **play**
 beside it to preview, or use **Mute all notification sounds**. Play always
 sounds, even during quiet hours or with a category switched off, so you can
@@ -1181,8 +1190,9 @@ hear what you are choosing. Quiet hours, when you turn them on, silence
 DM, room-message, knock and door chimes between 22:00 and 08:00 on your computer's
 clock. Once they're on, **Quiet from** and **Quiet until** move the window in
 half-hour steps: 21:00 to 06:00 for an early night, or 02:00 to 12:00 if you
-sleep late. Voice and mute/deafen sounds still play during quiet hours, because
-they answer something you just did, and voice chat itself is never affected.
+sleep late. Voice, mute/deafen and watching sounds still play during quiet hours,
+because they answer something you're doing in a call, and voice chat itself is
+never affected.
 
 If the chimes are hard to hear, turn up **Sound volume**, at the top of
 **Settings → Sound & Voice**. It's one slider for all of Linger's own sounds:

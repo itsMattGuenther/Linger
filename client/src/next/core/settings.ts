@@ -240,6 +240,7 @@ export const CHIMES: readonly { category: SoundCategory; label: string; hint: st
   { category: "rooms", label: "Room messages", hint: "Off by default. Your conversations don't need to compete for attention.", cue: "room" },
   { category: "knocks", label: "Knocks", hint: "Two gentle taps when someone wants your attention.", cue: "knock" },
   { category: "door", label: "Door chime", hint: "Off by default. A soft ding-dong when somebody comes into a room, at most once every five minutes for each person.", cue: "door" },
+  { category: "watchers", label: "Someone starts watching your screen", hint: "While you share your screen, a soft note when somebody starts watching it, at most once a minute for each person.", cue: "watcher" },
 ];
 
 /** Every half hour of the day, plus a saved time that isn't on one, so the box never claims another. */

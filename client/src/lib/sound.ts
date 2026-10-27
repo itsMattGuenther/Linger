@@ -69,16 +69,18 @@ const QUIET_UNTIL_KEY = "linger.sound.quietUntil";
 const CATEGORY_KEY = "linger.sound.categories";
 const VOLUME_KEY = "linger.sound.volume";
 
-export const SOUND_CATEGORIES = ["voice", "controls", "dms", "rooms", "knocks", "door"] as const;
+export const SOUND_CATEGORIES = ["voice", "controls", "dms", "rooms", "knocks", "door", "watchers"] as const;
 export type SoundCategory = typeof SOUND_CATEGORIES[number];
 export type SoundCue = "voice-join" | "voice-leave" | "voice-move" | "peer-join" | "peer-leave"
-  | "mute" | "unmute" | "deafen" | "undeafen" | "dm" | "room" | "knock" | "door";
+  | "mute" | "unmute" | "deafen" | "undeafen" | "dm" | "room" | "knock" | "door" | "watcher";
 
 export const DEFAULT_SOUND_PREFS: SoundPrefs = {
   muted: false, quietHours: false,
   quietFrom: DEFAULT_QUIET_FROM, quietUntil: DEFAULT_QUIET_UNTIL,
   // The door chime (decision 12) starts off: an arrival is a card first.
-  categories: { voice: true, controls: true, dms: true, rooms: false, knocks: true, door: false },
+  // Somebody starting to watch your share (#735) starts on: while you
+  // present, your share's box is usually under what you're showing.
+  categories: { voice: true, controls: true, dms: true, rooms: false, knocks: true, door: false, watchers: true },
   volume: 1,
 };
 let fallbackPrefs = DEFAULT_SOUND_PREFS;
@@ -335,7 +337,8 @@ export function playKnock(now: Date = new Date()): Promise<boolean> {
 /**
  * What quiet hours silence: the notifications that arrive on their own. Voice
  * and mic/deafen cues are feedback for a call you are in, and going quiet on
- * those at night only makes the controls feel broken (#186). Mute and each
+ * those at night only makes the controls feel broken (#186). So is somebody
+ * starting to watch the screen you share in it (#735). Mute and each
  * category's own switch still silence them.
  */
 export const QUIET_HOURS_SILENCE: readonly SoundCategory[] = ["dms", "rooms", "knocks", "door"];
@@ -345,6 +348,7 @@ export function categoryOf(cue: SoundCue): SoundCategory {
   if (cue === "door") return "door";
   if (cue === "dm") return "dms";
   if (cue === "room") return "rooms";
+  if (cue === "watcher") return "watchers";
   if (cue.startsWith("voice-") || cue.startsWith("peer-")) return "voice";
   return "controls";
 }

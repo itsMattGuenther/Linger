@@ -36,6 +36,10 @@ export const CHIMES: Record<Exclude<SoundCue, "knock">, Chime> = {
   // Somebody came in (decision 12): a soft falling ding-dong, the quietest
   // two-note cue, a step below a DM.
   door: { notes: [A, F], gain: 0.026, spacing: 0.17, decay: 0.34 },
+  // Somebody started watching the screen you share (#735): three notes a
+  // fourth apart, higher than any voice cue and the only one not built of
+  // thirds, so "started watching" isn't heard as "joined voice".
+  watcher: { notes: [B, E * 2, A * 2], gain: 0.028, spacing: 0.08, decay: 0.22 },
 };
 
 function note(

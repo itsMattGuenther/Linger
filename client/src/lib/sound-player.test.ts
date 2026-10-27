@@ -74,7 +74,7 @@ describe("notification sound policy", () => {
     vi.stubGlobal("window", { localStorage: storage(held) });
     const sound = await import("./sound");
     const prefs = sound.loadSoundPrefs();
-    expect(prefs).toEqual({ muted: true, quietHours: false, quietFrom: 22 * 60, quietUntil: 8 * 60, categories: { voice: true, controls: true, dms: true, rooms: true, knocks: true, door: false }, volume: 1 });
+    expect(prefs).toEqual({ muted: true, quietHours: false, quietFrom: 22 * 60, quietUntil: 8 * 60, categories: { voice: true, controls: true, dms: true, rooms: true, knocks: true, door: false, watchers: true }, volume: 1 });
     held.set("linger.sound.quietHours", "true");
     expect(sound.loadSoundPrefs().quietHours).toBe(true);
     sound.saveSoundPrefs({ ...prefs, muted: false, categories: { ...prefs.categories, rooms: false } });
@@ -182,8 +182,8 @@ describe("notification sound policy", () => {
 
   it("master mute wins over every category", async () => {
     const sound = await import("./sound");
-    for (const cue of ["voice-join", "voice-move", "peer-leave", "mute", "deafen", "dm", "room", "knock", "door"] as const) {
-      const prefs = { ...sound.DEFAULT_SOUND_PREFS, muted: true, categories: { voice: true, controls: true, dms: true, rooms: true, knocks: true, door: true } };
+    for (const cue of ["voice-join", "voice-move", "peer-leave", "mute", "deafen", "dm", "room", "knock", "door", "watcher"] as const) {
+      const prefs = { ...sound.DEFAULT_SOUND_PREFS, muted: true, categories: { voice: true, controls: true, dms: true, rooms: true, knocks: true, door: true, watchers: true } };
       expect(sound.cueAllowed(cue, prefs, new Date(2026, 8, 17, 14))).toBe(false);
       expect(sound.cueAllowed(cue, prefs, new Date(2026, 8, 17, 3))).toBe(false);
     }
@@ -191,7 +191,7 @@ describe("notification sound policy", () => {
 
   it("quiet hours silence notifications, not the controls of a call you are in (#186)", async () => {
     const sound = await import("./sound");
-    const prefs = { ...sound.DEFAULT_SOUND_PREFS, quietHours: true, categories: { voice: true, controls: true, dms: true, rooms: true, knocks: true, door: true } };
+    const prefs = { ...sound.DEFAULT_SOUND_PREFS, quietHours: true, categories: { voice: true, controls: true, dms: true, rooms: true, knocks: true, door: true, watchers: true } };
     const night = new Date(2026, 8, 17, 3);
     for (const cue of ["dm", "room", "knock", "door"] as const) {
       expect(sound.cueAllowed(cue, prefs, night)).toBe(false);
@@ -203,6 +203,54 @@ describe("notification sound policy", () => {
     // Their own switches still silence them.
     expect(sound.cueAllowed("mute", { ...prefs, categories: { ...prefs.categories, controls: false } }, night)).toBe(false);
     expect(sound.cueAllowed("voice-join", { ...prefs, categories: { ...prefs.categories, voice: false } }, night)).toBe(false);
+  });
+
+  it("somebody starting to watch your screen is a call's cue: quiet hours leave it, and mute, its switch and 0% silence it (#735)", async () => {
+    const held = new Map<string, string>();
+    const { sources } = player(held);
+    const sound = await import("./sound");
+    sound.unlockAudio();
+    expect(sound.categoryOf("watcher")).toBe("watchers");
+    expect(sound.QUIET_HOURS_SILENCE).not.toContain("watchers");
+    // 3am, inside quiet hours: it plays, and a DM doesn't.
+    vi.setSystemTime(new Date(2026, 8, 17, 3));
+    sound.saveSoundPrefs({ ...sound.DEFAULT_SOUND_PREFS, quietHours: true });
+    await expect(sound.playSound("dm")).resolves.toBe(false);
+    await expect(sound.playSound("watcher")).resolves.toBe(true);
+    expect(renderChime).toHaveBeenLastCalledWith("watcher", 48000, 1);
+    expect(sources).toHaveLength(1);
+    // Past the player's guard against a burst, each of these silences it.
+    for (const prefs of [
+      { ...sound.DEFAULT_SOUND_PREFS, muted: true },
+      { ...sound.DEFAULT_SOUND_PREFS, categories: { ...sound.DEFAULT_SOUND_PREFS.categories, watchers: false } },
+      { ...sound.DEFAULT_SOUND_PREFS, volume: 0 },
+    ]) {
+      vi.advanceTimersByTime(200);
+      sound.saveSoundPrefs(prefs);
+      await expect(sound.playSound("watcher")).resolves.toBe(false);
+    }
+    expect(sources).toHaveLength(1);
+    // Its own switch leaves every other cue alone.
+    sound.saveSoundPrefs({ ...sound.DEFAULT_SOUND_PREFS, categories: { ...sound.DEFAULT_SOUND_PREFS.categories, watchers: false } });
+    await expect(sound.playSound("peer-join")).resolves.toBe(true);
+  });
+
+  it("chimes saved before the watching switch existed load with it on, and keep the rest (#735)", async () => {
+    // As 0.5.2 saved them: every switch but this one, two of them changed.
+    const held = new Map([["linger.sound.categories", JSON.stringify({ voice: false, controls: true, dms: true, rooms: true, knocks: true, door: false })]]);
+    player(held);
+    const sound = await import("./sound");
+    expect(sound.loadSoundPrefs().categories).toEqual({ voice: false, controls: true, dms: true, rooms: true, knocks: true, door: false, watchers: true });
+    expect(sound.cueAllowed("watcher", sound.loadSoundPrefs(), new Date())).toBe(true);
+    // Turned off, it stays off.
+    sound.saveSoundPrefs({ ...sound.loadSoundPrefs(), categories: { ...sound.loadSoundPrefs().categories, watchers: false } });
+    expect(JSON.parse(held.get("linger.sound.categories") ?? "{}")).toMatchObject({ watchers: false, voice: false });
+    expect(sound.loadSoundPrefs().categories.watchers).toBe(false);
+    // A damaged setting, or one that isn't a yes or no, is the default: on.
+    held.set("linger.sound.categories", "{not json");
+    expect(sound.loadSoundPrefs().categories.watchers).toBe(true);
+    held.set("linger.sound.categories", JSON.stringify({ watchers: "yes" }));
+    expect(sound.loadSoundPrefs().categories).toEqual(sound.DEFAULT_SOUND_PREFS.categories);
   });
 
   it("keeps master silence when storage can be read but writes fail", async () => {

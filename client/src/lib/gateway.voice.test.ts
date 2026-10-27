@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReadyData } from "../generated/ReadyData";
 import type { ServerFrame } from "../generated/ServerFrame";
 import type { User } from "../generated/User";
+import type { VoicePeer } from "../generated/VoicePeer";
 import type { AuthedApi } from "./api";
 
 const invoked: { cmd: string; args: Record<string, unknown> }[] = [];
@@ -47,8 +48,11 @@ const played: string[] = [];
 vi.mock("./sound", () => ({ playKnock: () => false, playSound: (cue: string) => { played.push(cue); return true; } }));
 
 const {
+  adopt,
+  applyFollowed,
   connect,
   disconnect,
+  follow,
   joinVoice,
   leaveVoice,
   OLD_WAY,
@@ -59,6 +63,8 @@ const {
   setVoicePushToTalk,
   setVoiceTalking,
   setVoiceVolume,
+  snapshotOf,
+  unfollow,
   voicePeersIn,
 } = await import("./gateway");
 const { startProblemWords, voiceStartProblem } = await import("./voice");
@@ -645,6 +651,44 @@ describe("voice in the store", () => {
       played.length = 0;
       arrive(HOME, back("s-f5"));
       expect(played).toEqual(["peer-join"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("somebody starting to watch your share rings in the window holding the connection, not from a replay, and not in a window following it (#735)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.parse("2026-10-27T20:00:00Z"));
+    try {
+      await seated(HOME);
+      // Every seat forwarded, as every server that carries voice says (#306).
+      const me: VoicePeer = { session_id: "s-me", user_id: "u-matt", forwarded: true };
+      const sharing: VoicePeer = { ...me, screen: { fps: 60 } };
+      const ada: VoicePeer = { session_id: "s-ada", user_id: "u-ada", forwarded: true };
+      const bo: VoicePeer = { session_id: "s-bo", user_id: "u-bo", forwarded: true };
+      const cy: VoicePeer = { session_id: "s-cy", user_id: "u-cy", forwarded: true };
+      const watching = (peer: VoicePeer): VoicePeer => ({ ...peer, watching: "s-me" });
+      const garage = (...peers: VoicePeer[]): ServerFrame => ({ s: 2, op: "voice.state", d: { room_id: "r-garage", peers } });
+      arrive(HOME, garage(me, ada, bo, cy));
+      arrive(HOME, garage(sharing, ada, bo, cy));
+      played.length = 0;
+      arrive(HOME, garage(sharing, watching(ada), bo, cy));
+      expect(played).toEqual(["watcher"]);
+      // From a resume's replay: nothing, then or after.
+      handlers.get("gateway:frame")?.({ payload: { server: HOME, frame: garage(sharing, watching(ada), watching(bo), cy), replayed: true } });
+      arrive(HOME, garage(sharing, watching(ada), watching(bo), cy));
+      expect(played).toEqual(["watcher"]);
+
+      // A conversation's own window follows the connection: the same frame folds there, and plays nothing.
+      follow(fakeApi(WORK));
+      adopt(WORK, snapshotOf(HOME));
+      applyFollowed(WORK, garage(sharing, watching(ada), watching(bo), watching(cy)));
+      expect(voicePeersIn(serverState(WORK), "r-garage").filter((peer) => peer.watching === "s-me")).toHaveLength(3);
+      expect(played).toEqual(["watcher"]);
+      unfollow(WORK);
+      // This window, given it, rings.
+      arrive(HOME, garage(sharing, watching(ada), watching(bo), watching(cy)));
+      expect(played).toEqual(["watcher", "watcher"]);
     } finally {
       vi.useRealTimers();
     }

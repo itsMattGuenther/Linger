@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { NotifyRule } from "../../generated/NotifyRule";
 import type { Room } from "../../generated/Room";
+import { categoryOf, DEFAULT_SOUND_PREFS } from "../../lib/sound";
 import {
   backupLine,
   bucketLine,
@@ -113,9 +114,20 @@ describe("the Settings copy", () => {
   });
 
   it("names every chime, with room messages and the door chime off by default", () => {
-    expect(CHIMES.map((chime) => chime.category)).toEqual(["voice", "controls", "dms", "rooms", "knocks", "door"]);
+    expect(CHIMES.map((chime) => chime.category)).toEqual(["voice", "controls", "dms", "rooms", "knocks", "door", "watchers"]);
     expect(CHIMES.find((chime) => chime.category === "rooms")?.hint).toMatch(/off by default/i);
     expect(CHIMES.find((chime) => chime.category === "door")?.hint).toMatch(/off by default/i);
+    // Each row's Play sounds a cue its own switch decides, and says it's off only when it is.
+    for (const chime of CHIMES) {
+      expect(categoryOf(chime.cue), chime.label).toBe(chime.category);
+      expect(/off by default/i.test(chime.hint), chime.label).toBe(!DEFAULT_SOUND_PREFS.categories[chime.category]);
+    }
+  });
+
+  it("has a row for somebody starting to watch your screen, on by default, playing its own cue (#735)", () => {
+    const row = CHIMES.find((chime) => chime.category === "watchers");
+    expect(row).toMatchObject({ label: "Someone starts watching your screen", cue: "watcher" });
+    expect(DEFAULT_SOUND_PREFS.categories.watchers).toBe(true);
   });
 
   it("offers invites for one, five or anyone, lasting a day, a week or for good (HOST-5)", () => {

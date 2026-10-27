@@ -63,7 +63,7 @@ import {
 import type { IceServers } from "../generated/IceServers";
 import type { VoicePeer } from "../generated/VoicePeer";
 import { playKnock, playSound, type SoundCue } from "./sound";
-import { controlCue, PeerCueLimit, voiceCueToPlay } from "./sound-events";
+import { controlCue, PeerCueLimit, voiceCueToPlay, WatchCues } from "./sound-events";
 import { clampVolume, loadVoiceVolumes, type RefusedMicrophone, saveVoiceVolume } from "./voice";
 import { ApiError, type AuthedApi } from "./api";
 import { START, advance, type Position } from "./catchup";
@@ -1066,6 +1066,26 @@ function peerCueLimit(server: string): PeerCueLimit {
   return limit;
 }
 
+/**
+ * Each server's chime for somebody starting to watch your share (#735), and
+ * the voice cues beside it. Only the window that connects (the list window)
+ * plays them: a viewer window folds frames without any of these side
+ * effects, so a share run from a conversation's own window rings once, here.
+ */
+const watchCueSets = new Map<string, WatchCues>();
+function watchCues(server: string): WatchCues {
+  let cues = watchCueSets.get(server);
+  if (cues === undefined) {
+    cues = new WatchCues(
+      (cue) => void playSound(cue),
+      // A voice join held back while you share plays only if you're still connected and in voice there.
+      () => links.has(server) && stateOf(server).myVoice !== null,
+    );
+    watchCueSets.set(server, cues);
+  }
+  return cues;
+}
+
 // ---------------------------------------------------------------------------
 // Following without connecting: the viewer windows
 // (docs/design/architecture.md, "How windows share state").
@@ -1289,11 +1309,12 @@ async function attachListeners(): Promise<void> {
       // Asking any earlier finds nobody yet and gives up.
       const madeCohost = frame.op === "user.update" && frame.d.id === next.me?.id && hostsHere(next.me) && !hostsHere(before.me);
       if (frame.op === "ready" || frame.op === "reports.changed" || madeCohost) void loadReports(links.get(server)?.api ?? null).catch(() => undefined);
-      if (!replayed) {
-        if (frame.op === "knock") void playKnock();
-        const cue = voiceCueToPlay(frame, before, next, peerCueLimit(server), Date.now());
-        if (cue !== null) void playSound(cue);
-      }
+      if (!replayed && frame.op === "knock") void playKnock();
+      // Voice cues, and somebody starting to watch your share (#735), which
+      // notes a replay's changes without playing them.
+      const now = Date.now();
+      const cue = replayed ? null : voiceCueToPlay(frame, before, next, peerCueLimit(server), now);
+      watchCues(server).hear(frame, before, next, cue, !replayed, now);
       // The forwarding server's offer is the core's business, not this
       // page's (ARCHITECTURE §2, #197): it is handed straight over, and the
       // core answers it. Not one from a resume's replay: the core starts a

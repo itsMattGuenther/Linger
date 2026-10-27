@@ -328,6 +328,20 @@ test.describe("this app", () => {
     expect(await did(page)).toContain("play:knocks");
   });
 
+  test("somebody starting to watch your screen has its own row, on until you turn it off, with its Play (#735)", async ({ page }) => {
+    await open(page, "?section=sound");
+    const toggle = page.getByRole("switch", { name: "Someone starts watching your screen" });
+    await expect(toggle).toBeChecked();
+    await expect(panel(page)).toContainText("While you share your screen, a soft note when somebody starts watching it");
+    await toggle.click();
+    await expect(toggle).not.toBeChecked();
+    const sounds = (await did(page)).filter((line) => line.startsWith("sound:"));
+    expect(JSON.parse(sounds.at(-1)?.slice("sound:".length) ?? "{}")).toMatchObject({ categories: { watchers: false, voice: true } });
+    // Play still plays it, off or not.
+    await page.getByRole("button", { name: "Play the someone starts watching your screen chime" }).click();
+    expect(await did(page)).toContain("play:watchers");
+  });
+
   test("says when quiet hours are on right now, and when every chime is off", async ({ page }) => {
     await open(page, "?section=sound");
     const line = page.getByRole("status").filter({ hasText: /Quiet hours are on|All chimes are off/ });

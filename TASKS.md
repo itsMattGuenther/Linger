@@ -1021,6 +1021,15 @@ and not as a WebRTC track. Branch `feat/360-screen-sharing`. Numbers are `T-19xx
   ways: it fails on 0.5.2's two bugs ("VP8 doesn't play: Decode error" with NVIDIA's
   decoders back in reach, and the web process dying under `GDK_GL=disable`), and passes
   on the fixes, with the RTX 4090 and Radeon 610M's decoders in the container.
+- 🟡 **T-1915 · A sound when somebody starts watching** (Matt, 2026-10-27, #735) — only
+  the person sharing hears it, a cue of its own (`watcher` in `chimes.ts`), from the list
+  window whichever window the share runs in, at most once a minute for each person and
+  never for a reconnect, a replay or the list a share starts with (`WatchCues`,
+  `lib/sound-events.ts`). While you share, a voice join waits two seconds, so a Watch from
+  outside voice rings this alone. Its own switch, on by default, which quiet hours leave
+  alone. Tests: `sound-events.test.ts`, `sound-player.test.ts`, `gateway.voice.test.ts`,
+  `next-list-window.spec.ts`, `next-settings.spec.ts`, `chime-onset.spec.ts`. **Still to
+  do:** hear it on a real share, with somebody pressing Watch from outside voice.
 - ⬜ **T-1909 · Streaming a game** — the computer's sound, the graphics card's encoder, later.
 
 ---

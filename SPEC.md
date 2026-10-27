@@ -283,15 +283,16 @@ keyword-based system delivers it.
 
 **Notification chimes** (2026-09-17). Optional, short, quiet cues, with one
 master silence switch and separate controls for voice sessions, microphone/
-deafen controls, DMs, room messages and knocks. Voice/control/DM/knock sounds
-default on; ordinary room-message sounds default off. Quiet hours are
+deafen controls, DMs, room messages, knocks and somebody starting to watch your
+screen (#735). Voice/control/DM/knock/watching sounds default on; ordinary
+room-message sounds default off. Quiet hours are
 listener-local, off until they opt in, and run 22:00–08:00 unless the listener
 moves them: a start and an end in half-hour steps, crossing midnight or not
 (#185). Quiet hours silence the
 notifications that arrive on their own: DM, room-message and knock chimes.
-Voice and mic/deafen cues answer something the listener is doing in a call, so
-quiet hours leave them alone; mute and their own switches still silence them
-(#186). None of these settings touch other people's voice; deafen is the control
+Voice, mic/deafen and watching cues answer something the listener is doing in a
+call, so quiet hours leave them alone; mute and their own switches still silence
+them (#186). None of these settings touch other people's voice; deafen is the control
 for that (§4.14). The play control in settings is a deliberate click and is not gated
 by mute, quiet hours or category switches.
 
@@ -312,6 +313,16 @@ people's voice.
   leaving, sound at most once a minute apiece (#473), so somebody joining and
   leaving over and over can't ring the room. No cue for browsing a text room, no
   ringing someone who has not joined voice, and no sound on push-to-talk edges.
+- Watching cue (#735, §4.20): only the person sharing a screen hears it, when
+  somebody starts watching it, from the list window, whichever window the share
+  runs in. It sounds for somebody who hasn't watched that share in the last
+  minute, so it rings at most once a minute for each person: Watch, close and
+  Watch again rings once, and a watcher back after a dropped line is the same
+  watch. No cue for the list a share starts with, a reconnect's replay,
+  somebody stopping, or you watching your own share from another computer.
+  Watch joins voice first for somebody outside it: while you share, a voice
+  join waits two seconds, and if that person starts watching in that time,
+  only the watching cue plays.
 - DM/room-message cues: new messages from others, not messages currently being
   read in the focused app, edits, history loads, replay or duplicates. One
   short cue per message burst, not a sound per line. DMs remain membership-filtered.
@@ -1318,6 +1329,15 @@ everybody pressing Watch again.
 **Who's watching is names, never a number.** The person sharing sees who is watching, and
 so does everybody else in that voice: "Matt, Eli and Dave are watching", never "3
 watching" (§4.2).
+
+**A soft sound when somebody starts watching** (Matt, 2026-10-27, #735). While you
+present, your share's box is usually under what you're showing, so the person sharing
+hears a short, quiet cue when somebody starts watching, one that sounds unlike a voice
+join. Only they hear it: everybody else in voice already sees who's watching, and a cue
+for each new watcher would ring the whole room. At most once a minute for each person,
+and a reconnect is the same watch. Stopping makes no sound, the same as leaving a room.
+It's on by default, with its own switch among the notification chimes (§4.2), and quiet
+hours leave it alone, like the voice cues.
 
 **Where it shows.** Watching puts the screen above the room's conversation, with the
 conversation and its message box carrying on underneath; the line between them drags,
