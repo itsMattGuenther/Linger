@@ -146,6 +146,16 @@ jobs:
         run: |
           node scripts/linux-next-check.mjs client/src-tauri/target/debug/bundle/appimage/*.AppImage --appimage --output package-check/next-appimage
           node scripts/linux-next-check.mjs package-check/deb/usr/bin/linger-client --output package-check/next-deb
+          # As on a person's computer, WebKit's GPU path on (software GL
+          # here): a shared screen must play (#360, #729).
+          node scripts/linux-next-check.mjs client/src-tauri/target/debug/bundle/appimage/*.AppImage --appimage --webkit-gpu --output package-check/next-appimage-gpu
+          node scripts/linux-next-check.mjs package-check/deb/usr/bin/linger-client --webkit-gpu --output package-check/next-deb-gpu
+      - name: The packaged app on Arch's own WebKit plays a shared screen (#729, #730)
+        if: runner.os == 'Linux'
+        shell: bash
+        # What the Arch and Omarchy package runs: the .deb's binary on Arch's
+        # current WebKitGTK and GStreamer, which 0.5.2 shipped broken on.
+        run: scripts/linux-arch-check.sh package-check/deb/usr/bin/linger-client package-check/arch
       - name: Windows upgrades preserve desktop shortcuts
         if: runner.os == 'Windows'
         shell: pwsh

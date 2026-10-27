@@ -27,7 +27,8 @@ what CI adds on top.
 | --- | --- | --- |
 | Rust/TypeScript tests | Logic, real HTTP/temp SQLite, forced gateway reconnect, palette contrast, generated types | Desktop rendering or physical audio |
 | Chromium + WebKit browser tests | Real components with synthetic people, keyboard/pointer behavior and geometry | Installed WebView2/WebKitGTK behavior |
-| Linux/Windows package checks | Installation, icons, recorded chimes, Windows shortcut upgrades, the list window starting and drawing at every interface size, a minimized or tray-hidden Windows window stopping its drawing and coming back drawn, nothing the shipped CSP refuses | Signed-in use, every distro, physical speakers, real-network voice, a real GPU |
+| Linux/Windows package checks | Installation, icons, recorded chimes, Windows shortcut upgrades, the list window starting and drawing at every interface size, a minimized or tray-hidden Windows window stopping its drawing and coming back drawn, nothing the shipped CSP refuses, a shared screen's VP8 and H.264 playing in the packaged app on Ubuntu's WebKit and on Arch's current one (`scripts/linux-arch-check.sh`), and the app refusing to play one, without crashing, where WebKit draws on the CPU (#729) | Signed-in use, every distro, physical speakers, real-network voice, a real GPU |
+| GPU check, before every release | The packaged app plays a shared screen on Arch's WebKit with a real computer's GPUs and their hardware decoders installed (`scripts/linux-arch-check.sh --gpu`, `docs/releasing.md` step 1, #730) | GPUs that computer doesn't have, Windows' decoders |
 | Short two-person release check | Your installed clients, actual update path, listening and interaction | Exhaustive platform coverage |
 
 The package audio harness injects a test-only bundle of the real sound player

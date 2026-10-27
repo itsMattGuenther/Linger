@@ -1010,6 +1010,17 @@ and not as a WebRTC track. Branch `feat/360-screen-sharing`. Numbers are `T-19xx
   `detail`). "Sharp text" had promised a sharpness a whole 4K screen, scaled to 1080p,
   never had. The page and the Linux shell keep the same sizes (`presets.ts`,
   `screen_shell/linux.rs` `speed`).
+- ✅ **T-1913 · Watching tested where Linux people watch** (2026-10-27, after #729 and
+  #730) — 0.5.2's package checks ran Ubuntu 22.04's WebKit, with its GPU path off, and
+  decoded only VP8, so neither failure could show. `linux-next-check.mjs` now asks the
+  app whether it plays a screen, as the app does, and checks the answer fits how it
+  was started. With `--webkit-gpu`, VP8 (and H.264 with `--h264`) must play; with
+  `--gdk-gl-disable` it must refuse, and not crash. `scripts/linux-arch-check.sh` runs
+  both on Arch's current WebKit in a container, in CI. With `--gpu` it hands over a
+  real computer's graphics for the release step (`docs/releasing.md`). Proved both
+  ways: it fails on 0.5.2's two bugs ("VP8 doesn't play: Decode error" with NVIDIA's
+  decoders back in reach, and the web process dying under `GDK_GL=disable`), and passes
+  on the fixes, with the RTX 4090 and Radeon 610M's decoders in the container.
 - ⬜ **T-1909 · Streaming a game** — the computer's sound, the graphics card's encoder, later.
 
 ---

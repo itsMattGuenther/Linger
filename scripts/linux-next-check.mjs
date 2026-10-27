@@ -10,6 +10,15 @@
 // version of this check is client/scripts/windows-next-check.mjs.
 //
 // Usage: node scripts/linux-next-check.mjs PROGRAM --output DIR [--appimage]
+//          [--webkit-gpu] [--gdk-gl-disable] [--h264]
+//
+// By default WebKit's GPU paths are off, as CI's runners need for Ubuntu's
+// WebKit, and the app must then say it can't play a shared screen (#729).
+// --webkit-gpu leaves them on, as on a person's computer: the app must say
+// it plays one, and must really play VP8 (and H.264 with --h264).
+// --gdk-gl-disable starts it as on NVIDIA's legacy driver (#229): it must
+// say it can't, and not crash. `scripts/linux-arch-check.sh` runs these on
+// Arch's own WebKit, and with this machine's GPUs before a release.
 
 import { execFileSync, spawn } from "node:child_process";
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync } from "node:fs";
@@ -22,10 +31,16 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
-  options: { appimage: { type: "boolean", default: false }, output: { type: "string" } },
+  options: {
+    appimage: { type: "boolean", default: false },
+    output: { type: "string" },
+    "webkit-gpu": { type: "boolean", default: false },
+    "gdk-gl-disable": { type: "boolean", default: false },
+    h264: { type: "boolean", default: false },
+  },
 });
 if (positionals.length !== 1 || values.output === undefined) {
-  console.error("usage: node scripts/linux-next-check.mjs PROGRAM --output DIR [--appimage]");
+  console.error("usage: node scripts/linux-next-check.mjs PROGRAM --output DIR [--appimage] [--webkit-gpu] [--gdk-gl-disable] [--h264]");
   process.exit(2);
 }
 const program = resolve(positionals[0]);
@@ -57,9 +72,14 @@ Object.assign(env, {
   NO_AT_BRIDGE: "1",
   XDG_CURRENT_DESKTOP: "GNOME",
   GTK_OVERLAY_SCROLLING: "0",
-  WEBKIT_DISABLE_DMABUF_RENDERER: "1",
-  WEBKIT_DISABLE_COMPOSITING_MODE: "1",
 });
+for (const key of ["WEBKIT_DISABLE_DMABUF_RENDERER", "WEBKIT_DISABLE_COMPOSITING_MODE"]) delete env[key];
+if (!values["webkit-gpu"]) Object.assign(env, { WEBKIT_DISABLE_DMABUF_RENDERER: "1", WEBKIT_DISABLE_COMPOSITING_MODE: "1" });
+if (values["gdk-gl-disable"]) env.GDK_GL = "disable";
+else delete env.GDK_GL;
+// Whether the app should say it plays a shared screen, as started: not where
+// WebKit draws on the CPU (#729, `screen_shell::draws_on_cpu`).
+const plays = values["webkit-gpu"] && !values["gdk-gl-disable"];
 
 const module = join(output, "probe.so");
 const flags = execFileSync("pkg-config", ["--cflags", "--libs", "webkit2gtk-4.1", "gstreamer-1.0"], { encoding: "utf8" }).trim().split(/\s+/);
@@ -219,10 +239,22 @@ try {
   }
   if (result?.status !== "passed") throw new Error(`The Buddy list didn't start: ${JSON.stringify(result)}; see ${output}`);
   console.log(`PASS ${basename(program)}: the Buddy list starts in the packaged WebView: ${JSON.stringify(result.checks)}`);
+  const { watch, screens } = result.checks;
+  if (watch !== plays) {
+    throw new Error(`the app says ${JSON.stringify(watch)} to playing a shared screen, started ${plays ? "with WebKit's GPU path" : "with WebKit drawing on the CPU"}, where it should say ${plays} (#729)`);
+  }
+  if (plays) {
+    if (screens?.vp8 !== "plays") throw new Error(`a shared screen in VP8 doesn't play: ${screens?.vp8}`);
+    if (values.h264 && screens?.avc1 !== "plays") throw new Error(`a shared screen in H.264, as Windows sends it, doesn't play: ${screens?.avc1} (#730)`);
+    console.log(`PASS ${basename(program)}: a shared screen plays: VP8 ${screens.vp8}, H.264 ${screens.avc1}`);
+  } else {
+    if (screens !== null) throw new Error("the probe decoded a screen where the app says it can't play one");
+    console.log(`PASS ${basename(program)}: where WebKit draws on the CPU, the app says it can't play a shared screen, and doesn't crash (#729)`);
+  }
   const libraries = await checkHttp1();
   console.log(`PASS ${basename(program)}: WebKit's network process speaks HTTP/1.1 only (${libraries.join(", ")})`);
   const pages = await checkDecoderRanks();
-  console.log(`PASS ${basename(program)}: WebKit's web process${pages === 1 ? "" : "es"} decode shared screens in software (#730)`);
+  console.log(`PASS ${basename(program)}: ${pages === 1 ? "WebKit's web process decodes" : "WebKit's web processes decode"} shared screens in software (#730)`);
 } catch (error) {
   failure = error;
 } finally {

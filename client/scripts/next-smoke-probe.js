@@ -34,11 +34,22 @@
       checks.sizes.push(scale);
     }
     document.documentElement.style.removeProperty("zoom");
-    // Watching a shared screen (#360): this engine's WebCodecs plays a real
-    // frame of each format the app asks for, the codec strings the app uses
-    // (lib/screen/presets.ts). VP8 is what every watcher must play; H.264 is
-    // said, since a package may leave its player out. One 64×64 frame each,
-    // made with ffmpeg: VP8 red, H.264 (Annex B, Constrained Baseline) blue.
+    // Watching a shared screen (#360), asked first as the app asks
+    // (lib/screen/shell.ts `shellPlays`): where WebKit draws on the CPU,
+    // building a decoder aborts the page (#729), so the shell says no and
+    // nothing is decoded. The harness checks the answer fits how it started
+    // the app. Otherwise this engine's WebCodecs plays a real frame of each
+    // format the app asks for, with the codec strings and settings the app
+    // uses (lib/screen/presets.ts). VP8 is what every watcher must play;
+    // H.264, what Windows sends, is said, and the harness requires it where
+    // the package depends on its player. One 64×64 frame each, made with
+    // ffmpeg: VP8 red, H.264 (Annex B, Constrained Baseline) blue.
+    const shell = window.__TAURI_INTERNALS__;
+    checks.watch = typeof shell?.invoke === "function" ? await shell.invoke("screen_watch_available").catch((error) => `no answer: ${error}`) : "no shell";
+    if (checks.watch !== true) {
+      checks.screens = null;
+      return checks;
+    }
     checks.screens = {
       vp8: await playsOne("vp8", "0AMAnQEqQABAAABHCIWFiIWEiAICAnWqA/gD+gIHGkZGAXDHSEvEAP79bvP/45k3MMT/jm3/8WE8DijI//FRAA==", [255, 0, 0]),
       avc1: await playsOne("avc1.42E02A", "AAAAAWdCwArZBCbARAAAAwAEAAADAMg8SJkgAAAAAWjLg8sgAAABBgX//23cRem95tlIt5Ys2CDZI+7veDI2NCAtIGNvcmUgMTY1IHIzMjIyIGIzNTYwNWEgLSBILjI2NC9NUEVHLTQgQVZDIGNvZGVjIC0gQ29weWxlZnQgMjAwMy0yMDI1IC0gaHR0cDovL3d3dy52aWRlb2xhbi5vcmcveDI2NC5odG1sIC0gb3B0aW9uczogY2FiYWM9MCByZWY9MyBkZWJsb2NrPTE6MDowIGFuYWx5c2U9MHgxOjB4MTExIG1lPWhleCBzdWJtZT03IHBzeT0xIHBzeV9yZD0xLjAwOjAuMDAgbWl4ZWRfcmVmPTEgbWVfcmFuZ2U9MTYgY2hyb21hX21lPTEgdHJlbGxpcz0xIDh4OGRjdD0wIGNxbT0wIGRlYWR6b25lPTIxLDExIGZhc3RfcHNraXA9MSBjaHJvbWFfcXBfb2Zmc2V0PS0yIHRocmVhZHM9MiBsb29rYWhlYWRfdGhyZWFkcz0xIHNsaWNlZF90aHJlYWRzPTAgbnI9MCBkZWNpbWF0ZT0xIGludGVybGFjZWQ9MCBibHVyYXlfY29tcGF0PTAgY29uc3RyYWluZWRfaW50cmE9MCBiZnJhbWVzPTAgd2VpZ2h0cD0wIGtleWludD0yNTAga2V5aW50X21pbj0yNSBzY2VuZWN1dD00MCBpbnRyYV9yZWZyZXNoPTAgcmNfbG9va2FoZWFkPTQwIHJjPWNyZiBtYnRyZWU9MSBjcmY9MjMuMCBxY29tcD0wLjYwIHFwbWluPTAgcXBtYXg9NjkgcXBzdGVwPTQgaXBfcmF0aW89MS40MCBhcT0xOjEuMDAAgAAAAWWIhArxGKAAJ6ccAAS+I4AAguycnJ1111111111114=", [0, 0, 255]),

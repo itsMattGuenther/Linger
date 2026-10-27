@@ -66,8 +66,26 @@ produces a green release that no installed copy will accept.
   its notes.
 - Point the README's release-notes line and `docs/testing-strategy.md` at the
   new notes, and record the release in `TASKS.md`.
+- **Run the GPU check** on a Linux computer with a graphics card, with Docker
+  installed. CI's runners have no GPU, and 0.5.2 shipped with watching a
+  screen broken wherever NVIDIA's or VA-API's hardware decoders were installed
+  (#730). Take the `.deb` from the release pull request's `package-check-Linux`
+  artifact, unpack it, and run the packaged app on Arch's WebKit with this
+  computer's GPUs passed in:
 
-Merge it once CI is green.
+  ```bash
+  gh run download <run> -n package-check-Linux -D /tmp/rc
+  mkdir /tmp/rc/deb && (cd /tmp/rc && ar x client/src-tauri/target/debug/bundle/deb/*.deb && tar -xf data.tar.* -C deb)
+  scripts/linux-arch-check.sh --gpu /tmp/rc/deb/usr/bin/linger-client /tmp/rc/gpu-check
+  ```
+
+  It must print a `PASS` for "a shared screen plays", with the hardware
+  decoders it found listed in `hardware-decoders.txt`, and a `PASS` for the
+  `GDK_GL=disable` launch (#729). Nothing opens on the screen; it runs in a
+  container on a virtual display. Say in the pull request which GPUs it ran
+  with.
+
+Merge it once CI is green and the GPU check passed.
 
 **2. Tag the merge commit.**
 
