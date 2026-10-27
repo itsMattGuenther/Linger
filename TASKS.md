@@ -26,6 +26,19 @@ default.
 
 ## How to run a task
 
+**0.5.3 release — prepared 2026-10-27, screen sharing fixed on Linux and with
+sound.** Watching works in the Linux app with NVIDIA's or VA-API's hardware
+decoders installed (#730), and a computer drawing without the graphics card
+says it can't play instead of closing (#729); Share's choices are High quality
+(1080p, 60 fps) and Low quality (720p, 30 fps, smaller than before) (#732); the
+black-share note says what to do (#731); a Linux share is encoded on the
+graphics card, and not at all while nobody watches (#733); the sharer hears a
+sound when somebody starts watching (#735); the Windows app can share the
+computer's sound, less the call, and every app plays it (#736). Hosts: the
+computer's sound needs the server updated; no database change. Every change now
+plays a screen in the packaged Linux app on Ubuntu's and Arch's WebKit, and a
+release runs the GPU check (#738). Notes in `docs/releases/0.5.3.md`.
+
 **0.5.2 release — prepared 2026-10-27, screen sharing.** Share your screen from
 Windows and Linux at 30 or 60 frames a second and watch from every app (#360,
 M16), with a share gone black saying so (#722) and a watcher's own slow line
