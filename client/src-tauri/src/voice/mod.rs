@@ -253,6 +253,40 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
         sink.is_some_and(|sink| sink.cue(samples))
     }
 
+    /// The sink of the call, while there is one.
+    async fn sink(&self) -> Option<Arc<dyn Sink>> {
+        self.inner
+            .lock()
+            .await
+            .devices
+            .as_ref()
+            .map(|d| Arc::clone(&d.sink))
+    }
+
+    /// A shared screen's sound (#736) into the call's own speakers, over the
+    /// voices: interleaved stereo at `SAMPLE_RATE`. Watching is being in
+    /// voice, so there is always a call to play it in while somebody
+    /// watches; answers whether there was.
+    pub async fn screen_sound(&self, stereo: &[i16]) -> bool {
+        self.sink()
+            .await
+            .is_some_and(|sink| sink.screen_sound(stereo))
+    }
+
+    /// How loud a shared screen's sound plays for you, 0 to 1.
+    pub async fn screen_volume(&self, volume: f32) {
+        if let Some(sink) = self.sink().await {
+            sink.screen_volume(volume);
+        }
+    }
+
+    /// Let go of a shared screen's sound waiting to play.
+    pub async fn screen_quiet(&self) {
+        if let Some(sink) = self.sink().await {
+            sink.screen_quiet();
+        }
+    }
+
     /// How loud one peer plays for you. Nothing crosses the wire.
     pub async fn set_volume(&self, peer: &str, volume: f32) {
         let sink = self

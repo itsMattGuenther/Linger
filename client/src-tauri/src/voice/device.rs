@@ -322,7 +322,7 @@ where
 fn output_as<T>(
     device: &cpal::Device,
     config: cpal::StreamConfig,
-    (lanes, cues, deafened): Playback,
+    (lanes, cues, screen, deafened): Playback,
     channels: usize,
     died: impl FnMut(cpal::Error) + Send + 'static,
 ) -> Result<cpal::Stream, DeviceError>
@@ -331,7 +331,17 @@ where
 {
     Ok(device.build_output_stream(
         config,
-        move |out: &mut [T], _| mix(&lanes, &cues, &deafened, channels, out, T::from_sample),
+        move |out: &mut [T], _| {
+            mix_all(
+                &lanes,
+                &cues,
+                &screen,
+                &deafened,
+                channels,
+                out,
+                T::from_sample,
+            );
+        },
         died,
         None,
     )?)
@@ -379,9 +389,11 @@ fn choose(wanted: &Mutex<Option<String>>, name: Option<&str>) -> bool {
 }
 
 /// Mixes every peer into the default output device, and Linger's own sounds
-/// on top (#250).
+/// on top (#250), and a shared screen's sound (#736).
 pub struct Speaker {
     lanes: Arc<Mutex<HashMap<String, Lane>>>,
+    /// The sound of the screen being watched, in stereo (#736).
+    screen: Screen,
     /// Linger's own sounds (#250), at the device's rate, waiting to be played
     /// over whatever else is. Sounds that overlap are summed into it, so a
     /// knock during a chime is both, not one after the other.
@@ -402,8 +414,105 @@ pub struct Speaker {
 /// that summing overlapping ones can't wrap before the clamp in `mix`.
 type Cues = Arc<Mutex<VecDeque<i32>>>;
 
-/// What an output stream's callback mixes: the lanes, the sounds and the deafen gate.
-type Playback = (Arc<Mutex<HashMap<String, Lane>>>, Cues, Arc<AtomicBool>);
+/// A shared screen's sound, waiting to be played (#736).
+type Screen = Arc<Mutex<ScreenLane>>;
+
+/// What an output stream's callback mixes: the lanes, the sounds, the
+/// screen's sound and the deafen gate.
+type Playback = (
+    Arc<Mutex<HashMap<String, Lane>>>,
+    Cues,
+    Screen,
+    Arc<AtomicBool>,
+);
+
+/// How far behind a shared screen's sound plays (#736): enough for its
+/// packets coming unevenly over the screen socket, a TCP connection that
+/// can hold a packet back for a moment, and little enough that the sound
+/// stays with the picture.
+const SCREEN_CUSHION_MS: usize = 80;
+
+/// The most of a screen's sound held at once. Packets arriving together
+/// after a stall would otherwise put the sound behind for good: past this,
+/// the oldest is dropped back to the cushion, a skip rather than a delay.
+const SCREEN_MOST_MS: usize = 160;
+
+/// A shared screen's sound (#736), at the device's rate, two channels.
+struct ScreenLane {
+    queue: VecDeque<[i16; 2]>,
+    /// The rate it's queued at: the device's.
+    rate: u32,
+    /// One for each channel, when the device isn't at `SAMPLE_RATE`.
+    resampler: Option<[Linear; 2]>,
+    /// Your volume for it, 0 to 1, applied on the way in.
+    gain: f32,
+}
+
+impl ScreenLane {
+    fn new(rate: u32) -> Self {
+        Self {
+            queue: VecDeque::new(),
+            rate,
+            resampler: (rate != SAMPLE_RATE).then(|| {
+                [
+                    Linear::new(SAMPLE_RATE, rate),
+                    Linear::new(SAMPLE_RATE, rate),
+                ]
+            }),
+            gain: 1.0,
+        }
+    }
+
+    /// Queue one packet's sound: interleaved stereo at `SAMPLE_RATE`. The
+    /// first, and the first after running dry, starts `SCREEN_CUSHION_MS`
+    /// behind; past `SCREEN_MOST_MS` the oldest goes.
+    fn feed(&mut self, stereo: &[i16], rate: u32) {
+        if rate != self.rate {
+            self.retune(rate);
+        }
+        let per_ms = (rate / 1000) as usize;
+        if self.queue.is_empty() {
+            self.queue.resize(per_ms * SCREEN_CUSHION_MS, [0, 0]);
+        }
+        let side = |channel: usize| -> Vec<i16> {
+            let samples: Vec<i16> = stereo.iter().skip(channel).step_by(2).copied().collect();
+            if (self.gain - 1.0).abs() < f32::EPSILON {
+                samples
+            } else {
+                scale(&samples, self.gain)
+            }
+        };
+        let (left, right) = (side(0), side(1));
+        let (left, right) = match self.resampler.as_mut() {
+            Some([on_left, on_right]) => {
+                let (mut l, mut r) = (Vec::new(), Vec::new());
+                on_left.push(&left, &mut l);
+                on_right.push(&right, &mut r);
+                (l, r)
+            }
+            None => (left, right),
+        };
+        self.queue
+            .extend(left.into_iter().zip(right).map(|(l, r)| [l, r]));
+        if self.queue.len() > per_ms * SCREEN_MOST_MS {
+            let drop = self.queue.len() - per_ms * SCREEN_CUSHION_MS;
+            self.queue.drain(..drop);
+        }
+    }
+
+    /// The device changed, or the sound stopped: what was queued goes.
+    fn retune(&mut self, rate: u32) {
+        let gain = self.gain;
+        *self = Self::new(rate);
+        self.gain = gain;
+    }
+}
+
+impl Default for ScreenLane {
+    fn default() -> Self {
+        Self::new(SAMPLE_RATE)
+    }
+}
 
 /// The longest run of sounds held at once: a cue is well under a second, so
 /// anything past this is sounds piling up faster than they play.
@@ -600,6 +709,8 @@ impl Speaker {
         let chosen = Arc::clone(&wanted);
         let lanes: Arc<Mutex<HashMap<String, Lane>>> = Arc::new(Mutex::new(HashMap::new()));
         let cues: Cues = Arc::default();
+        let screen: Screen = Arc::default();
+        let shared_screen = Arc::clone(&screen);
         let rate = Arc::new(AtomicU32::new(SAMPLE_RATE));
         let deafened = Arc::new(AtomicBool::new(false));
         let shared_deafened = Arc::clone(&deafened);
@@ -626,6 +737,7 @@ impl Speaker {
                             device,
                             &shared,
                             &shared_cues,
+                            &shared_screen,
                             &shared_deafened,
                             &shared_rate,
                             alarm,
@@ -642,6 +754,7 @@ impl Speaker {
         )?;
         Ok(Self {
             lanes,
+            screen,
             cues,
             deafened,
             rate,
@@ -684,14 +797,21 @@ fn output_stream(
     device: &cpal::Device,
     lanes: &Arc<Mutex<HashMap<String, Lane>>>,
     cues: &Cues,
+    screen: &Screen,
     deafened: &Arc<AtomicBool>,
     rate: &AtomicU32,
     alarm: &Alarm,
 ) -> Result<cpal::Stream, DeviceError> {
+    let playback = (
+        Arc::clone(lanes),
+        Arc::clone(cues),
+        Arc::clone(screen),
+        Arc::clone(deafened),
+    );
     opened(
         preferred(device.supported_output_configs()?),
         || Ok(device.default_output_config()?),
-        |config| open_output(device, config, lanes, cues, deafened, rate, alarm),
+        |config| open_output(device, config, playback.clone(), rate, alarm),
     )
 }
 
@@ -699,9 +819,7 @@ fn output_stream(
 fn open_output(
     device: &cpal::Device,
     config: SupportedStreamConfig,
-    lanes: &Arc<Mutex<HashMap<String, Lane>>>,
-    cues: &Cues,
-    deafened: &Arc<AtomicBool>,
+    (lanes, cues, screen, deafened): Playback,
     rate: &AtomicU32,
     alarm: &Alarm,
 ) -> Result<cpal::Stream, DeviceError> {
@@ -710,60 +828,104 @@ fn open_output(
     // Whatever was queued was for the device that just went; the new one may
     // run at another rate. Retune every lane before a single callback fires on
     // it.
-    for lane in lock(lanes).values_mut() {
+    for lane in lock(&lanes).values_mut() {
         lane.retune(device_rate);
     }
+    lock(&screen).retune(device_rate);
     // A sound half played on the old device was at its rate; let it go.
-    lock(cues).clear();
+    lock(&cues).clear();
     rate.store(device_rate, Ordering::Relaxed);
     let died = on_error("speaker", alarm.clone());
-    let (lanes, cues, deafened) = (Arc::clone(lanes), Arc::clone(cues), Arc::clone(deafened));
     let format = config.sample_format();
     let config = config.config();
     Ok(match format {
         SampleFormat::I16 => device.build_output_stream(
             config,
-            move |out: &mut [i16], _| mix(&lanes, &cues, &deafened, channels, out, |s| s),
+            move |out: &mut [i16], _| {
+                mix_all(&lanes, &cues, &screen, &deafened, channels, out, |s| s);
+            },
             died,
             None,
         )?,
         SampleFormat::F32 => device.build_output_stream(
             config,
-            move |out: &mut [f32], _| mix(&lanes, &cues, &deafened, channels, out, to_f32),
+            move |out: &mut [f32], _| {
+                mix_all(&lanes, &cues, &screen, &deafened, channels, out, to_f32);
+            },
             died,
             None,
         )?,
         // Converted on the way out, as the microphone's are on the way in (#261).
-        SampleFormat::I8 => {
-            output_as::<i8>(device, config, (lanes, cues, deafened), channels, died)?
-        }
-        SampleFormat::I24 => {
-            output_as::<I24>(device, config, (lanes, cues, deafened), channels, died)?
-        }
-        SampleFormat::I32 => {
-            output_as::<i32>(device, config, (lanes, cues, deafened), channels, died)?
-        }
-        SampleFormat::I64 => {
-            output_as::<i64>(device, config, (lanes, cues, deafened), channels, died)?
-        }
-        SampleFormat::U8 => {
-            output_as::<u8>(device, config, (lanes, cues, deafened), channels, died)?
-        }
-        SampleFormat::U16 => {
-            output_as::<u16>(device, config, (lanes, cues, deafened), channels, died)?
-        }
-        SampleFormat::U24 => {
-            output_as::<U24>(device, config, (lanes, cues, deafened), channels, died)?
-        }
-        SampleFormat::U32 => {
-            output_as::<u32>(device, config, (lanes, cues, deafened), channels, died)?
-        }
-        SampleFormat::U64 => {
-            output_as::<u64>(device, config, (lanes, cues, deafened), channels, died)?
-        }
-        SampleFormat::F64 => {
-            output_as::<f64>(device, config, (lanes, cues, deafened), channels, died)?
-        }
+        SampleFormat::I8 => output_as::<i8>(
+            device,
+            config,
+            (lanes, cues, screen, deafened),
+            channels,
+            died,
+        )?,
+        SampleFormat::I24 => output_as::<I24>(
+            device,
+            config,
+            (lanes, cues, screen, deafened),
+            channels,
+            died,
+        )?,
+        SampleFormat::I32 => output_as::<i32>(
+            device,
+            config,
+            (lanes, cues, screen, deafened),
+            channels,
+            died,
+        )?,
+        SampleFormat::I64 => output_as::<i64>(
+            device,
+            config,
+            (lanes, cues, screen, deafened),
+            channels,
+            died,
+        )?,
+        SampleFormat::U8 => output_as::<u8>(
+            device,
+            config,
+            (lanes, cues, screen, deafened),
+            channels,
+            died,
+        )?,
+        SampleFormat::U16 => output_as::<u16>(
+            device,
+            config,
+            (lanes, cues, screen, deafened),
+            channels,
+            died,
+        )?,
+        SampleFormat::U24 => output_as::<U24>(
+            device,
+            config,
+            (lanes, cues, screen, deafened),
+            channels,
+            died,
+        )?,
+        SampleFormat::U32 => output_as::<u32>(
+            device,
+            config,
+            (lanes, cues, screen, deafened),
+            channels,
+            died,
+        )?,
+        SampleFormat::U64 => output_as::<u64>(
+            device,
+            config,
+            (lanes, cues, screen, deafened),
+            channels,
+            died,
+        )?,
+        SampleFormat::F64 => output_as::<f64>(
+            device,
+            config,
+            (lanes, cues, screen, deafened),
+            channels,
+            died,
+        )?,
         other => return Err(DeviceError::Format("output", other)),
     })
 }
@@ -849,6 +1011,9 @@ impl Sink for Speaker {
             deafened,
             self.rate.load(Ordering::Relaxed),
         );
+        if deafened {
+            lock(&self.screen).retune(self.rate.load(Ordering::Relaxed));
+        }
     }
 
     async fn set_volume(&self, peer: &str, volume: f32) {
@@ -870,6 +1035,22 @@ impl Sink for Speaker {
         Speaker::cue(self, samples);
         true
     }
+
+    fn screen_sound(&self, stereo: &[i16]) -> bool {
+        // Deafened, you hear nothing of the room, a screen in it included.
+        if !self.deafened.load(Ordering::Relaxed) {
+            lock(&self.screen).feed(stereo, self.rate.load(Ordering::Relaxed));
+        }
+        true
+    }
+
+    fn screen_volume(&self, volume: f32) {
+        lock(&self.screen).gain = volume.clamp(0.0, 1.0);
+    }
+
+    fn screen_quiet(&self) {
+        lock(&self.screen).retune(self.rate.load(Ordering::Relaxed));
+    }
 }
 
 /// Twice as loud as sent is as far as the control goes. Past that a quiet
@@ -889,12 +1070,8 @@ fn scale(samples: &[i16], gain: f32) -> Vec<i16> {
         .collect()
 }
 
-/// The output callback: one sample from every lane and from Linger's own
-/// sounds, summed, into every channel of the device. A lane with nothing
-/// queued contributes silence, which is what a pause between words is, once
-/// its last sample has eased to zero: a lane that runs dry mid-word fades
-/// out rather than clicks (#462), and says how long it waited (`starved`).
-/// Deafened, the voices are silent and the sounds still play (#250).
+/// [`mix_all`] with no screen being watched: what the voice tests hear.
+#[cfg(test)]
 fn mix<T: Copy>(
     lanes: &Mutex<HashMap<String, Lane>>,
     cues: &Mutex<VecDeque<i32>>,
@@ -903,8 +1080,39 @@ fn mix<T: Copy>(
     out: &mut [T],
     convert: impl Fn(i16) -> T,
 ) {
+    mix_all(
+        lanes,
+        cues,
+        &Mutex::default(),
+        deafened,
+        channels,
+        out,
+        convert,
+    );
+}
+
+/// The output callback: one sample from every lane and from Linger's own
+/// sounds, summed, into every channel of the device. A lane with nothing
+/// queued contributes silence, which is what a pause between words is, once
+/// its last sample has eased to zero: a lane that runs dry mid-word fades
+/// out rather than clicks (#462), and says how long it waited (`starved`).
+/// Deafened, the voices are silent and the sounds still play (#250).
+///
+/// A shared screen's sound (#736) is stereo: its left goes to the first
+/// channel and its right to the second, both halves to any other, and to a
+/// one-channel device. Deafened, it's silent with the voices.
+fn mix_all<T: Copy>(
+    lanes: &Mutex<HashMap<String, Lane>>,
+    cues: &Mutex<VecDeque<i32>>,
+    screen: &Mutex<ScreenLane>,
+    deafened: &AtomicBool,
+    channels: usize,
+    out: &mut [T],
+    convert: impl Fn(i16) -> T,
+) {
     let mut lanes = lock(lanes);
     let mut cues = lock(cues);
+    let mut screen = lock(screen);
     let voices = !deafened.load(Ordering::Relaxed);
     for frame in out.chunks_mut(channels.max(1)) {
         let mut acc: i32 = cues.pop_front().unwrap_or(0);
@@ -921,9 +1129,23 @@ fn mix<T: Copy>(
                 acc += lane.tail;
             }
         }
-        #[allow(clippy::cast_possible_truncation)]
-        let sample = acc.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16;
-        for slot in frame {
+        let [left, right] = if voices {
+            screen.queue.pop_front().unwrap_or([0, 0])
+        } else {
+            [0, 0]
+        };
+        let (left, right) = (i32::from(left), i32::from(right));
+        let both = (left + right) / 2;
+        let only = frame.len() == 1;
+        for (at, slot) in frame.iter_mut().enumerate() {
+            let side = match at {
+                _ if only => both,
+                0 => left,
+                1 => right,
+                _ => both,
+            };
+            #[allow(clippy::cast_possible_truncation)]
+            let sample = (acc + side).clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16;
             *slot = convert(sample);
         }
     }
@@ -2089,6 +2311,7 @@ mod tests {
         // The production speaker queue without opening a physical device.
         let speaker = Speaker {
             lanes: Arc::new(Mutex::new(HashMap::new())),
+            screen: Arc::default(),
             cues: Arc::default(),
             deafened: Arc::new(AtomicBool::new(false)),
             rate: Arc::new(AtomicU32::new(SAMPLE_RATE)),
@@ -2145,6 +2368,7 @@ mod tests {
     fn quiet_speaker(rate: u32) -> Speaker {
         Speaker {
             lanes: Arc::new(Mutex::new(HashMap::new())),
+            screen: Arc::default(),
             cues: Arc::default(),
             deafened: Arc::new(AtomicBool::new(false)),
             rate: Arc::new(AtomicU32::new(rate)),
@@ -2203,6 +2427,81 @@ mod tests {
             [7, 7, 0],
             "deafen held back a sound, or let a voice through"
         );
+    }
+
+    /// A shared screen's sound plays in stereo over the voices, a little
+    /// behind, at your volume for it, and not at all while deafened (#736).
+    #[tokio::test]
+    async fn a_screens_sound_plays_in_stereo_over_the_voices() {
+        let speaker = quiet_speaker(SAMPLE_RATE);
+        lock(&speaker.lanes).insert(
+            "friend".to_string(),
+            Lane {
+                fresh: false,
+                ..Lane::new(SAMPLE_RATE)
+            },
+        );
+        let behind = SAMPLE_RATE as usize / 1000 * SCREEN_CUSHION_MS;
+        assert!(speaker.screen_sound(&[100, -100, 200, -200]));
+        speaker.play("friend", &vec![1000; behind + 2]).await;
+        let mut out = vec![0i16; (behind + 2) * 2];
+        mix_all(
+            &speaker.lanes,
+            &speaker.cues,
+            &speaker.screen,
+            &speaker.deafened,
+            2,
+            &mut out,
+            |s| s,
+        );
+        // The voice at once, in both ears; the screen's sound after its
+        // cushion, its left in the left and its right in the right.
+        assert_eq!(out[..2], [1000, 1000]);
+        assert_eq!(out[behind * 2..], [1100, 900, 1200, 800]);
+        // A one-channel device hears both halves.
+        speaker.screen_quiet();
+        assert!(speaker.screen_sound(&[100, 300]));
+        let mut mono = vec![0i16; behind + 1];
+        mix_all(
+            &speaker.lanes,
+            &speaker.cues,
+            &speaker.screen,
+            &speaker.deafened,
+            1,
+            &mut mono,
+            |s| s,
+        );
+        assert_eq!(mono[behind], 200);
+        // At half your volume for it.
+        speaker.screen_volume(0.5);
+        speaker.screen_quiet();
+        assert!(speaker.screen_sound(&[1000, 1000]));
+        assert_eq!(lock(&speaker.screen).queue.back(), Some(&[500, 500]));
+        // Deafened: nothing of it is queued.
+        speaker.set_deafened(true).await;
+        assert!(lock(&speaker.screen).queue.is_empty());
+        assert!(speaker.screen_sound(&[1000, 1000]));
+        assert!(lock(&speaker.screen).queue.is_empty());
+    }
+
+    /// A screen's sound that arrives in a rush is cut back rather than
+    /// played late for the rest of the share (#736).
+    #[test]
+    fn a_screens_sound_held_too_long_is_dropped_back_to_its_cushion() {
+        let speaker = quiet_speaker(SAMPLE_RATE);
+        let per_ms = SAMPLE_RATE as usize / 1000;
+        // Ten packets at once, after a stall: 200 ms on top of the cushion.
+        for _ in 0..10 {
+            assert!(speaker.screen_sound(&vec![7; per_ms * 20 * 2]));
+        }
+        let held = lock(&speaker.screen).queue.len();
+        assert!(held <= per_ms * SCREEN_MOST_MS, "{held} held");
+        assert!(held >= per_ms * SCREEN_CUSHION_MS, "{held} held");
+        // And it's resampled for a device at another rate.
+        let other = quiet_speaker(44_100);
+        assert!(other.screen_sound(&vec![7; 960 * 2]));
+        let queued = lock(&other.screen).queue.len() - 44 * SCREEN_CUSHION_MS;
+        assert!((880..=884).contains(&queued), "20 ms became {queued}");
     }
 
     /// Loud sounds landing together are clamped, never wrapped into a click.

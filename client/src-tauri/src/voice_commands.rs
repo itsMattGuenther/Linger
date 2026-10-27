@@ -147,6 +147,35 @@ pub const VOICE_AUDIO_EVENT: &str = "voice:audio";
 
 type VoiceEngine = voice::Engine<VoiceWire, VoiceWatcher>;
 
+/// The voice engine for `base_url`, if there is one; asking builds none.
+fn engine_if_any(app: &AppHandle, base_url: &str) -> Option<std::sync::Arc<VoiceEngine>> {
+    app.try_state::<VoiceEngines>()
+        .and_then(|engines| engines.with(|held| held.get(base_url).map(std::sync::Arc::clone)))
+}
+
+/// A shared screen's sound (#736) into `base_url`'s call, over its voices:
+/// interleaved stereo at 48 kHz. False when there's no call to play it in.
+pub(crate) async fn screen_sound(app: &AppHandle, base_url: &str, stereo: &[i16]) -> bool {
+    match engine_if_any(app, base_url) {
+        Some(engine) => engine.screen_sound(stereo).await,
+        None => false,
+    }
+}
+
+/// How loud a shared screen's sound plays in `base_url`'s call, 0 to 1.
+pub(crate) async fn screen_volume(app: &AppHandle, base_url: &str, volume: f32) {
+    if let Some(engine) = engine_if_any(app, base_url) {
+        engine.screen_volume(volume).await;
+    }
+}
+
+/// Let go of a shared screen's sound waiting to play in `base_url`'s call.
+pub(crate) async fn screen_quiet(app: &AppHandle, base_url: &str) {
+    if let Some(engine) = engine_if_any(app, base_url) {
+        engine.screen_quiet().await;
+    }
+}
+
 /// One voice engine per server. A person can be signed into several and is in
 /// voice on at most one, but which one is theirs to decide, and an engine per
 /// server is what makes "leave the one you were in" a local question.

@@ -40,6 +40,8 @@ mod phone_sound;
 mod phone_text;
 #[cfg(desktop)]
 mod screen_shell;
+#[cfg(desktop)]
+mod screen_sound;
 mod secrets;
 #[cfg(desktop)]
 pub mod sounds;
@@ -351,6 +353,7 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
         .manage(std::sync::Arc::new(sounds::Sounds::default()))
         .manage(clip::Clips::default())
         .manage(screen_shell::ScreenShares::default())
+        .manage(screen_sound::ScreenSounds::default())
         .manage(talk_key::TalkKeyWatch::default())
         .manage(dropped::Dropped::default())
         // The window is built here, not from the config, so it can leave the
@@ -370,6 +373,7 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
             use tauri::Manager as _;
             if matches!(payload.event(), tauri::webview::PageLoadEvent::Started) {
                 screen_shell::forget(webview.app_handle(), webview.label());
+                screen_sound::forget(webview.app_handle(), webview.label());
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -419,7 +423,13 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
             screen_shell::screen_share_keyframe,
             screen_shell::screen_share_want,
             screen_shell::screen_share_preview,
-            screen_shell::screen_share_stop
+            screen_shell::screen_share_stop,
+            screen_sound::screen_sound_available,
+            screen_sound::screen_sound_start,
+            screen_sound::screen_sound_stop,
+            screen_sound::screen_sound_play,
+            screen_sound::screen_sound_volume,
+            screen_sound::screen_sound_end
         ])
 }
 

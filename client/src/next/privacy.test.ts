@@ -91,10 +91,36 @@ describe("privacy, from the source", () => {
     const ASKING = /GetForegroundWindow|GetWindowText|EnumWindows|_NET_ACTIVE_WINDOW|_NET_WM_NAME|WM_NAME|NSWorkspace|frontmostApplication|active_win|get_active_window|x11rb|xcb::|wmctrl|xdotool|hyprctl|swaymsg|sysinfo|\/proc\//;
     expect(uses(RUST, ASKING)).toEqual([]);
     const crates = readFileSync(join(SHELL, "Cargo.toml"), "utf8");
-    expect(crates).not.toMatch(/^(active-win|active-win-pos-rs|x-win|x11rb|xcb|x11|x11-dl|sysinfo|windows|objc2-app-kit)\s*=/m);
+    expect(crates).not.toMatch(/^(active-win|active-win-pos-rs|x-win|x11rb|xcb|x11|x11-dl|sysinfo|objc2-app-kit)\s*=/m);
     // `windows-sys` only to ask whether the one talk key is down (#500):
     // none of Windows' windows, processes or hooks.
     expect(featuresOf(crates, "windows-sys")).toEqual(["Win32_UI_Input_KeyboardAndMouse"]);
+    // `windows` only for the computer's sound in a share (#736): Windows'
+    // audio and the COM and threading it runs on, never its windows or
+    // anything that lists or reads another program.
+    expect(featuresOf(crates, "windows")).toEqual([
+      "Win32_Foundation",
+      "Win32_Media_Audio",
+      "Win32_Security",
+      "Win32_System_Com",
+      "Win32_System_Com_StructuredStorage",
+      "Win32_System_Threading",
+      "Win32_System_Variant",
+    ]);
+  });
+
+  it("leaves Linger's own sound out of a share by its own process alone, and never asks what makes the rest (PRIV-2, #736)", () => {
+    // The loopback is told one process, Linger's own, to leave out with
+    // everything it started; it is never told another, or to capture just one.
+    const LOOPBACK = RUST.filter((file) => rel(file) === "src-tauri/src/screen_sound/windows.rs");
+    expect(LOOPBACK).toHaveLength(1);
+    expect(uses(RUST, /TargetProcessId/)).toEqual([expect.stringMatching(/^src-tauri\/src\/screen_sound\/windows\.rs:\d+: TargetProcessId: std::process::id\(\),$/)]);
+    expect(uses(RUST, /PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE/).map((line) => line.split(":")[0])).toEqual(["src-tauri/src/screen_sound/windows.rs", "src-tauri/src/screen_sound/windows.rs"]);
+    // Nothing lists programs, opens one, reads one's name, or reads the
+    // audio sessions, which would say which program plays what.
+    const NAMING =
+      /PROCESS_LOOPBACK_MODE_INCLUDE|CreateToolhelp32Snapshot|Process32First|Process32Next|EnumProcesses|OpenProcess|QueryFullProcessImageName|GetModuleBaseName|GetModuleFileNameEx|GetProcessImageFileName|IAudioSessionManager|IAudioSessionEnumerator|IAudioSessionControl|GetSessionEnumerator|GetProcessId|GetDisplayName|GetIconPath|IAudioMeterInformation/;
+    expect(uses(RUST, NAMING)).toEqual([]);
   });
 
   it("never asks a shared screen what it is: no window's or app's name, no picker of its own (PRIV-2, #360)", () => {

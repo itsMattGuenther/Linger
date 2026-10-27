@@ -61,6 +61,12 @@ const COMMANDS: &[&str] = &[
     "screen_share_want",
     "screen_share_preview",
     "screen_share_stop",
+    "screen_sound_available",
+    "screen_sound_start",
+    "screen_sound_stop",
+    "screen_sound_play",
+    "screen_sound_volume",
+    "screen_sound_end",
 ];
 
 fn main() {

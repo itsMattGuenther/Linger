@@ -294,8 +294,9 @@ fn only_the_chat_windows_and_the_list_window_record_a_voice_message() {
 #[test]
 fn only_the_chat_windows_and_the_list_window_share_or_watch_a_screen() {
     // A screen is shared and watched from voice (#360), which only those
-    // windows show: Settings, Search and Media never get the desktop's picker.
-    const SHARE: [&str; 7] = [
+    // windows show: Settings, Search and Media never get the desktop's
+    // picker, nor the computer's sound (#736).
+    const SHARE: [&str; 13] = [
         "screen_share_available",
         "screen_watch_available",
         "screen_share_start",
@@ -303,6 +304,12 @@ fn only_the_chat_windows_and_the_list_window_share_or_watch_a_screen() {
         "screen_share_want",
         "screen_share_preview",
         "screen_share_stop",
+        "screen_sound_available",
+        "screen_sound_start",
+        "screen_sound_stop",
+        "screen_sound_play",
+        "screen_sound_volume",
+        "screen_sound_end",
     ];
     for (file, windows, commands) in granted() {
         if !SHARE.iter().any(|command| commands.contains(*command)) {

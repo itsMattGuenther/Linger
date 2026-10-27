@@ -119,6 +119,22 @@ pub trait Sink: Send + Sync + 'static {
     fn cue(&self, _samples: &[i16]) -> bool {
         false
     }
+
+    /// Play a shared screen's sound (#736): interleaved stereo at
+    /// [`SAMPLE_RATE`], over the voices, a little behind so packets arriving
+    /// unevenly play evenly. True when it was played; a sink with no device
+    /// can't.
+    fn screen_sound(&self, _stereo: &[i16]) -> bool {
+        false
+    }
+
+    /// How loud a shared screen's sound plays for you, 0 to 1. Yours alone,
+    /// like a person's volume.
+    fn screen_volume(&self, _volume: f32) {}
+
+    /// Let go of a screen's sound waiting to play: watching it ended, or its
+    /// sound was turned off.
+    fn screen_quiet(&self) {}
 }
 
 /// The two ends, together. What [`crate::voice::Engine::join`] takes: a

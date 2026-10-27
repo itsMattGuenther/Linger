@@ -478,6 +478,7 @@ pub fn on_event(window: &tauri::Window, event: &tauri::WindowEvent) {
     if matches!(event, tauri::WindowEvent::Destroyed) {
         crate::clip::forget(window.app_handle(), window.label());
         crate::screen_shell::forget(window.app_handle(), window.label());
+        crate::screen_sound::forget(window.app_handle(), window.label());
         if let Ok(mut unseen) = UNSEEN.lock() {
             unseen.remove(window.label());
         }

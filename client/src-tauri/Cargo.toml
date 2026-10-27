@@ -160,6 +160,16 @@ winreg = "0.55"
 # Windows builds. This feature and nothing else: `privacy.test.ts` refuses any
 # other, so the shell can't ask what window is in front or hook the keyboard.
 windows-sys = { version = "0.61", features = ["Win32_UI_Input_KeyboardAndMouse"] }
+# The computer's sound in a screen share (#736, `screen_sound/windows.rs`):
+# WASAPI's process loopback, which captures everything played except Linger
+# and the processes it started. The same `windows` release, with the same
+# audio, COM and threading parts, that cpal already builds for voice, so it
+# adds no crate and next to nothing to the app. These features and nothing
+# else: `privacy.test.ts` refuses any other, and refuses the code naming any
+# process but Linger's own, listing processes, or reading audio sessions.
+windows = { version = "0.62", default-features = false, features = ["Win32_Foundation", "Win32_Media_Audio", "Win32_Security", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Threading", "Win32_System_Variant"] }
+# What `windows`' `#[implement]` builds the loopback's completion handler on.
+windows-core = { version = "0.62", default-features = false, features = ["std"] }
 
 # Everything the desktop app has and the phone app doesn't (SPEC §4.15):
 # notifications, remembered windows, one copy at a time, voice and its
