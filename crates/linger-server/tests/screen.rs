@@ -490,3 +490,218 @@ async fn too_many_screen_sockets_in_a_minute_says_so_rather_than_a_bad_hello() {
     let mut ws = screen(&server, share_hello(&host.access_token, &host_session, 30)).await;
     assert_eq!(closed_with(&mut ws).await, Some(4009));
 }
+
+/// A packet of the computer's sound as an app sends one (#736): the 12-byte
+/// header, kind 2 and Opus, then some sound.
+fn sound(fill: u8) -> Vec<u8> {
+    let mut bytes = vec![2, 1, 0, 0];
+    bytes.extend_from_slice(&7u64.to_be_bytes());
+    bytes.extend_from_slice(&[fill; 40]);
+    bytes
+}
+
+fn sound_share_hello(token: &str, session: &str) -> Value {
+    json!({"op": "share", "token": token, "session_id": session, "fps": 30, "encode": ["vp8"], "sound": true})
+}
+
+fn sound_watch_hello(token: &str, session: &str, target: &str) -> Value {
+    json!({"op": "watch", "token": token, "session_id": session, "target": target, "decode": ["vp8"], "sound": true})
+}
+
+/// A member in the room's voice: their gateway, session and access token.
+async fn in_voice(
+    server: &common::TestServer,
+    host: &str,
+    name: &str,
+    room: &str,
+) -> (Ws, String, String) {
+    let member = common::join_member(server, host, name).await;
+    let (mut gw, session) = gateway(server, &member.access_token).await;
+    join_voice(&mut gw, room).await;
+    (gw, session, member.access_token)
+}
+
+#[tokio::test]
+async fn a_shares_sound_reaches_the_watchers_who_asked_and_nobody_else() {
+    let (server, host, room) = common::voice_server_with_room("cinema").await;
+    let room = room.id.to_string();
+    let (mut host_gw, host_session) = gateway(&server, &host.access_token).await;
+    join_voice(&mut host_gw, &room).await;
+    let (_eli_gw, eli_session, eli) = in_voice(&server, &host.access_token, "eli", &room).await;
+    let (_dave_gw, dave_session, dave) = in_voice(&server, &host.access_token, "dave", &room).await;
+    let (_sam_gw, sam_session, sam) = in_voice(&server, &host.access_token, "sam", &room).await;
+    let (_kim_gw, kim_session, kim) = in_voice(&server, &host.access_token, "kim", &room).await;
+    drain(&mut host_gw, SETTLE).await;
+
+    // The host shares with sound. Nobody watching: asked for nothing.
+    let mut share = screen(
+        &server,
+        sound_share_hello(&host.access_token, &host_session),
+    )
+    .await;
+    assert_eq!(
+        recv_json(&mut share).await,
+        json!({"op": "want", "codecs": []})
+    );
+
+    // Dave watches without asking for sound: the share asks for pictures
+    // alone, and Dave is told the share carries sound.
+    let mut dave_watch = screen(&server, watch_hello(&dave, &dave_session, &host_session)).await;
+    assert_eq!(
+        recv_json(&mut dave_watch).await,
+        json!({"op": "showing", "target": host_session, "codec": "vp8", "sound": true})
+    );
+    assert_eq!(
+        recv_json(&mut share).await,
+        json!({"op": "want", "codecs": ["vp8"]})
+    );
+    assert_eq!(recv_json(&mut share).await["op"], "keyframe");
+
+    // Eli watches and asks: the share is told to send its sound.
+    let mut eli_watch = screen(
+        &server,
+        sound_watch_hello(&eli, &eli_session, &host_session),
+    )
+    .await;
+    assert_eq!(
+        recv_json(&mut eli_watch).await,
+        json!({"op": "showing", "target": host_session, "codec": "vp8", "sound": true})
+    );
+    assert_eq!(
+        recv_json(&mut share).await,
+        json!({"op": "want", "codecs": ["vp8"], "sound": true})
+    );
+
+    // Sam shares with sound too, and Kim watches Sam's, asking for it.
+    let mut sam_share = screen(&server, sound_share_hello(&sam, &sam_session)).await;
+    assert_eq!(recv_json(&mut sam_share).await["op"], "want");
+    let mut kim_watch = screen(&server, sound_watch_hello(&kim, &kim_session, &sam_session)).await;
+    assert_eq!(recv_json(&mut kim_watch).await["op"], "showing");
+
+    // Sound, then a key frame: Eli hears the sound before any picture, with
+    // no key frame first; Dave gets the picture alone.
+    share
+        .send(WsMessage::Binary(sound(5).into()))
+        .await
+        .unwrap();
+    share
+        .send(WsMessage::Binary(frame(1, true, 6).into()))
+        .await
+        .unwrap();
+    assert_eq!(next_binary(&mut eli_watch).await, sound(5));
+    assert_eq!(next_binary(&mut eli_watch).await, frame(1, true, 6));
+    assert_eq!(next_binary(&mut dave_watch).await, frame(1, true, 6));
+    // Kim, watching Sam's share, hears Sam's sound and none of the host's.
+    sam_share
+        .send(WsMessage::Binary(sound(8).into()))
+        .await
+        .unwrap();
+    assert_eq!(next_binary(&mut kim_watch).await, sound(8));
+
+    // Eli turns the sound off: the share is told nobody wants it, and Eli
+    // gets pictures alone.
+    eli_watch
+        .send(WsMessage::Text(
+            json!({"op": "sound", "on": false}).to_string().into(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        recv_json(&mut share).await,
+        json!({"op": "want", "codecs": ["vp8"]})
+    );
+    share
+        .send(WsMessage::Binary(sound(9).into()))
+        .await
+        .unwrap();
+    share
+        .send(WsMessage::Binary(frame(1, false, 10).into()))
+        .await
+        .unwrap();
+    assert_eq!(next_binary(&mut eli_watch).await, frame(1, false, 10));
+}
+
+#[tokio::test]
+async fn sound_from_a_share_that_never_said_so_or_from_a_watcher_goes_nowhere() {
+    let (server, host, room) = common::voice_server_with_room("hush").await;
+    let room = room.id.to_string();
+    let (mut host_gw, host_session) = gateway(&server, &host.access_token).await;
+    join_voice(&mut host_gw, &room).await;
+    let (_eli_gw, eli_session, eli) = in_voice(&server, &host.access_token, "eli", &room).await;
+    let (_dave_gw, dave_session, dave) = in_voice(&server, &host.access_token, "dave", &room).await;
+    drain(&mut host_gw, SETTLE).await;
+
+    // A share from an app from before sound: its hello says nothing of it.
+    let mut share = screen(&server, share_hello(&host.access_token, &host_session, 30)).await;
+    assert_eq!(recv_json(&mut share).await["op"], "want");
+    // Eli asks for sound all the same: Eli isn't told there's any, and the
+    // share isn't asked for it.
+    let mut eli_watch = screen(
+        &server,
+        sound_watch_hello(&eli, &eli_session, &host_session),
+    )
+    .await;
+    assert_eq!(
+        recv_json(&mut eli_watch).await,
+        json!({"op": "showing", "target": host_session, "codec": "vp8"})
+    );
+    assert_eq!(
+        recv_json(&mut share).await,
+        json!({"op": "want", "codecs": ["vp8"]})
+    );
+    let mut dave_watch = screen(
+        &server,
+        sound_watch_hello(&dave, &dave_session, &host_session),
+    )
+    .await;
+    assert_eq!(recv_json(&mut dave_watch).await["op"], "showing");
+
+    // Sound it sends anyway goes nowhere, and closes nothing; nor does
+    // anything binary from a watcher's socket. The frame after reaches both.
+    share
+        .send(WsMessage::Binary(sound(1).into()))
+        .await
+        .unwrap();
+    dave_watch
+        .send(WsMessage::Binary(sound(2).into()))
+        .await
+        .unwrap();
+    dave_watch
+        .send(WsMessage::Binary(frame(1, true, 3).into()))
+        .await
+        .unwrap();
+    share
+        .send(WsMessage::Binary(frame(1, true, 4).into()))
+        .await
+        .unwrap();
+    assert_eq!(next_binary(&mut eli_watch).await, frame(1, true, 4));
+    assert_eq!(next_binary(&mut dave_watch).await, frame(1, true, 4));
+}
+
+#[tokio::test]
+async fn the_server_says_it_passes_a_screens_sound_on() {
+    // An app finds sound in GET /server before offering it (PROTOCOL §9).
+    let (server, host, _room) = common::voice_server_with_room("x").await;
+    let info: Value = reqwest::Client::new()
+        .get(server.url("/server"))
+        .bearer_auth(&host.access_token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(info["screen_sound"], json!(true));
+    let (quiet, host, _room) =
+        common::voice_server_tuned("q", |config| config.screens = false).await;
+    let info: Value = reqwest::Client::new()
+        .get(quiet.url("/server"))
+        .bearer_auth(&host.access_token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(info["screen_sound"], json!(false));
+}

@@ -4,4 +4,4 @@ import type { ScreenCodec } from "./ScreenCodec";
 /**
  * What a watching app can ask, once it is watching.
  */
-export type ScreenWatchAsks = { "op": "watch", target: string, decode?: Array<ScreenCodec>, } | { "op": "keyframe" };
+export type ScreenWatchAsks = { "op": "watch", target: string, decode?: Array<ScreenCodec>, } | { "op": "keyframe" } | { "op": "sound", on: boolean, };

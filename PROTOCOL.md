@@ -303,7 +303,7 @@ consumes the token. Once any user exists, both endpoints return `NOT_FOUND`.
 ```
 GET  /server             → { name, accent_key, icon_key, member_count, created_at,
                              storage_used_bytes, storage_limit_bytes, file_expiry_days,
-                             file_expiry_when_full?, voice?, screens?, health? }
+                             file_expiry_when_full?, voice?, screens?, screen_sound?, health? }
 PATCH /server            (host or co-host) { name?, accent_key?, icon_key? }   # accent_key from PALETTE
 
 GET  /rooms              → Room[]                       # public rooms only
@@ -405,6 +405,10 @@ reads as "maybe" (#306).
 #360): `true` when it carries voice, since only people in a room's voice share or watch,
 and its host hasn't turned screens off (`LINGER_SCREENS=off`, docs/host-guide.md). A server from before it leaves it out, and the app offers neither Share nor Watch
 there.
+
+**`screen_sound`** says whether it passes a shared screen's sound on too (§8, "The
+computer's sound", #736): `true` exactly when `screens` is. A server from before it leaves
+it out, and the app offers no "Share the computer's sound" there.
 
 ### 3.1 DMs
 
@@ -1964,8 +1968,9 @@ can watch it (SPEC §4.20). The pictures don't travel on the gateway or on voice
 port: each share and each watcher has a **screen socket**, a WebSocket of its own at
 `/api/v1/screen` on the server's address. The sharing app turns the screen into video
 itself (WebCodecs) and sends it there; the server passes each frame on, unopened, to the
-people watching; their apps play it. Nothing is stored. `docs/decisions.md` has why it
-isn't a WebRTC track.
+people watching; their apps play it. A share can carry the computer's sound too, on the
+same socket (#736, below). Nothing is stored. `docs/decisions.md` has why it isn't a
+WebRTC track.
 
 **Who is sharing and watching is in `voice.state`.** Each `VoicePeer` gains:
 
@@ -1981,8 +1986,8 @@ within `linger-core::limits::SCREEN_HELLO_MS` (10 s), says who it is and what fo
 ```ts
 type ScreenCodec = "vp8" | "avc1"     // VP8, or H.264 in Annex B
 type ScreenHello =
-  | { op: "share"; token: string; session_id: string; fps: 30 | 60; encode: ScreenCodec[] }
-  | { op: "watch"; token: string; session_id: string; target: string; decode: ScreenCodec[] }
+  | { op: "share"; token: string; session_id: string; fps: 30 | 60; encode: ScreenCodec[]; sound?: boolean }
+  | { op: "watch"; token: string; session_id: string; target: string; decode: ScreenCodec[]; sound?: boolean }
 ```
 
 `token` is an access token (§2) and `session_id` the gateway session it belongs to, from
@@ -1992,10 +1997,12 @@ session is that person's and has a voice seat. Then:
 - **`share`**: at most `MAX_SCREENS_PER_ROOM` (3) sessions share in one room at a time;
   `fps` is 30 or 60; `encode` names the formats the app can make, best first, and needs at
   least one the server knows. A session that already shares is sharing again: its old
-  socket closes (4006) and the new one takes over, at the new `fps`.
+  socket closes (4006) and the new one takes over, at the new `fps`. `sound: true` says
+  the share carries the computer's sound (below); left out, it carries none.
 - **`watch`**: `target` is a session sharing in the same room's voice, not this one.
   `decode` names the formats the app can play. A session that already watches moves its
-  watching here, and its old socket closes (4006).
+  watching here, and its old socket closes (4006). `sound: true` asks for the share's
+  sound, if it has some; left out, none is sent.
 
 A hello that doesn't pass closes the socket with a code and nothing else happens:
 
@@ -2016,7 +2023,7 @@ encoded frame as WebCodecs made it (`EncodedVideoChunk`).
 
 | Bytes | |
 |---|---|
-| 0 | Version, `1` |
+| 0 | Version, `1` (a sound packet's is `2`, below) |
 | 1 | Format: `1` VP8, `2` H.264 (Annex B, parameter sets on every key frame) |
 | 2 | Flags: bit 0 set on a key frame, the others `0` |
 | 3 | `0` |
@@ -2044,18 +2051,19 @@ With nobody watching the sharer is asked for nothing, and makes nothing.
 ```ts
 // To a share socket
 type ScreenShareSays =
-  | { op: "want"; codecs: ScreenCodec[] }      // make exactly these from now on; [] is nothing
+  | { op: "want"; codecs: ScreenCodec[]; sound?: true } // make exactly these from now on; [] is nothing
   | { op: "keyframe"; codec: ScreenCodec }    // make the next frame of this format a key frame
   | { op: "alive" }                            // still here (below)
 // To a watch socket
 type ScreenWatchSays =
-  | { op: "showing"; target: string | null; codec: ScreenCodec | null }
+  | { op: "showing"; target: string | null; codec: ScreenCodec | null; sound?: true }
   | { op: "alive" }                            // still here (below)
   | { op: "behind" }                           // your line couldn't keep up: skipped forward
 // From a watch socket
 type ScreenWatchAsks =
   | { op: "watch"; target: string; decode?: ScreenCodec[] }   // watch another share here
   | { op: "keyframe" }                                        // my player lost its place
+  | { op: "sound"; on: boolean }                              // send me the sound, or stop
 ```
 
 `want` comes right after a good `share` hello, and again whenever the answer changes.
@@ -2109,9 +2117,53 @@ neither survives a server restart, as voice doesn't. A seat that leaves voice in
 moment between a hello's check and the share or watching starting is checked again once
 it has started, and closes it (4002).
 
-**Hard rule 2 holds here too.** Nothing in a hello, a frame or `voice.state` names a
-window or an application; the operating system's picker is the app's only way to choose
-what to share, and its choice reaches the app as pictures alone.
+**The computer's sound (#736).** A share can carry what the sharing computer plays, less
+everything Linger itself plays: a video, a game, a clip in a slide, never the call's own
+voices or chimes, which would come back to everybody late. Only the Windows app sends it
+for now, captured by its shell with Windows' process loopback, which leaves out Linger's
+own process and the web engine's under it (`client/src-tauri/src/screen_sound/`). Every
+app can play it.
+
+- **The server says it passes sound on**, in `GET /server`'s `screen_sound: true`
+  (exactly when it passes screens on), and on a share socket, in `want`: `sound: true`
+  means "send the sound too", said when the share's hello had `sound: true` and somebody
+  watching it has asked for sound. Left out, nobody wants it, and the app sends none. A
+  server from before this says neither, so an app never sends sound to one.
+- **A watcher asks for it** with `sound: true` in its hello, and turns it off and on
+  again with `{ op: "sound", on }`: its own sound button. The server sends sound only to
+  a watcher that asked, so an app from before this is never sent a message it can't
+  read. `showing` says `sound: true` whenever the share carries sound, asked for or not,
+  so an app can say what it isn't playing.
+- **A sound packet is a binary message**, on the share socket in and the watch socket out,
+  with a 12-byte header like a frame's and one Opus packet after it: 48 kHz, two
+  channels, 20 ms, about 128 kbit/s.
+
+| Bytes | |
+|---|---|
+| 0 | `2`, a sound packet: no frame has this version, so a server or an app that knows only frames drops it |
+| 1 | Format: `1` Opus |
+| 2 | Flags, `0` |
+| 3 | `0` |
+| 4–11 | When the sound was captured, in microseconds on the same clock as the share's frames, big-endian |
+
+The time stamp lets a watcher line sound up with the picture. Today's apps play each as
+it comes, the sound through a small buffer of 60 to 120 ms that drops what comes late
+rather than falling behind, and the stamp to tell a lost packet from a pause.
+
+- **The server passes sound on as it came**, read only for its first two bytes and its
+  length. A sound packet is dropped when the share's hello didn't say `sound: true`, when
+  it is over `MAX_SCREEN_SOUND_BYTES` (4 KiB), when it arrives on a watch socket, or when
+  it would take the share over its ceiling: sound counts toward
+  `SCREEN_MAX_BITS_PER_SECOND` with the frames. It never waits for a key frame. Each
+  watcher has its own short line for sound, `SCREEN_SOUND_QUEUE` packets (a fifth of a
+  second): once that is full the next packet is dropped rather than queued, and nobody is
+  told, the picture's `behind` being about the picture.
+
+**Hard rule 2 holds here too.** Nothing in a hello, a frame, a sound packet or
+`voice.state` names a window or an application; the operating system's picker is the
+app's only way to choose what to share, and its choice reaches the app as pictures
+alone. The sound is the computer's whole mix less Linger's own, as sound alone: the app
+never learns, and could not send, which program made it.
 
 **Limits.** Hellos are rate-limited per person (`RATE_SCREEN_HELLO`, past which the
 socket closes with 4009), and `watch` and `keyframe` messages per socket
@@ -2215,3 +2267,18 @@ every update for review.
   server, from the same tag, and its notes say when something new needs the server
   updated. Releasing them apart would give each its own number, and every rule above
   would have to be written out for both.
+
+**A shared screen's sound (#736)** works both ways like this, wherever the sharing
+app, the server and the watching app are from before it or after:
+
+| Sharing app | Server | Watching app | What happens |
+|---|---|---|---|
+| new, sound on | new | new, sound on | The sound plays for that watcher |
+| new, sound on | new | new, sound off | No sound sent to it; the server tells the sharer when nobody wants any, and it sends none |
+| new, sound on | new | old | The picture as before; the watcher never asks for sound, so none is sent to it |
+| new, sound on | old | either | The picture as before; the app finds no `screen_sound` and offers no switch, and no `want` ever says `sound`, so none is sent |
+| new, sound off, or old | new | new | The picture as before; the watcher is told there's no sound (`showing` without it), and its button doesn't show |
+| old | old | new | The picture as before; no sound is asked for or said |
+
+A new watcher's `{ op: "sound" }` is ignored by an old server (an `op` it doesn't know,
+above), and an old server drops any sound packet as a frame of an unknown version.

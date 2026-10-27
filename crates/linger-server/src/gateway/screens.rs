@@ -12,7 +12,10 @@
 //! a lock taken twice by one thread never comes back.
 //!
 //! The board never opens a frame. It reads a frame's format and whether it is
-//! a key frame from the header, and hands every watcher the same bytes.
+//! a key frame from the header, and hands every watcher the same bytes. A
+//! share's sound (#736) goes the same way, to the watchers who asked for it,
+//! read only for being sound: never opened, never gated on a key frame, and
+//! dropped rather than queued for a watcher whose line is behind.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -21,11 +24,11 @@ use std::time::{Duration, Instant};
 
 use axum::body::Bytes;
 use linger_core::limits::{
-    MAX_SCREENS_PER_ROOM, MAX_SCREEN_WATCH_BYTES, SCREEN_BURST_BYTES, SCREEN_KEYFRAME_EVERY_MS,
-    SCREEN_MAX_BITS_PER_SECOND,
+    MAX_SCREENS_PER_ROOM, MAX_SCREEN_SOUND_BYTES, MAX_SCREEN_WATCH_BYTES, SCREEN_BURST_BYTES,
+    SCREEN_KEYFRAME_EVERY_MS, SCREEN_MAX_BITS_PER_SECOND,
 };
 use linger_core::screen::{
-    ScreenCodec, ScreenFrameHead, ScreenShare, ScreenShareSays, ScreenWatchSays,
+    ScreenCodec, ScreenFrameHead, ScreenShare, ScreenShareSays, ScreenSoundHead, ScreenWatchSays,
 };
 use linger_core::RoomId;
 use tokio::sync::mpsc;
@@ -75,10 +78,13 @@ pub enum ToWatch {
 }
 
 /// What a watch socket is given: frames on a bounded channel, so a watcher
-/// that falls behind is noticed, and everything else on its own, so nothing
-/// the board says is ever dropped.
+/// that falls behind is noticed, sound on a short one of its own (#736), so
+/// sound that can't go at once is dropped rather than queued behind frames,
+/// and everything else on its own, so nothing the board says is ever dropped.
 pub struct WatchLine {
     pub frames: mpsc::Sender<Bytes>,
+    /// `SCREEN_SOUND_QUEUE` packets at most.
+    pub sound: mpsc::Sender<Bytes>,
     pub says: mpsc::UnboundedSender<ToWatch>,
     /// The bytes waiting on `frames`: the board adds, the socket takes away
     /// as each one goes (`MAX_SCREEN_WATCH_BYTES`).
@@ -89,6 +95,11 @@ struct Share {
     room: RoomId,
     fps: u8,
     encode: Vec<ScreenCodec>,
+    /// Its hello said it carries the computer's sound (#736): sound from any
+    /// other share is dropped.
+    sound: bool,
+    /// Whether it was last told to send its sound: somebody watching asked.
+    sounding: bool,
     says: mpsc::UnboundedSender<ToShare>,
     /// Which socket this is, so an old one closing after a new one took over
     /// doesn't end the new one's share.
@@ -102,6 +113,33 @@ struct Share {
     filled: Instant,
 }
 
+impl Share {
+    /// Whether `bytes` more fit under the share's ceiling at `now`, taken
+    /// from what it may still send if so: a bucket that fills at
+    /// `SCREEN_MAX_BITS_PER_SECOND` and holds `SCREEN_BURST_BYTES`. Frames
+    /// and sound draw on the same one (#736).
+    fn afford(&mut self, bytes: usize, now: Instant) -> bool {
+        let elapsed = now.saturating_duration_since(self.filled).as_secs_f64();
+        self.filled = now;
+        self.budget = (self.budget + elapsed * bytes_per_second()).min(budget_cap());
+        #[allow(clippy::cast_precision_loss)]
+        let cost = bytes as f64;
+        if self.budget < cost {
+            return false;
+        }
+        self.budget -= cost;
+        true
+    }
+
+    /// Tell the sharer what to make now: its formats, and whether its sound.
+    fn want(&self) {
+        let _ = self.says.send(ToShare::Say(ScreenShareSays::Want {
+            codecs: self.wanted.clone(),
+            sound: self.sounding.then_some(true),
+        }));
+    }
+}
+
 struct Watch {
     room: RoomId,
     target: Option<String>,
@@ -113,6 +151,9 @@ struct Watch {
     /// Nothing goes to it until a key frame in its format: it just started,
     /// fell behind, or asked for one.
     gated: bool,
+    /// It asked for the share's sound (#736): its hello, then its sound
+    /// button.
+    sound: bool,
 }
 
 impl Watch {
@@ -232,6 +273,7 @@ impl Board {
             .collect();
         let slices: Vec<&[ScreenCodec]> = decodes.iter().map(Vec::as_slice).collect();
         let (wanted, each) = choose(&encode, &slices);
+        let sound = self.sounds(sharer);
 
         let mut keyframes: Vec<ScreenCodec> = Vec::new();
         for (session, codec) in watching.iter().zip(each) {
@@ -244,6 +286,7 @@ impl Board {
                 let _ = watch.line.says.send(ToWatch::Say(ScreenWatchSays::Showing {
                     target: Some(sharer.to_owned()),
                     codec,
+                    sound,
                 }));
             }
             if let (true, Some(codec)) = (watch.gated, watch.codec) {
@@ -252,17 +295,36 @@ impl Board {
                 }
             }
         }
+        let listening = self.listening(sharer);
         if let Some(share) = self.shares.get_mut(sharer) {
-            if share.wanted != wanted {
+            if share.wanted != wanted || share.sounding != listening {
                 share.wanted.clone_from(&wanted);
-                let _ = share
-                    .says
-                    .send(ToShare::Say(ScreenShareSays::Want { codecs: wanted }));
+                share.sounding = listening;
+                share.want();
             }
         }
         for codec in keyframes {
             self.ask_keyframe(sharer, codec, now);
         }
+    }
+
+    /// Whether `sharer`'s sound has anybody to go to: it carries some, and
+    /// somebody watching it asked for it (#736).
+    fn listening(&self, sharer: &str) -> bool {
+        self.shares.get(sharer).is_some_and(|share| share.sound)
+            && self
+                .watches
+                .values()
+                .any(|watch| watch.sound && watch.target.as_deref() == Some(sharer))
+    }
+
+    /// What `sharer`'s watchers are told it carries: `sound: true` when it
+    /// carries the computer's sound, left out otherwise.
+    fn sounds(&self, sharer: &str) -> Option<bool> {
+        self.shares
+            .get(sharer)
+            .is_some_and(|share| share.sound)
+            .then_some(true)
     }
 
     /// Stop `session` watching, telling nobody: the caller settles and
@@ -310,6 +372,7 @@ impl Screens {
         room: RoomId,
         fps: u8,
         encode: Vec<ScreenCodec>,
+        sound: bool,
         says: mpsc::UnboundedSender<ToShare>,
     ) -> Result<u64, Closing> {
         let mut board = lock(self);
@@ -327,6 +390,8 @@ impl Screens {
             room,
             fps,
             encode,
+            sound,
+            sounding: false,
             says,
             socket,
             wanted: Vec::new(),
@@ -344,9 +409,7 @@ impl Screens {
                 watch.codec = None;
             }
         }
-        let _ = board.shares[session]
-            .says
-            .send(ToShare::Say(ScreenShareSays::Want { codecs: Vec::new() }));
+        board.shares[session].want();
         board.settle(session, now);
         Ok(socket)
     }
@@ -371,6 +434,7 @@ impl Screens {
                 let _ = watch.line.says.send(ToWatch::Say(ScreenWatchSays::Showing {
                     target: None,
                     codec: None,
+                    sound: None,
                 }));
             }
         }
@@ -390,6 +454,7 @@ impl Screens {
         room: RoomId,
         target: &str,
         decode: Vec<ScreenCodec>,
+        sound: bool,
         line: WatchLine,
     ) -> Result<Showing, Closing> {
         let mut board = lock(self);
@@ -410,6 +475,7 @@ impl Screens {
             line,
             socket,
             gated: true,
+            sound,
         };
         let before = board
             .watches
@@ -423,6 +489,7 @@ impl Screens {
             board.settle(&before, now);
         }
         board.settle(target, now);
+        let sound = board.sounds(target);
         let watch = &board.watches[session];
         if watch.codec.is_none() {
             // `settle` tells only a watcher whose format changed; one that
@@ -430,6 +497,7 @@ impl Screens {
             let _ = watch.line.says.send(ToWatch::Say(ScreenWatchSays::Showing {
                 target: Some(target.to_owned()),
                 codec: None,
+                sound,
             }));
         }
         Ok(Showing {
@@ -479,6 +547,7 @@ impl Screens {
             let _ = watch.line.says.send(ToWatch::Say(ScreenWatchSays::Showing {
                 target: None,
                 codec: None,
+                sound: None,
             }));
         }
         if let Some(before) = before.filter(|before| before != target) {
@@ -486,11 +555,13 @@ impl Screens {
         }
         if can_watch {
             board.settle(target, now);
+            let sound = board.sounds(target);
             let watch = &board.watches[session];
             if watch.codec.is_none() {
                 let _ = watch.line.says.send(ToWatch::Say(ScreenWatchSays::Showing {
                     target: Some(target.to_owned()),
                     codec: None,
+                    sound,
                 }));
             }
             Ok(room)
@@ -534,6 +605,65 @@ impl Screens {
         }
     }
 
+    /// The watcher on socket `socket` turned the share's sound on or off
+    /// (#736): its sharer is told whether anybody still wants it.
+    pub fn hear(&self, session: &str, socket: u64, on: bool) {
+        let mut board = lock(self);
+        let Some(watch) = board
+            .watches
+            .get_mut(session)
+            .filter(|watch| watch.socket == socket)
+        else {
+            return;
+        };
+        watch.sound = on;
+        if let Some(target) = watch.target.clone() {
+            let listening = board.listening(&target);
+            if let Some(share) = board.shares.get_mut(&target) {
+                if share.sounding != listening {
+                    share.sounding = listening;
+                    share.want();
+                }
+            }
+        }
+    }
+
+    /// A sound packet from `session`'s share socket `socket` (#736): pass it
+    /// to each of its watchers that asked for sound, unless the share never
+    /// said it carries any or is over its ceiling, which sound counts toward.
+    /// Never held for a key frame; a watcher whose sound line is full goes
+    /// without this one. Answers whether it went anywhere (for tests).
+    pub fn sound(&self, session: &str, socket: u64, packet: &Bytes) -> bool {
+        self.sound_at(session, socket, packet, Instant::now())
+    }
+
+    /// [`Self::sound`] at a given moment, as [`Self::frame_at`].
+    fn sound_at(&self, session: &str, socket: u64, packet: &Bytes, now: Instant) -> bool {
+        if packet.len() > MAX_SCREEN_SOUND_BYTES || ScreenSoundHead::read(packet).is_none() {
+            return false;
+        }
+        let mut board = lock(self);
+        let Some(share) = board
+            .shares
+            .get_mut(session)
+            .filter(|share| share.socket == socket && share.sound)
+        else {
+            return false;
+        };
+        if !share.afford(packet.len(), now) {
+            return false;
+        }
+        let mut went = false;
+        for watch in board.watches.values() {
+            if !watch.sound || watch.target.as_deref() != Some(session) {
+                continue;
+            }
+            // Full, it's behind: this packet is dropped, not queued.
+            went |= watch.line.sound.try_send(packet.clone()).is_ok();
+        }
+        went
+    }
+
     /// A frame from `session`'s share socket `socket`: pass it to each of its
     /// watchers in that format, unless the share is over its ceiling.
     /// Answers whether it went anywhere (for tests).
@@ -558,17 +688,7 @@ impl Screens {
         if !share.wanted.contains(&head.codec) {
             return false;
         }
-        // The ceiling: a bucket that fills at SCREEN_MAX_BITS_PER_SECOND and
-        // holds SCREEN_BURST_BYTES.
-        let elapsed = now.saturating_duration_since(share.filled).as_secs_f64();
-        share.filled = now;
-        share.budget = (share.budget + elapsed * bytes_per_second()).min(budget_cap());
-        #[allow(clippy::cast_precision_loss)]
-        let cost = frame.len() as f64;
-        let over = share.budget < cost;
-        if !over {
-            share.budget -= cost;
-        }
+        let over = !share.afford(frame.len(), now);
 
         let mut went = false;
         let mut behind = false;
@@ -636,6 +756,7 @@ impl Screens {
                     let _ = watch.line.says.send(ToWatch::Say(ScreenWatchSays::Showing {
                         target: None,
                         codec: None,
+                        sound: None,
                     }));
                 }
             }
@@ -677,7 +798,7 @@ fn budget_cap() -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use linger_core::limits::SCREEN_WATCH_QUEUE;
+    use linger_core::limits::{SCREEN_SOUND_QUEUE, SCREEN_WATCH_QUEUE};
 
     const VP8: ScreenCodec = ScreenCodec::Vp8;
     const AVC: ScreenCodec = ScreenCodec::Avc1;
@@ -701,7 +822,7 @@ mod tests {
         fn start(screens: &Screens, session: &str, room: RoomId, encode: &[ScreenCodec]) -> Self {
             let (tx, says) = mpsc::unbounded_channel();
             let socket = screens
-                .share(session, room, 30, encode.to_vec(), tx)
+                .share(session, room, 30, encode.to_vec(), false, tx)
                 .expect("a share");
             Self { socket, says }
         }
@@ -718,6 +839,7 @@ mod tests {
     struct Watcher {
         socket: u64,
         frames: mpsc::Receiver<Bytes>,
+        sound: mpsc::Receiver<Bytes>,
         says: mpsc::UnboundedReceiver<ToWatch>,
         queued: Arc<AtomicUsize>,
     }
@@ -730,7 +852,20 @@ mod tests {
             target: &str,
             decode: &[ScreenCodec],
         ) -> Self {
+            Self::listening(screens, session, room, target, decode, false)
+        }
+
+        /// A watcher that asked for the share's sound, or didn't.
+        fn listening(
+            screens: &Screens,
+            session: &str,
+            room: RoomId,
+            target: &str,
+            decode: &[ScreenCodec],
+            sound: bool,
+        ) -> Self {
             let (frames_tx, frames) = mpsc::channel(SCREEN_WATCH_QUEUE);
+            let (sound_tx, sound_rx) = mpsc::channel(SCREEN_SOUND_QUEUE);
             let (says_tx, says) = mpsc::unbounded_channel();
             let queued = Arc::new(AtomicUsize::new(0));
             let showing = screens
@@ -739,8 +874,10 @@ mod tests {
                     room,
                     target,
                     decode.to_vec(),
+                    sound,
                     WatchLine {
                         frames: frames_tx,
+                        sound: sound_tx,
                         says: says_tx,
                         queued: Arc::clone(&queued),
                     },
@@ -749,9 +886,19 @@ mod tests {
             Self {
                 socket: showing.socket,
                 frames,
+                sound: sound_rx,
                 says,
                 queued,
             }
+        }
+
+        /// The sound packets waiting for it.
+        fn heard(&mut self) -> usize {
+            let mut heard = 0;
+            while self.sound.try_recv().is_ok() {
+                heard += 1;
+            }
+            heard
         }
 
         /// Take what's waiting, as the socket does: the bytes go with it.
@@ -798,7 +945,7 @@ mod tests {
         let _c = Sharer::start(&screens, "c", here, &[VP8]);
         let (tx, _rx) = mpsc::unbounded_channel();
         assert_eq!(
-            screens.share("d", here, 30, vec![VP8], tx),
+            screens.share("d", here, 30, vec![VP8], false, tx),
             Err(Closing::RoomFull)
         );
         // Another room has room.
@@ -806,7 +953,9 @@ mod tests {
         // One of the three sharing again at 60 is allowed, and closes its
         // old socket; the old socket closing then ends nothing.
         let (tx, _rx) = mpsc::unbounded_channel();
-        let again = screens.share("b", here, 60, vec![VP8], tx).expect("again");
+        let again = screens
+            .share("b", here, 60, vec![VP8], false, tx)
+            .expect("again");
         assert!(replaced(&mut b.says));
         assert_eq!(screens.unshare("b", b.socket), None);
         assert_eq!(screens.peer("b").0, Some(ScreenShare { fps: 60 }));
@@ -822,7 +971,10 @@ mod tests {
         // Nobody watching: the sharer is asked for nothing.
         assert_eq!(
             sharer.heard(),
-            vec![ScreenShareSays::Want { codecs: vec![] }]
+            vec![ScreenShareSays::Want {
+                codecs: vec![],
+                sound: None
+            }]
         );
         assert!(!screens.frame("s", sharer.socket, &frame(VP8, true, 10)));
 
@@ -830,7 +982,10 @@ mod tests {
         assert_eq!(
             sharer.heard(),
             vec![
-                ScreenShareSays::Want { codecs: vec![VP8] },
+                ScreenShareSays::Want {
+                    codecs: vec![VP8],
+                    sound: None
+                },
                 ScreenShareSays::Keyframe { codec: VP8 },
             ]
         );
@@ -975,7 +1130,8 @@ mod tests {
             watcher.says.try_recv(),
             Ok(ToWatch::Say(ScreenWatchSays::Showing {
                 target: None,
-                codec: None
+                codec: None,
+                sound: None,
             }))
         ));
         assert_eq!(screens.peer("w").1, None);
@@ -1030,25 +1186,181 @@ mod tests {
         let _sharer = Sharer::start(&screens, "s", here, &[VP8]);
         let line = || {
             let (frames, _f) = mpsc::channel(1);
+            let (sound, _a) = mpsc::channel(1);
             let (says, _s) = mpsc::unbounded_channel();
             WatchLine {
                 frames,
+                sound,
                 says,
                 queued: Arc::new(AtomicUsize::new(0)),
             }
         };
         assert_eq!(
-            screens.watch("s", here, "s", vec![VP8], line()),
+            screens.watch("s", here, "s", vec![VP8], false, line()),
             Err(Closing::NothingToWatch)
         );
         assert_eq!(
-            screens.watch("w", room(), "s", vec![VP8], line()),
+            screens.watch("w", room(), "s", vec![VP8], false, line()),
             Err(Closing::NothingToWatch)
         );
         assert_eq!(
-            screens.watch("w", here, "nobody", vec![VP8], line()),
+            screens.watch("w", here, "nobody", vec![VP8], false, line()),
             Err(Closing::NothingToWatch)
         );
+    }
+
+    fn sound(size: usize) -> Bytes {
+        let mut bytes = ScreenSoundHead { micros: 0 }.write().to_vec();
+        bytes.resize(bytes.len() + size, 3);
+        Bytes::from(bytes)
+    }
+
+    /// A share that carries sound, as its hello says.
+    fn sounding(screens: &Screens, session: &str, room: RoomId) -> Sharer {
+        let (tx, says) = mpsc::unbounded_channel();
+        let socket = screens
+            .share(session, room, 30, vec![VP8], true, tx)
+            .expect("a share");
+        Sharer { socket, says }
+    }
+
+    #[test]
+    fn sound_goes_to_the_watchers_who_asked_and_the_sharer_is_told_when_anybody_has() {
+        let screens = Screens::default();
+        let here = room();
+        let mut sharer = sounding(&screens, "s", here);
+        let mut deaf = Watcher::start(&screens, "deaf", here, "s", &[VP8]);
+        // Nobody asked for sound yet: the sharer is asked for none.
+        assert!(sharer.heard().iter().all(|said| !matches!(
+            said,
+            ScreenShareSays::Want {
+                sound: Some(true),
+                ..
+            }
+        )));
+        assert!(!screens.sound("s", sharer.socket, &sound(300)));
+        // A watcher who asks: the sharer is told to send it, and it goes to
+        // that watcher alone, with no key frame first.
+        let mut ears = Watcher::listening(&screens, "ears", here, "s", &[VP8], true);
+        assert_eq!(
+            sharer.heard(),
+            vec![ScreenShareSays::Want {
+                codecs: vec![VP8],
+                sound: Some(true)
+            }]
+        );
+        assert!(screens.sound("s", sharer.socket, &sound(300)));
+        assert_eq!(ears.heard(), 1);
+        assert_eq!(deaf.heard(), 0);
+        // A frame isn't sound, nor is sound a frame.
+        assert!(!screens.sound("s", sharer.socket, &frame(VP8, true, 300)));
+        assert!(!screens.frame("s", sharer.socket, &sound(300)));
+        assert_eq!(ears.got() + deaf.got(), 0);
+        // Its sound button off: none goes, and the sharer is told nobody wants it.
+        screens.hear("ears", ears.socket, false);
+        assert_eq!(
+            sharer.heard(),
+            vec![ScreenShareSays::Want {
+                codecs: vec![VP8],
+                sound: None
+            }]
+        );
+        assert!(!screens.sound("s", sharer.socket, &sound(300)));
+        screens.hear("ears", ears.socket, true);
+        assert!(screens.sound("s", sharer.socket, &sound(300)));
+        assert_eq!(ears.heard(), 1);
+        // Both are told the share carries sound.
+        let carries = |says: &mut mpsc::UnboundedReceiver<ToWatch>| {
+            let mut told = false;
+            while let Ok(said) = says.try_recv() {
+                told |= matches!(
+                    said,
+                    ToWatch::Say(ScreenWatchSays::Showing {
+                        sound: Some(true),
+                        ..
+                    })
+                );
+            }
+            told
+        };
+        assert!(carries(&mut deaf.says));
+        assert!(carries(&mut ears.says));
+    }
+
+    #[test]
+    fn sound_from_a_share_that_never_said_so_or_too_big_is_dropped() {
+        let screens = Screens::default();
+        let here = room();
+        let silent = Sharer::start(&screens, "quiet", here, &[VP8]);
+        let mut ears = Watcher::listening(&screens, "ears", here, "quiet", &[VP8], true);
+        assert!(!screens.sound("quiet", silent.socket, &sound(300)));
+        assert_eq!(ears.heard(), 0);
+        // A share that does carry sound, but a packet over the biggest.
+        let loud = sounding(&screens, "loud", here);
+        let mut other = Watcher::listening(&screens, "other", here, "loud", &[VP8], true);
+        assert!(!screens.sound("loud", loud.socket, &sound(MAX_SCREEN_SOUND_BYTES)));
+        assert!(screens.sound("loud", loud.socket, &sound(300)));
+        assert_eq!(other.heard(), 1);
+        // Nothing of another share reaches the first's watcher.
+        assert_eq!(ears.heard(), 0);
+    }
+
+    #[test]
+    fn sound_counts_toward_the_ceiling_and_never_waits_for_a_key_frame() {
+        let screens = Screens::default();
+        let here = room();
+        let sharer = sounding(&screens, "s", here);
+        let mut watcher = Watcher::listening(&screens, "w", here, "s", &[VP8], true);
+        let at = Instant::now() + Duration::from_millis(1);
+        // The watcher is still waiting for its first key frame: sound goes anyway.
+        assert!(!screens.frame_at("s", sharer.socket, &frame(VP8, false, 10), at));
+        assert!(screens.sound_at("s", sharer.socket, &sound(300), at));
+        assert_eq!(watcher.heard(), 1);
+        // Spend the whole ceiling on frames, all at one moment.
+        let big = usize::try_from(SCREEN_BURST_BYTES / 4).expect("fits") - 2_000;
+        assert!(screens.frame_at("s", sharer.socket, &frame(VP8, true, big), at));
+        for _ in 0..3 {
+            assert!(screens.frame_at("s", sharer.socket, &frame(VP8, false, big), at));
+        }
+        let left = SCREEN_BURST_BYTES as usize - 4 * (big + 12) - (300 + 12);
+        // What's left goes on sound, a packet at a time, until it's gone.
+        let packet = 1_000;
+        let fits = left / (packet + 12);
+        for _ in 0..fits {
+            assert!(screens.sound_at("s", sharer.socket, &sound(packet), at));
+            watcher.heard();
+        }
+        assert!(!screens.sound_at("s", sharer.socket, &sound(packet), at));
+        // Sound took the room a frame would have had.
+        assert!(!screens.frame_at("s", sharer.socket, &frame(VP8, true, packet), at));
+        // A moment later there's room again, for both.
+        let later = at + Duration::from_millis(100);
+        assert!(screens.sound_at("s", sharer.socket, &sound(packet), later));
+    }
+
+    #[test]
+    fn a_watcher_whose_sound_line_is_full_goes_without_and_nothing_else_waits() {
+        let screens = Screens::default();
+        let here = room();
+        let sharer = sounding(&screens, "s", here);
+        let mut slow = Watcher::listening(&screens, "slow", here, "s", &[VP8], true);
+        let mut quick = Watcher::listening(&screens, "quick", here, "s", &[VP8], true);
+        let mut quick_heard = 0;
+        for _ in 0..SCREEN_SOUND_QUEUE * 3 {
+            assert!(screens.sound("s", sharer.socket, &sound(200)));
+            quick_heard += quick.heard();
+        }
+        // `slow` read nothing: it holds a queue's worth, and the rest were
+        // dropped rather than queued. `quick` had every one.
+        assert_eq!(slow.heard(), SCREEN_SOUND_QUEUE);
+        assert_eq!(quick_heard, SCREEN_SOUND_QUEUE * 3);
+        // It isn't told its picture is behind: sound isn't its picture.
+        while let Ok(said) = slow.says.try_recv() {
+            assert!(!matches!(said, ToWatch::Say(ScreenWatchSays::Behind)));
+        }
+        // And it carries on once it has read them.
+        assert!(screens.sound("s", sharer.socket, &sound(200)));
+        assert_eq!(slow.heard(), 1);
     }
 
     /// Whether the board told this share socket it was replaced.

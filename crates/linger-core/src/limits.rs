@@ -220,6 +220,14 @@ pub const SCREEN_ALIVE_MISSED: u32 = 6;
 /// biggest frame, so a frame over `MAX_SCREEN_FRAME_BYTES` is dropped, as
 /// PROTOCOL §8 says, rather than ending the share.
 pub const MAX_SCREEN_MESSAGE_BYTES: usize = 2 * MAX_SCREEN_FRAME_BYTES;
+/// The biggest sound packet a screen socket passes on, header included
+/// (#736). One Opus packet of 20 ms is a few hundred bytes at the 128 kbit/s
+/// the apps send, and libopus never makes one over 1,275.
+pub const MAX_SCREEN_SOUND_BYTES: usize = 4 * 1024;
+/// Sound packets waiting to go to one watcher before the next is dropped
+/// rather than queued (#736): a fifth of a second. Sound that late is no
+/// use to anybody, and waiting for it would hold the watcher's picture back.
+pub const SCREEN_SOUND_QUEUE: usize = 10;
 
 /// Gateway (PROTOCOL §8).
 pub const HEARTBEAT_INTERVAL_MS: u64 = 30_000;

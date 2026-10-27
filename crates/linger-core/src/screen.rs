@@ -3,14 +3,17 @@
 //! A share and each of its watchers have a screen socket of their own at
 //! `/api/v1/screen`, apart from the gateway. Its first text message is a
 //! [`ScreenHello`]; then binary messages carry frames, each a
-//! [`SCREEN_FRAME_HEADER_BYTES`]-byte header and one encoded frame, and text
-//! messages carry what the server asks of the sharer ([`ScreenShareSays`]) and
-//! tells a watcher ([`ScreenWatchSays`]), and what a watcher asks
+//! [`SCREEN_FRAME_HEADER_BYTES`]-byte header and one encoded frame, and the
+//! computer's sound when the share carries it (#736), each a header of the
+//! same size ([`ScreenSoundHead`]) and one Opus packet. Text messages carry
+//! what the server asks of the sharer ([`ScreenShareSays`]) and tells a
+//! watcher ([`ScreenWatchSays`]), and what a watcher asks
 //! ([`ScreenWatchAsks`]).
 //!
 //! Nothing here can carry the name of a window or an application (hard rule
 //! 2): the operating system's picker chooses what is shared, and its choice
-//! reaches the app as pictures alone.
+//! reaches the app as pictures alone. The sound is the computer's, less
+//! Linger's own, as sound alone: nothing says which app made it.
 
 use serde::{Deserialize, Deserializer, Serialize};
 use ts_rs::TS;
@@ -102,6 +105,12 @@ pub enum ScreenHello {
         /// The formats this app can make, best first.
         #[serde(deserialize_with = "known_codecs")]
         encode: Vec<ScreenCodec>,
+        /// This share carries the computer's sound too (#736). Left out, or
+        /// false, by an app from before it and by a share without: the
+        /// server then drops any sound packet the share sends.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        sound: Option<bool>,
     },
     /// Watch the share of `target`, a session in the same room's voice.
     Watch {
@@ -111,6 +120,12 @@ pub enum ScreenHello {
         /// The formats this app can play.
         #[serde(deserialize_with = "known_codecs")]
         decode: Vec<ScreenCodec>,
+        /// Send this watcher the share's sound, when it has some (#736). An
+        /// app from before it leaves it out and is sent none, so it is never
+        /// sent a message it can't read.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        sound: Option<bool>,
     },
 }
 
@@ -120,8 +135,16 @@ pub enum ScreenHello {
 #[ts(export)]
 pub enum ScreenShareSays {
     /// Make exactly these formats from now on. Empty is nothing: nobody is
-    /// watching.
-    Want { codecs: Vec<ScreenCodec> },
+    /// watching. `sound: true` is "send the sound too": the share said it
+    /// carries some and somebody watching it has asked for it (#736). Left
+    /// out otherwise, and by a server from before it, which passes no sound
+    /// on, so an app sends none to it.
+    Want {
+        codecs: Vec<ScreenCodec>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        sound: Option<bool>,
+    },
     /// Make the next frame of this format a key frame.
     Keyframe { codec: ScreenCodec },
     /// Still here, every `SCREEN_ALIVE_MS`: an app that hears nothing for
@@ -135,10 +158,15 @@ pub enum ScreenShareSays {
 #[ts(export)]
 pub enum ScreenWatchSays {
     /// What this socket shows now. A `target` with no `codec` is a share this
-    /// app can't play; no `target` is the share having ended.
+    /// app can't play; no `target` is the share having ended. `sound: true`
+    /// says the share carries the computer's sound (#736), whether or not
+    /// this watcher asked for it; left out otherwise.
     Showing {
         target: Option<String>,
         codec: Option<ScreenCodec>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        sound: Option<bool>,
     },
     /// Still here, every `SCREEN_ALIVE_MS`, as for a share.
     Alive,
@@ -162,9 +190,14 @@ pub enum ScreenWatchAsks {
     },
     /// This app's player lost its place: send a fresh key frame.
     Keyframe,
+    /// Send the share's sound from now on, or stop (#736): the watcher's own
+    /// sound button. A server from before it ignores it, and sends none.
+    Sound { on: bool },
 }
 
-/// The version every frame's first byte carries.
+/// The version every frame's first byte carries. A sound packet's first
+/// byte is [`SCREEN_SOUND_KIND`] instead, so a server or an app that knows
+/// only frames drops it as a frame of a version it doesn't know.
 pub const SCREEN_FRAME_VERSION: u8 = 1;
 
 /// A frame's header: version, format, flags, a zero, then the moment it was
@@ -208,6 +241,54 @@ impl ScreenFrameHead {
     }
 }
 
+/// A sound packet's first byte (#736): what tells it from a frame, whose
+/// first byte is [`SCREEN_FRAME_VERSION`].
+pub const SCREEN_SOUND_KIND: u8 = 2;
+
+/// A sound packet's format, its second byte: Opus, 48 kHz, two channels,
+/// one packet of 20 ms.
+pub const SCREEN_SOUND_OPUS: u8 = 1;
+
+/// What the server reads of a sound packet (#736): that it is one, in a
+/// format it knows, and when it was captured. Its header is the size of a
+/// frame's, [`SCREEN_FRAME_HEADER_BYTES`]: kind, format, a zero for flags, a
+/// zero, then the moment it was captured in microseconds, big-endian, on the
+/// same clock as the share's frames, so a watcher can line the two up. The
+/// Opus packet follows, which the server passes on as it came.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScreenSoundHead {
+    pub micros: u64,
+}
+
+impl ScreenSoundHead {
+    /// Read a sound packet's header, if it is one: long enough to have one
+    /// and some sound after it, this kind, a format the server knows.
+    #[must_use]
+    pub fn read(packet: &[u8]) -> Option<Self> {
+        if packet.len() <= SCREEN_FRAME_HEADER_BYTES
+            || packet[0] != SCREEN_SOUND_KIND
+            || packet[1] != SCREEN_SOUND_OPUS
+        {
+            return None;
+        }
+        let mut micros = [0u8; 8];
+        micros.copy_from_slice(&packet[4..SCREEN_FRAME_HEADER_BYTES]);
+        Some(Self {
+            micros: u64::from_be_bytes(micros),
+        })
+    }
+
+    /// The header for a sound packet captured at `micros`.
+    #[must_use]
+    pub fn write(self) -> [u8; SCREEN_FRAME_HEADER_BYTES] {
+        let mut head = [0u8; SCREEN_FRAME_HEADER_BYTES];
+        head[0] = SCREEN_SOUND_KIND;
+        head[1] = SCREEN_SOUND_OPUS;
+        head[4..].copy_from_slice(&self.micros.to_be_bytes());
+        head
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -235,12 +316,14 @@ mod tests {
     fn what_the_server_says_travels_as_named_messages() {
         let want = serde_json::to_value(ScreenShareSays::Want {
             codecs: vec![ScreenCodec::Vp8],
+            sound: None,
         })
         .expect("json");
         assert_eq!(want, serde_json::json!({"op": "want", "codecs": ["vp8"]}));
         let showing = serde_json::to_value(ScreenWatchSays::Showing {
             target: None,
             codec: None,
+            sound: None,
         })
         .expect("json");
         assert_eq!(
@@ -282,5 +365,67 @@ mod tests {
         other = frame.clone();
         other[1] = 9;
         assert_eq!(ScreenFrameHead::read(&other), None);
+    }
+
+    #[test]
+    fn a_sound_packet_round_trips_and_no_frame_reader_takes_it() {
+        let head = ScreenSoundHead { micros: 9_876_543 };
+        let mut packet = head.write().to_vec();
+        packet.extend_from_slice(b"opus");
+        assert_eq!(ScreenSoundHead::read(&packet), Some(head));
+        assert_eq!(&packet[4..12], &9_876_543u64.to_be_bytes());
+        // A server or an app that knows only frames drops it: its first byte
+        // is a version no frame has.
+        assert_eq!(ScreenFrameHead::read(&packet), None);
+        // And a frame is never read as sound.
+        let mut frame = ScreenFrameHead {
+            codec: ScreenCodec::Vp8,
+            key: true,
+        }
+        .write(5)
+        .to_vec();
+        frame.extend_from_slice(b"picture");
+        assert_eq!(ScreenSoundHead::read(&frame), None);
+        // A header with no sound after it, or a format it doesn't know.
+        assert_eq!(
+            ScreenSoundHead::read(&packet[..SCREEN_FRAME_HEADER_BYTES]),
+            None
+        );
+        packet[1] = 9;
+        assert_eq!(ScreenSoundHead::read(&packet), None);
+    }
+
+    #[test]
+    fn sound_is_asked_for_and_said_only_when_it_is_on() {
+        // A hello from before sound reads as no sound.
+        let hello: ScreenHello = serde_json::from_value(serde_json::json!({
+            "op": "watch", "token": "t", "session_id": "s", "target": "x", "decode": ["vp8"]
+        }))
+        .expect("a watch hello");
+        assert!(matches!(hello, ScreenHello::Watch { sound: None, .. }));
+        let hello: ScreenHello = serde_json::from_value(serde_json::json!({
+            "op": "share", "token": "t", "session_id": "s", "fps": 30, "encode": ["vp8"], "sound": true
+        }))
+        .expect("a share hello");
+        assert!(matches!(
+            hello,
+            ScreenHello::Share {
+                sound: Some(true),
+                ..
+            }
+        ));
+        // `want` says sound only when it's wanted, so it reads as before.
+        assert_eq!(
+            serde_json::to_value(ScreenShareSays::Want {
+                codecs: vec![],
+                sound: Some(true),
+            })
+            .expect("json"),
+            serde_json::json!({"op": "want", "codecs": [], "sound": true})
+        );
+        let ask: ScreenWatchAsks =
+            serde_json::from_value(serde_json::json!({"op": "sound", "on": false}))
+                .expect("a sound ask");
+        assert!(matches!(ask, ScreenWatchAsks::Sound { on: false }));
     }
 }

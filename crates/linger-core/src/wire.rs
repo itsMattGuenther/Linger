@@ -464,6 +464,13 @@ pub struct ServerInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub screens: Option<bool>,
+    /// Whether this server passes a shared screen's sound on too (#736,
+    /// SPEC §4.20): exactly when it passes screens on. A server from before
+    /// leaves it out, and the app offers no "Share the computer's sound"
+    /// there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub screen_sound: Option<bool>,
     /// What the host alone is told about the machine the server runs on
     /// (#582): its backups and how full its disk is. Left out for everybody
     /// else, co-hosts included, and by a server from before it.

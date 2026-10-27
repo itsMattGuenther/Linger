@@ -1,7 +1,7 @@
 //! The screen socket at `/api/v1/screen` (PROTOCOL §8 "Screen sharing", #360):
-//! a hello saying who it is and what for, then a share's frames coming in or
-//! a watcher's going out. The board in `screens.rs` decides who gets what;
-//! this is the socket around it.
+//! a hello saying who it is and what for, then a share's frames and sound
+//! (#736) coming in or a watcher's going out. The board in `screens.rs`
+//! decides who gets what; this is the socket around it.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -15,10 +15,11 @@ use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
 use linger_core::limits::{
     MAX_SCREEN_FRAME_BYTES, MAX_SCREEN_MESSAGE_BYTES, MAX_SCREEN_TEXT_BYTES, RATE_SCREEN_ASK,
-    RATE_SCREEN_HELLO, SCREEN_ALIVE_MISSED, SCREEN_HELLO_MS, SCREEN_WATCH_QUEUE,
+    RATE_SCREEN_HELLO, SCREEN_ALIVE_MISSED, SCREEN_HELLO_MS, SCREEN_SOUND_QUEUE,
+    SCREEN_WATCH_QUEUE,
 };
 use linger_core::screen::{
-    ScreenCodec, ScreenHello, ScreenShareSays, ScreenWatchAsks, ScreenWatchSays,
+    ScreenCodec, ScreenHello, ScreenShareSays, ScreenSoundHead, ScreenWatchAsks, ScreenWatchSays,
 };
 use linger_core::{RoomId, UserId};
 use tokio::sync::mpsc;
@@ -128,17 +129,33 @@ async fn handle(socket: WebSocket, state: AppState) {
         Err(why) => return close(&mut sink, why).await,
     };
     match hello {
-        ScreenHello::Share { fps, encode, .. } => {
+        ScreenHello::Share {
+            fps, encode, sound, ..
+        } => {
             if !matches!(fps, 30 | 60) || encode.is_empty() {
                 return close(&mut sink, Closing::BadHello).await;
             }
-            share(&state, signed, fps, encode, sink, stream).await;
+            let shape = Shape {
+                fps,
+                encode,
+                sound: sound == Some(true),
+            };
+            share(&state, signed, shape, sink, stream).await;
         }
-        ScreenHello::Watch { target, decode, .. } => {
+        ScreenHello::Watch {
+            target,
+            decode,
+            sound,
+            ..
+        } => {
             if decode.is_empty() {
                 return close(&mut sink, Closing::BadHello).await;
             }
-            watch(&state, signed, &target, decode, sink, stream).await;
+            let wants = Wants {
+                decode,
+                sound: sound == Some(true),
+            };
+            watch(&state, signed, &target, wants, sink, stream).await;
         }
     }
 }
@@ -169,19 +186,28 @@ async fn sign(state: &AppState, token: &str, session_id: &str) -> Result<Signed,
     })
 }
 
-/// A share: frames in, what the board asks of the sharer out, until either
-/// side ends it.
-async fn share(
-    state: &AppState,
-    signed: Signed,
+/// What a share's hello asked for: its speed, its formats, and whether it
+/// carries the computer's sound (#736).
+struct Shape {
     fps: u8,
     encode: Vec<ScreenCodec>,
-    mut sink: Sink,
-    mut stream: Stream,
-) {
+    sound: bool,
+}
+
+/// What a watch's hello asked for: the formats it plays, and whether it
+/// wants the share's sound (#736).
+struct Wants {
+    decode: Vec<ScreenCodec>,
+    sound: bool,
+}
+
+/// A share: frames and sound in, what the board asks of the sharer out,
+/// until either side ends it.
+async fn share(state: &AppState, signed: Signed, shape: Shape, mut sink: Sink, mut stream: Stream) {
     let screens = &state.gateway.screens;
     let (says_tx, mut says) = mpsc::unbounded_channel();
-    let socket = match screens.share(&signed.session_id, signed.room, fps, encode, says_tx) {
+    let Shape { fps, encode, sound } = shape;
+    let socket = match screens.share(&signed.session_id, signed.room, fps, encode, sound, says_tx) {
         Ok(socket) => socket,
         Err(why) => return close(&mut sink, why).await,
     };
@@ -221,6 +247,11 @@ async fn share(
                 match received {
                     // Over the biggest frame: dropped, as PROTOCOL §8 says.
                     Some(Ok(Message::Binary(frame))) if frame.len() > MAX_SCREEN_FRAME_BYTES => {}
+                    // Sound (#736), by its first byte: the board drops it
+                    // unless the hello said the share carries some.
+                    Some(Ok(Message::Binary(packet))) if ScreenSoundHead::read(&packet).is_some() => {
+                        screens.sound(&signed.session_id, socket, &packet);
+                    }
                     Some(Ok(Message::Binary(frame))) => {
                         screens.frame(&signed.session_id, socket, &frame);
                     }
@@ -236,25 +267,39 @@ async fn share(
     }
 }
 
-/// A watcher: frames and what the board tells it out, its asks in.
+/// A watcher: frames, sound and what the board tells it out, its asks in.
+/// It sends nothing in binary: anything it does is dropped.
 async fn watch(
     state: &AppState,
     signed: Signed,
     target: &str,
-    decode: Vec<ScreenCodec>,
+    wants: Wants,
     mut sink: Sink,
     mut stream: Stream,
 ) {
     let screens = &state.gateway.screens;
     let (frames_tx, mut frames) = mpsc::channel(SCREEN_WATCH_QUEUE);
+    let (sound_tx, mut sound) = mpsc::channel(SCREEN_SOUND_QUEUE);
     let (says_tx, mut says) = mpsc::unbounded_channel();
     let queued = Arc::new(AtomicUsize::new(0));
     let line = WatchLine {
         frames: frames_tx,
+        sound: sound_tx,
         says: says_tx,
         queued: Arc::clone(&queued),
     };
-    let socket = match screens.watch(&signed.session_id, signed.room, target, decode, line) {
+    let Wants {
+        decode,
+        sound: listens,
+    } = wants;
+    let socket = match screens.watch(
+        &signed.session_id,
+        signed.room,
+        target,
+        decode,
+        listens,
+        line,
+    ) {
         Ok(showing) => showing.socket,
         Err(why) => return close(&mut sink, why).await,
     };
@@ -287,6 +332,15 @@ async fn watch(
                 if heard.elapsed() >= gone || !say_alive(&mut sink, &ScreenWatchSays::Alive, gone).await {
                     break;
                 }
+            },
+            // Ahead of frames: a packet of sound is small and late is no use.
+            packet = sound.recv() => match packet {
+                Some(packet) => {
+                    if !send(&mut sink, Message::Binary(packet), gone).await {
+                        break;
+                    }
+                }
+                None => break,
             },
             frame = frames.recv() => match frame {
                 Some(frame) => {
@@ -321,6 +375,7 @@ async fn watch(
                             }
                         }
                         Ok(ScreenWatchAsks::Keyframe) => screens.keyframe(&signed.session_id, socket),
+                        Ok(ScreenWatchAsks::Sound { on }) => screens.hear(&signed.session_id, socket, on),
                         // Unknown asks are ignored (PROTOCOL §9).
                         Err(_) => {}
                     }

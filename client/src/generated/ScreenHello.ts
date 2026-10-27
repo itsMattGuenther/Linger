@@ -10,8 +10,20 @@ export type ScreenHello = { "op": "share", token: string, session_id: string, fp
 /**
  * The formats this app can make, best first.
  */
-encode: Array<ScreenCodec>, } | { "op": "watch", token: string, session_id: string, target: string, 
+encode: Array<ScreenCodec>, 
+/**
+ * This share carries the computer's sound too (#736). Left out, or
+ * false, by an app from before it and by a share without: the
+ * server then drops any sound packet the share sends.
+ */
+sound?: boolean, } | { "op": "watch", token: string, session_id: string, target: string, 
 /**
  * The formats this app can play.
  */
-decode: Array<ScreenCodec>, };
+decode: Array<ScreenCodec>, 
+/**
+ * Send this watcher the share's sound, when it has some (#736). An
+ * app from before it leaves it out and is sent none, so it is never
+ * sent a message it can't read.
+ */
+sound?: boolean, };
