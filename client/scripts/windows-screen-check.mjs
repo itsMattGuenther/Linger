@@ -11,8 +11,10 @@
 // - Frames keep coming and encoding with the window minimized: a slide show
 //   covers Linger, and the share mustn't stop when it does.
 // - The computer's sound (#736): the shell says this Windows can capture it,
-//   and starting it from the list window answers, started or refused where
-//   the runner has no audio engine.
+//   and starting it from the list window answers. Where the runner plays
+//   sound, another program's tone is in what it captures, and Linger's own,
+//   from the shell (voice and chimes) and from the page (WebView2), aren't:
+//   the echo the capture exists to keep out.
 // - Then again without the test switch, as a person meets it: a press opens
 //   WebView2's own picker (a picture of it is kept), and Escape closes it
 //   with the share refused, which Share takes as nothing to say.
@@ -48,6 +50,26 @@ function verdict(step, ok, detail) {
   return ok;
 }
 const note = (what) => console.log(`NOTE ${what}`);
+
+/** A WAV file of a `hz` tone, `seconds` long, at half strength: 48 kHz, 16 bits, one channel. */
+function toneWav(hz, seconds) {
+  const frames = 48000 * seconds;
+  const wav = Buffer.alloc(44 + frames * 2);
+  wav.write("RIFF", 0);
+  wav.writeUInt32LE(36 + frames * 2, 4);
+  wav.write("WAVEfmt ", 8);
+  wav.writeUInt32LE(16, 16);
+  wav.writeUInt16LE(1, 20);
+  wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(48000, 24);
+  wav.writeUInt32LE(96000, 28);
+  wav.writeUInt16LE(2, 32);
+  wav.writeUInt16LE(16, 34);
+  wav.write("data", 36);
+  wav.writeUInt32LE(frames * 2, 40);
+  for (let at = 0; at < frames; at += 1) wav.writeInt16LE(Math.round(Math.sin((2 * Math.PI * hz * at) / 48000) * 16000), 44 + at * 2);
+  return wav;
+}
 
 // The Win32 helper, as windows-hidden-check.mjs uses it.
 const helper = spawn("pwsh", ["-NoProfile", "-NonInteractive", "-File", fileURLToPath(new URL("./windows-window.ps1", import.meta.url))], {
@@ -200,34 +222,98 @@ try {
 
   // 1b. The computer's sound (#736): the installed app's shell says this
   // Windows has process loopback, and starts it from the list window, as
-  // Share does with the switch on. A runner may have no audio engine, which
-  // the shell then refuses cleanly; either answer is the command reached
-  // and allowed. What it captured, if anything, is only counted.
-  const sound = await page.evaluate(async () => {
+  // Share does with the switch on. Then the echo it exists to prevent:
+  // Linger plays two tones of its own, which must be left out, 1 kHz from the
+  // shell, where voice and chimes play, and 1.4 kHz from the page, which
+  // WebView2 plays from a process Linger started; and another program plays
+  // 600 Hz, which must be in. The packets are decoded in the page, as a
+  // watcher's would be, and each tone's strength read from them.
+  const tone = resolve(output, "tone-600.wav");
+  await writeFile(tone, toneWav(600, 4));
+  await page.evaluate(async () => {
     const tauri = window.__TAURI_INTERNALS__;
-    const available = await tauri.invoke("screen_sound_available");
-    const got = { packets: 0, bytes: 0 };
+    const check = { available: await tauri.invoke("screen_sound_available"), started: null, packets: [] };
+    window.__lingerSoundCheck = check;
     const channel = (onMessage) => `__CHANNEL__:${tauri.transformCallback(onMessage)}`;
     const sounds = channel((message) => {
       const body = message?.message ?? message;
-      got.packets += 1;
-      got.bytes += body?.byteLength ?? 0;
+      const bytes = body instanceof ArrayBuffer ? body : body?.buffer instanceof ArrayBuffer ? body.buffer : null;
+      if (bytes) check.packets.push(bytes);
     });
     const says = channel(() => undefined);
-    let started;
     try {
       await tauri.invoke("screen_sound_start", { sounds, says });
-      started = "started";
+      check.started = "started";
     } catch (error) {
-      started = String(error);
+      check.started = String(error);
     }
-    await new Promise((settle) => setTimeout(settle, 2000));
+    // Linger's own sound from the page: WebView2's.
+    const context = new AudioContext();
+    const own = context.createOscillator();
+    const level = context.createGain();
+    own.frequency.value = 1400;
+    level.gain.value = 0.5;
+    own.connect(level).connect(context.destination);
+    own.start();
+    check.context = context;
+    // And from the shell, as a chime plays: two seconds of 1 kHz.
+    const chime = Array.from({ length: 96000 }, (_, at) => Math.round(Math.sin((2 * Math.PI * 1000 * at) / 48000) * 16000));
+    check.chimed = await tauri.invoke("sound_play", { samples: chime, output: null }).catch((error) => String(error));
+  });
+  await sleep(500);
+  // Another program's sound, not Linger's: Windows' own player.
+  const other = spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-Command", `(New-Object Media.SoundPlayer '${tone}').PlaySync()`], { encoding: "utf8", timeout: 20000 });
+  const sound = await page.evaluate(async () => {
+    const check = window.__lingerSoundCheck;
+    const tauri = window.__TAURI_INTERNALS__;
     await tauri.invoke("screen_sound_stop").catch(() => undefined);
-    return { available, started, ...got };
+    await check.context.close().catch(() => undefined);
+    // Decoded as a watcher's page would, then each tone's strength (Goertzel).
+    const left = [];
+    if (check.packets.length > 0 && typeof AudioDecoder === "function") {
+      const decoder = new AudioDecoder({
+        output: (data) => {
+          const plane = new Float32Array(data.numberOfFrames);
+          data.copyTo(plane, { planeIndex: 0, format: "f32-planar" });
+          left.push(plane);
+          data.close();
+        },
+        error: () => undefined,
+      });
+      decoder.configure({ codec: "opus", sampleRate: 48000, numberOfChannels: 2 });
+      for (const packet of check.packets) {
+        const micros = Number(new DataView(packet).getBigUint64(4));
+        decoder.decode(new EncodedAudioChunk({ type: "key", timestamp: micros, data: new Uint8Array(packet, 12) }));
+      }
+      await decoder.flush().catch(() => undefined);
+      decoder.close();
+    }
+    const samples = new Float32Array(left.reduce((sum, plane) => sum + plane.length, 0));
+    let at = 0;
+    for (const plane of left) {
+      samples.set(plane, at);
+      at += plane.length;
+    }
+    const strength = (hz) => {
+      if (samples.length === 0) return 0;
+      const k = 2 * Math.cos((2 * Math.PI * hz) / 48000);
+      let [s1, s2] = [0, 0];
+      for (const value of samples) [s1, s2] = [value + k * s1 - s2, s1];
+      return (2 * Math.sqrt(Math.max(0, s1 * s1 + s2 * s2 - k * s1 * s2))) / samples.length;
+    };
+    return { available: check.available, started: check.started, chimed: check.chimed, packets: check.packets.length, seconds: samples.length / 48000, at600: strength(600), at1000: strength(1000), at1400: strength(1400) };
   });
   verdict("the installed app says this Windows can share the computer's sound", sound.available === true, sound);
   verdict("starting the computer's sound answers, started or refused", sound.started === "started" || sound.started === "no-sound", sound);
-  note(`the computer's sound: ${sound.started}, ${sound.packets} packets in 2 s (a runner plays nothing, so none is usual)`);
+  if (sound.started === "started" && sound.at600 > 0.02) {
+    verdict("another program's sound is in the capture", true, sound);
+    // Linger's own tones, far below the other program's: left out.
+    verdict("the shell's own sound, where voice and chimes play, is left out of the capture", sound.at1000 < sound.at600 / 30, sound);
+    verdict("the page's own sound, played by WebView2, is left out of the capture", sound.at1400 < sound.at600 / 30, sound);
+  } else {
+    note(`the computer's sound: ${JSON.stringify(sound)}; another program's tone wasn't heard here (${other.status}${other.stderr ? `: ${other.stderr.trim()}` : ""}), so what's left out isn't shown`);
+    verdict("Linger's own tones aren't in the capture", sound.at1000 < 0.02 && sound.at1400 < 0.02, sound);
+  }
 
   // 2. Share as Share does: from a press, read through the track processor,
   // encoded as VP8 (and H.264 when the runner makes it), counted. Nothing
