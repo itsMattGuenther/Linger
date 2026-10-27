@@ -274,6 +274,7 @@
   --poll-length-w: 112px; /* the "Closes after" choice when asking a poll: its longest, "2 weeks", and the caret (#474) */
   --rule-strong: 2px; /* the bracket beside a reply's quote */
   --menu-w: 200px;
+  --menu-w-wide: 264px; /* a menu whose items say more: Share's, with "Share the computer's sound" (#736) */
   --picker-w: 280px; /* the people the message box offers after an @: a marker, a name and @username (#267) */
 
   /* Search and media (docs/design/system.md, "Search and media"). */
@@ -431,6 +432,7 @@
   /* Holds a thumb's controls (#429): mute, deafen and leave. */
   --voice-strip: max(52px, calc(40px * var(--text-scale)));
   --menu-w: calc(200px * var(--text-scale));
+  --menu-w-wide: calc(264px * var(--text-scale));
   --picker-w: calc(280px * var(--text-scale));
   --settings-label: calc(104px * var(--text-scale));
 }

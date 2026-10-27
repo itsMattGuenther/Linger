@@ -156,7 +156,7 @@ wire (AGENTS rules 8 and 12). It becomes a color only in the generated
 | Icon boxes | `--icon-sm` 12 · `--icon-md` 16 · `--icon-lg` 20 |
 | Markers | `--marker-slot` 14 (the lead column) · `--marker-gap` 8 · `--marker-md` 8 · `--marker-sm` 6 |
 | Rows | `--row-1` 32 · `--row-2` 48 · `--line-name` 20 · `--line-meta` 16 · `--line-display` 28 |
-| Chrome | `--titlebar` 40 · `--tab` 32 · `--tab-min` 136 · `--tab-max` 232 · switch 36×20 with a 14 thumb · `--swatch` 24 · `--menu-w` 200 · `--picker-w` 280 (the people an `@` offers) · `--rule-strong` 2 (a quote's rule, a tab's server stripe) |
+| Chrome | `--titlebar` 40 · `--tab` 32 · `--tab-min` 136 · `--tab-max` 232 · switch 36×20 with a 14 thumb · `--swatch` 24 · `--menu-w` 200 · `--menu-w-wide` 264 (a menu whose items say more) · `--picker-w` 280 (the people an `@` offers) · `--rule-strong` 2 (a quote's rule, a tab's server stripe) |
 | Conversation | `--line-body` 20 (a message line) · `--pane-head` 40 · `--voice-strip` 40 · `--measure` 80ch (a search result's longest line; a message's words have no such limit, #334) · `--message-indent` 16 (a message's words, in from its sender's name) · `--media-max-w` 320 · `--media-max-h` 400 · `--linkcard-w` 360 · `--audio-volume-w` 64 (a shared audio file's volume slider) · `--composer-max` 200 · `--composer-min-w` 96 (the narrowest typing area, #512) · `--composer-thumb` 40 (a picture's preview above the box, #397) · `--poll-w` 420 (a poll's card, #474) · `--poll-length-w` 112 (how long a poll runs, as it's asked) · `--emoji-grid` 8 columns |
 | Settings | `--settings-nav` 196 (the sidebar) · `--settings-label` 104 (the label column beside rows of choices) |
 | Search and media | `--media-tile` 152 (the narrowest a media tile gets; the grid fits as many as it can) |
@@ -525,7 +525,9 @@ message's Reply, Edit and Delete.
   move and wrap, Enter chooses, Escape and Tab close. A click anywhere else
   closes it. The caller puts focus back on the trigger, since only it knows
   what the trigger was.
-- **Width** is `--menu-w`; a long label ends in "…".
+- **Width** is `--menu-w`; a long label ends in "…". `wide` makes it
+  `--menu-w-wide`, for a menu whose items say more than a word or two:
+  Share's, when it has "Share the computer's sound" (#736).
 - **`checked`** makes an item an on/off choice (`menuitemcheckbox`), like a
   server's Quiet: a tick in the lamp at its end when it's on.
 - **`sheet`** (the phone, SPEC §4.15): the same items rise from the bottom of
@@ -728,7 +730,17 @@ and on a line of its own under the band, until that share stops.
 Share is an `IconButton` with the `share` glyph beside Mute, Deafen and
 Leave; it offers High quality and Low quality in a `Menu`, each with its size
 and speed as the item's `detail`, and is pressed while you
-share. Nothing about a share is drawn in the lamp but the pressed button: a
+share. Where the computer's sound can go with it (#736), a `checked` item
+under the two, "Share the computer's sound" over "Everything but this
+call", with the `speaker` glyph, says whether it does; it is off until it's
+turned on, kept on that computer, and ticking it leaves the menu open, which
+is then `wide`. Your box says the sound goes with a `speaker` after "Sharing
+your screen", its title and screen-reader words saying so, and that it
+couldn't in `--text-secondary` meta text where the black warning goes. A
+watched screen carrying sound has a `speaker` / `speakerOff` `IconButton` in
+its bar, and on a computer a `Slider`, `--audio-volume-w` wide, for how loud
+it is for you; on a device that can't play it the button is `unavailable`
+and says why. Nothing about a share is drawn in the lamp but the pressed button: a
 screen being shared isn't something new for you.
 
 ### Card and Popover

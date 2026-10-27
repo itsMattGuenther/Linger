@@ -1,10 +1,10 @@
 import { useEffect } from "react";
 import type { User } from "../../../generated/User";
-import { loadVoicePrefs } from "../../../lib/voice";
+import { loadVoicePrefs, volumeLabel } from "../../../lib/voice";
 import { type ScreenWatchState, watchOver } from "../../../lib/screen/watch";
 import { isFullScreenKey, typingIn } from "../../core/keys";
 import { onPhone } from "../../core/phone";
-import { Icon, IconButton, Name } from "../../kit";
+import { Icon, IconButton, Name, Slider } from "../../kit";
 import "./ScreenStage.css";
 
 export interface StageProps {
@@ -24,7 +24,23 @@ export interface StageProps {
   onClose: () => void;
   /** Where the picture is drawn. */
   onCanvas: (canvas: HTMLCanvasElement | null) => void;
+  /** The share carries the computer's sound (#736): your button for it, and how loud. Left out for a share without. */
+  sound?: StageSound;
 }
+
+/** A watched share's sound, as its screen shows it (#736): yours alone, kept on this device. */
+export interface StageSound {
+  /** This device can play it (WebCodecs' Opus on a phone; always on a computer). */
+  playable: boolean;
+  on: boolean;
+  /** 0 to 1. */
+  volume: number;
+  onToggle: () => void;
+  onVolume: (volume: number) => void;
+}
+
+/** Why a phone without the decoder plays no sound: said on the sound button. */
+export const SOUND_UNPLAYABLE = "This device can't play the sound of a shared screen.";
 
 /** "Eli", "Eli and Dave", "Eli, Dave and Sam": who else is watching, by name. */
 function namesOf(people: readonly User[]): string {
@@ -41,8 +57,11 @@ function namesOf(people: readonly User[]): string {
  * Your line not keeping up says so over the picture's foot, the slowness
  * being yours: the person sharing and everybody else are told nothing.
  * F or a double-click on the picture fills the monitor and gives it back.
+ * A share carrying the computer's sound (#736) gets a speaker that turns it
+ * off and on, and on a computer a slider for how loud, both kept on this
+ * device and nobody else's business.
  */
-export function ScreenStage({ sharer, others, status, behind = false, opensNext = false, full, onFull, onClose, onCanvas }: StageProps) {
+export function ScreenStage({ sharer, others, status, behind = false, opensNext = false, full, onFull, onClose, onCanvas, sound }: StageProps) {
   const whose = sharer?.display_name ?? "Somebody";
   const over = watchOver(status);
   // Escape leaves full screen, as everywhere else.
@@ -86,6 +105,7 @@ export function ScreenStage({ sharer, others, status, behind = false, opensNext 
         </span>
         {others.length > 0 ? <span className="nx-stage-others">with {namesOf(others)} watching</span> : null}
         <span className="nx-stage-gap" />
+        {sound && !over ? <SoundControls sound={sound} whose={whose} size={size} /> : null}
         {over ? null : (
           <IconButton icon={full ? "windowed" : "fullscreen"} label={full ? "Leave full screen" : "Full screen"} shortcut={full ? "Esc" : fullKey()} size={size} onClick={() => onFull(!full)} />
         )}
@@ -105,6 +125,27 @@ export function ScreenStage({ sharer, others, status, behind = false, opensNext 
         ) : null}
       </div>
     </section>
+  );
+}
+
+/** The speaker, and on a computer how loud, for a share's sound (#736). */
+function SoundControls({ sound, whose, size }: { sound: StageSound; whose: string; size: "md" | "lg" }) {
+  const playing = sound.playable && sound.on;
+  return (
+    <>
+      {playing && !onPhone() ? (
+        <span className="nx-stage-volume">
+          <Slider label={`How loud ${whose}'s screen is for you`} value={sound.volume} min={0} max={1} step={0.05} valueText={volumeLabel(sound.volume)} onChange={sound.onVolume} />
+        </span>
+      ) : null}
+      <IconButton
+        icon={playing ? "speaker" : "speakerOff"}
+        label={playing ? "Turn the sound off" : "Turn the sound on"}
+        size={size}
+        unavailable={sound.playable ? undefined : SOUND_UNPLAYABLE}
+        onClick={sound.onToggle}
+      />
+    </>
   );
 }
 

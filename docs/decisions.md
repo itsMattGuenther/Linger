@@ -1700,3 +1700,32 @@ the box keeps saying it once the show ends.
 shares stored on the server. Several sizes of every share for slower connections, which
 costs the sharer and the server more than a screen needs; a slow watcher gets fewer
 frames instead.
+
+**The computer's sound, from Windows first** (Matt, 2026-10-27, #736). A friend's
+full-screen share of videos looked right and played silently. A share can now carry the
+computer's sound, off until the sharer turns it on, kept on that computer.
+
+- **Linger's own sound is left out, or nobody could stand it.** Captured whole, the
+  sharer's computer plays the call, so everybody's voices would go back out in the share
+  and come back to them late. On Windows the shell captures with WASAPI's process
+  loopback (Windows 10 2004 and later), which takes every program's sound but one process
+  and what it started: Linger's, by its own id. Voice and chimes play from the shell
+  (`cpal`), and the WebView2 processes are its children, so all of it is left out. The
+  web engine's own capture (`getDisplayMedia` with `audio`) was not taken: it would take
+  the voice call in with everything else.
+- **Opus, 48 kHz stereo, 20 ms, about 128 kbit/s**, made in the shell with the libopus
+  voice already uses, and sent on the share's own screen socket, in a message whose first
+  byte no frame has, so an older server or app drops it. The server says it passes sound
+  on (`GET /server`, then `want`), a watcher asks for it, and only a watcher who asked is
+  sent it, so every mix of older and newer apps and servers carries on as before
+  (PROTOCOL §9). Sound counts toward the share's ceiling, never waits for a key frame,
+  and is dropped rather than queued for a watcher who's behind.
+- **Played in the call.** A computer plays it in the shell, through the Speakers picked
+  in Settings, mixed with the voices the way Linger's own sounds are (#250), in stereo,
+  80 to 160 ms behind. A phone plays it in the page with WebCodecs' Opus decoder where
+  its engine has one, and says so where it hasn't.
+- **A watcher's own speaker and volume**, on by default and kept on that device; with it
+  off, the server stops sending. Deafen silences it with the voices.
+- **Linux shares the picture alone for now.** The desktop's portal gives no sound, and
+  leaving Linger's own voice out of a PipeWire capture means finding Linger's streams in
+  the graph and leaving them out (a filter or a null sink). macOS doesn't share yet.

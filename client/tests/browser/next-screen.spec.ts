@@ -47,6 +47,99 @@ test("in voice, Share asks which speed and starts at the one picked", async ({ p
   await expect(menu).toBeHidden();
 });
 
+// The computer's sound (#736): a tick under Share's two choices where this
+// app can capture it and the server passes it on.
+test("where the computer's sound can go, Share has a tick for it, off until it's turned on, and kept", async ({ page }) => {
+  await chat(page, "?voice=mine&screen=shared&sound");
+  const strip = page.getByRole("group", { name: "Voice in this conversation" });
+  await strip.getByRole("button", { name: "Share your screen" }).click();
+  const menu = page.getByRole("menu", { name: "Share your screen" });
+  await expect(menu.getByRole("menuitem")).toHaveCount(2);
+  const tick = menu.getByRole("menuitemcheckbox", { name: "Share the computer's sound, Everything but this call" });
+  await expect(tick).toHaveAttribute("aria-checked", "false");
+  // Under the two choices, its words fitting the menu.
+  const items = menu.locator("[data-kit='MenuItem']");
+  await expect(items.nth(2)).toHaveAccessibleName("Share the computer's sound, Everything but this call");
+  const fits = async () => {
+    for (const line of await menu.locator(".k-menu-text, .k-menu-detail").all()) {
+      expect(await line.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+    }
+  };
+  await fits();
+  // Ticking it leaves the menu open for the choice, and its words still fit.
+  await tick.click();
+  await expect(tick).toHaveAttribute("aria-checked", "true");
+  await expect(menu).toBeVisible();
+  await fits();
+  await menu.getByRole("menuitem", { name: "High quality, 1080p, 60 fps" }).click();
+  await expect.poll(() => did(page)).toContain("share:60 with sound");
+  // Kept on this computer.
+  await page.reload();
+  await expect(page.getByRole("log")).toBeVisible();
+  await page.getByRole("group", { name: "Voice in this conversation" }).getByRole("button", { name: "Share your screen" }).click();
+  const again = page.getByRole("menu", { name: "Share your screen" }).getByRole("menuitemcheckbox");
+  await expect(again).toHaveAttribute("aria-checked", "true");
+  await again.click();
+  await page.getByRole("menu", { name: "Share your screen" }).getByRole("menuitem", { name: "Low quality, 720p, 30 fps" }).click();
+  await expect.poll(() => did(page)).toContain("share:30");
+  expect(await did(page)).not.toContain("share:30 with sound");
+});
+
+test("where it can't go, Share has no tick for the computer's sound", async ({ page }) => {
+  await chat(page, "?voice=mine&screen=shared");
+  await page.getByRole("group", { name: "Voice in this conversation" }).getByRole("button", { name: "Share your screen" }).click();
+  const menu = page.getByRole("menu", { name: "Share your screen" });
+  await expect(menu.getByRole("menuitem")).toHaveCount(2);
+  await expect(menu.getByRole("menuitemcheckbox")).toHaveCount(0);
+});
+
+test("a screen carrying sound has its speaker and, on a computer, how loud: off and on again, kept", async ({ page }) => {
+  await chat(page, "?voice=mine&screen=watching&sound");
+  const stage = page.getByRole("region", { name: "Jules's screen" });
+  const slider = stage.getByRole("slider", { name: "How loud Jules's screen is for you" });
+  await expect(slider).toBeVisible();
+  await expect(slider).toHaveAttribute("aria-valuetext", "100%");
+  // The bar keeps everything inside it, in a line.
+  const bar = await stage.locator(".nx-stage-bar").boundingBox();
+  for (const control of [slider, stage.getByRole("button", { name: "Turn the sound off" }), stage.getByRole("button", { name: "Full screen" }), stage.getByRole("button", { name: "Stop watching" })]) {
+    const box = await control.boundingBox();
+    expect(bar && box && box.x >= bar.x && box.x + box.width <= bar.x + bar.width + 1 && box.y >= bar.y && box.y + box.height <= bar.y + bar.height + 1).toBe(true);
+  }
+  // Quieter, from the keyboard.
+  await slider.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(slider).toHaveAttribute("aria-valuetext", "95%");
+  await stage.getByRole("button", { name: "Turn the sound off" }).click();
+  await expect.poll(() => did(page)).toContain("sound:off");
+  await expect(stage.getByRole("button", { name: "Turn the sound on" })).toBeVisible();
+  await expect(slider).toHaveCount(0);
+  // Kept on this computer, the volume too.
+  await page.reload();
+  const back = page.getByRole("region", { name: "Jules's screen" });
+  await back.getByRole("button", { name: "Turn the sound on" }).click();
+  await expect.poll(() => did(page)).toContain("sound:on");
+  await expect(back.getByRole("slider", { name: "How loud Jules's screen is for you" })).toHaveAttribute("aria-valuetext", "95%");
+});
+
+test("a screen without sound has no speaker, and one this device can't play says so on it", async ({ page }) => {
+  await chat(page, "?voice=mine&screen=watching");
+  const stage = page.getByRole("region", { name: "Jules's screen" });
+  await expect(stage.getByRole("button", { name: /sound/ })).toHaveCount(0);
+  await expect(stage.getByRole("slider")).toHaveCount(0);
+  await chat(page, "?voice=mine&screen=watching&sound=unplayable");
+  const cant = page.getByRole("region", { name: "Jules's screen" }).getByRole("button", { name: "This device can't play the sound of a shared screen." });
+  await expect(cant).toBeVisible();
+  await expect(page.getByRole("region", { name: "Jules's screen" }).getByRole("slider")).toHaveCount(0);
+});
+
+test("on a phone a screen's sound has its speaker and no slider: the phone's own buttons say how loud", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/tests/fixtures/next-chat.html?voice=mine&screen=watching&shell=phone&sound");
+  const stage = page.getByRole("region", { name: "Jules's screen" });
+  await expect(stage.getByRole("button", { name: "Turn the sound off" })).toBeVisible();
+  await expect(stage.getByRole("slider")).toHaveCount(0);
+});
+
 test("while you share, Share is lit and stops it", async ({ page }) => {
   await chat(page, "?voice=mine&screen=sharing");
   const stop = page.getByRole("button", { name: "Stop sharing your screen" });
@@ -271,6 +364,25 @@ test("your share in the voice bar: a copy, who's watching by name, and Stop", as
   await box.getByRole("button", { name: "Stop" }).click();
   // The list page writes what was pressed on `body[data-opened]`.
   await expect.poll(() => page.locator("body").getAttribute("data-opened")).toContain("stop sharing");
+});
+
+test("your share's box says its sound goes with it, and plainly when it couldn't", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.goto("/tests/fixtures/next-list.html?voice&screen=sharing&sound");
+  const box = page.getByRole("group", { name: "Your screen" });
+  const words = box.locator(".nx-sharing-words");
+  // A speaker after the words, said in full to a screen reader.
+  await expect(words).toHaveText("Sharing your screen and its sound");
+  await expect(words.locator('[title="With the computer\'s sound"]')).toBeVisible();
+  expect(await words.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await expect(box.getByRole("alert")).toHaveCount(0);
+  await page.goto("/tests/fixtures/next-list.html?voice&screen=sharing&sound=failed");
+  const failed = page.getByRole("group", { name: "Your screen" });
+  await expect(failed.locator(".nx-sharing-words")).toHaveText("Sharing your screen");
+  const said = failed.getByText("The computer's sound couldn't be shared, so everyone watching sees your screen without it.");
+  await expect(said).toBeVisible();
+  expect(await inDanger(said)).toBe(false);
+  expect(await said.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
 });
 
 test("a share that went black says so in the voice bar's box, under who's watching", async ({ page }) => {

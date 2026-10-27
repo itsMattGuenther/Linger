@@ -54,6 +54,12 @@
   flex: 1;
 }
 
+/* How loud a share's sound is for you (#736), beside its speaker. */
+.nx-stage-volume {
+  flex: none;
+  width: var(--audio-volume-w);
+}
+
 .nx-stage-pic {
   position: relative;
   display: flex;

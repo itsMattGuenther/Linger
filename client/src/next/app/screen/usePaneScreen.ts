@@ -5,7 +5,8 @@ import type { AuthedApi } from "../../../lib/api";
 import type { GatewayState } from "../../../lib/gateway";
 import { hasWebCodecs, useSharesFromHere } from "../../../lib/screen/probe";
 import { useScreenShare, useShareStopped } from "../../../lib/screen/share";
-import { awaitNext, closeEnded, drawOn, startWatching, stopWatching, useScreenWatch, watchNext, watchOver } from "../../../lib/screen/watch";
+import { setWatchSoundOn, setWatchVolume, shareSoundOn, useCapturesSound, useWatchSoundOn, useWatchVolume } from "../../../lib/screen/sound";
+import { awaitNext, closeEnded, drawOn, playWatchedAt, startWatching, stopWatching, useScreenWatch, watchNext, watchOver } from "../../../lib/screen/watch";
 import { onPhone } from "../../core/phone";
 import { myScreen, seatedIn, shareBy, sharersIn, shareStoppedWords, watchersOf, watchingWords } from "../../core/screens";
 import { startSharingHere, stopSharingEverywhere } from "../../core/screenStop";
@@ -26,6 +27,9 @@ const SEAT_WAIT_MS = 15_000;
  * opens the same person's next share in that voice by itself. In a window
  * with no voice bar of its own (`shareBox`), your share from it has its box
  * under that voice's line: the copy, who's watching, the eye and Stop.
+ * Where this app can share the computer's sound and the server passes it on
+ * (#736), Share offers it, and a screen whose share carries sound has its
+ * speaker and volume.
  */
 export function usePaneScreen({
   server,
@@ -34,6 +38,7 @@ export function usePaneScreen({
   roomId,
   intend,
   screensOn,
+  soundOn = false,
   shareBox = false,
 }: {
   server: string | null;
@@ -43,6 +48,8 @@ export function usePaneScreen({
   intend: (intent: Intent) => Promise<void>;
   /** The server passes screens on (`GET /server`'s `screens`). */
   screensOn: boolean;
+  /** It passes a screen's sound on too (`screen_sound`, #736). */
+  soundOn?: boolean;
   /** This window has no voice bar: your share from it gets its box here. */
   shareBox?: boolean;
 }): ChatPane["screen"] | undefined {
@@ -54,6 +61,9 @@ export function usePaneScreen({
 
   const seatedHere = state !== null && roomId !== null && seatedIn(state, roomId);
   const canShare = useSharesFromHere(seatedHere && screensOn && !onPhone());
+  const soundOffered = useCapturesSound(seatedHere && screensOn && soundOn && !onPhone());
+  const hearing = useWatchSoundOn();
+  const loudness = useWatchVolume();
   useEffect(() => {
     if (!pending || !api || !state || server !== pending.server || state.sessionId === null) return;
     if (seatedIn(state, pending.roomId)) {
@@ -119,9 +129,10 @@ export function usePaneScreen({
         ? {
             sharing: iShare,
             unavailable: !iShare && sharers.length >= 3 ? "Three people are sharing here already." : undefined,
+            sound: soundOffered,
             onShare: (fps) => {
               if (!api || state.sessionId === null) return;
-              void startSharingHere({ server, api, sessionId: state.sessionId, fps });
+              void startSharingHere({ server, api, sessionId: state.sessionId, fps, sound: soundOffered && shareSoundOn() });
             },
             onStop: stopSharingEverywhere,
           }
@@ -135,6 +146,7 @@ export function usePaneScreen({
           watching: watchingWords(me === null ? [] : watchersOf(state, roomId, me).flatMap((id) => users.get(id)?.display_name ?? [])),
           starting: mineHere.status !== "sharing",
           wentBlack: mineHere.wentBlack,
+          ...(mineHere.sound ? { sound: mineHere.sound } : {}),
           onStop: stopSharingEverywhere,
         }
       : undefined;
@@ -156,6 +168,20 @@ export function usePaneScreen({
             closeEnded();
           },
           onCanvas: drawOn,
+          ...(shownHere.sound
+            ? {
+                sound: {
+                  playable: shownHere.sound === true,
+                  on: hearing,
+                  volume: loudness,
+                  onToggle: () => setWatchSoundOn(!hearing),
+                  onVolume: (volume: number) => {
+                    setWatchVolume(volume);
+                    playWatchedAt(volume);
+                  },
+                },
+              }
+            : {}),
         }
       : null;
     return {
@@ -166,5 +192,5 @@ export function usePaneScreen({
       ...(box ? { box } : {}),
       ...(stopped ? { stopped } : {}),
     };
-  }, [server, state, roomId, screensOn, watch, share, shareStopped, shareBox, api, intend, seatedHere, canShare]);
+  }, [server, state, roomId, screensOn, watch, share, shareStopped, shareBox, api, intend, seatedHere, canShare, soundOffered, hearing, loudness]);
 }

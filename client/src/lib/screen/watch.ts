@@ -1,16 +1,22 @@
 import { useSyncExternalStore } from "react";
 import type { ScreenCodec } from "../../generated/ScreenCodec";
 import type { AuthedApi } from "../api";
-import { readFrame } from "./frames";
+import { isSound, readFrame } from "./frames";
+import { playsSound, type SoundPlayer, soundPlayer } from "./listen";
 import { decoderConfig } from "./presets";
 import { playable } from "./probe";
 import { closingOf, onSilence, openScreenSocket, readSaid, RETRIES, retryAfter } from "./socket";
+import { onWatchSound, watchSoundOn, watchVolume } from "./sound";
 
 /**
  * Watching somebody's screen (SPEC §4.20, PROTOCOL §8, #360), in the window
  * that shows it. The frames come on this window's own screen socket, the web
  * engine's WebCodecs plays them, and the newest is drawn on whatever canvas
  * the screen above the conversation gives it. One share at a time.
+ *
+ * A share that carries the computer's sound (#736) says so, and its sound
+ * comes on the same socket while this window's sound button is on: played
+ * by the shell in a desktop app, by the page on a phone (`listen.ts`).
  */
 
 export interface ScreenWatchState {
@@ -41,6 +47,12 @@ export interface ScreenWatchState {
    * last said so, on this screen alone; the person sharing isn't told.
    */
   behind?: boolean;
+  /**
+   * The share carries the computer's sound (#736): `true` when this app can
+   * play it, `"unplayable"` when it can't. Left out for a share without.
+   * Whether it's playing is the sound button's (`sound.ts`).
+   */
+  sound?: true | "unplayable";
 }
 
 /** How long the screen says it's behind after the server last said so. */
@@ -80,7 +92,7 @@ export async function startWatching(options: { server: string; api: AuthedApi; s
     return;
   }
   running?.finish();
-  const decode = await playable();
+  const [decode, sound] = await Promise.all([playable(), playsSound()]);
   // Watch pressed again while this one waited for the player: the later
   // press is the one that counts, and this one's watch goes first.
   running?.finish();
@@ -90,7 +102,7 @@ export async function startWatching(options: { server: string; api: AuthedApi; s
     publish({ server: options.server, place: options.place, who: options.who, target: options.target, status: "unplayable", width: 0, height: 0 });
     return;
   }
-  const watching = new Watching(options.server, options.api, options.sessionId, options.target, decode, options.place, options.who);
+  const watching = new Watching(options.server, options.api, options.sessionId, options.target, decode, options.place, options.who, sound);
   running = watching;
   publish({ server: options.server, place: options.place, who: options.who, target: options.target, status: "connecting", width: 0, height: 0 });
   void watching.connect();
@@ -99,6 +111,11 @@ export async function startWatching(options: { server: string; api: AuthedApi; s
 /** Stop watching. */
 export function stopWatching(): void {
   running?.finish();
+}
+
+/** How loud the watched screen's sound plays, 0 to 1, now (the slider's own is kept by `sound.ts`). */
+export function playWatchedAt(volume: number): void {
+  running?.setVolume(volume);
 }
 
 /** Where the picture is drawn: the screen above the conversation's canvas, or null while it isn't on screen. */
@@ -126,6 +143,11 @@ class Watching {
   #drawing = 0;
   #fails: number[] = [];
   #done = false;
+  /** The share being shown carries sound (`showing`'s `sound`). */
+  #carries = false;
+  /** What plays the sound, while the share carries some and the button is on. */
+  #player: SoundPlayer | null = null;
+  #stopHearing: (() => void) | null = null;
 
   constructor(
     readonly server: string,
@@ -135,11 +157,47 @@ class Watching {
     public decode: ScreenCodec[],
     public place: string,
     public who: string,
-  ) {}
+    /** This app can play a screen's sound (`listen.ts`). */
+    readonly playsSound = false,
+  ) {
+    // The sound button, pressed while watching: the server is told, so
+    // sound nobody here plays isn't sent.
+    this.#stopHearing = onWatchSound((on) => {
+      if (!this.playsSound || this.#done) return;
+      this.#ask({ op: "sound", on });
+      this.#listen();
+    });
+  }
+
+  /** Whether this window asks for the sound: it can play it, and the button is on. */
+  #wantsSound(): boolean {
+    return this.playsSound && watchSoundOn();
+  }
+
+  /** Start or stop playing the sound, as the share and the button now say. */
+  #listen(): void {
+    const play = this.#carries && this.#wantsSound() && !this.#done;
+    if (play && !this.#player) this.#player = soundPlayer(this.server, watchVolume());
+    if (!play && this.#player) {
+      this.#player.stop();
+      this.#player = null;
+    }
+  }
+
+  /** How loud the sound plays, 0 to 1, from the slider beside the screen. */
+  setVolume(volume: number): void {
+    this.#player?.volume(volume);
+  }
+
+  /** What `sound` says, as the share and this app's player stand. */
+  #sound(): Pick<ScreenWatchState, "sound"> {
+    if (!this.#carries) return {};
+    return { sound: this.playsSound ? true : "unplayable" };
+  }
 
   /** The state as the screens read it, at `status`. */
   #state(status: ScreenWatchState["status"], width = 0, height = 0): ScreenWatchState {
-    return { server: this.server, place: this.place, who: this.who, target: this.target, status, width, height };
+    return { server: this.server, place: this.place, who: this.who, target: this.target, status, width, height, ...this.#sound() };
   }
 
   async connect(): Promise<void> {
@@ -158,12 +216,15 @@ class Watching {
       session_id: this.sessionId,
       target: this.target,
       decode: this.decode,
+      ...(this.#wantsSound() ? { sound: true } : {}),
     });
     this.#socket = socket;
     socket.addEventListener("message", (event) => {
       if (this.#socket !== socket) return;
-      if (event.data instanceof ArrayBuffer) this.frame(event.data);
-      else this.said(event.data);
+      if (event.data instanceof ArrayBuffer) {
+        if (isSound(event.data)) this.#player?.play(event.data);
+        else this.frame(event.data);
+      } else this.said(event.data);
     });
     socket.addEventListener("close", (event) => this.closed(socket, event.code));
     // Nothing from the server, not even its `alive`: the line died without
@@ -207,6 +268,9 @@ class Watching {
     this.#waitingForKey = true;
     this.#closeDecoder();
     this.#codec = null;
+    // Another share: whether it has sound, its `showing` says.
+    this.#carries = false;
+    this.#listen();
     publish(this.#state("connecting"));
     const socket = this.#socket;
     if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ op: "watch", target }));
@@ -241,10 +305,15 @@ class Watching {
     this.#attempts = 0;
     const target = typeof said.target === "string" ? said.target : null;
     const codec = said.codec === "vp8" || said.codec === "avc1" ? said.codec : null;
+    this.#carries = target !== null && said.sound === true;
+    this.#listen();
     if (target === null) {
       this.#closeDecoder();
       this.#codec = null;
-      if (shown) publish({ ...shown, status: "ended" });
+      if (shown) {
+        const { sound: _gone, ...rest } = shown;
+        publish({ ...rest, status: "ended" });
+      }
       return;
     }
     this.target = target;
@@ -257,6 +326,11 @@ class Watching {
     if (codec !== this.#codec || !this.#decoder) this.#openDecoder(codec);
     this.#waitingForKey = true;
     if (shown?.target !== target || shown.status !== "showing") publish(this.#state("waiting", shown?.width ?? 0, shown?.height ?? 0));
+    else if (shown.sound !== this.#sound().sound) {
+      // The same share, showing, shared again with sound or without.
+      const { sound: _was, ...rest } = shown;
+      publish({ ...rest, ...this.#sound() });
+    }
   }
 
   frame(buffer: ArrayBuffer): void {
@@ -376,6 +450,10 @@ class Watching {
     const mine = running === this;
     window.clearTimeout(this.#behindTimer);
     if (this.#drawing !== 0) cancelAnimationFrame(this.#drawing);
+    this.#stopHearing?.();
+    this.#stopHearing = null;
+    this.#player?.stop();
+    this.#player = null;
     this.#closeDecoder();
     this.#pending?.close();
     this.#pending = null;

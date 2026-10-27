@@ -36,7 +36,7 @@ export const INFO_RETRY_MS = 2 * 60_000;
  * key), and for the host, how its machine is (#582), which the foot says
  * while something there needs them.
  */
-export type ListedInfo = Pick<ServerInfo, "name" | "accent_key" | "health" | "screens">;
+export type ListedInfo = Pick<ServerInfo, "name" | "accent_key" | "health" | "screens" | "screen_sound">;
 
 /**
  * The list's held answers with one server's new one. The very same object
@@ -49,10 +49,24 @@ export function withInfo(
   info: ListedInfo,
 ): Readonly<Record<string, ListedInfo>> {
   const was = held[server];
-  if (was !== undefined && was.name === info.name && was.accent_key === info.accent_key && was.screens === info.screens && sameHealth(was.health, info.health)) return held;
+  if (
+    was !== undefined &&
+    was.name === info.name &&
+    was.accent_key === info.accent_key &&
+    was.screens === info.screens &&
+    was.screen_sound === info.screen_sound &&
+    sameHealth(was.health, info.health)
+  )
+    return held;
   return {
     ...held,
-    [server]: { name: info.name, accent_key: info.accent_key, ...(info.health ? { health: info.health } : {}), ...(info.screens === undefined ? {} : { screens: info.screens }) },
+    [server]: {
+      name: info.name,
+      accent_key: info.accent_key,
+      ...(info.health ? { health: info.health } : {}),
+      ...(info.screens === undefined ? {} : { screens: info.screens }),
+      ...(info.screen_sound === undefined ? {} : { screen_sound: info.screen_sound }),
+    },
   };
 }
 

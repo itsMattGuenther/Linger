@@ -111,7 +111,12 @@ Consequences:
    shell asks the desktop's ScreenCast portal, encodes the PipeWire stream with
    GStreamer, and hands the page finished VP8 frames on a Tauri channel, which the
    page sends like its own. `docs/decisions.md` has why it isn't a WebRTC track,
-   and why Linux captures in the shell.
+   and why Linux captures in the shell. **A share's sound is Rust's at both ends**
+   (#736, `screen_sound.rs`): on Windows the shell captures the computer's sound with
+   WASAPI's process loopback, leaving Linger's own process tree out so the call never
+   goes back in the share, and hands the page 20 ms Opus packets to send on the same
+   socket; a watching computer's page hands each packet back to the shell, which plays
+   it in the call's own speaker (`voice/device.rs`). A phone plays it in the page.
 3. Avoid CSS features newer than ~2023 without checking WebKitGTK support. `oklch()` is
    supported and is required by §4.5 of the spec; verify it in the target WebKitGTK
    version during M0.

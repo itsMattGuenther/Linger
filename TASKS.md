@@ -1043,7 +1043,31 @@ and not as a WebRTC track. Branch `feat/360-screen-sharing`. Numbers are `T-19xx
   quality, but a range made wlroots' portal send 2 frames a second, so it needs a try
   on Hyprland's portal first; and shrinking a 4K picture on the GPU for portals that
   don't shrink it themselves.
-- ⬜ **T-1909 · Streaming a game** — the computer's sound, the graphics card's encoder, later.
+- 🟡 **T-1916 · The computer's sound** (Matt, 2026-10-27, #736) — a share can carry what
+  the computer plays, never the call: the Windows shell captures it with WASAPI's process
+  loopback, leaving out Linger's own process and the WebView2 processes it starts
+  (`src-tauri/src/screen_sound/windows.rs`), and cuts it into 20 ms Opus packets at
+  128 kbit/s, stereo (`screen_sound/pack.rs`). The page stamps them on the frames' clock and
+  sends them on the share's socket only while the server's `want` says somebody watching
+  asked (`lib/screen/share.ts`). The server passes them to the watchers who asked, held
+  to the share's ceiling, never waiting for a key frame, dropped rather than queued for a
+  watcher whose line is full (`gateway/screens.rs`, PROTOCOL §8 "The computer's sound").
+  Desktop apps play it in the call through the chosen speakers, in stereo, 80 to 160 ms
+  behind (`voice/device.rs` `ScreenLane`); a phone with WebCodecs' Opus plays it in the
+  page (`lib/screen/listen.ts`). Share's menu has the tick, off until turned on; the box a
+  speaker; a watched screen a speaker and, on a computer, a volume slider, all kept on that
+  device. Tests: the header in `linger-core`, the board's and `tests/screen.rs`, the
+  packetizer and the stereo mix in the shell, a Windows-only loopback test on CI's
+  Windows runner, `sound.test.ts`, and the browser tests (`screen-pipeline.spec.ts`,
+  `next-screen.spec.ts`). **Still to do:** hear it for real, a Windows share of a video
+  watched on Windows, Linux and a phone, with someone talking in the call, to check
+  nobody's voice comes back and the sound keeps up with the picture; and on an iPhone,
+  whose web engine may have no Opus decoder. **Linux sharing sound** is later work: the
+  desktop's screen-sharing portal gives no sound, and a PipeWire capture of what's
+  playing would need Linger's own output streams found by their node and left out (a
+  filter or a null sink), so the call never goes back out.
+- ⬜ **T-1909 · Streaming a game** — later. The computer's sound is T-1916 (#736), and
+  a Linux share encoded on the graphics card T-1914 (#733).
 
 ---
 

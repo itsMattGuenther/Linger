@@ -2,10 +2,11 @@ import { useSyncExternalStore } from "react";
 import type { ScreenCodec } from "../../generated/ScreenCodec";
 import type { AuthedApi } from "../api";
 import { BlackWatch, LOOK_EVERY_MS, LOOK_HEIGHT, LOOK_WIDTH, looksBlack } from "./black";
-import { MAX_FRAME_BYTES, packFrame, readFrame } from "./frames";
+import { MAX_FRAME_BYTES, packFrame, readFrame, readSound } from "./frames";
 import { encoderConfig, fitWithin, KEYFRAME_EVERY_MS, SCREEN_SPEEDS, type ScreenFps, type ScreenSpeed } from "./presets";
 import { canPickScreen, makeable } from "./probe";
 import { captureInShell, sharesThroughShell, type ShellCapture } from "./shell";
+import { captureSound, type SoundCapture } from "./sound";
 import { closingOf, onSilence, openScreenSocket, readSaid, RETRIES, retryAfter, type ScreenClosing } from "./socket";
 
 /**
@@ -21,6 +22,11 @@ import { closingOf, onSilence, openScreenSocket, readSaid, RETRIES, retryAfter, 
  * encoded here with WebCodecs (Windows), or the desktop shell, which picks,
  * reads and encodes the screen itself and hands over finished frames (Linux,
  * `shell.ts`). The socket, the watchers and the endings are the same.
+ *
+ * The computer's sound, when the share carries it (#736), always comes from
+ * the shell, which leaves Linger's own out (`sound.ts`); it goes out on the
+ * same socket, stamped on the frames' clock, only while the server says
+ * somebody watching wants it.
  */
 
 /** Why a share ended when it wasn't Stop. */
@@ -37,6 +43,11 @@ export interface ScreenShareState {
   pictures: boolean;
   /** It went black for a while: a slide show in a window of its own, if one window was shared (`black.ts`). */
   wentBlack: boolean;
+  /**
+   * The computer's sound (#736): going with it, or asked for and couldn't
+   * be captured, or stopped by itself. Left out when it wasn't asked for.
+   */
+  sound?: "on" | "failed";
 }
 
 /** The share as this window holds it, or null. */
@@ -157,13 +168,24 @@ let running: Sharing | null = null;
 /** The picker this window has open, until it answers; Stop forgets it. */
 let picking: object | null = null;
 
+/** What a share is started with. `sound` asks for the computer's sound too (#736). */
+export interface ShareOptions {
+  server: string;
+  api: AuthedApi;
+  sessionId: string;
+  fps: ScreenFps;
+  sound?: boolean;
+}
+
 /**
  * Share your screen on `server` at `fps`. Call it straight from the click:
  * the system's picker opens only from a person's own press, and some engines
  * forget a press across any wait. Resolves once the picker has answered;
- * closing the picker shares nothing and says nothing.
+ * closing the picker shares nothing and says nothing. With `sound`, the
+ * computer's sound is captured once something is picked; if it can't be,
+ * the share goes ahead without it, and says so.
  */
-export async function startSharing(options: { server: string; api: AuthedApi; sessionId: string; fps: ScreenFps }): Promise<void> {
+export async function startSharing(options: ShareOptions): Promise<void> {
   running?.finish(null);
   lastStop = null;
   const ask = {};
@@ -199,24 +221,32 @@ export async function startSharing(options: { server: string; api: AuthedApi; se
     return;
   }
   const track = stream.getVideoTracks()[0];
-  const made = await makeable(options.fps);
+  const [made, sound] = await Promise.all([makeable(options.fps), options.sound === true ? captureSound() : Promise.resolve(null)]);
   if (picking !== ask) {
     // Stopped while the picker was open.
     for (const each of stream.getTracks()) each.stop();
+    sound?.stop();
     return;
   }
   picking = null;
   if (!track || made.codecs.length === 0) {
     for (const each of stream.getTracks()) each.stop();
+    sound?.stop();
     stopped(options.server, "no-encoder");
     publish(null);
     return;
   }
   track.contentHint = speed.hint === "detail" ? "detail" : "motion";
-  const sharing = new Sharing(options.server, options.api, options.sessionId, speed, { kind: "track", stream, track }, made.codecs, made.hardware);
+  const sharing = new Sharing(options.server, options.api, options.sessionId, speed, { kind: "track", stream, track }, made.codecs, made.hardware, sound);
   running = sharing;
-  publish({ server: options.server, fps: options.fps, status: "starting", preview: stream, pictures: false, wentBlack: false });
+  publish({ server: options.server, fps: options.fps, status: "starting", preview: stream, pictures: false, wentBlack: false, ...soundState(options, sound) });
   sharing.start();
+}
+
+/** What the share's state says of its sound: nothing when it wasn't asked for. */
+function soundState(options: ShareOptions, sound: SoundCapture | null): Pick<ScreenShareState, "sound"> {
+  if (options.sound !== true) return {};
+  return { sound: sound ? "on" : "failed" };
 }
 
 /**
@@ -225,23 +255,30 @@ export async function startSharing(options: { server: string; api: AuthedApi; se
  * the formats the shell makes: H.264 first where the graphics card makes
  * it, then VP8, as the page does (#733).
  */
-async function startInShell(options: { server: string; api: AuthedApi; sessionId: string; fps: ScreenFps }, ask: object): Promise<void> {
+async function startInShell(options: ShareOptions, ask: object): Promise<void> {
   publish({ server: options.server, fps: options.fps, status: "picking", preview: null, pictures: false, wentBlack: false });
   const capture = await captureInShell(options.fps, previewShown);
   if (picking !== ask) {
     if (typeof capture !== "string") capture.stop();
     return;
   }
-  picking = null;
   if (typeof capture === "string") {
+    picking = null;
     publish(null);
     if (capture !== "declined") stopped(options.server, capture);
     return;
   }
+  const sound = options.sound === true ? await captureSound() : null;
+  if (picking !== ask) {
+    capture.stop();
+    sound?.stop();
+    return;
+  }
+  picking = null;
   const hardware = new Set(capture.codecs.filter((codec) => codec === "avc1"));
-  const sharing = new Sharing(options.server, options.api, options.sessionId, SCREEN_SPEEDS[options.fps], { kind: "shell", capture }, capture.codecs, hardware);
+  const sharing = new Sharing(options.server, options.api, options.sessionId, SCREEN_SPEEDS[options.fps], { kind: "shell", capture }, capture.codecs, hardware, sound);
   running = sharing;
-  publish({ server: options.server, fps: options.fps, status: "starting", preview: null, pictures: true, wentBlack: false });
+  publish({ server: options.server, fps: options.fps, status: "starting", preview: null, pictures: true, wentBlack: false, ...soundState(options, sound) });
   sharing.start();
 }
 
@@ -271,6 +308,13 @@ const FIRST_FRAME_MS = 8_000;
 const MOST_WAITING = 1_500_000;
 /** How many frames may wait in an encoder before frames are skipped: the computer is behind. */
 const MOST_ENCODING = 2;
+/**
+ * How far the sound's stamps may stray from the frames' clock before the
+ * two are put together again (#736): a packet's journey from the shell
+ * varies by a few milliseconds, and the sound card's clock drifts from the
+ * computer's by a little a minute.
+ */
+const SOUND_DRIFT_MICROS = 150_000;
 /** An encoder that fails this many times in this long is given up on. */
 const FAILS = 3;
 const FAILS_WITHIN_MS = 10_000;
@@ -320,6 +364,12 @@ class Sharing {
   /** The picture last looked at, and whether it was black: a screen that isn't changing sends no new ones. */
   #looked: { frame: VideoFrame; black: boolean } | null = null;
   #look: OffscreenCanvas | null = null;
+  /** The server last said somebody watching wants the sound (`want`'s `sound`). */
+  #soundWanted = false;
+  /** The newest frame's time stamp, and when it came: the clock the sound is stamped on. */
+  #clock: { micros: number; at: number } | null = null;
+  /** From the shell's clock to the frames', set by the first sound packet. */
+  #soundOffset: number | null = null;
 
   constructor(
     readonly server: string,
@@ -329,12 +379,23 @@ class Sharing {
     readonly source: Source,
     public codecs: ScreenCodec[],
     readonly hardware: ReadonlySet<ScreenCodec>,
+    /** The computer's sound, when it was asked for and could be captured. */
+    public sound: SoundCapture | null = null,
   ) {}
 
   start(): void {
     this.#firstFrameTimer = window.setTimeout(() => {
       if (!this.#seen) this.finish("no-frames");
     }, FIRST_FRAME_MS);
+    const sound = this.sound;
+    if (sound) {
+      sound.onPacket = (packet) => this.soundPacket(packet);
+      // It stopped by itself: the picture goes on, and the box says so.
+      sound.onEnded = () => {
+        this.sound = null;
+        if (running === this && shown?.server === this.server) publish({ ...shown, sound: "failed" });
+      };
+    }
     const source = this.source;
     if (source.kind === "shell") {
       source.capture.onFrame = (frame) => this.shellFrame(frame);
@@ -372,7 +433,9 @@ class Sharing {
       session_id: this.sessionId,
       fps: this.speed.fps,
       encode: this.codecs,
+      ...(this.sound ? { sound: true } : {}),
     });
+    this.#soundWanted = false;
     this.#socket = socket;
     socket.addEventListener("message", (event) => {
       if (this.#socket === socket) this.said(event.data);
@@ -417,6 +480,9 @@ class Sharing {
         }
       }
       this.#wanted = wanted;
+      // Only a server that passes sound on says so, and only once somebody
+      // watching has asked: an older one never does, and gets none.
+      this.#soundWanted = said.sound === true;
       if (shown?.status !== "sharing" && shown?.server === this.server) publish({ ...shown, status: "sharing" });
       // Somebody new is watching: they needn't wait for the screen to change.
       if (this.source.kind === "shell") {
@@ -445,6 +511,7 @@ class Sharing {
     const read = readFrame(frame);
     if (!read || this.#done) return;
     this.#seen = true;
+    this.#clock = { micros: read.micros, at: performance.now() };
     const socket = this.#socket;
     if (!socket || socket.readyState !== WebSocket.OPEN || !this.#wanted.includes(read.codec)) return;
     if (this.#shellWaitsForKey.has(read.codec) && !read.key) return;
@@ -461,6 +528,25 @@ class Sharing {
     }
     this.#shellWaitsForKey.delete(read.codec);
     socket.send(frame);
+  }
+
+  /**
+   * A packet of the computer's sound from the shell (#736): sent only while
+   * the server says somebody watching wants it, and not while the line to
+   * the server is behind, when it's dropped rather than queued. It's
+   * stamped on the frames' clock, so a watcher can line the two up: the
+   * shell's clock is put onto it by where the first packet landed, and
+   * again if the two drift apart.
+   */
+  soundPacket(packet: ArrayBuffer): void {
+    const sound = readSound(packet);
+    const socket = this.#socket;
+    if (!sound || this.#done || !this.#soundWanted || !socket || socket.readyState !== WebSocket.OPEN) return;
+    if (socket.bufferedAmount > MOST_WAITING) return;
+    const now = this.#clock ? this.#clock.micros + (performance.now() - this.#clock.at) * 1_000 : performance.now() * 1_000;
+    if (this.#soundOffset === null || Math.abs(sound.micros + this.#soundOffset - now) > SOUND_DRIFT_MICROS) this.#soundOffset = now - sound.micros;
+    new DataView(packet).setBigUint64(4, BigInt(Math.max(0, Math.round(sound.micros + this.#soundOffset))));
+    socket.send(packet);
   }
 
   /**
@@ -564,6 +650,7 @@ class Sharing {
       return;
     }
     this.#seen = true;
+    this.#clock = { micros: frame.timestamp, at: performance.now() };
     const now = performance.now();
     // No faster than the speed it was started at.
     if (this.#done || now - this.#lastFrameAt < 800 / this.speed.fps) {
@@ -673,6 +760,8 @@ class Sharing {
     window.clearInterval(this.#lookTimer);
     this.#looked = null;
     this.#stopReading?.();
+    this.sound?.stop();
+    this.sound = null;
     for (const held of this.#encoders.values()) closeEncoder(held);
     this.#encoders.clear();
     this.#latest?.close();

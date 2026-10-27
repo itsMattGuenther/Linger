@@ -14,6 +14,11 @@
   overflow-y: auto;
 }
 
+/* A menu whose items say more (#736): Share's, with its sound. */
+.k-menu[data-width="wide"] {
+  width: var(--menu-w-wide);
+}
+
 /* Measured before it is placed; invisible for that one frame. */
 .k-menu[data-placed="no"] {
   visibility: hidden;

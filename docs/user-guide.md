@@ -958,10 +958,28 @@ again while it's still open, say to pick another window or the other speed,
 it opens there by itself, so nobody has to press Watch again. Close the screen
 and it stays closed.
 
-There's no sound from the computer yet: talk through your microphone as
-usual, and a video playing in your slides plays silently for the people
-watching. Like voice, a shared screen goes through the host's server, which
-passes it on without keeping it, and it's never recorded.
+**Sharing the computer's sound.** Showing a video, a game, or a slide with a
+clip in it? Tick **Share the computer's sound** in the Share menu before you
+pick High or Low quality. It's off until you turn it on, and your computer
+remembers it. The people watching then hear what your computer plays, and
+never the call: Linger leaves out its own sounds, everybody's voices
+included, so nobody hears themselves come back. A small speaker after
+"Sharing your screen" says the sound is going; if it couldn't be shared, the
+box says so and the picture goes on without it. Talk through your microphone
+as usual. For now only the Windows app shares the sound, on Windows 10
+version 2004 or later; the Linux app shares the picture alone until it can
+keep its own voice out of what your desktop plays.
+
+**Hearing a shared screen.** A screen with sound has a speaker beside Full
+screen: press it to turn the sound off, and again to bring it back. On a
+computer a slider beside it sets how loud it is, through the speakers you
+picked for voice. Both are yours alone and stay as you left them on that
+device. Deafen silences it with everybody's voices. On a phone the phone's
+own buttons set how loud; a phone whose web engine can't play the sound says
+so on the speaker instead.
+
+Like voice, a shared screen goes through the host's server, which passes it
+on without keeping it, and it's never recorded.
 
 ## Talking to one person
 

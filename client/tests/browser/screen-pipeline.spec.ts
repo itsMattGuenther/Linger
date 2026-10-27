@@ -18,6 +18,11 @@ const SERVER = "http://screen.test";
  * `alive` every second, as the server's say it's still there; `quiet()`
  * stops that and everything else, a line that died without closing.
  * `behind()` tells the watcher its line couldn't keep up.
+ *
+ * The computer's sound (#736), as the real server passes it: a share whose
+ * hello says it carries sound is asked for it (`want`'s `sound`) while its
+ * watcher asks, and its packets reach a watcher that asked. `sound.in` counts
+ * the packets the share sent; `hellos` keeps what each hello said.
  */
 async function standIn(page: Page) {
   let share: WebSocketRoute | null = null;
@@ -27,6 +32,9 @@ async function standIn(page: Page) {
   const asked: string[] = [];
   /** What each share's hello said it encodes. */
   const offered: unknown[] = [];
+  const hellos: Record<string, unknown>[] = [];
+  const sound = { carried: false, asked: false, in: 0, out: 0 };
+  const want = () => JSON.stringify({ op: "want", codecs: ["vp8"], ...(sound.carried && sound.asked ? { sound: true } : {}) });
   const restart = async () => {
     restarted = true;
     await share?.close({ code: 1012, reason: "restarting" });
@@ -50,15 +58,29 @@ async function standIn(page: Page) {
         return;
       }
       if (typeof message !== "string") {
-        // A frame from the share: passed on to the watcher as it came.
-        if (socket === share) watch?.send(message);
+        // A frame from the share: passed on to the watcher as it came. Sound
+        // (its first byte 2) only to a watcher that asked, from a share that said.
+        if (socket !== share) return;
+        if (message[0] === 2) {
+          sound.in += 1;
+          if (!sound.carried || !sound.asked) return;
+          sound.out += 1;
+        }
+        watch?.send(message);
         return;
       }
-      const said = JSON.parse(message) as { op: string; target?: string; encode?: unknown };
+      const said = JSON.parse(message) as { op: string; target?: string; encode?: unknown; sound?: boolean; on?: boolean };
       asked.push(said.op);
+      if (said.op === "share" || said.op === "watch") hellos.push(said);
+      if (said.op === "sound") {
+        sound.asked = said.on === true;
+        share?.send(want());
+        return;
+      }
       if (said.op === "share") {
         offered.push(said.encode);
         share = socket;
+        sound.carried = said.sound === true;
         socket.send(JSON.stringify({ op: "want", codecs: [] }));
         socket.onClose(() => {
           if (share !== socket) return;
@@ -68,8 +90,9 @@ async function standIn(page: Page) {
         });
       } else if (said.op === "watch") {
         watch = socket;
-        socket.send(JSON.stringify({ op: "showing", target: said.target, codec: "vp8" }));
-        share?.send(JSON.stringify({ op: "want", codecs: ["vp8"] }));
+        sound.asked = said.sound === true;
+        socket.send(JSON.stringify({ op: "showing", target: said.target, codec: "vp8", ...(sound.carried ? { sound: true } : {}) }));
+        share?.send(want());
         share?.send(JSON.stringify({ op: "keyframe", codec: "vp8" }));
       }
     });
@@ -81,8 +104,11 @@ async function standIn(page: Page) {
     silent = on;
   };
   const behind = () => watch?.send(JSON.stringify({ op: "behind" }));
-  return { asked, offered, restart, endWatch, quiet, behind };
+  return { asked, offered, restart, endWatch, quiet, behind, hellos, sound };
 }
+
+/** How many packets of a share's sound this page has played: in the shell, or in the page. */
+const played = (page: Page) => page.evaluate(() => window.loop.sound_played());
 
 async function colour(page: Page): Promise<number[]> {
   return page.evaluate(() => window.loop.pixel());
@@ -344,6 +370,38 @@ test("a line that goes silent without closing is taken as dropped, and the share
   expect(await page.evaluate(() => (window.loop.share_state() as { status?: string } | null)?.status)).toBe("sharing");
 });
 
+// A watcher with no desktop shell plays a share's sound in the page (#736),
+// as a phone does: the web engine's own Opus decoder, then Web Audio.
+test("without the shell, a watcher plays a share's sound with the page's own decoder, and its button stops it", async ({ page }) => {
+  const { hellos, sound } = await standIn(page);
+  await page.goto("/tests/fixtures/screen-loop.html");
+  const engine = await page.evaluate(async () => {
+    if (typeof AudioEncoder !== "function" || typeof AudioDecoder !== "function") return false;
+    return (await AudioDecoder.isConfigSupported({ codec: "opus", sampleRate: 48_000, numberOfChannels: 2 })).supported === true;
+  });
+  test.skip(!engine, "this engine has no WebCodecs Opus to make or play the sound with");
+  // Jules shares with the computer's sound, made here as real Opus.
+  await page.evaluate((server) => window.loop.feed(server, "s-jules", true), SERVER);
+  await page.evaluate((server) => window.loop.pane(server, "s-watcher"), SERVER);
+  await page.evaluate(() => window.loop.voice(true));
+  await page.evaluate(() => window.loop.pane_watch("s-jules"));
+  await expect.poll(() => page.evaluate(() => window.loop.pane_state().status), { timeout: 15_000 }).toBe("showing");
+  expect(hellos.find((hello) => hello.op === "watch")).toMatchObject({ sound: true });
+  expect(await page.evaluate(() => window.loop.pane_state().sound)).toEqual({ playable: true, on: true });
+  await expect.poll(() => played(page), { timeout: 10_000 }).toBeGreaterThan(10);
+  // The screen's speaker off: the server is told, nothing more comes, and nothing more plays.
+  await page.evaluate(() => window.loop.pane_sound());
+  await expect.poll(() => page.evaluate(() => window.loop.pane_state().sound)).toEqual({ playable: true, on: false });
+  await expect.poll(() => sound.asked).toBe(false);
+  await page.waitForTimeout(300);
+  const stopped = await played(page);
+  const passed = sound.out;
+  await page.waitForTimeout(1_000);
+  expect(await played(page)).toBe(stopped);
+  expect(sound.out).toBe(passed);
+  await page.evaluate(() => window.loop.watch_sound(true));
+});
+
 // The Linux app shares through its shell (T-1907, src-tauri/src/screen_shell.rs),
 // played here by the test page (`?shell`): the shell's frames go out on the
 // same screen socket, and a watcher plays them. Each engine says it's the
@@ -528,6 +586,61 @@ test.describe("through the Linux app's shell", () => {
     await page.evaluate((server) => window.loop.share(server, "token", "s-me", 30), SERVER);
     await expect(page.getByRole("status", { name: "Why sharing stopped" })).toHaveText("Linger couldn't read the screen you picked, so sharing stopped.", { timeout: 10_000 });
     await expect(page.getByRole("group", { name: "Your screen" })).toHaveCount(0);
+  });
+
+  // The computer's sound in a share (#736). The stand-in shell captures it as
+  // the Windows app's does; which desktop it is makes no difference to the page.
+  test("with the switch off, a share sends no sound, says none, and the shell captures none", async ({ page }) => {
+    const { hellos, sound } = await standIn(page);
+    await page.goto("/tests/fixtures/screen-loop.html?shell");
+    await page.evaluate((server) => window.loop.share(server, "token", "s-sharer", 30), SERVER);
+    await page.evaluate((server) => window.loop.watch(server, "token", "s-watcher", "s-sharer"), SERVER);
+    await page.evaluate(() => window.loop.paint("#ff0000"));
+    await expect.poll(() => colour(page).then((got) => near(got, [255, 0, 0, 255])), { timeout: 15_000 }).toBe(true);
+    await page.waitForTimeout(1_000);
+    // The share's hello is as it was before sound; the watcher still asks,
+    // and is told there's none.
+    expect(Object.keys(hellos.find((hello) => hello.op === "share") ?? {}).sort()).toEqual(["encode", "fps", "op", "session_id", "token"]);
+    expect(hellos.find((hello) => hello.op === "watch")).toMatchObject({ sound: true });
+    expect(sound.in).toBe(0);
+    expect(await page.evaluate(() => window.loop.shell_asked())).not.toContain("screen_sound_start");
+    expect(await played(page)).toBe(0);
+    expect(await page.evaluate(() => window.loop.watch_state())).not.toHaveProperty("sound");
+  });
+
+  test("with the switch on, the computer's sound reaches the watcher's shell, and the watcher's sound button stops it", async ({ page }) => {
+    const { asked, hellos, sound } = await standIn(page);
+    await page.goto("/tests/fixtures/screen-loop.html?shell");
+    await page.evaluate((server) => window.loop.share(server, "token", "s-jules", 30, true), SERVER);
+    await expect.poll(() => hellos[0]).toMatchObject({ op: "share", sound: true });
+    expect(await page.evaluate(() => window.loop.share_state())).toMatchObject({ sound: "on" });
+    // Nobody watching yet: the shell captures, and nothing goes out.
+    await page.waitForTimeout(500);
+    expect(await page.evaluate(() => window.loop.shell_asked())).toContain("screen_sound_start");
+    expect(sound.in).toBe(0);
+    // You watch it from the room's screen, its sound on, as it starts.
+    await page.evaluate((server) => window.loop.pane(server, "s-watcher"), SERVER);
+    await page.evaluate(() => window.loop.voice(true));
+    await page.evaluate(() => window.loop.pane_watch("s-jules"));
+    await expect.poll(() => page.evaluate(() => window.loop.pane_state().status), { timeout: 15_000 }).toBe("showing");
+    expect(await page.evaluate(() => window.loop.pane_state().sound)).toEqual({ playable: true, on: true });
+    await expect.poll(() => sound.out, { timeout: 10_000 }).toBeGreaterThan(10);
+    await expect.poll(() => played(page), { timeout: 10_000 }).toBeGreaterThan(10);
+    // Its speaker off: the server is told, the share stops sending, the shell lets go.
+    await page.evaluate(() => window.loop.pane_sound());
+    await expect.poll(() => asked.includes("sound")).toBe(true);
+    expect(await page.evaluate(() => window.loop.shell_asked())).toContain("screen_sound_end");
+    await page.waitForTimeout(300);
+    const [sent, heard] = [sound.in, await played(page)];
+    await page.waitForTimeout(1_000);
+    expect(sound.in).toBe(sent);
+    expect(await played(page)).toBe(heard);
+    // And on again: it comes back.
+    await page.evaluate(() => window.loop.pane_sound());
+    await expect.poll(() => played(page), { timeout: 10_000 }).toBeGreaterThan(heard + 10);
+    // Stop ends the capture.
+    await page.evaluate(() => window.loop.stop());
+    expect(await page.evaluate(() => window.loop.shell_asked())).toContain("screen_sound_stop");
   });
 
   test("Stop while the shell's picker is open shares nothing when it answers", async ({ page }) => {

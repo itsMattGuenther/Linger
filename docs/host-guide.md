@@ -479,11 +479,14 @@ UDP 3479 and works through the proxy in front of the server.
 
 What it costs is upload: up to about 2.5 Mbps for each person watching a
 share at Low quality (720p, 30 frames a second), and 6 Mbps at High quality
-(1080p, 60 frames a second), less for a still slide. Eight people
+(1080p, 60 frames a second), less for a still slide. A share with the
+computer's sound (#736) adds about 128 kbps for each person listening; your
+server sends it only to people who have their speaker on. Eight people
 watching a presentation for an hour is roughly 7 GB of data out; a game shared
-at 60 frames a second to eight people is closer to 20 GB an hour. Your server
-holds every share to 10 Mbps whatever an app sends, and a room to three shares
-at once. The server passes the pictures on without opening them and keeps
+at 60 frames a second to eight people is closer to 20 GB an hour, and its
+sound about half a gigabyte more. Your server
+holds every share to 10 Mbps whatever an app sends, its sound included, and a
+room to three shares at once. The server passes the pictures on without opening them and keeps
 nothing; like voice, a host who changed the server could see them.
 
 It is light on the server itself. On the smallest DigitalOcean server (one

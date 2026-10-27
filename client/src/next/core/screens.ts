@@ -73,6 +73,23 @@ export const SHARE_CHOICES: Readonly<Record<ScreenFps, { label: string; detail: 
 };
 
 /**
+ * The tick under Share's two choices (#736): the computer's sound goes with
+ * the picture, everything it plays except the call itself, which Linger
+ * leaves out so nobody hears themselves come back.
+ */
+export const SHARE_SOUND = { label: "Share the computer's sound", detail: "Everything but this call" } as const;
+
+/**
+ * Your share's box with its sound going too (#736): a speaker after
+ * "Sharing your screen", these words its tooltip and, for a screen reader,
+ * the rest of the sentence.
+ */
+export const SHARING_SOUND = { title: "With the computer's sound", said: " and its sound" } as const;
+
+/** Said in your share's box when its sound was asked for and couldn't go, or stopped (#736). */
+export const SOUND_FAILED_WORDS = "The computer's sound couldn't be shared, so everyone watching sees your screen without it.";
+
+/**
  * Your share's box, once your share has gone black for a while
  * (`lib/screen/black.ts`): said until that share stops, since leaving the
  * slide show that made it black brings the window back, and with it the box,

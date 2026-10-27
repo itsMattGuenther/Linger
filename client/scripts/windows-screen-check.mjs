@@ -10,6 +10,9 @@
 //   graphics card, so it's reported, not required).
 // - Frames keep coming and encoding with the window minimized: a slide show
 //   covers Linger, and the share mustn't stop when it does.
+// - The computer's sound (#736): the shell says this Windows can capture it,
+//   and starting it from the list window answers, started or refused where
+//   the runner has no audio engine.
 // - Then again without the test switch, as a person meets it: a press opens
 //   WebView2's own picker (a picture of it is kept), and Escape closes it
 //   with the share refused, which Share takes as nothing to say.
@@ -194,6 +197,37 @@ try {
   verdict("WebView2 has WebCodecs, the track processor and the system's picker", has.webCodecs && has.trackProcessor && has.picker, has);
   verdict("WebView2 makes and plays VP8 at 1080p60", has.vp8Encode && has.vp8Decode, has);
   note(`H.264: hardware encode ${has.avcHardwareEncode}, any encode ${has.avcEncode}, decode ${has.avcDecode}`);
+
+  // 1b. The computer's sound (#736): the installed app's shell says this
+  // Windows has process loopback, and starts it from the list window, as
+  // Share does with the switch on. A runner may have no audio engine, which
+  // the shell then refuses cleanly; either answer is the command reached
+  // and allowed. What it captured, if anything, is only counted.
+  const sound = await page.evaluate(async () => {
+    const tauri = window.__TAURI_INTERNALS__;
+    const available = await tauri.invoke("screen_sound_available");
+    const got = { packets: 0, bytes: 0 };
+    const channel = (onMessage) => `__CHANNEL__:${tauri.transformCallback(onMessage)}`;
+    const sounds = channel((message) => {
+      const body = message?.message ?? message;
+      got.packets += 1;
+      got.bytes += body?.byteLength ?? 0;
+    });
+    const says = channel(() => undefined);
+    let started;
+    try {
+      await tauri.invoke("screen_sound_start", { sounds, says });
+      started = "started";
+    } catch (error) {
+      started = String(error);
+    }
+    await new Promise((settle) => setTimeout(settle, 2000));
+    await tauri.invoke("screen_sound_stop").catch(() => undefined);
+    return { available, started, ...got };
+  });
+  verdict("the installed app says this Windows can share the computer's sound", sound.available === true, sound);
+  verdict("starting the computer's sound answers, started or refused", sound.started === "started" || sound.started === "no-sound", sound);
+  note(`the computer's sound: ${sound.started}, ${sound.packets} packets in 2 s (a runner plays nothing, so none is usual)`);
 
   // 2. Share as Share does: from a press, read through the track processor,
   // encoded as VP8 (and H.264 when the runner makes it), counted. Nothing

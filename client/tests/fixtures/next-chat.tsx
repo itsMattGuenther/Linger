@@ -32,6 +32,10 @@
  *   there. `&box`, with `sharing`: you share from this window, a popped-out
  *   one, so your box sits under the voice line, a slide in its copy.
  *   `stopped`: your share from here ended by itself, and says why. Watch, Share, Stop and closing go on `body[data-did]`.
+ *   `&sound` (#736): Share offers the computer's sound, your box says it goes
+ *   with your share, and the screen you watch carries sound, with its speaker
+ *   and volume; `&sound=failed` has your share's sound not captured, and
+ *   `&sound=unplayable` this device unable to play a screen's.
  * - `?raid`: forty-five more people in #general's voice (#197,
  *   next/raid.ts), and `window.chat.talk(ids)` says who is talking now.
  * - `?joins`: people joining voice (#473). In #general Jules joins, says
@@ -71,6 +75,7 @@ import type { DraftFile } from "../../src/next/app/chat/Composer";
 import type { Submission } from "../../src/next/core/chat/sending";
 import { voiceStrip } from "../../src/next/core/chat/voice";
 import { voiceStartProblem } from "../../src/lib/voice";
+import { setWatchSoundOn, setWatchVolume, shareSoundOn, useWatchSoundOn, useWatchVolume } from "../../src/lib/screen/sound";
 import { closeTab, keyOf, openTab, selectTab, type TabKey, type Tabs } from "../../src/next/core/tabs";
 import { markerOf, type TabItem } from "../../src/next/kit";
 import { customKey, toggled, withGroup } from "../../src/lib/reactions";
@@ -350,11 +355,30 @@ function slide(): MediaStream {
   return slideStream;
 }
 
-function screenPane(inVoiceHere: boolean): ChatPane["screen"] {
+/** `&sound` (#736): what of the computer's sound there is here. */
+const SOUND = query.get("sound");
+
+function screenPane(inVoiceHere: boolean, hearing: boolean, loudness: number): ChatPane["screen"] {
   const showing = SCREEN === "watching" || SCREEN === "waiting" || SCREEN === "unplayable" || SCREEN === "ended" || SCREEN === "lost";
   const boxHere = SCREEN === "sharing" && query.has("box") && inVoiceHere;
+  const yours = SOUND === null ? {} : { sound: SOUND === "failed" ? ("failed" as const) : ("on" as const) };
+  const theirs =
+    SOUND === null
+      ? {}
+      : {
+          sound: {
+            playable: SOUND !== "unplayable",
+            on: hearing,
+            volume: loudness,
+            onToggle: () => {
+              setWatchSoundOn(!hearing);
+              note(`sound:${hearing ? "off" : "on"}`);
+            },
+            onVolume: (volume: number) => setWatchVolume(volume),
+          },
+        };
   return {
-    ...(boxHere ? { box: { preview: { kind: "stream" as const, stream: slide() }, watching: "Eli and Dave are watching", starting: false, wentBlack: query.has("black"), onStop: () => note("stop sharing") } } : {}),
+    ...(boxHere ? { box: { preview: { kind: "stream" as const, stream: slide() }, watching: "Eli and Dave are watching", starting: false, wentBlack: query.has("black"), ...yours, onStop: () => note("stop sharing") } } : {}),
     ...(SCREEN === "stopped" && inVoiceHere ? { stopped: "Linger couldn't read the screen you picked, so sharing stopped." } : {}),
     stage: showing
       ? {
@@ -365,6 +389,7 @@ function screenPane(inVoiceHere: boolean): ChatPane["screen"] {
           opensNext: (SCREEN === "ended" || SCREEN === "lost") && inVoiceHere,
           onClose: () => note("stop watching"),
           onCanvas: paintSlide,
+          ...theirs,
         }
       : null,
     sharing: new Set(SCREEN === "sharing" ? [people.matt.id] : [people.jules.id]),
@@ -372,7 +397,14 @@ function screenPane(inVoiceHere: boolean): ChatPane["screen"] {
       SCREEN === "sharing"
         ? undefined
         : { sharers: [{ session: "s-jules", user: people.jules }], watching: showing && SCREEN !== "ended" && SCREEN !== "lost" ? "s-jules" : null, onWatch: (session) => note(`watch:${session}`) },
-    share: inVoiceHere ? { sharing: SCREEN === "sharing", onShare: (fps) => note(`share:${fps}`), onStop: () => note("stop sharing") } : undefined,
+    share: inVoiceHere
+      ? {
+          sharing: SCREEN === "sharing",
+          sound: SOUND !== null,
+          onShare: (fps) => note(`share:${fps}${SOUND !== null && shareSoundOn() ? " with sound" : ""}`),
+          onStop: () => note("stop sharing"),
+        }
+      : undefined,
   };
 }
 
@@ -407,6 +439,9 @@ interface Held {
 }
 
 function Fixture() {
+  // A screen's sound button and volume (#736), as the pane reads them.
+  const hearing = useWatchSoundOn();
+  const loudness = useWatchVolume();
   const [tabs, setTabs] = useState<Tabs>(() => {
     let next: Tabs = { open: [], active: null };
     for (const id of ["r-general", "r-listening", "d-jules", "r-plans"]) next = openTab(next, tabOf(id));
@@ -645,7 +680,7 @@ function Fixture() {
               failed: VOICE_FAIL === null ? undefined : { ...voiceStartProblem(VOICE_FAIL, query.has("windows"), ASKED), detail: VOICE_FAIL },
               takenOut: query.has("takenout") && myVoice !== id,
             },
-      screen: room.id === "r-general" && SCREEN !== null ? screenPane(myVoice === id) : undefined,
+      screen: room.id === "r-general" && SCREEN !== null ? screenPane(myVoice === id, hearing, loudness) : undefined,
       people: everyone,
       gone: GONE,
       // The server's own emoji (#359); `?noemoji` has none.

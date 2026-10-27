@@ -18,6 +18,8 @@ export interface ServerTagInfo {
   voice?: boolean;
   /** Whether it passes shared screens on (#360); left out by a server from before. */
   screens?: boolean;
+  /** Whether it passes a shared screen's sound on too (#736); left out by a server from before. */
+  screenSound?: boolean;
 }
 
 /**
@@ -44,6 +46,7 @@ export function useServerInfos(apis: ReadonlyMap<string, AuthedApi>): Readonly<R
             storage: { used: info.storage_used_bytes, limit: info.storage_limit_bytes },
             voice: info.voice,
             screens: info.screens,
+            screenSound: info.screen_sound,
           } })),
         )
         .catch(() => undefined);

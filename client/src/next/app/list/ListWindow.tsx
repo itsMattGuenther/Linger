@@ -99,6 +99,7 @@ import type { InVoice } from "../chat/VoiceStrip";
 import { VoiceDock, type VoiceDockProps } from "./VoiceDock";
 import { useSharesFromHere } from "../../../lib/screen/probe";
 import { type ScreenShareState, useScreenShare, useShareStopped } from "../../../lib/screen/share";
+import { shareSoundOn, useCapturesSound } from "../../../lib/screen/sound";
 import { stopWatching } from "../../../lib/screen/watch";
 import { previewOf } from "../screen/SharingBox";
 import { myScreen, sharersIn, shareStoppedWords, watchersOf, watchingWords } from "../../core/screens";
@@ -852,6 +853,8 @@ function Servers({
   const shareStopped = useShareStopped();
   // The tray's Stop sharing (#360): on while you share, from any window.
   const canShare = useSharesFromHere(voiceServer !== null && infos[voiceServer]?.screens === true && !onPhone());
+  // The computer's sound with a share (#736): this app captures it, and the server passes it on.
+  const soundOffered = useCapturesSound(voiceServer !== null && infos[voiceServer]?.screens === true && infos[voiceServer]?.screen_sound === true && !onPhone());
   const traySharing = (voiceState ? (myScreen(voiceState)?.sharing ?? false) : false) || (shareHere !== null && shareHere.server === voiceServer);
   const trayVoice = useRef<(action: string) => void>(() => undefined);
   trayVoice.current = (action) => {
@@ -900,12 +903,12 @@ function Servers({
   const voice = useMemo(() => {
     if (!voiceState || voiceServer === null) return undefined;
     const screensOn = infos[voiceServer]?.screens === true && !onPhone() && canShare;
-    const dock = voiceDock(voiceState, talkingNow(voiceState), voiceServer, talkKey, screensOn ? { api: apisRef.current.get(voiceServer) ?? null, share: shareHere, stopped: shareStopped?.server === voiceServer ? shareStoppedWords(shareStopped.why) : null } : null);
+    const dock = voiceDock(voiceState, talkingNow(voiceState), voiceServer, talkKey, screensOn ? { api: apisRef.current.get(voiceServer) ?? null, share: shareHere, stopped: shareStopped?.server === voiceServer ? shareStoppedWords(shareStopped.why) : null, sound: soundOffered } : null);
     if (!dock || !several) return dock;
     const info = infos[voiceServer];
     const inVoice = voiceState.myVoice ? (voiceState.voice[voiceState.myVoice.roomId]?.length ?? 0) : 0;
     return { ...dock, server: { name: info?.name ?? hostOf(voiceServer), accent: info?.accent_key ?? null, seats: seatsWords(inVoice) } };
-  }, [voiceState, voiceServer, several, infos, talkKey, shareHere, shareStopped, canShare]);
+  }, [voiceState, voiceServer, several, infos, talkKey, shareHere, shareStopped, canShare, soundOffered]);
 
   // On the phone a conversation, Media or Search covers the list and its
   // voice bar, so your voice comes with them, as a line under the title (#429).
@@ -1690,13 +1693,13 @@ function voiceDock(
   speaking: ReadonlySet<string>,
   server: string,
   talkKey: string,
-  screen: { api: ServerSession["api"] | null; share: ScreenShareState | null; stopped: string | null } | null,
+  screen: { api: ServerSession["api"] | null; share: ScreenShareState | null; stopped: string | null; sound: boolean } | null,
 ): VoiceDockProps | undefined {
   const model = voiceModel(state, speaking, talkKeyName(talkKey));
   if (model === null) return undefined;
   return {
     ...model,
-    ...(screen ? { share: { ...shareOf(state, server, model.roomId, screen.api, screen.share), stopped: screen.stopped } } : {}),
+    ...(screen ? { share: { ...shareOf(state, server, model.roomId, screen.api, screen.share, screen.sound), stopped: screen.stopped } } : {}),
     onGoToRoom: () => openChat(server, model.roomId),
     onMute: (muted) => void setVoiceMuted(server, muted).catch(() => undefined),
     onDeafen: (deafened) => void setVoiceDeafened(server, deafened).catch(() => undefined),
@@ -1716,7 +1719,7 @@ function voiceDock(
  * small copy when it runs in this window, and who is watching it by name,
  * from the server's word.
  */
-function shareOf(state: GatewayState, server: string, roomId: string, api: ServerSession["api"] | null, here: ScreenShareState | null): NonNullable<VoiceDockProps["share"]> {
+function shareOf(state: GatewayState, server: string, roomId: string, api: ServerSession["api"] | null, here: ScreenShareState | null, sound: boolean): NonNullable<VoiceDockProps["share"]> {
   const mine = myScreen(state);
   const sharingHere = here !== null && here.server === server;
   const sharing = sharingHere || (mine?.sharing ?? false);
@@ -1725,12 +1728,21 @@ function shareOf(state: GatewayState, server: string, roomId: string, api: Serve
   return {
     sharing,
     unavailable: !sharing && sharersIn(state, roomId).length >= 3 ? "Three people are sharing here already." : undefined,
+    sound,
     onShare: (fps) => {
       if (!api || state.sessionId === null) return;
-      void startSharingHere({ server, api, sessionId: state.sessionId, fps });
+      void startSharingHere({ server, api, sessionId: state.sessionId, fps, sound: sound && shareSoundOn() });
     },
     onStop: stopSharingEverywhere,
-    box: sharing ? { preview: sharingHere ? previewOf(here) : null, watching: watchingWords(watchers), starting: sharingHere && here.status !== "sharing", wentBlack: sharingHere && here.wentBlack } : null,
+    box: sharing
+      ? {
+          preview: sharingHere ? previewOf(here) : null,
+          watching: watchingWords(watchers),
+          starting: sharingHere && here.status !== "sharing",
+          wentBlack: sharingHere && here.wentBlack,
+          ...(sharingHere && here.sound ? { sound: here.sound } : {}),
+        }
+      : null,
   };
 }
 

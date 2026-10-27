@@ -53,6 +53,52 @@ export function packFrame(codec: ScreenCodec, key: boolean, micros: number, data
   return buffer;
 }
 
+/**
+ * A packet of the computer's sound (PROTOCOL §8, "The computer's sound",
+ * #736): a header the size of a frame's whose first byte is 2, which no
+ * frame has, so a server or an app that knows only frames drops it.
+ *
+ * | byte | what |
+ * |---|---|
+ * | 0 | 2, a sound packet |
+ * | 1 | format: 1 Opus, 48 kHz, two channels, 20 ms |
+ * | 2, 3 | 0 |
+ * | 4–11 | when it was captured, microseconds on the share's frames' clock, big-endian |
+ */
+export const SOUND_KIND = 2;
+const SOUND_OPUS = 1;
+
+/** One sound packet read off the socket. */
+export interface SoundPacket {
+  micros: number;
+  /** The Opus packet. */
+  data: Uint8Array;
+}
+
+/** Whether a binary message is a sound packet, by its first byte. */
+export function isSound(buffer: ArrayBuffer): boolean {
+  return buffer.byteLength > FRAME_HEADER_BYTES && new DataView(buffer).getUint8(0) === SOUND_KIND;
+}
+
+/** Read a sound packet, or null for anything that isn't one this app knows. */
+export function readSound(buffer: ArrayBuffer): SoundPacket | null {
+  if (!isSound(buffer)) return null;
+  const view = new DataView(buffer);
+  if (view.getUint8(1) !== SOUND_OPUS) return null;
+  return { micros: Number(view.getBigUint64(4)), data: new Uint8Array(buffer, FRAME_HEADER_BYTES) };
+}
+
+/** A sound packet ready to send: the header, then the Opus packet. */
+export function packSound(micros: number, data: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(FRAME_HEADER_BYTES + data.byteLength);
+  const view = new DataView(buffer);
+  view.setUint8(0, SOUND_KIND);
+  view.setUint8(1, SOUND_OPUS);
+  view.setBigUint64(4, BigInt(Math.max(0, Math.floor(micros))));
+  new Uint8Array(buffer, FRAME_HEADER_BYTES).set(data);
+  return buffer;
+}
+
 /** Read a frame, or null for anything that isn't one this app knows. */
 export function readFrame(buffer: ArrayBuffer): ScreenFrame | null {
   if (buffer.byteLength <= FRAME_HEADER_BYTES) return null;

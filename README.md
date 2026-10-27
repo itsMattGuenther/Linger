@@ -99,8 +99,9 @@ This is not an attempt to build a better platform. It's an attempt to not need o
 - **Screen sharing** in voice: share a screen or one window from the Windows
   or Linux app at 30 or 60 frames a second, and everybody in that voice can watch it
   above the conversation, on a computer or a phone. Your system's own picker
-  chooses what's shared, and Linger never learns a window's name. No sound
-  from the computer yet, and it's never recorded. Cameras aren't a feature.
+  chooses what's shared, and Linger never learns a window's name. From
+  Windows the computer's sound can go with it, without the call's own voices,
+  and everybody can hear it. It's never recorded. Cameras aren't a feature.
 - **Every emoji**, found by name: type `:smiley:` as on Discord. A server's
   host can add its own emoji too, animated GIFs included.
 - **Reactions**, as on Discord and Slack: any emoji, the server's own

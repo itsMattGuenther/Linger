@@ -1351,16 +1351,29 @@ of what everybody sees, beside **Stop**, in the voice bar, or under the voice li
 conversation popped out into its own window when they share from there; Stop is in the
 tray menu too, for when a slide show covers the app.
 
-**No sound from the computer yet.** The person sharing talks through their microphone as
-usual. A video playing on a shared screen plays silently for the people watching. The
-computer's own sound comes with streaming a game, later (#360).
+**The computer's sound can go with it, never the call's** (Matt, 2026-10-27, #736). Share
+asks whether to **Share the computer's sound** too: off until it's turned on, then kept on
+that computer. With it on, the people watching hear what the sharing computer plays, a
+video, a game, a clip in a slide, and never the call itself: Linger leaves out everything
+it plays, everybody's voices and its own chimes, so nobody hears themselves come back,
+late. The sharer's box says the sound goes with it (a speaker after "Sharing your
+screen"), or that it couldn't. Only the Windows app shares it for now (Windows 10 version
+2004 and later), since Windows can capture every program's sound but one: Linger's. The
+Linux app shares the picture alone until it can leave its own voice out of what the
+desktop plays. Every app plays it: the computer apps in the call, through the Speakers
+picked in Settings; a phone where its web engine can decode it, and where it can't, its
+screen says so. A watched screen with sound has a speaker that turns it off and on, and
+on a computer a slider for how loud it is, both kept on that device and nobody else's
+business; with the speaker off, the server sends that watcher none. Deafen silences it with
+the voices. Nothing says which program made the sound (hard rule 2): it arrives as sound
+alone. The person sharing still talks through their microphone as usual.
 
 **Through the host's server, like voice.** The person sharing sends their screen once, to
 the host's server, which passes a copy to each person watching and keeps nothing. It
 travels on the same secure connection the app already has with the server, not voice's
 port, so it works on networks that block voice. Each person watching costs the host
 up to about 2.5 Mbps of upload while they watch at Low quality and 6 Mbps at High,
-less while the screen is still. **The host's server could see a shared screen**, the same way it could hear
+less while the screen is still, and about 128 kbps more with the computer's sound. **The host's server could see a shared screen**, the same way it could hear
 voice (§4.14). It isn't end-to-end encrypted, and Linger never says it is.
 
 **Never recorded, never kept.** No copy on the server, no preview pictures, no recordings,
@@ -1529,8 +1542,9 @@ says what replaced it: a status somebody typed.
 - A phone app for iPhone and Android, with voice rooms (#429) and no push (§4.15)
 - Every emoji, shortcodes, and a server's own emoji (§4.17, #359)
 - Polls, asked with `/poll` by the host or a co-host (§4.18, #474)
-- Screen sharing at 30 or 60 frames a second, watched from every app (§4.20, #360);
-  streaming a game with its sound comes after it
+- Screen sharing at 30 or 60 frames a second, watched from every app, with the
+  computer's sound from Windows (§4.20, #360, #736); streaming a game on the graphics
+  card's encoder comes after it
 
 **Ambient voice used to be on this list and is gone** (Matt, 2026-10-11 —
 `docs/decisions.md`). It was "a room you leave running, not a call you join",

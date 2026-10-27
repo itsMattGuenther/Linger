@@ -107,6 +107,20 @@
   color: var(--text-danger);
 }
 
+/* The computer's sound couldn't go (#736): said as plainly, but not a
+   problem with what everybody sees. */
+.nx-sharing-black[data-tone="quiet"] {
+  color: var(--text-secondary);
+}
+
+/* The speaker after "Sharing your screen" while its sound goes too (#736). */
+.nx-sharing-sound {
+  display: inline-flex;
+  margin-left: var(--space-1-5);
+  vertical-align: middle;
+  color: var(--text-secondary);
+}
+
 .nx-sharing-black[data-layout="band"] {
   flex: none;
   padding: var(--space-2) var(--space-3-5);

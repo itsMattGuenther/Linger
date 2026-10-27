@@ -56,11 +56,17 @@ export function Menu({
   anchor,
   onClose,
   sheet,
+  wide = false,
 }: {
   label: string;
   items: MenuItem[];
   anchor: MenuAnchor;
   onClose: (reason: MenuCloseReason) => void;
+  /**
+   * `--menu-w-wide` rather than `--menu-w`, for a menu whose items say more
+   * than a word or two: Share's, with "Share the computer's sound" (#736).
+   */
+  wide?: boolean;
   /**
    * On a phone (SPEC §4.15): the whole width, risen from the bottom over the
    * page dimmed, with rows a thumb can hit, instead of floating by a button
@@ -140,6 +146,7 @@ export function Menu({
       className="k-menu"
       data-kit="Menu"
       data-sheet={sheet ? "yes" : undefined}
+      data-width={wide ? "wide" : undefined}
       role="menu"
       aria-label={label}
       data-placed={place ? "yes" : "no"}

@@ -252,6 +252,7 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
     roomId: room ? roomId : null,
     intend,
     screensOn: active ? infos[active.server]?.screens === true : false,
+    soundOn: active ? infos[active.server]?.screenSound === true : false,
     shareBox,
   });
 

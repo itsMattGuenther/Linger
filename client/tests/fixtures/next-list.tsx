@@ -346,7 +346,17 @@ function OneServer() {
                       unavailable: SCREEN === "full" ? "Three people are sharing here already." : undefined,
                       onShare: (fps: number) => note(`share:${fps}`),
                       onStop: () => note("stop sharing"),
-                      box: SCREEN === "sharing" ? { preview: previewOf(fakeScreen()), watching: "Eli and Jules are watching", starting: false, wentBlack: query.has("black") } : null,
+                      // `&sound`: the computer's sound goes with it (#736), or `=failed` couldn't.
+                      box:
+                        SCREEN === "sharing"
+                          ? {
+                              preview: previewOf(fakeScreen()),
+                              watching: "Eli and Jules are watching",
+                              starting: false,
+                              wentBlack: query.has("black"),
+                              ...(query.has("sound") ? { sound: query.get("sound") === "failed" ? ("failed" as const) : ("on" as const) } : {}),
+                            }
+                          : null,
                       // `=stopped`: your last share didn't start, and the bar says why.
                       stopped: SCREEN === "stopped" ? "Three people are sharing here already, so yours didn't start." : null,
                     },

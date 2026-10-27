@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { onPreviewPicture, type ScreenShareState, setPreviewShown, usePreviewShown } from "../../../lib/screen/share";
-import { WENT_BLACK_WORDS } from "../../core/screens";
-import { Button, IconButton } from "../../kit";
+import { SHARING_SOUND, SOUND_FAILED_WORDS, WENT_BLACK_WORDS } from "../../core/screens";
+import { Button, Icon, IconButton } from "../../kit";
 import "./SharingBox.css";
 
 /** Where your share's preview comes from: the page's own picture of it, or the shell's (Linux). */
@@ -21,6 +21,8 @@ export interface SharingBoxProps {
   starting: boolean;
   /** Your share went black for a while: said until it stops. */
   wentBlack?: boolean;
+  /** The computer's sound goes with it, or was asked for and couldn't (#736). */
+  sound?: "on" | "failed";
   onStop: () => void;
 }
 
@@ -34,9 +36,19 @@ export interface SharingBoxProps {
  * voice bar, a band: the copy beside the words, and hidden, one line. A
  * share gone black says so under the words in the box, and under the band.
  */
-export function SharingBox({ preview, watching, starting, wentBlack = false, onStop, layout = "bar" }: SharingBoxProps & { layout?: "bar" | "band" }) {
+export function SharingBox({ preview, watching, starting, wentBlack = false, sound, onStop, layout = "bar" }: SharingBoxProps & { layout?: "bar" | "band" }) {
   const shown = usePreviewShown();
-  const words = <span className="nx-sharing-words">{starting ? "Starting to share…" : "Sharing your screen"}</span>;
+  const words = (
+    <span className="nx-sharing-words">
+      {starting ? "Starting to share…" : "Sharing your screen"}
+      {sound === "on" && !starting ? (
+        <span className="nx-sharing-sound" title={SHARING_SOUND.title}>
+          <Icon name="speaker" size="sm" />
+          <span className="k-sr-only">{SHARING_SOUND.said}</span>
+        </span>
+      ) : null}
+    </span>
+  );
   const eye = preview ? <IconButton icon="preview" label="Show the preview" size="sm" pressed={shown} onClick={() => setPreviewShown(!shown)} /> : null;
   const stop = (
     <Button size="sm" variant="secondary" onClick={onStop}>
@@ -48,12 +60,20 @@ export function SharingBox({ preview, watching, starting, wentBlack = false, onS
       {watching}
     </p>
   );
-  const black = (band: boolean) =>
-    wentBlack ? (
-      <p className="nx-sharing-black" data-layout={band ? "band" : undefined} role="alert">
-        {WENT_BLACK_WORDS}
-      </p>
-    ) : null;
+  const black = (band: boolean) => (
+    <>
+      {wentBlack ? (
+        <p className="nx-sharing-black" data-layout={band ? "band" : undefined} role="alert">
+          {WENT_BLACK_WORDS}
+        </p>
+      ) : null}
+      {sound === "failed" && !starting ? (
+        <p className="nx-sharing-black" data-layout={band ? "band" : undefined} data-tone="quiet" role="status">
+          {SOUND_FAILED_WORDS}
+        </p>
+      ) : null}
+    </>
+  );
   if (layout === "band") {
     const copy = preview && shown ? <div className="nx-sharing-preview">{preview.kind === "stream" ? <StreamPreview stream={preview.stream} /> : <PicturePreview />}</div> : null;
     return (
