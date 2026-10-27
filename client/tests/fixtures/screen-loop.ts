@@ -321,7 +321,7 @@ declare global {
       unfeed: () => void;
       pane: (baseUrl: string, sessionId: string, own?: boolean) => void;
       voice: (julesShares: boolean, julesWatches?: string) => void;
-      pane_watch: (session: string) => void;
+      pane_watch: (session: string) => Promise<void>;
       pane_close: () => void;
       pane_state: () => { status: string | null; opensNext: boolean; behind: boolean; sound: { playable: boolean; on: boolean } | null };
       pane_sound: () => void;
@@ -459,7 +459,15 @@ window.loop = {
     ];
     for (const heard of voiceHeard) heard();
   },
-  pane_watch: (session) => paneNow?.watch?.onWatch(session),
+  // Pressed once the voice line offers it: the pane draws after `pane` and
+  // `voice` return, and a Watch pressed before that pressed nothing, which a
+  // busy WebKit on CI once showed (#736).
+  pane_watch: async (session) => {
+    for (let wait = 0; wait < 100 && !paneNow?.watch?.sharers.some((one) => one.session === session); wait += 1) {
+      await new Promise((settle) => window.setTimeout(settle, 50));
+    }
+    paneNow?.watch?.onWatch(session);
+  },
   pane_close: () => paneNow?.stage?.onClose(),
   pane_state: () => ({
     status: paneNow?.stage?.status ?? null,
