@@ -570,7 +570,13 @@ broken it, and it stays a hard rule now that there is not.
 
 ## 7. Security
 
-### Threat model, stated plainly — publish this verbatim in the README
+### Threat model, stated plainly
+
+The README's Privacy section and linger.im say this in their own words, leading
+with whose server it is: your friend's, not a company's (Matt, 2026-10-28). However
+they put it, they say plainly that Linger isn't end-to-end encrypted and that the
+host can see what's on their server, and they name only what's filed as coming:
+end-to-end encrypted voice (#200).
 
 > Messages and files travel over TLS in a deployed server. Linger does not encrypt
 > its database or stored files; encryption at rest depends on the host's disk or

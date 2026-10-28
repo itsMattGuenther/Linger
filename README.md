@@ -133,11 +133,17 @@ product.
 
 ## 🔐 Privacy
 
-**The person running the server can read everything on it**, and voice and
-shared screens pass through it too. There is no end-to-end
-encryption. Traffic goes over TLS; files and the database are not
-encrypted on the host's disk. Run your own server, or trust the person who
-runs yours. If you need guarantees against your host, use Signal.
+**Your conversations live on your friend's server, not a company's.**
+Messages, files, voice and shared screens travel encrypted (TLS) to the
+host's server, and nowhere else. No company sits in the middle, and nothing
+in Linger reads them to sell you something.
+
+Linger isn't end-to-end encrypted yet, so the person running the server can
+see what's on it, and the database and files sit unencrypted on their disk.
+That's why it's made for friends: run your own server, or join one run by
+somebody you trust. End-to-end encrypted voice is on the backlog
+([#200](https://github.com/itsMattGuenther/Linger/issues/200)). If you need
+protection even from your host, use an app built for that, such as Signal.
 
 What *is* guaranteed: no telemetry, analytics or crash reporting, not even
 opt-in (the app only contacts GitHub to check for updates); EXIF, including
