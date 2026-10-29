@@ -68,9 +68,10 @@ function commandProblem({ command, piped }) {
   const toFile =
     /\s-[a-zA-Z]*O(?:\s|$)/.test(command) ||
     /\s--remote-name\b/.test(command) ||
-    new RegExp(String.raw`\s(?:-[a-zA-Z]*o|--output)(?:\s+|=)(?!${NULL})\S`).test(command) ||
-    // Standard output into a file; not 2> (errors), not >&2.
-    new RegExp(String.raw`(?:^|[^0-9&])>{1,2}\s*(?!${NULL}|&)\S`).test(command);
+    // -o name, -o=name, --output name, or the name attached: -otool.jar.
+    new RegExp(String.raw`\s(?:-[a-zA-Z]*o|--output)(?:\s+|=)?(?!${NULL})[^\s=-]`).test(command) ||
+    // Standard output into a file: >, >>, 1> or &>; not 2> (errors), not >&2.
+    new RegExp(String.raw`(?<![0-9])1?>{1,2}\s*(?!${NULL}|&)\S`).test(command);
   if (!toFile && !piped) return null;
   if (!/\s--retry\s+[1-9]/.test(command)) return "a download without --retry";
   if (!/\s--retry-all-errors\b/.test(command)) return "a download without --retry-all-errors";
@@ -127,6 +128,8 @@ test("a download without retries is refused; a check, a package list or a retrie
     'curl -fsS -o "/dev/null" "$HEALTH"',
     "curl -fsS -o '/dev/null' \"$HEALTH\" 2>&1 || exit 1",
     'curl -fsS --output=/dev/null "$HEALTH" >&2',
+    'curl -fsS -o/dev/null "$HEALTH"',
+    'curl -fsS "$HEALTH" 1>/dev/null 2>/dev/null',
     'echo "the | in here is words" ; curl --version',
   ];
   for (const line of fine) assert.equal(downloadProblem(line), null, line);
@@ -143,6 +146,9 @@ test("a download without retries is refused; a check, a package list or a retrie
     'curl -fsS -o /dev/null "$HEALTH" && curl -fsSL -o tool.jar "$URL"',
     'curl -fsSL "$URL"|sh',
     'curl -fsSL "$URL" >tool.tar.gz',
+    'curl -fsSL -otool.jar "$URL"',
+    'curl -fsSL "$URL" 1> tool.jar',
+    'curl -fsSL "$URL" &> tool.jar',
     'curl -fsSL --retry 5 --retry-all-errors -o a.jar "$A";curl -fsSL -o b.jar "$B"',
   ];
   for (const line of bad) assert.notEqual(downloadProblem(line), null, line);
