@@ -191,6 +191,12 @@ rules that came out of them.
 - **A check that proves the app does something starts where it isn't
   already done.** An environment, a file or a setting the check inherits can
   pass for what it's there to prove (#757; #765 for the packaged-app check).
+- **Test what a script does, not what its source says.** A test that looks
+  for a line in the source passes a change that keeps the line and defeats
+  it. Run the script, with stand-ins on `PATH` for what it calls, and check
+  what came out, as `scripts/linux-next-env.test.mjs` does with `xvfb-run`
+  (#768). A test that reads files on purpose (a lint over the workflows, two
+  lists kept equal) is the exception, and says so.
 - **Scripts that look for system files look where every distro keeps them:**
   `/usr/lib` (Arch), `/usr/lib64` (Fedora), `/usr/lib/x86_64-linux-gnu`
   (Debian, Ubuntu). And never bind-mount a path that might be missing: Docker

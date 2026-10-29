@@ -59,6 +59,16 @@ to be right for every shape that window takes.
   mounts a file that isn't there (Docker makes an empty directory in its
   place). Rule in `docs/testing-strategy.md`.
 
+## A test of the source, not of what it does
+
+- **#768: the packaged-app check's launch went unchecked.** #765's test
+  looked for `cleanEnvironment(process.env)` in the check's source, so a
+  launch that ignored it (`{ env: process.env }`) would still pass. *Missed
+  because* reading the source was quicker than running the script. *Changed:*
+  the test runs the check with stand-ins for what it calls, and the stand-in
+  `xvfb-run` writes down the environment the app would have had. Rule: test
+  what a script does, not what its source says (`docs/testing-strategy.md`).
+
 ## Tests written from the case in mind, not from the ways things fail
 
 - **#758: a download cut off half way.** The retry test dropped a
