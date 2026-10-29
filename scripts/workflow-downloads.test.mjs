@@ -17,26 +17,72 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
 
-/** What's wrong with one shell command line, or null when it's fine. */
-export function downloadProblem(line) {
-  if (/^\s*#/.test(line)) return null;
+/**
+ * The commands on one line, split where the shell would: at ;, &&, || and |,
+ * outside quotes, with or without spaces around them, and stopping at a
+ * comment. Each says whether its output is piped on.
+ */
+export function commandsOf(line) {
+  const out = [];
+  let command = "";
+  let quote = null;
+  for (let at = 0; at < line.length; at += 1) {
+    const char = line[at];
+    if (quote !== null) {
+      command += char;
+      if (char === quote) quote = null;
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      command += char;
+      continue;
+    }
+    if (char === "#" && (at === 0 || /\s/.test(line[at - 1]))) break;
+    const two = line.slice(at, at + 2);
+    if (two === "&&" || two === "||") {
+      out.push({ command, piped: false });
+      command = "";
+      at += 1;
+      continue;
+    }
+    if (char === ";" || char === "|") {
+      out.push({ command, piped: char === "|" });
+      command = "";
+      continue;
+    }
+    command += char;
+  }
+  out.push({ command, piped: false });
+  return out;
+}
+
+/** `/dev/null`, quoted or not: an answer thrown away. */
+const NULL = String.raw`["']?\/dev\/null["']?(?:\s|$)`;
+
+/** What's wrong with one command, or null when it's fine. */
+function commandProblem({ command, piped }) {
   // A wget run, not one named in a list of packages: an option or an address follows.
-  if (/(?:^|[\s;&|(])wget\s+(?:-|https?:|["'$])/.test(line)) return "use curl, with --retry 5 --retry-all-errors";
-  const at = line.search(/(?:^|[\s;&|(])curl\s/);
-  if (at < 0) return null;
-  // The curl command alone: up to the next command, and whether it's piped on.
-  const from = line.slice(at);
-  const end = from.search(/\s(?:&&|\|\||;)\s|\s\|\s/);
-  const command = end < 0 ? from : from.slice(0, end);
-  const piped = end >= 0 && /^\s\|\s/.test(from.slice(end));
+  if (/(?:^|[\s(])wget\s+(?:-|https?:|["'$])/.test(command)) return "use curl, with --retry 5 --retry-all-errors";
+  if (!/(?:^|[\s(])curl\s/.test(command)) return null;
   const toFile =
     /\s-[a-zA-Z]*O(?:\s|$)/.test(command) ||
     /\s--remote-name\b/.test(command) ||
-    /\s(?:-[a-zA-Z]*o|--output)[\s=]+(?!\/dev\/null\b)\S/.test(command) ||
-    /\s>\s*(?!\/dev\/null\b)\S/.test(command);
+    new RegExp(String.raw`\s(?:-[a-zA-Z]*o|--output)(?:\s+|=)(?!${NULL})\S`).test(command) ||
+    // Standard output into a file; not 2> (errors), not >&2.
+    new RegExp(String.raw`(?:^|[^0-9&])>{1,2}\s*(?!${NULL}|&)\S`).test(command);
   if (!toFile && !piped) return null;
   if (!/\s--retry\s+[1-9]/.test(command)) return "a download without --retry";
   if (!/\s--retry-all-errors\b/.test(command)) return "a download without --retry-all-errors";
+  return null;
+}
+
+/** What's wrong with one shell line, every command on it, or null when it's fine. */
+export function downloadProblem(line) {
+  for (const command of commandsOf(line)) {
+    const problem = commandProblem(command);
+    if (problem !== null) return problem;
+  }
   return null;
 }
 
@@ -78,6 +124,10 @@ test("a download without retries is refused; a check, a package list or a retrie
     "librsvg2-dev libasound2-dev build-essential curl wget file libxdo-dev patchelf",
     "sudo apt-get install -y curl wget",
     "# curl -o old.jar https://example.com/old.jar",
+    'curl -fsS -o "/dev/null" "$HEALTH"',
+    "curl -fsS -o '/dev/null' \"$HEALTH\" 2>&1 || exit 1",
+    'curl -fsS --output=/dev/null "$HEALTH" >&2',
+    'echo "the | in here is words" ; curl --version',
   ];
   for (const line of fine) assert.equal(downloadProblem(line), null, line);
   const bad = [
@@ -90,6 +140,10 @@ test("a download without retries is refused; a check, a package list or a retrie
     "curl -fsSL --output=tool.tar.gz https://example.com/tool.tar.gz",
     "set -e; curl -fsSLo tool.tar.gz https://example.com/tool.tar.gz && tar -xf tool.tar.gz",
     "wget https://example.com/tool.tar.gz",
+    'curl -fsS -o /dev/null "$HEALTH" && curl -fsSL -o tool.jar "$URL"',
+    'curl -fsSL "$URL"|sh',
+    'curl -fsSL "$URL" >tool.tar.gz',
+    'curl -fsSL --retry 5 --retry-all-errors -o a.jar "$A";curl -fsSL -o b.jar "$B"',
   ];
   for (const line of bad) assert.notEqual(downloadProblem(line), null, line);
 });
