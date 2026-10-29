@@ -135,7 +135,9 @@ jobs:
           } > "$RUNNER_TEMP/google-play.pem"
           openssl pkey -pubin -in "$RUNNER_TEMP/google-play.pem" -noout ||
             { echo "::error::encryption_key isn't a public key: paste the whole text of Play Console's .pem"; exit 1; }
-          curl -fsSL -o "$RUNNER_TEMP/pepk.jar" "$PEPK_URL"
+          # Tried again through a slow server, as every download is (#761).
+          curl -fL --no-progress-meter --retry 5 --retry-all-errors --connect-timeout 30 --max-time 300 \
+            -o "$RUNNER_TEMP/pepk.jar" "$PEPK_URL"
           echo "$PEPK_SHA256  $RUNNER_TEMP/pepk.jar" | sha256sum -c - ||
             { echo "::error::Google's pepk.jar has changed: check the new one and update PEPK_SHA256"; exit 1; }
           mkdir -p "$RUNNER_TEMP/play-key"

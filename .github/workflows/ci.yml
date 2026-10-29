@@ -375,10 +375,11 @@ jobs:
         # An updater that compares the wrong version is a release that installs
         # nothing and reports success (T-701).
         run: scripts/version-check.sh
-      - name: test CI selection, that every job is in the gate, and that every action is pinned
+      - name: test CI selection, that every job is in the gate, that every action is pinned, and that every download retries
         # A tag can be moved to new code by whoever owns the action; a commit
         # SHA can't, and the release job hands the actions its signing key (#491).
-        run: node --test scripts/ci-scope.test.mjs scripts/ci-gate.test.mjs scripts/changed-tests.test.mjs scripts/action-pins.test.mjs
+        # A download that isn't tried again fails a job on one slow moment (#761).
+        run: node --test scripts/ci-scope.test.mjs scripts/ci-gate.test.mjs scripts/changed-tests.test.mjs scripts/action-pins.test.mjs scripts/workflow-downloads.test.mjs
       - name: test the build's CSP check
         run: node --test scripts/csp-assets.test.mjs
       - name: a new issue with no label gets one from its body

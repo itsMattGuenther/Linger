@@ -75,6 +75,7 @@ version check, and the tests of these scripts themselves
 (`node --test scripts/ci-scope.test.mjs`, `scripts/csp-assets.test.mjs`,
 `scripts/package-deps.test.mjs`, `scripts/playwright-image.test.mjs`,
 `scripts/issue-label.test.mjs`, `scripts/action-pins.test.mjs`,
+`scripts/workflow-downloads.test.mjs`,
 `scripts/startup-time.test.mjs`,
 `python3 scripts/linux-audio-check.test.py`,
 `scripts/android-signing-test.sh`, `scripts/tidy-branches-test.sh`,
@@ -335,6 +336,14 @@ rules that came out of them:
   against its checksum before it's used. `scripts/appimage-fetch-test.sh`
   has a stand-in server drop, turn away (503) or never answer the first
   request, and checks the file still arrives.
+- **Every download in a workflow is tried again when it fails** (#761):
+  `scripts/workflow-downloads.test.mjs`, in the rules job and `check.sh`,
+  fails any `curl` in a workflow or one of the repository's own actions that
+  keeps what it fetched (to a file, or piped on) without `--retry` and
+  `--retry-all-errors`, naming the file and line. A `curl` that throws the
+  answer away (`-o /dev/null`) is a check, retried by the loop it sits in;
+  `wget` isn't used. The AppImage's downloads go through
+  `scripts/appimage-fetch.sh` (above), which retries the same way.
 - The page server runs on port 1421. `LINGER_TEST_PORT=1431` (any free port)
   moves it, so a second copy of the repository, such as a git worktree, can
   run its browser tests while the first runs its own.
