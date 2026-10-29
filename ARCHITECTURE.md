@@ -175,6 +175,18 @@ connections per server instead of one. `scripts/linux-next-check.mjs` checks
 the packaged network process has the switch and that its libsoup still reads
 it.
 
+Shared screens and chat videos are both decoded by GStreamer in WebKit's page
+process, which inherits its settings from startup. Startup ranks the hardware
+H.264 and VP8 decoders out (`GST_PLUGIN_FEATURE_RANK`), since WebKit's
+WebCodecs hands them input they refuse and a shared screen can't play (#730).
+That puts a chat video's H.264 in software too, and WebKit's GL video sink
+hands software-decoded frames to GStreamer's GL upload, which gives them to
+NVIDIA's EGL as udmabufs that it imports as nothing: every chat video was
+solid green there (#756). So startup also sets `WEBKIT_GST_DISABLE_GL_SINK=1`
+unless it is set, and WebKit copies a video's frames itself. A shared screen
+doesn't use that sink (WebCodecs draws onto a canvas). The package checks play
+a chat video and read its picture back, on NVIDIA's own EGL in the GPU check.
+
 The same startup path ignores `SIGHUP` so closing the launching terminal does
 not kill the window, and an AppImage writes a user menu entry
 (`com.linger.desktop`) so the next open does not need a terminal. Packaged

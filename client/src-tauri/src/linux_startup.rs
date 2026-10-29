@@ -37,6 +37,11 @@ const FORCE_HTTP1: &str = "SOUP_FORCE_HTTP1";
 /// GStreamer starts; WebKit's page process inherits them from here. Later
 /// pairs win. Set by [`configure`] (#730).
 const FEATURE_RANK: &str = "GST_PLUGIN_FEATURE_RANK";
+/// WebKit's switch for its GL video sink. Off, a `<video>` element's frames
+/// come to WebKit in ordinary memory and it puts them on screen itself;
+/// on, GStreamer's `glupload` does. Set by [`configure`] (#756) unless
+/// somebody set it.
+const DISABLE_GL_SINK: &str = "WEBKIT_GST_DISABLE_GL_SINK";
 /// The hardware H.264 and VP8 decoders, kept out of WebKit's way (#730).
 ///
 /// WebKitGTK's WebCodecs decoder takes the highest-ranked GStreamer decoder
@@ -375,6 +380,16 @@ pub fn configure() -> Result<(), &'static str> {
         FEATURE_RANK,
         decoder_ranks(std::env::var_os(FEATURE_RANK).as_deref()),
     );
+    // That puts a chat's H.264 video in software too, and GStreamer's GL
+    // upload hands software-decoded frames to NVIDIA's EGL as udmabufs, which
+    // it imports as nothing: every video in a conversation played solid green
+    // (#756). Without WebKit's GL sink, WebKit copies the frames itself. A
+    // shared screen doesn't come this way (WebCodecs, onto a canvas), so its
+    // decoders stay as #730 left them. `linux-next-check.mjs` plays a video
+    // on NVIDIA's EGL to show it.
+    if std::env::var_os(DISABLE_GL_SINK).is_none() {
+        std::env::set_var(DISABLE_GL_SINK, "1");
+    }
     ignore_terminal_hangup();
     if let Err(err) = install_appimage_menu_entry(&chosen) {
         eprintln!("Linger couldn't add itself to the application menu: {err}");

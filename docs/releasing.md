@@ -91,10 +91,16 @@ produces a green release that no installed copy will accept.
   ```
 
   It must print a `PASS` for "a shared screen plays", with the hardware
-  decoders it found listed in `hardware-decoders.txt`, and a `PASS` for the
-  `GDK_GL=disable` launch (#729). Nothing opens on the screen; it runs in a
-  container on a virtual display. Say in the pull request which GPUs it ran
-  with.
+  decoders it found listed in `hardware-decoders.txt`, a `PASS` for "a video
+  in a conversation shows its picture" in every run (#756), and a `PASS` for
+  the `GDK_GL=disable` launch (#729). On a computer with NVIDIA's driver it
+  runs a third time with the page drawing on NVIDIA's own EGL (`/out/nvidia`),
+  where a chat's video went green, and that run must print "the page draws
+  with libnvidia-eglcore". Every run must also print a `PASS` for "a voice
+  message and a sound file in a conversation play". Run it on the NVIDIA computer, and
+  if it says NVIDIA's libraries weren't found, the NVIDIA run didn't happen:
+  say so. Nothing opens on the screen; it runs in a container on a virtual
+  display. Say in the pull request which GPUs it ran with.
 
 Merge it once CI is green and the GPU check passed.
 

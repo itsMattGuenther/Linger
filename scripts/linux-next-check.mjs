@@ -3,14 +3,18 @@
 //
 // Runs the unchanged package on a private virtual display with an empty profile
 // and no account, injects client/scripts/next-smoke-probe.js through the same
-// test-only GTK module the audio check uses, and waits for its verdict. Then it
-// checks WebKit's network process speaks HTTP/1.1 only (#646), and that its web
-// process keeps the hardware H.264 and VP8 decoders out (#730). Requires cc,
-// pkg-config, WebKitGTK/GStreamer headers, Xvfb and D-Bus. The Windows
-// version of this check is client/scripts/windows-next-check.mjs.
+// test-only GTK module the audio check uses, and waits for its verdict: among
+// the rest, an H.264 video in a <video> element, as a chat shows one, must
+// show its picture, and a voice message and an MP3 must play (#756). Then it
+// checks WebKit's network process speaks
+// HTTP/1.1 only (#646), and that its web process keeps the hardware H.264 and
+// VP8 decoders out (#730) and copies software-decoded video itself (#756).
+// Requires cc, pkg-config, WebKitGTK/GStreamer headers, Xvfb and D-Bus. The
+// Windows version of this check is client/scripts/windows-next-check.mjs.
 //
 // Usage: node scripts/linux-next-check.mjs PROGRAM --output DIR [--appimage]
 //          [--webkit-gpu] [--gdk-gl-disable] [--h264]
+//          [--render-device PATH --draws-with LIBRARY]
 //
 // By default WebKit's GPU paths are off, as CI's runners need for Ubuntu's
 // WebKit, and the app must then say it can't play a shared screen (#729).
@@ -19,6 +23,13 @@
 // --gdk-gl-disable starts it as on NVIDIA's legacy driver (#229): it must
 // say it can't, and not crash. `scripts/linux-arch-check.sh` runs these on
 // Arch's own WebKit, and with this machine's GPUs before a release.
+// --render-device has WebKit's pages draw on that graphics device
+// (`WEBKIT_WEB_RENDER_DEVICE_FILE`), with WebKit's GBM path on, as a native
+// Wayland desktop has it (on X11 Linger keeps it off). --draws-with fails the
+// check unless WebKit's page process loaded that library, so a run meant for
+// one driver can't quietly draw with another: WebGL can't say, since WebKit
+// names every GPU "Apple GPU". The GPU check runs on NVIDIA's own EGL this
+// way (`libnvidia-eglcore`), where #756 showed.
 
 import { execFileSync, spawn } from "node:child_process";
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync } from "node:fs";
@@ -37,6 +48,8 @@ const { values, positionals } = parseArgs({
     "webkit-gpu": { type: "boolean", default: false },
     "gdk-gl-disable": { type: "boolean", default: false },
     h264: { type: "boolean", default: false },
+    "render-device": { type: "string" },
+    "draws-with": { type: "string" },
   },
 });
 if (positionals.length !== 1 || values.output === undefined) {
@@ -77,6 +90,13 @@ for (const key of ["WEBKIT_DISABLE_DMABUF_RENDERER", "WEBKIT_DISABLE_COMPOSITING
 if (!values["webkit-gpu"]) Object.assign(env, { WEBKIT_DISABLE_DMABUF_RENDERER: "1", WEBKIT_DISABLE_COMPOSITING_MODE: "1" });
 if (values["gdk-gl-disable"]) env.GDK_GL = "disable";
 else delete env.GDK_GL;
+for (const key of ["WEBKIT_WEB_RENDER_DEVICE_FILE", "WEBKIT_DMABUF_RENDERER_DISABLE_GBM", "WEBKIT_DMABUF_RENDERER_FORCE_SHM"]) delete env[key];
+if (values["render-device"] !== undefined) {
+  env.WEBKIT_WEB_RENDER_DEVICE_FILE = values["render-device"];
+  // Somebody's own setting wins over Linger's choice (linux_startup.rs), so
+  // this keeps GBM on under X11, as Wayland has it, and pages go to that device.
+  env.WEBKIT_DMABUF_RENDERER_DISABLE_GBM = "0";
+}
 // Whether the app should say it plays a shared screen, as started: not where
 // WebKit draws on the CPU (#729, `screen_shell::draws_on_cpu`).
 const plays = values["webkit-gpu"] && !values["gdk-gl-disable"];
@@ -187,14 +207,8 @@ async function checkHttp1() {
   return [...libraries].map((library) => basename(library));
 }
 
-/**
- * A shared screen is decoded in WebKit's web process, by GStreamer's
- * highest-ranked decoder. Linger ranks the hardware H.264 and VP8 ones out,
- * since WebKit hands them input they refuse and the screen says "This device
- * can't play" (#730). So every web process must have them in
- * `GST_PLUGIN_FEATURE_RANK`.
- */
-async function checkDecoderRanks() {
+/** WebKit's page processes under the app, once there's one. */
+async function webProcesses() {
   let pages = [];
   for (let attempt = 0; attempt < 50 && pages.length === 0; attempt++) {
     if (attempt > 0) await sleep(100);
@@ -207,6 +221,31 @@ async function checkDecoderRanks() {
     });
   }
   if (pages.length === 0) throw new Error("No WebKit web process under the app");
+  return pages;
+}
+
+/**
+ * Whether a page process drew with `library` (`--draws-with`): loaded in its
+ * memory map, by any version.
+ */
+async function checkDrawsWith(library) {
+  const pages = await webProcesses();
+  const drawing = pages.filter((pid) => readFileSync(`/proc/${pid}/maps`, "utf8").includes(`/${library}.so`));
+  if (drawing.length === 0) throw new Error(`no page process loaded ${library}, so this run didn't draw where it's meant to`);
+}
+
+/**
+ * A shared screen is decoded in WebKit's web process, by GStreamer's
+ * highest-ranked decoder. Linger ranks the hardware H.264 and VP8 ones out,
+ * since WebKit hands them input they refuse and the screen says "This device
+ * can't play" (#730). So every web process must have them in
+ * `GST_PLUGIN_FEATURE_RANK`. That puts a chat video's H.264 in software too,
+ * whose frames GStreamer's GL upload loses on NVIDIA (#756), so every web
+ * process must also have `WEBKIT_GST_DISABLE_GL_SINK=1`: WebKit copies them
+ * itself.
+ */
+async function checkMediaSettings() {
+  const pages = await webProcesses();
   for (const pid of pages) {
     const ranks = readFileSync(`/proc/${pid}/environ`, "utf8")
       .split("\0")
@@ -216,6 +255,10 @@ async function checkDecoderRanks() {
       if (!pairs.includes(`${decoder}:NONE`)) {
         throw new Error(`WebKit's web process (${pid}) can decode a shared screen with ${decoder}, which refuses WebKit's input (#730)`);
       }
+    }
+    const environ = readFileSync(`/proc/${pid}/environ`, "utf8").split("\0");
+    if (!environ.includes("WEBKIT_GST_DISABLE_GL_SINK=1")) {
+      throw new Error(`WebKit's web process (${pid}) hands software-decoded video to GStreamer's GL upload, which shows it green on NVIDIA (#756)`);
     }
   }
   return pages.length;
@@ -239,7 +282,18 @@ try {
   }
   if (result?.status !== "passed") throw new Error(`The Buddy list didn't start: ${JSON.stringify(result)}; see ${output}`);
   console.log(`PASS ${basename(program)}: the Buddy list starts in the packaged WebView: ${JSON.stringify(result.checks)}`);
-  const { watch, screens } = result.checks;
+  const { watch, screens, video, sounds } = result.checks;
+  const drawsWith = values["draws-with"];
+  if (drawsWith !== undefined) {
+    await checkDrawsWith(drawsWith);
+    console.log(`PASS ${basename(program)}: the page draws with ${drawsWith}`);
+  }
+  // Every way the app is started, a chat's video shows its picture (#756).
+  if (video !== "plays") throw new Error(`a video in a conversation doesn't show its picture${drawsWith ? `, drawn with ${drawsWith}` : ""}: ${video} (#756)`);
+  console.log(`PASS ${basename(program)}: a video in a conversation shows its picture (#756)`);
+  // And its voice messages and sound files play, through the same player.
+  if (sounds?.voice !== "plays" || sounds?.file !== "plays") throw new Error(`a voice message or sound file in a conversation doesn't play: ${JSON.stringify(sounds)} (#756)`);
+  console.log(`PASS ${basename(program)}: a voice message and a sound file in a conversation play (#756)`);
   if (watch !== plays) {
     throw new Error(`the app says ${JSON.stringify(watch)} to playing a shared screen, started ${plays ? "with WebKit's GPU path" : "with WebKit drawing on the CPU"}, where it should say ${plays} (#729)`);
   }
@@ -253,8 +307,8 @@ try {
   }
   const libraries = await checkHttp1();
   console.log(`PASS ${basename(program)}: WebKit's network process speaks HTTP/1.1 only (${libraries.join(", ")})`);
-  const pages = await checkDecoderRanks();
-  console.log(`PASS ${basename(program)}: ${pages === 1 ? "WebKit's web process decodes" : "WebKit's web processes decode"} shared screens in software (#730)`);
+  const pages = await checkMediaSettings();
+  console.log(`PASS ${basename(program)}: ${pages === 1 ? "WebKit's web process decodes" : "WebKit's web processes decode"} shared screens in software (#730), and copies software-decoded video itself (#756)`);
 } catch (error) {
   failure = error;
 } finally {

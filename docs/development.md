@@ -247,8 +247,12 @@ NVIDIA's legacy driver (the 580 branch and older), startup also sets
 was resized with another open (#229); WebKit then paints on the CPU. An
 explicit `GDK_GL` always wins. Startup also sets `SOUP_FORCE_HTTP1=1`, so the
 window's requests use HTTP/1.1: over HTTP/2 a connection that died during a
-long sleep swallowed the token refresh for about 15 minutes (#646). These
-choices happen before GTK and change no desktop settings.
+long sleep swallowed the token refresh for about 15 minutes (#646). It ranks
+the hardware H.264 and VP8 decoders out of WebKit's way (`GST_PLUGIN_FEATURE_RANK`,
+#730), and sets `WEBKIT_GST_DISABLE_GL_SINK=1`, so a chat video's software-decoded
+frames don't go through GStreamer's GL upload, which showed them solid green on
+NVIDIA (#756); an explicit value of either wins. These choices happen before
+GTK and change no desktop settings.
 See [Linux input checks](linux-input-checks.md) for evidence and limits.
 
 ## The Buddy list client

@@ -28,7 +28,7 @@ what CI adds on top.
 | Rust/TypeScript tests | Logic, real HTTP/temp SQLite, forced gateway reconnect, palette contrast, generated types | Desktop rendering or physical audio |
 | Chromium + WebKit browser tests | Real components with synthetic people, keyboard/pointer behavior and geometry | Installed WebView2/WebKitGTK behavior |
 | Linux/Windows package checks | Installation, icons, recorded chimes, Windows shortcut upgrades, the list window starting and drawing at every interface size, a minimized or tray-hidden Windows window stopping its drawing and coming back drawn, nothing the shipped CSP refuses, a shared screen's VP8 and H.264 playing in the packaged app on Ubuntu's WebKit and on Arch's current one (`scripts/linux-arch-check.sh`), and the app refusing to play one, without crashing, where WebKit draws on the CPU (#729); on Windows, the shell's own tests of the computer's sound in a share: Windows' process loopback started and read for a second, where the runner has an audio engine, and the 20 ms packets it makes (#736) | Signed-in use, every distro, physical speakers, real-network voice, a real GPU, the computer's sound heard with somebody talking |
-| GPU check, before every release | The packaged app plays a shared screen on Arch's WebKit with a real computer's GPUs and their hardware decoders installed (`scripts/linux-arch-check.sh --gpu`, `docs/releasing.md` step 1, #730) | GPUs that computer doesn't have, Windows' decoders |
+| GPU check, before every release | The packaged app plays a shared screen on Arch's WebKit with a real computer's GPUs and their hardware decoders installed, and a chat's video shows its picture there, the page drawing on NVIDIA's own EGL too where the computer has it (`scripts/linux-arch-check.sh --gpu`, `docs/releasing.md` step 1, #730, #756) | GPUs that computer doesn't have, Windows' decoders, native Wayland (it runs X11 with GBM forced on, as Wayland has it) |
 | Short two-person release check | Your installed clients, actual update path, listening and interaction | Exhaustive platform coverage |
 
 The package audio harness injects a test-only bundle of the real sound player
@@ -137,6 +137,24 @@ fails. Assert the result a person needs, not just a class name or implementation
 detail. Shared CSS fixes must cover both rendering engines and both desktop
 platforms, including short windows, long names and the supported interface sizes.
 Test the combined release candidate: separately green PRs can disagree.
+
+**A setting that covers a whole process reaches everything that runs in it.**
+0.5.3 ranked the hardware decoders out of WebKit's page process to fix
+watching a shared screen on Linux (#730), and checked that a shared screen
+played. The same ranks reached every video in a conversation, which went solid
+green on NVIDIA (#756), and nothing checked a chat video. So a change to what
+the Linux app's startup hands WebKit or GStreamer (`linux_startup.rs`:
+decoder ranks, WebKit's media and drawing switches) is checked against every
+media feature there, and the pull request says how. A check that can't fail where the bug was
+proves nothing: the GPU check only showed #756's green once the container had
+`/dev/udmabuf`, so run a new check against the release that had the bug first.
+
+| Feature | Checked by |
+|---|---|
+| A video in a conversation (H.264 MP4, WebKit's player) | `linux-next-check.mjs`, every run: its picture read back; the GPU check on NVIDIA's EGL, with `/dev/udmabuf` |
+| A voice message (Opus in WebM) and a sound file (MP3) in a conversation | `linux-next-check.mjs`, every run: each plays, its time moving on |
+| A shared screen (VP8, H.264, WebCodecs) | `linux-next-check.mjs` with `--webkit-gpu`; the GPU check |
+| Linger's own sounds | `scripts/linux-audio-check.py` |
 
 A new rule gets the same: a test that proves it, named in the pull request
 (the template asks). Most bugs that reached people after 0.4.0 were rules
