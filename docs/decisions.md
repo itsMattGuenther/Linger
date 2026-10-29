@@ -1614,8 +1614,9 @@ doesn't change what the app is. Putting one *inside* the app would, and that's
 a separate question for Matt.
 
 **Thanks in the README** (Matt, 2026-10-29). The README ends with a Thanks
-section. Contributors are named there, each linking to their GitHub with a few
-words on what they did, in the order they joined in: never by how much, since a
+section. Contributors are named there by their GitHub handle only, never a real
+name (Matt), each linking to their GitHub with a few words on what they did, in
+the order they joined in: never by how much, since a
 list ranked by commits is a leaderboard (SPEC §2). Somebody is added the first
 time they're thanked in a release's notes (`docs/releasing.md`). Ko-fi supporters
 get one thank-you for all of them, saying what tips pay for (servers, the app

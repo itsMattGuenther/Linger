@@ -253,7 +253,7 @@ docs ([SPEC](SPEC.md), [ARCHITECTURE](ARCHITECTURE.md),
 
 **To the people who've helped build Linger**, in the order they joined in:
 
-- [Kyle (@eGGnogSC)](https://github.com/eGGnogSC), for messages that show up
+- [@eGGnogSC](https://github.com/eGGnogSC), for messages that show up
   the moment they're sent ([#133](https://github.com/itsMattGuenther/Linger/pull/133))
   and a sidebar that no longer scrolls sideways ([#84](https://github.com/itsMattGuenther/Linger/pull/84)).
 - [@Gleasonmt](https://github.com/Gleasonmt), for getting the iPhone app ready

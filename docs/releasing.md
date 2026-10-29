@@ -59,7 +59,8 @@ produces a green release that no installed copy will accept.
   setting, a change to `compose.yaml`, or a database change worth a backup
   somewhere else first.
 - **Thank every contributor whose change is in it** (Matt, 2026-10-29), by
-  their GitHub `@handle`, with what they did in a few plain words: "Thanks to
+  their GitHub `@handle` only, never a name, with what they did in a few plain
+  words: "Thanks to
   @Gleasonmt for getting the iPhone app ready for Apple's iOS 15 rule (#743)."
   Always, however small the change, in its own "Thanks" section at the end.
   Who: the authors of the release's commits that aren't Matt or a bot
