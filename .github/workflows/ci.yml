@@ -403,6 +403,9 @@ jobs:
       - name: the AppImage's downloads are tried again through a slow server
         # One slow moment at ffmpeg.org failed a package build (#753).
         run: bash scripts/appimage-fetch-test.sh
+      - name: the packaged-app checks start the app without the caller's WebKit, media and graphics settings
+        # A workaround in the shell could pass for the fix it stands in for (#757, #765).
+        run: node --test scripts/linux-next-env.test.mjs
       - name: the Linux packages ask for the media plugins shared videos need
         # Without the AAC and H.264 decoders a shared video plays silent, or
         # not at all (#358).

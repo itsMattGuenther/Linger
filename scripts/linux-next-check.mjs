@@ -37,6 +37,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { cleanEnvironment } from "./linux-next-env.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -69,11 +70,11 @@ try {
   process.exit(1);
 }
 
-const env = { ...process.env };
-for (const key of Object.keys(env)) {
-  if (["GST_", "PULSE_", "APPIMAGE", "APPDIR", "GTK3_MODULES", "LINGER_", "SOUP_"].some((prefix) => key.startsWith(prefix))) delete env[key];
-}
-for (const key of ["DISPLAY", "WAYLAND_DISPLAY", "WAYLAND_SOCKET", "DBUS_SESSION_BUS_ADDRESS", "LD_LIBRARY_PATH"]) delete env[key];
+// Nothing from the caller's shell that changes what WebKit, GStreamer, GTK or
+// the graphics drivers do: the app's own startup must supply what it relies
+// on, and that's what this checks (#765, linux-next-env.mjs).
+const { env, dropped } = cleanEnvironment(process.env);
+if (dropped.length > 0) console.log(`left out of the app's environment, from this shell: ${dropped.join(", ")}`);
 for (const kind of ["config", "data", "cache", "state", "runtime"]) {
   const path = join(output, kind);
   mkdirSync(path, { mode: 0o700 });
@@ -86,13 +87,8 @@ Object.assign(env, {
   XDG_CURRENT_DESKTOP: "GNOME",
   GTK_OVERLAY_SCROLLING: "0",
 });
-for (const key of ["WEBKIT_DISABLE_DMABUF_RENDERER", "WEBKIT_DISABLE_COMPOSITING_MODE"]) delete env[key];
 if (!values["webkit-gpu"]) Object.assign(env, { WEBKIT_DISABLE_DMABUF_RENDERER: "1", WEBKIT_DISABLE_COMPOSITING_MODE: "1" });
 if (values["gdk-gl-disable"]) env.GDK_GL = "disable";
-else delete env.GDK_GL;
-// The app's own startup must supply the GL sink switch (#756), so somebody's
-// workaround in their shell can't pass for it.
-for (const key of ["WEBKIT_WEB_RENDER_DEVICE_FILE", "WEBKIT_DMABUF_RENDERER_DISABLE_GBM", "WEBKIT_DMABUF_RENDERER_FORCE_SHM", "WEBKIT_GST_DISABLE_GL_SINK"]) delete env[key];
 if (values["render-device"] !== undefined) {
   env.WEBKIT_WEB_RENDER_DEVICE_FILE = values["render-device"];
   // Somebody's own setting wins over Linger's choice (linux_startup.rs), so

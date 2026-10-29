@@ -419,11 +419,20 @@ def heard(recorder, output, result, program):
           f"({tone:.2f} s, peak={peak:.4f})")
 
 
+# Settings that change what the WebView, its media or its drawing do: left out
+# of the app's environment, whatever the caller's shell has, so the app's own
+# startup supplies what it relies on (#765). The same families as
+# scripts/linux-next-env.mjs, whose test keeps the two in step.
+SETTING_FAMILIES = ("WEBKIT_", "JSC_", "GST_", "PULSE_", "GTK", "GDK_", "GSK_", "SOUP_", "MESA_", "LIBGL_", "__GL",
+                    "__EGL", "EGL_", "GBM_", "__NV", "NVD_", "LIBVA_", "VDPAU_", "VK_", "DRI_PRIME", "APPIMAGE",
+                    "APPDIR", "LINGER_")
+
+
 def check(program, output, appimage, video=False):
     output.mkdir(parents=True, exist_ok=False)
     env = dict(os.environ)
     for key in tuple(env):
-        if key.startswith(("GST_", "PULSE_", "APPIMAGE", "APPDIR", "GTK3_MODULES")):
+        if key.startswith(SETTING_FAMILIES):
             env.pop(key)
     for key in ("DISPLAY", "WAYLAND_DISPLAY", "WAYLAND_SOCKET", "DBUS_SESSION_BUS_ADDRESS", "LD_LIBRARY_PATH"):
         env.pop(key, None)
