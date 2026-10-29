@@ -264,7 +264,7 @@ rules that came out of them:
   a real server: `?netms=N` for every request, `?sendms=N` more for a send.
   `next-newest-lands.spec.ts` does each thing that adds or changes the
   newest row while you're at the bottom (a message, long or short, a reply,
-  a burst, a photo with and without its size, a link card, an edit, a
+  three together between two frames, a photo with and without its size, a link card, an edit, a
   reaction, a poll, a join or share line) at 250 ms, and checks the row is
   on screen whole and read. A change to a row that's already there waits
   until the conversation is still first: changed while it was still being

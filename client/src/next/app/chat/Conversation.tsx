@@ -389,12 +389,21 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
   // end. From anywhere else in the margin (a scroll a few pixels short, or the
   // frame where something above changed size, a link card landing), a message
   // taller than the margin was left below the fold and never marked read (#625).
+  //
+  // A message arriving while the one before is still being followed down is
+  // followed too, wherever the one before has got to. Messages that come
+  // together, between two frames (a burst of them over the socket), each
+  // found the one before not yet moved, below the margin, and nothing
+  // followed any of them (#760).
   const lastKey = rows[rows.length - 1]?.key;
   const lastKeyBefore = useRef(lastKey);
+  const following = useRef(false);
   const seenNow = useRef<() => void>(() => {});
   useEffect(() => {
     const before = lastKeyBefore.current;
     lastKeyBefore.current = lastKey;
+    const carrying = following.current;
+    following.current = false;
     const element = scroller.current;
     if (!element || rows.length === 0 || !landing.current.done || !atEnd || jumping.current) return;
     // The row that was last, if it's still drawn. A sent message replaced by
@@ -403,7 +412,7 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
     const below = wasLast
       ? wasLast.getBoundingClientRect().bottom - element.getBoundingClientRect().bottom
       : element.scrollHeight - element.scrollTop - element.clientHeight;
-    if (below > BOTTOM_MARGIN_PX) return;
+    if (below > BOTTOM_MARGIN_PX && !carrying) return;
     // Aim at the end every frame until it holds still: rows are measured, and
     // anything above settles, a frame or two after they're drawn. Somebody
     // reaching for the conversation meanwhile takes it back at once.
@@ -411,12 +420,17 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
     let stable = 0;
     let total = -1;
     let frame = 0;
-    const stop = () => {
+    // Ended by a newer last row, it hands the following on (above).
+    const cancel = () => {
       cancelAnimationFrame(frame);
       element.removeEventListener("wheel", stop);
       element.removeEventListener("touchstart", stop);
       element.removeEventListener("pointerdown", stop);
       element.removeEventListener("keydown", stop);
+    };
+    const stop = () => {
+      following.current = false;
+      cancel();
     };
     const step = () => {
       virtualizer.scrollToIndex(rowsNow.current.length - 1, { align: "end" });
@@ -438,8 +452,9 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
     element.addEventListener("touchstart", stop, { passive: true });
     element.addEventListener("pointerdown", stop, { passive: true });
     element.addEventListener("keydown", stop);
+    following.current = true;
     frame = requestAnimationFrame(step);
-    return stop;
+    return cancel;
     // Deliberately keyed on the last row only: a re-render, or history
     // arriving above, must never pull the view down.
   }, [lastKey]);

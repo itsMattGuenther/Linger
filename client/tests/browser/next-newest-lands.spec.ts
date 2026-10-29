@@ -128,11 +128,31 @@ test("a reply, its quote above it, lands whole, and is read", async ({ page }) =
   await expect.poll(async () => (await reads(page)).at(-1)).toBe(id);
 });
 
-test("three messages at once land whole, and the last is read", async ({ page }) => {
+// Three messages one after another, before the next frame is drawn, as a
+// burst of them comes over the socket: each found the one before not yet
+// followed down, and the newest was left below the bottom (#760).
+test("three messages together, between two frames, land whole, and the last is read", async ({ page }) => {
   await open(page);
-  await arrives(page, { body: "Morning!", author_id: "u-jules" });
-  await arrives(page, { body: LONG, author_id: "u-dave" });
-  const id = await arrives(page, { body: "Coffee first.", author_id: "u-eli" });
+  made += 3;
+  const ids = [made - 2, made - 1, made].map((n) => `m95${String(n).padStart(4, "0")}`);
+  await page.evaluate(
+    async ([ids, long]) => {
+      const said = [
+        ["u-jules", "Morning!"],
+        ["u-dave", long],
+        ["u-eli", "Coffee first."],
+      ];
+      for (const [at, [author_id, body]] of said.entries()) {
+        window.owner?.frame({
+          op: "message.create",
+          d: { id: ids[at] ?? "", room_id: "r-general", author_id: author_id ?? "", body: body ?? "", reply_to: null, attachments: [], reactions: [], pinned_at: null, edited_at: null, deleted_at: null, created_at: Date.now() },
+        });
+        await Promise.resolve();
+      }
+    },
+    [ids, LONG] as const,
+  );
+  const id = ids[2] ?? "";
   await expectNewestWhole(page, id);
   await expect.poll(async () => (await reads(page)).at(-1)).toBe(id);
 });
