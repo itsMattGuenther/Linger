@@ -73,5 +73,5 @@ The repo is arranged so a session reads little and misses nothing:
   Matt's review — CODEOWNERS enforces this. Those files are the source of
   truth, so they change deliberately or not at all.
 - Your name goes in the release notes. Every contribution that ships is thanked
-  there, by your GitHub handle, in the release it ships in, however small
-  (`docs/releasing.md`).
+  there, by your GitHub handle, in the release it ships in, however small, and
+  your first one puts you in the README's Thanks (`docs/releasing.md`).

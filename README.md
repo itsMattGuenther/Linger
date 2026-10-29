@@ -249,6 +249,23 @@ docs ([SPEC](SPEC.md), [ARCHITECTURE](ARCHITECTURE.md),
 [PROTOCOL](PROTOCOL.md)) are the source of truth; the queue is
 [TASKS.md](TASKS.md).
 
+## 🙏 Thanks
+
+**To the people who've helped build Linger**, in the order they joined in:
+
+- [Kyle (@eGGnogSC)](https://github.com/eGGnogSC), for messages that show up
+  the moment they're sent ([#133](https://github.com/itsMattGuenther/Linger/pull/133))
+  and a sidebar that no longer scrolls sideways ([#84](https://github.com/itsMattGuenther/Linger/pull/84)).
+- [@Gleasonmt](https://github.com/Gleasonmt), for getting the iPhone app ready
+  for Apple's iOS 15 rule ([#749](https://github.com/itsMattGuenther/Linger/pull/749)).
+
+Everybody whose work ships is added here, and thanked in that release's notes.
+
+**And to everyone who's chipped in on [Ko-fi](https://ko-fi.com/mattguenther).**
+It goes toward what Linger costs to keep going, month after month: the servers
+it's built and tested on, the app stores' fees, and the website and its domain.
+A tip buys nothing in the app. Everybody gets all of Linger either way.
+
 ## 📜 License
 
 [AGPL-3.0](LICENSE). If you run a modified server for other people, they get

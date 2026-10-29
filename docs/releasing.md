@@ -65,7 +65,9 @@ produces a green release that no installed copy will accept.
   Who: the authors of the release's commits that aren't Matt or a bot
   (`git log v<previous>..HEAD --format='%an <%ae>' | sort -u`), each matched to
   the pull request it came from for their handle. Naming them in a GitHub
-  release tells them it shipped.
+  release tells them it shipped. The first time somebody is thanked, add them
+  to the README's Thanks too, after the people already there, with a few words
+  on what they did: never by how much.
 - Say whether anything stops working with an older app or server (PROTOCOL §9,
   "Which apps and servers work together"). Before 1.0, a change works both ways
   wherever it can. From 1.0, a break may only leave behind versions outside the window
