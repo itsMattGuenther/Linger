@@ -114,7 +114,7 @@ describe("the Settings copy", () => {
   });
 
   it("names every chime, with room messages and the door chime off by default", () => {
-    expect(CHIMES.map((chime) => chime.category)).toEqual(["voice", "controls", "dms", "rooms", "knocks", "door", "watchers"]);
+    expect(CHIMES.map((chime) => chime.category)).toEqual(["voice", "controls", "dms", "rooms", "knocks", "door", "shares", "watchers"]);
     expect(CHIMES.find((chime) => chime.category === "rooms")?.hint).toMatch(/off by default/i);
     expect(CHIMES.find((chime) => chime.category === "door")?.hint).toMatch(/off by default/i);
     // Each row's Play sounds a cue its own switch decides, and says it's off only when it is.
@@ -128,6 +128,13 @@ describe("the Settings copy", () => {
     const row = CHIMES.find((chime) => chime.category === "watchers");
     expect(row).toMatchObject({ label: "Someone starts watching your screen", cue: "watcher" });
     expect(DEFAULT_SOUND_PREFS.categories.watchers).toBe(true);
+  });
+
+  it("has a row for a screen share starting, on by default, playing its own cue (#746)", () => {
+    const row = CHIMES.find((chime) => chime.category === "shares");
+    expect(row).toMatchObject({ label: "Someone starts sharing a screen", cue: "share" });
+    expect(row?.hint).toMatch(/when yours starts too/);
+    expect(DEFAULT_SOUND_PREFS.categories.shares).toBe(true);
   });
 
   it("offers invites for one, five or anyone, lasting a day, a week or for good (HOST-5)", () => {

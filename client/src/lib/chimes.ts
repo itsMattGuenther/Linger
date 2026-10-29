@@ -12,7 +12,8 @@ const A = 440;
 const B = 493.883;
 
 interface Chime {
-  notes: readonly number[];
+  /** One note at each step, or a chord: notes that start together. */
+  notes: readonly (number | readonly number[])[];
   gain: number;
   spacing: number;
   decay: number;
@@ -40,6 +41,11 @@ export const CHIMES: Record<Exclude<SoundCue, "knock">, Chime> = {
   // fourth apart, higher than any voice cue and the only one not built of
   // thirds, so "started watching" isn't heard as "joined voice".
   watcher: { notes: [B, E * 2, A * 2], gain: 0.028, spacing: 0.08, decay: 0.22 },
+  // Somebody in your voice started sharing their screen, or you did (#746):
+  // two chords a step apart, rising. The only cue with notes together, so
+  // it's heard as something to look at, a DM's cousin, and never as a join.
+  // Each note softer than a lone one, as two ring at once.
+  share: { notes: [[A, E * 2], [B, F * 2]], gain: 0.021, spacing: 0.14, decay: 0.3 },
 };
 
 function note(
@@ -139,8 +145,10 @@ export function scheduleChime(
     return;
   }
   const chime = CHIMES[cue];
-  for (const [index, frequency] of chime.notes.entries()) {
-    note(ctx, out, frequency, at + index * chime.spacing, chime.gain, chime.decay);
+  for (const [index, step] of chime.notes.entries()) {
+    for (const frequency of typeof step === "number" ? [step] : step) {
+      note(ctx, out, frequency, at + index * chime.spacing, chime.gain, chime.decay);
+    }
   }
 }
 

@@ -25,7 +25,7 @@ for (const rate of [44100, 48000]) {
       }
       return result;
     }, rate);
-    expect(results).toHaveLength(14);
+    expect(results).toHaveLength(15);
     for (const result of results) {
       expect(result.error, result.cue).toBeLessThan(0.000001);
       expect(result, result.cue).toMatchObject({ leadSilent: true, endSilent: true });
@@ -66,7 +66,7 @@ for (const rate of [44100, 48000]) {
       }
       return { max: MAX_SOUND_VOLUME, knockTop: KNOCK_TOP_VOLUME, results };
     }, rate);
-    expect(results).toHaveLength(14);
+    expect(results).toHaveLength(15);
     expect(max).toBe(4);
     const loudest = results.reduce((most, result) => (result.usual > most.usual ? result : most));
     expect(loudest.cue).toBe("knock");
@@ -80,6 +80,10 @@ for (const rate of [44100, 48000]) {
     // join, and clear of clipping at the top like every other.
     expect(at("watcher")?.usual).toBeLessThan(at("voice-join")?.usual ?? 0);
     expect(at("watcher")?.top).toBeLessThanOrEqual(0.8);
+    // A share starting (#746) is two notes at once: still no louder than a
+    // voice join, and clear of clipping at the top.
+    expect(at("share")?.usual).toBeLessThanOrEqual(at("voice-join")?.usual ?? 0);
+    expect(at("share")?.top).toBeLessThanOrEqual(0.8);
     for (const result of results) {
       expect(result.louder / result.usual, result.cue).toBeCloseTo(1.5, 5);
       expect(result.misshapen, result.cue).toBeLessThan(0.000001);
@@ -115,8 +119,8 @@ test("every chime renders offline, stays short and quiet, and ends in silence", 
     }
     return results;
   });
-  expect(rendered).toHaveLength(14);
-  expect(new Set(rendered.map((cue) => cue.fingerprint)).size).toBe(14);
+  expect(rendered).toHaveLength(15);
+  expect(new Set(rendered.map((cue) => cue.fingerprint)).size).toBe(15);
   for (const cue of rendered) {
     expect(cue.peak, cue.cue).toBeGreaterThan(0.01);
     // The knock plays at twice its first level (#252).

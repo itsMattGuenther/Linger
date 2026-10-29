@@ -3,7 +3,7 @@ import type { ServerFrame } from "../generated/ServerFrame";
 import type { User } from "../generated/User";
 import type { VoicePeer } from "../generated/VoicePeer";
 import { apply, type GatewayState, type MyVoice, serverState } from "./gateway";
-import { controlCue, PeerCueLimit, voiceCueToPlay, WATCH_JOIN_WAIT_MS, WatchCues } from "./sound-events";
+import { controlCue, PeerCueLimit, shareChange, ShareCues, voiceCueToPlay, WATCH_JOIN_WAIT_MS, WatchCues } from "./sound-events";
 
 function seat(changes: Partial<MyVoice> = {}): MyVoice {
   return {
@@ -258,5 +258,131 @@ describe("the chime for somebody starting to watch your screen (#735)", () => {
     plain.voice([ME]);
     plain.voice([ME, ELI]);
     expect(plain.played).toEqual(["voice-join", "peer-join"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A screen share starting in the voice you're in (#746)
+
+const JULES: VoicePeer = { session_id: "s-jules", user_id: "u-jules" };
+const JULES_SHARING: VoicePeer = { ...JULES, screen: { fps: 30 } };
+const JULES_DESKTOP: VoicePeer = { session_id: "s-jules-desktop", user_id: "u-jules" };
+
+/** Your list window's side of one room's voice, with only the share chords written down. */
+function shareRoom() {
+  const played: string[] = [];
+  let state: GatewayState = { ...serverState("https://sharing.example"), sessionId: "s-me", myVoice: seat({ roomId: "r-1" }) };
+  const cues = new ShareCues((cue) => played.push(cue));
+  const hear = (frame: ServerFrame, replayed = false) => {
+    const before = state;
+    state = apply(state, frame);
+    cues.hear(frame, before, state, !replayed, Date.now());
+  };
+  return {
+    played,
+    hear,
+    voice: (peers: VoicePeer[], replayed = false, room = "r-1") => hear({ s: 2, op: "voice.state", d: { room_id: room, peers } }, replayed),
+  };
+}
+
+describe("the chords for a screen share starting (#746)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.parse("2026-10-29T20:00:00Z"));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("ring for everybody in that voice when somebody starts sharing, once", () => {
+    const here = shareRoom();
+    here.voice([ME, ELI, JULES]);
+    here.voice([ME, ELI, JULES_SHARING]);
+    expect(here.played).toEqual(["share"]);
+    // The same list again, or somebody starting to watch it, is nothing new.
+    here.voice([ME, ELI, JULES_SHARING]);
+    here.voice([ME, watching(ELI, "s-jules"), JULES_SHARING]);
+    expect(here.played).toEqual(["share"]);
+    // Somebody else starting too is.
+    here.voice([ME, { ...ELI, screen: { fps: 60 } }, JULES_SHARING]);
+    expect(here.played).toEqual(["share", "share"]);
+  });
+
+  it("ring for the person sharing too, every time their own share starts", () => {
+    const here = shareRoom();
+    here.voice([ME, ELI]);
+    here.voice([SHARING, ELI]);
+    expect(here.played).toEqual(["share"]);
+    // Stopping to pick another window and sharing again: it says so again.
+    later(5_000);
+    here.voice([ME, ELI]);
+    later(5_000);
+    here.voice([SHARING, ELI]);
+    expect(here.played).toEqual(["share", "share"]);
+  });
+
+  it("don't ring again when somebody stops to pick another window, however long they'd shared", () => {
+    const here = shareRoom();
+    here.voice([ME, JULES]);
+    here.voice([ME, JULES_SHARING]);
+    later(20 * 60_000);
+    for (let again = 0; again < 3; again += 1) {
+      here.voice([ME, JULES]);
+      later(20_000);
+      here.voice([ME, JULES_SHARING]);
+      later(5 * 60_000);
+    }
+    expect(here.played).toEqual(["share"]);
+    // A whole minute without sharing, and back: that's news again.
+    here.voice([ME, JULES]);
+    later(59_999);
+    here.voice([ME, JULES_SHARING]);
+    expect(here.played).toEqual(["share"]);
+    here.voice([ME, JULES]);
+    later(60_000);
+    here.voice([ME, JULES_SHARING]);
+    expect(here.played).toEqual(["share", "share"]);
+  });
+
+  it("are silent for a share already going when you join, a fresh session's list, and a resume's replay", () => {
+    // Joining a voice where Jules is sharing already.
+    const joining = shareRoom();
+    joining.voice([JULES_SHARING]);
+    joining.voice([JULES_SHARING, ME]);
+    expect(joining.played).toEqual([]);
+    // A fresh session's snapshot with a share in it.
+    const fresh = shareRoom();
+    fresh.voice([ME, JULES]);
+    fresh.hear({ s: 1, op: "ready", d: { session_id: "s-me-2", user: MATT, users: [MATT], rooms: [], dms: [], presence: [], voice: [{ room_id: "r-1", peers: [ME, JULES_SHARING] }] } });
+    expect(fresh.played).toEqual([]);
+    // A replay plays nothing, and the live list after it is nothing new.
+    const resumed = shareRoom();
+    resumed.voice([ME, JULES]);
+    resumed.voice([ME, JULES_SHARING], true);
+    resumed.voice([ME, JULES_SHARING]);
+    expect(resumed.played).toEqual([]);
+    // A replay's stop holds the minute too: stopping and starting across a reconnect is one share.
+    resumed.voice([ME, JULES], true);
+    later(10_000);
+    resumed.voice([ME, JULES_SHARING]);
+    expect(resumed.played).toEqual([]);
+  });
+
+  it("are silent for a share in a voice you aren't in, and a second computer of the same person's", () => {
+    const here = shareRoom();
+    here.voice([ME]);
+    here.voice([JULES], false, "r-2");
+    here.voice([JULES_SHARING], false, "r-2");
+    expect(here.played).toEqual([]);
+    // Jules's desktop starting to share while the laptop still does is the same share.
+    here.voice([ME, JULES, JULES_DESKTOP]);
+    here.voice([ME, JULES_SHARING, JULES_DESKTOP]);
+    expect(here.played).toEqual(["share"]);
+    here.voice([ME, JULES_SHARING, { ...JULES_DESKTOP, screen: { fps: 60 } }]);
+    expect(here.played).toEqual(["share"]);
+  });
+
+  it("tell who started and who stopped, by person", () => {
+    const before: GatewayState = { ...serverState("https://sharing.example"), sessionId: "s-me", myVoice: seat({ roomId: "r-1" }), voice: { "r-1": [ME, ELI, JULES_SHARING] } };
+    const frame: ServerFrame = { s: 3, op: "voice.state", d: { room_id: "r-1", peers: [ME, { ...ELI, screen: { fps: 60 } }, JULES] } };
+    expect(shareChange(frame, before, apply(before, frame))).toEqual({ started: [{ session: "s-eli", person: "u-eli" }], stopped: ["u-jules"] });
   });
 });

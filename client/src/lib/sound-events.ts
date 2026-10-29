@@ -198,6 +198,69 @@ export class WatchCues {
 }
 
 /**
+ * Who started sharing a screen in this frame, and who stopped (#746).
+ * Starting is in the voice you're in, and needs a live `voice.state` with
+ * you seated there before and after: joining a voice where somebody is
+ * sharing already, and a fresh session's list, say where things stand, not
+ * who just started. Your own share starting is in it too. Stopping counts
+ * in any room, by person, for the minute below.
+ */
+export function shareChange(frame: ServerFrame, before: GatewayState, after: GatewayState): { started: { session: string; person: string }[]; stopped: string[] } {
+  if (frame.op !== "voice.state") return { started: [], stopped: [] };
+  const roomId = frame.d.room_id;
+  const old = before.voice[roomId] ?? [];
+  const next = after.voice[roomId] ?? [];
+  const sharingNow = new Set(next.filter((peer) => peer.screen).map((peer) => peer.session_id));
+  const stopped = [...new Set(old.filter((peer) => peer.screen && !sharingNow.has(peer.session_id)).map((peer) => peer.user_id))];
+  const me = before.sessionId;
+  const seated = (peers: readonly VoicePeer[]) => peers.some((peer) => peer.session_id === me);
+  if (me === null || me !== after.sessionId || before.myVoice?.roomId !== roomId || !seated(old) || !seated(next)) return { started: [], stopped };
+  const sharedBefore = new Set(old.filter((peer) => peer.screen).map((peer) => peer.session_id));
+  const started = next.filter((peer) => peer.screen && !sharedBefore.has(peer.session_id)).map((peer) => ({ session: peer.session_id, person: peer.user_id }));
+  return { started, stopped };
+}
+
+/**
+ * The chords for a screen share starting in the voice you're in (#746): so
+ * somebody in voice who's reading another room, or playing a game, knows
+ * there's something to watch. One for each server, in the window that holds
+ * the connection (the list window), the only one that plays what frames
+ * bring.
+ *
+ * - Everybody in that voice hears it, the person sharing too: for them it
+ *   says their share really is going, every time it starts.
+ * - For anybody else's share it rings when they hadn't shared in the last
+ *   minute ({@link PEER_CUE_EVERY_MS}), as the watching cue (#735) does, so
+ *   stopping to pick another window doesn't ring the room again, however long
+ *   the first share ran. Their second computer starting to share while the
+ *   first still does is the same share.
+ * - Nothing for shares already going when you join voice or connect, or for
+ *   a resume's replay: what a replay changed is noted, so the minute holds
+ *   across a reconnect, and nothing plays.
+ */
+export class ShareCues {
+  /** When each person last stopped sharing. */
+  readonly #stopped = new Map<string, number>();
+
+  constructor(
+    private readonly play: (cue: SoundCue) => void,
+    private readonly every = PEER_CUE_EVERY_MS,
+  ) {}
+
+  /** Play what one frame calls for. `live` is false for a frame from a resume's replay. */
+  hear(frame: ServerFrame, before: GatewayState, after: GatewayState, live: boolean, now: number): void {
+    const { started, stopped } = shareChange(frame, before, after);
+    for (const person of stopped) this.#stopped.set(person, now);
+    if (!live || started.length === 0 || frame.op !== "voice.state") return;
+    const sharing = new Set((before.voice[frame.d.room_id] ?? []).filter((peer) => peer.screen).map((peer) => peer.user_id));
+    const news = started.some(
+      (one) => one.session === before.sessionId || (!sharing.has(one.person) && now - (this.#stopped.get(one.person) ?? Number.NEGATIVE_INFINITY) >= this.every),
+    );
+    if (news) this.play("share");
+  }
+}
+
+/**
  * The sound that confirms a change to your own mute or deafen, if it makes
  * one. Deafening says so whatever it did to the microphone with it. Only
  * deliberate choices sound: push-to-talk's key opens and closes the
