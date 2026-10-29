@@ -2,7 +2,7 @@ import { type MouseEvent, memo, useEffect, useLayoutEffect, useMemo, useRef, use
 import { createPortal } from "react-dom";
 import type { User } from "../../../generated/User";
 import { startProblemWords, type StartProblem } from "../../../lib/voice";
-import { QUIET_MOVE_WORDS, VOICE_ACTION_WORDS, type VoiceStrip as Strip } from "../../core/chat/voice";
+import { QUIET_MOVE_WORDS, stripFit, VOICE_ACTION_WORDS, type StripFit, type StripMeasure, type VoiceStrip as Strip } from "../../core/chat/voice";
 import { verbFor } from "../../core/chat/words";
 import { copyText } from "../../core/copy";
 import { onPhone } from "../../core/phone";
@@ -10,12 +10,6 @@ import { Button, Chip, IconButton, markerOf, Name, Popover, VoiceGlyph } from ".
 import { useTalkSeats } from "../useTalkSeats";
 import { ShareButton, type ShareControl } from "../screen/ShareButton";
 import "./VoiceStrip.css";
-
-/**
- * Chips that fit on the strip's one line; past this it says "and others".
- * In a bigger room you're in, they're you and whoever just talked (#197).
- */
-const MAX_CHIPS = 4;
 
 /**
  * How long after Join or Leave a click on the strip doesn't count (#510).
@@ -110,12 +104,7 @@ export const VoiceStrip = memo(function VoiceStrip({
   share?: ShareControl;
 }) {
   const showFailed = failed && strip.kind !== "mine" ? failed : undefined;
-  const takenOutWords =
-    takenOut && strip.kind !== "mine" && !showFailed ? (
-      <p className="nx-strip-words" role="status">
-        You were taken out of voice.
-      </p>
-    ) : null;
+  const showTakenOut = takenOut === true && strip.kind !== "mine" && !showFailed;
   const [why, setWhy] = useState<DOMRect | null>(null);
   // A double-click on the strip is one click, and for a moment after Join
   // or Leave redraws the buttons a click doesn't count (#510): it was meant
@@ -127,6 +116,12 @@ export const VoiceStrip = memo(function VoiceStrip({
     if (swaps) swappedAt.current = event.timeStamp;
     act();
   };
+  // Who's in voice here, and as many of them as fit the line (#745).
+  const ids = strip.kind === "mine" || strip.kind === "others" ? strip.people : NOBODY;
+  const here = ids.flatMap((id) => people.get(id) ?? []);
+  const you = strip.kind === "mine" && meId !== null && ids.includes(meId) ? meId : null;
+  const words = stripWords(strip.kind, here.length, showFailed, showTakenOut);
+  const { fit, measuring, list, line, ruler } = useStripFit(here, you, words, mics, sharing);
   // A room too big for its chips, that you're in (#197): you first, then
   // whoever just talked, kept still (core/seats.ts). Who's talking is known
   // only in the room you're in; elsewhere the pane's order stands, with the
@@ -134,10 +129,15 @@ export const VoiceStrip = memo(function VoiceStrip({
   const others = strip.kind === "mine" ? strip.people.filter((id) => id !== meId) : [];
   const talkingKey = others.filter((id) => speaking.has(id)).join("\n");
   const talkingHere = useMemo(() => new Set(talkingKey === "" ? [] : talkingKey.split("\n")), [talkingKey]);
-  const seats = useTalkSeats(others, talkingHere, MAX_CHIPS - 1);
+  const seats = useTalkSeats(others, talkingHere, fit.kind === "seats" ? fit.seats : 0);
+  const takenOutWords = showTakenOut ? (
+    <p ref={line} className="nx-strip-words" role="status">
+      {TAKEN_OUT}
+    </p>
+  ) : null;
   const lead = showFailed ? `Couldn't start voice. ${startProblemWords(showFailed)}` : "";
   const problem = showFailed ? (
-    <p className="nx-strip-words" data-problem="yes" role="alert" title={`${lead}\n${showFailed.detail}`}>
+    <p ref={line} className="nx-strip-words" data-problem="yes" role="alert" title={`${lead}\n${showFailed.detail}`}>
       <button
         type="button"
         className="nx-strip-why-open"
@@ -145,7 +145,7 @@ export const VoiceStrip = memo(function VoiceStrip({
         aria-expanded={why !== null}
         onClick={(event) => setWhy(event.currentTarget.getBoundingClientRect())}
       >
-        Couldn't start voice. {showFailed.line}
+        {words.all}
       </button>
       {why ? <WhyCard anchor={why} lead={lead} detail={showFailed.detail} onClose={() => setWhy(null)} /> : null}
     </p>
@@ -177,16 +177,20 @@ export const VoiceStrip = memo(function VoiceStrip({
     );
   }
 
-  const here = strip.people.flatMap((id) => people.get(id) ?? []);
-  const seated = strip.kind === "mine" && here.length > MAX_CHIPS && meId !== null && strip.people.includes(meId);
-  const shown = (seated ? [meId, ...seats] : strip.people).flatMap((id) => people.get(id) ?? []).slice(0, MAX_CHIPS);
+  // While measuring, everybody, at their own widths; then as many as fit.
+  const shown =
+    measuring || fit.kind === "all"
+      ? here
+      : fit.kind === "first"
+        ? here.slice(0, fit.count)
+        : [you ?? "", ...seats].flatMap((id) => people.get(id) ?? []);
   const talking = here.some((user) => speaking.has(user.id));
   return (
     <div className="nx-strip" data-kind={strip.kind} role="group" aria-label="Voice in this conversation">
       <VoiceGlyph speaking={talking} mine={strip.kind === "mine"} />
-      <ul className="nx-strip-people" aria-label="In voice here">
+      <ul ref={list} className="nx-strip-people" data-measuring={measuring ? "yes" : undefined} aria-label="In voice here">
         {shown.map((user) => (
-          <li key={user.id}>
+          <li key={user.id} data-user={user.id}>
             <Chip
               label={user.id === meId ? "you" : user.display_name}
               marker={markerOf(user, "in_room")}
@@ -199,12 +203,7 @@ export const VoiceStrip = memo(function VoiceStrip({
           </li>
         ))}
       </ul>
-      {problem ?? takenOutWords ?? (
-        <p className="nx-strip-words">
-          {here.length > shown.length ? "and others " : ""}
-          {strip.kind === "others" ? `${verbFor(here.length, "is", "are")} talking` : ""}
-        </p>
-      )}
+      {problem ?? takenOutWords ?? <p ref={line} className="nx-strip-words">{here.length > shown.length ? words.some : words.all}</p>}
       {fix}
       {watch
         ? watch.sharers
@@ -231,9 +230,139 @@ export const VoiceStrip = memo(function VoiceStrip({
           {VOICE_ACTION_WORDS[strip.action]}
         </Button>
       )}
+      {measuring ? (
+        <span ref={ruler} className="nx-strip-ruler" aria-hidden="true">
+          <span>{words.some}</span>
+          <span>{words.all}</span>
+        </span>
+      ) : null}
     </div>
   );
 });
+
+const NOBODY: readonly string[] = [];
+const TAKEN_OUT = "You were taken out of voice.";
+const EVERYBODY: StripFit = { kind: "all" };
+
+/** The words after the chips, said with "and others" (`some`) and without (`all`). */
+interface StripWords {
+  some: string;
+  all: string;
+}
+
+/**
+ * What the strip says after its chips (#745): "and others", then who's
+ * talking when it isn't your room. A failed start or being taken out of
+ * voice says that instead, the same either way.
+ */
+function stripWords(kind: Strip["kind"], count: number, failed: StripProblem | undefined, takenOut: boolean): StripWords {
+  if (failed) {
+    const said = `Couldn't start voice. ${failed.line}`;
+    return { some: said, all: said };
+  }
+  if (takenOut) return { some: TAKEN_OUT, all: TAKEN_OUT };
+  const talking = kind === "others" ? `${verbFor(count, "is", "are")} talking` : "";
+  return { some: talking === "" ? "and others" : `and others ${talking}`, all: talking };
+}
+
+/** The width the chips and the words after them share: the line, less what's on it for good. */
+function room(list: Element, words: Element): number {
+  return list.getBoundingClientRect().width + words.getBoundingClientRect().width;
+}
+
+/**
+ * A chip on the line is no longer the width it was measured at. Only while
+ * none is squeezed: on a line that has just narrowed they shrink before the
+ * recount, and that isn't a change in the chips.
+ */
+function drifted(list: Element, measure: StripMeasure): boolean {
+  if (list.scrollWidth > list.clientWidth + 1) return false;
+  return [...list.children].some((chip) => {
+    const was = measure.chips.find((one) => one.id === (chip as HTMLElement).dataset.user);
+    return was !== undefined && Math.abs(chip.getBoundingClientRect().width - was.width) > 0.5;
+  });
+}
+
+function sameFit(a: StripFit, b: StripFit): boolean {
+  return a.kind === b.kind && (a.kind !== "first" || b.kind !== "first" || a.count === b.count) && (a.kind !== "seats" || b.kind !== "seats" || a.seats === b.seats);
+}
+
+/**
+ * How many of the strip's people fit its line (#745), measured rather than
+ * guessed, since names come in every face, weight and length. When who's
+ * here changes, or how any of them looks, or a font arrives, one draw puts
+ * everybody on the line at their own width (`measuring`, which CSS keeps
+ * from shrinking them). Before that's ever painted their widths are read,
+ * and the strip draws as many as fit (core/chat/voice.ts `stripFit`). A
+ * wider or narrower window, or a button coming or going on the line,
+ * recounts from those widths without drawing everybody again. A chip that
+ * has since changed width (a face that arrived late, which WebKit doesn't
+ * always say) has everybody measured again.
+ */
+function useStripFit(here: readonly User[], you: string | null, words: StripWords, mics: ReadonlyMap<string, "muted" | "deafened"> | undefined, sharing: ReadonlySet<string> | undefined) {
+  const list = useRef<HTMLUListElement>(null);
+  const line = useRef<HTMLParagraphElement>(null);
+  const ruler = useRef<HTMLSpanElement>(null);
+  // A face that arrives after the widths were read changes them.
+  const [again, setAgain] = useState(0);
+  useEffect(() => {
+    const faces = typeof document === "undefined" ? undefined : document.fonts;
+    if (!faces) return;
+    const measureAgain = () => setAgain((count) => count + 1);
+    faces.addEventListener("loadingdone", measureAgain);
+    return () => faces.removeEventListener("loadingdone", measureAgain);
+  }, []);
+  const key = [again, you ?? "", words.some, words.all, ...here.map((user) => `${JSON.stringify(user)} ${mics?.get(user.id) ?? ""} ${sharing?.has(user.id) ? "sharing" : ""}`)].join("\n");
+  const [fitted, setFitted] = useState<{ key: string; measure: StripMeasure; fit: StripFit } | null>(null);
+  const current = useRef(fitted);
+  current.current = fitted;
+  const measuring = here.length > 0 && fitted?.key !== key;
+  useLayoutEffect(() => {
+    if (!measuring) return;
+    const chips = list.current;
+    const said = line.current;
+    const sizes = ruler.current;
+    if (!chips || !said || !sizes) return;
+    const widths = [...chips.children].map((chip, at) => ({ id: here[at]?.id ?? "", width: chip.getBoundingClientRect().width }));
+    const [some = 0, all = 0] = [...sizes.children].map((words) => words.getBoundingClientRect().width);
+    const measure: StripMeasure = { chips: widths, gap: parseFloat(getComputedStyle(chips).columnGap) || 0, words: { some, all }, you };
+    setFitted({ key, measure, fit: stripFit(measure, room(chips, said)) });
+  });
+  // Recount whenever the line's room changes. The list and the words are
+  // watched, not the strip: a button coming or going on the line changes
+  // their room without changing the strip's width.
+  const watched = useRef<{ watch: ResizeObserver; chips: Element; said: Element } | null>(null);
+  useEffect(() => {
+    const chips = list.current;
+    const said = line.current;
+    const now = watched.current;
+    if (now && now.chips === chips && now.said === said) return;
+    now?.watch.disconnect();
+    watched.current = null;
+    if (!chips || !said || typeof ResizeObserver === "undefined") return;
+    const watch = new ResizeObserver(() => {
+      const was = current.current;
+      if (!was) return;
+      if (drifted(chips, was.measure)) {
+        setAgain((count) => count + 1);
+        return;
+      }
+      const fit = stripFit(was.measure, room(chips, said));
+      if (!sameFit(fit, was.fit)) setFitted({ ...was, fit });
+    });
+    watch.observe(chips);
+    watch.observe(said);
+    watched.current = { watch, chips, said };
+  });
+  useEffect(
+    () => () => {
+      watched.current?.watch.disconnect();
+      watched.current = null;
+    },
+    [],
+  );
+  return { fit: fitted?.fit ?? EVERYBODY, measuring, list, line, ruler };
+}
 
 /**
  * Mute, Deafen and Leave, as symbols: each word is the button's name and

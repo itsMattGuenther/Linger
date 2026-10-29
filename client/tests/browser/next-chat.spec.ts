@@ -742,23 +742,98 @@ test.describe("voice here", () => {
     expect(await did(page)).toEqual(["mute"]);
   });
 
-  // A raid (#197): more people than the strip has chips. In the room you're
-  // in, it shows you and whoever just talked, still while they talk.
+  // A raid (#197): more people than the strip has room for. In the room
+  // you're in, it shows you and whoever just talked, still while they talk,
+  // and as many seats as the line holds (#745).
   test("in a big room you're in, the strip shows you and whoever just talked, and nobody moves while they talk", async ({ page }) => {
     await open(page, "?voice=mine&raid");
     const strip = page.getByRole("group", { name: "Voice in this conversation" });
     const chips = strip.getByRole("list", { name: "In voice here" }).getByRole("listitem");
-    // Eli was talking as it opened; the others are the first to join.
-    await expect(chips).toHaveText(["you", "Eli", "Jules", "Kestrel"]);
     await expect(strip).toContainText("and others");
+    // Eli was talking as it opened; the others are the first to join.
+    const start = await chips.allTextContents();
+    expect(start.slice(0, 4)).toEqual(["you", "Eli", "Jules", "Kestrel"]);
+    // Fennick and Yarrow joined late enough to have no seat.
+    expect(start).not.toContain("Fennick");
+    expect(start).not.toContain("Yarrow");
+    const swap = (from: readonly string[], out: string, into: string) => from.map((name) => (name === out ? into : name));
     await page.evaluate(() => window.chat?.talk(["u-raid-12"]));
-    await expect(chips).toHaveText(["you", "Eli", "Fennick", "Kestrel"]);
+    const fennick = swap(start, "Jules", "Fennick");
+    await expect(chips).toHaveText(fennick);
     await expect(chips.filter({ hasText: "Fennick" }).locator("[data-kit='Chip']")).toHaveAttribute("data-active", "yes");
     await page.evaluate(() => window.chat?.talk([]));
-    await expect(chips).toHaveText(["you", "Eli", "Fennick", "Kestrel"]);
+    await expect(chips).toHaveText(fennick);
     // Somebody new: the seat of whoever spoke longest ago (Kestrel never did).
     await page.evaluate(() => window.chat?.talk(["u-raid-30"]));
-    await expect(chips).toHaveText(["you", "Eli", "Fennick", "Yarrow"]);
+    await expect(chips).toHaveText(swap(fennick, "Kestrel", "Yarrow"));
+  });
+
+  // #745: the strip showed four people and "and others", however wide the
+  // window was. It shows as many as its one line holds now, measured from
+  // the chips themselves, and recounts as the window changes.
+  for (const [query, who] of [["?voice=elsewhere&raid", "a big room you're not in"], ["?voice=mine&raid", "a big room you're in"]] as const) {
+    test(`in ${who}, the strip shows as many people as fit its line, and more as the window widens (#745)`, async ({ page }) => {
+      await page.setViewportSize({ width: 1280, height: 790 });
+      await open(page, query);
+      const strip = page.getByRole("group", { name: "Voice in this conversation" });
+      const list = strip.getByRole("list", { name: "In voice here" });
+      const chips = list.getByRole("listitem");
+      await expect(strip).toContainText("and others");
+      const layout = () =>
+        strip.evaluate((node) => {
+          const people = node.querySelector(".nx-strip-people");
+          const words = node.querySelector(".nx-strip-words");
+          const items = [...node.querySelectorAll(".nx-strip-people > li")].map((item) => item.getBoundingClientRect());
+          return {
+            count: items.length,
+            height: node.getBoundingClientRect().height,
+            // One line: every chip on the same row.
+            rows: new Set(items.map((item) => Math.round(item.top))).size,
+            // None is cut: the list holds them all, and they end before the words.
+            cut: people ? people.scrollWidth > people.clientWidth + 1 : true,
+            // "and others" is never cut short to make room for one more.
+            words: words ? words.scrollWidth <= words.clientWidth + 1 : false,
+          };
+        });
+      const wide = await layout();
+      expect(wide).toMatchObject({ rows: 1, cut: false, words: true });
+      // 1280 wide holds well over the four it used to stop at.
+      expect(wide.count).toBeGreaterThan(6);
+
+      await page.setViewportSize({ width: 600, height: 790 });
+      await expect.poll(async () => (await layout()).count).toBeLessThan(wide.count);
+      const narrow = await layout();
+      expect(narrow).toMatchObject({ rows: 1, cut: false, words: true, height: wide.height });
+      expect(narrow.count).toBeGreaterThanOrEqual(1);
+      await expect(strip).toContainText("and others");
+      if (query.includes("mine")) await expect(chips.first()).toHaveText("you");
+
+      await page.setViewportSize({ width: 1280, height: 790 });
+      await expect.poll(async () => (await layout()).count).toBe(wide.count);
+      expect((await layout()).height).toBe(wide.height);
+    });
+  }
+
+  test("with everybody fitting, the strip shows them all and no \"and others\" (#745)", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 790 });
+    await open(page, "?voice=mine");
+    const strip = page.getByRole("group", { name: "Voice in this conversation" });
+    await expect(strip.getByRole("listitem")).toHaveText(["you", "Eli", "Jules"]);
+    await expect(strip).not.toContainText("and others");
+  });
+
+  test("while people talk in a big room you're in, the strip keeps how many it shows (#745)", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 790 });
+    await open(page, "?voice=mine&raid");
+    const chips = page.getByRole("group", { name: "Voice in this conversation" }).getByRole("list", { name: "In voice here" }).getByRole("listitem");
+    await expect(chips.first()).toHaveText("you");
+    const count = await chips.count();
+    // Talkers with every kind of name take seats in turn: the count holds.
+    for (const talking of [["u-raid-4"], ["u-raid-30", "u-raid-41"], ["u-raid-44"], []]) {
+      await page.evaluate((ids) => window.chat?.talk(ids), talking);
+      if (talking[0]) await expect(chips.locator("[data-kit='Chip'][data-active='yes']").first()).toBeVisible();
+      expect(await chips.count()).toBe(count);
+    }
   });
 
   test("in voice elsewhere: offers to move, in words", async ({ page }) => {

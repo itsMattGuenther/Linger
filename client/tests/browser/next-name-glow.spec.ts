@@ -628,9 +628,10 @@ for (const scale of [1, 2]) {
 }
 
 // At the chat window's narrowest (420) and a conversation window's (360):
-// with five people in voice, the strip hides the chips that don't fit, long
-// words still end in "…", and nothing is anywhere but where it was with the
-// old rules, which cut the lines above and below too.
+// with five people in voice, the strip shows only the chips that fit (#745)
+// and still cuts one that's too wide on its own, long words still end in
+// "…", and nothing is anywhere but where it was with the old rules, which
+// cut the lines above and below too.
 for (const width of [420, 360]) {
   test.describe(`${width} wide`, () => {
     test.use({ viewport: { width, height: 820 }, deviceScaleFactor: 2 });
@@ -643,7 +644,10 @@ for (const width of [420, 360]) {
       await restyleInChat(page, styled(people.jules, GRADIENT_GLOW, { display_name: "Jules, whose name goes on and on" }));
       await restyleInChat(page, styled(people.dave, AMBER_GLOW, { display_name: "Dave, whose name also goes on" }));
       await everyoneInVoice(page);
-      await expect(inStrip(page, "Dave")).toBeVisible();
+      // As many as fit (#745): the first, at least, and "and others".
+      const first = strip(page).getByRole("list", { name: "In voice here" }).getByRole("listitem").first().locator("[data-kit='Name']");
+      await expect(first).toBeVisible();
+      await expect(strip(page)).toContainText("and others");
       await replyTo(page, "A bit of Khruangbin", "Eli");
       // Three typing, so the line is long: "Jules…, Dave and Callie are typing".
       const threeTyping = async () => {
@@ -651,7 +655,7 @@ for (const width of [420, 360]) {
       };
       await threeTyping();
       await settled(page, inTyping(page).first());
-      await settled(page, inStrip(page, "Dave"));
+      await settled(page, first);
       // Typing lasts a few seconds; said again, it holds for the measuring.
       await threeTyping();
 
@@ -684,7 +688,8 @@ for (const width of [420, 360]) {
       const before = await layout();
       await old.evaluate((node: Element) => node.remove());
       expect(now.words.length).toBeGreaterThanOrEqual(4);
-      expect(now.chips.length).toBe(4);
+      expect(now.chips.length).toBeGreaterThanOrEqual(1);
+      expect(now.chips.length).toBeLessThan(5);
       expect(now).toEqual(before);
       expect(now.strip[0]?.[3], "the strip's height").toBe(40);
 
@@ -719,13 +724,13 @@ for (const width of [420, 360]) {
         expect(white, `${selector}: letters painted past its end`).toBe(0);
       }
 
-      // The strip still hides the chips that don't fit: between the end of
-      // its list of people and its button, the strip is the same with the
-      // chips there or not. The button itself is left out: WebKit draws its
-      // icon a little differently from one shot to the next. Checked as the
-      // strip lays them out (they shrink to fit, so little reaches the end),
-      // and with chips that can't shrink, which run well past it and must
-      // still be cut there.
+      // The strip still cuts a chip too wide for it: between the end of its
+      // list of people and its button, the strip is the same with the chips
+      // there or not. The button itself is left out: WebKit draws its icon a
+      // little differently from one shot to the next. Checked as the strip
+      // lays them out (only those that fit, #745), and with chips that can't
+      // shrink and are far too wide, which run well past it and must still
+      // be cut there.
       const pastTheList = async (why: string) => {
         const list = await page.locator(".nx-strip-people").boundingBox();
         const join = await strip(page).getByRole("button", { name: /Join|Start talking/ }).boundingBox();
@@ -746,7 +751,7 @@ for (const width of [420, 360]) {
         expect(differ.length, `${why}: a chip is painted past the strip's list of people, in ${differ.length} pixels, at x ${[...new Set(differ)].slice(0, 12).join(" ")} (device pixels from ${end})`).toBe(0);
       };
       await pastTheList("as laid out");
-      const stiff = await page.addStyleTag({ content: ".nx-strip-people > li { flex: none !important; }" });
+      const stiff = await page.addStyleTag({ content: ".nx-strip-people > li { flex: none !important; min-width: 480px !important; }" });
       await expect.poll(() => page.locator(".nx-strip-people").evaluate((node) => node.scrollWidth > node.clientWidth + 40)).toBe(true);
       await pastTheList("chips that can't shrink");
       await stiff.evaluate((node: Element) => node.remove());

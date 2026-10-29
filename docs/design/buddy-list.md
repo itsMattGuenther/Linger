@@ -357,6 +357,10 @@ Khruangbin…`), which suits smaller windows.
   them, ringed in the lamp while they talk. A new talker takes the seat of whoever
   spoke longest ago, so nobody moves while they talk. The dots open everyone by name,
   with a search box; picking somebody opens their volume.
+- **A conversation's voice strip shows as many people as fit its one line**
+  (#745), then "and others", and recounts as the window changes. In a big room
+  you're in, that's you and as many seats for whoever just talked as the widest
+  names among them would fill, so how many never changes while people talk.
 - **The tab of your voice room** shows moving sound bars.
 - **Other rooms offer "Move voice here"** (or "Talk here instead" when they're
   quiet), so moving is never mistaken for a fresh join.
