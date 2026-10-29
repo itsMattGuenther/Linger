@@ -10,7 +10,7 @@ import { nameless } from "../../../lib/gone";
 import { mayActOn } from "../../../lib/host";
 import { useResizeAnchor } from "../../../lib/resize";
 import { sessionLabel } from "../../../lib/time";
-import { type ChatRow, chatRows, newestShareLines, rowIndex, sameRow } from "../../core/chat/rows";
+import { type ChatRow, chatRows, newestShareLines, rowIndex, sameRow, shareLineState } from "../../core/chat/rows";
 import { observeScrollNow } from "../../core/chat/scrollWatch";
 import { Button, Icon } from "../../kit";
 import { JoinLine } from "./JoinLine";
@@ -644,7 +644,7 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
                     emoji={emojiByName}
                     mediaUrl={props.mediaUrl}
                     actions={actions}
-                    share={row.kind === "message" ? shareState(row.message, newestShares, props.shares) : undefined}
+                    share={row.kind === "message" ? shareLineState(row.message, newestShares, props.shares, atEnd) : undefined}
                     onWatchShare={watchShare}
                   />
                 </div>
@@ -663,15 +663,6 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
     </div>
   );
 });
-
-/**
- * Where a line saying somebody shared their screen stands (#746): only
- * their newest one can be still going. Left out for every other row.
- */
-function shareState(message: Message, newest: ReadonlySet<MessageId>, shares: ConversationShares | undefined): ShareLineState | undefined {
-  if (message.screen_share !== true || !newest.has(message.id) || !shares?.live.has(message.author_id)) return undefined;
-  return shares.watchable.has(message.author_id) ? "watch" : "live";
-}
 
 interface RowViewProps {
   row: ChatRow;

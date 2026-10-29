@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Message } from "../../../generated/Message";
-import { chatRows, lastEditable, newestShareLines, rowIndex, sameRow } from "./rows";
+import { chatRows, lastEditable, newestShareLines, rowIndex, sameRow, shareLineState } from "./rows";
 
 const MIN = 60_000;
 const T0 = Date.parse("2026-09-25T22:00:00Z");
@@ -154,6 +154,24 @@ describe("somebody sharing their screen (#746)", () => {
       { atStart: false, leftOff: null },
     );
     expect([...newestShareLines(rows)].sort()).toEqual(["m000003", "m000004"]);
+  });
+
+  it("says a share is going only on its person's newest line, at the newest end, while they share", () => {
+    const older = shared(1, "jules", T0);
+    const newer = shared(2, "jules", T0 + MIN);
+    const newest = newestShareLines(chatRows([older, newer], [], { atStart: false, leftOff: null }));
+    const sharing = { live: new Set(["jules"]), watchable: new Set(["jules"]) };
+    expect(shareLineState(newer, newest, sharing, true)).toBe("watch");
+    expect(shareLineState(older, newest, sharing, true)).toBeUndefined();
+    // Watching it, or your own: going, without Watch.
+    expect(shareLineState(newer, newest, { live: new Set(["jules"]), watchable: new Set() }, true)).toBe("live");
+    // Over.
+    expect(shareLineState(newer, newest, { live: new Set(), watchable: new Set() }, true)).toBeUndefined();
+    // In a stretch of older history a newer line may be out of reach: the
+    // newest line held there is a share that's over (#751's review).
+    const alone = newestShareLines(chatRows([older], [], { atStart: false, leftOff: null }));
+    expect(shareLineState(older, alone, sharing, false)).toBeUndefined();
+    expect(shareLineState(message(3, "jules", T0), newest, sharing, true)).toBeUndefined();
   });
 });
 

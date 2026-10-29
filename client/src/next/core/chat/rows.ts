@@ -136,6 +136,24 @@ export function newestShareLines(rows: readonly ChatRow[]): ReadonlySet<MessageI
   return new Set(newest.values());
 }
 
+/**
+ * Where a line saying somebody shared their screen stands (#746): "live"
+ * while they still share, "watch" when that share is somebody else's you
+ * aren't watching, or over (undefined). Only their newest line can be live,
+ * and only when the conversation holds its newest messages (`atEnd`): in a
+ * stretch of older history, a newer line may be out of reach, and the old
+ * one is a share that's over.
+ */
+export function shareLineState(
+  message: Message,
+  newest: ReadonlySet<MessageId>,
+  shares: { live: ReadonlySet<string>; watchable: ReadonlySet<string> } | undefined,
+  atEnd: boolean,
+): "live" | "watch" | undefined {
+  if (message.screen_share !== true || !atEnd || !newest.has(message.id) || !shares?.live.has(message.author_id)) return undefined;
+  return shares.watchable.has(message.author_id) ? "watch" : "live";
+}
+
 /** Where each message sits in the rows, for jumping to one. */
 export function rowIndex(rows: readonly ChatRow[]): Map<MessageId, number> {
   const index = new Map<MessageId, number>();
