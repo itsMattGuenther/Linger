@@ -70,6 +70,9 @@ pub fn data_config(dir: &tempfile::TempDir) -> Config {
         voice_line_after: std::time::Duration::from_millis(
             linger_core::limits::VOICE_JOIN_LINE_AFTER_MS,
         ),
+        share_line_after: std::time::Duration::from_millis(
+            linger_core::limits::SCREEN_SHARE_LINE_AFTER_MS,
+        ),
         presence_grace: std::time::Duration::from_millis(linger_core::limits::PRESENCE_GRACE_MS),
         screen_alive: std::time::Duration::from_millis(linger_core::limits::SCREEN_ALIVE_MS),
         trusted_proxies: linger_server::config::TrustedProxies::default(),
@@ -99,6 +102,9 @@ pub async fn spawn_named_server(domain: &str, media_domain: &str) -> TestServer 
         voice_from_domain: None,
         voice_line_after: std::time::Duration::from_millis(
             linger_core::limits::VOICE_JOIN_LINE_AFTER_MS,
+        ),
+        share_line_after: std::time::Duration::from_millis(
+            linger_core::limits::SCREEN_SHARE_LINE_AFTER_MS,
         ),
         presence_grace: std::time::Duration::from_millis(linger_core::limits::PRESENCE_GRACE_MS),
         screen_alive: std::time::Duration::from_millis(linger_core::limits::SCREEN_ALIVE_MS),
@@ -140,6 +146,9 @@ pub async fn spawn_s3_server() -> Option<TestServer> {
         voice_from_domain: None,
         voice_line_after: std::time::Duration::from_millis(
             linger_core::limits::VOICE_JOIN_LINE_AFTER_MS,
+        ),
+        share_line_after: std::time::Duration::from_millis(
+            linger_core::limits::SCREEN_SHARE_LINE_AFTER_MS,
         ),
         presence_grace: std::time::Duration::from_millis(linger_core::limits::PRESENCE_GRACE_MS),
         screen_alive: std::time::Duration::from_millis(linger_core::limits::SCREEN_ALIVE_MS),

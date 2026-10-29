@@ -64,6 +64,16 @@ pub const VOICE_JOIN_LINE_AFTER_MS: u64 = 10_000;
 /// can't fill a room with lines.
 pub const VOICE_JOIN_LINE_EVERY_MS: i64 = 10 * 60 * 1000;
 
+/// How long a screen share lasts before the room gets a line saying
+/// somebody is sharing (SPEC §4.20, #746). A misclick on Share, or stopping
+/// at once to pick another window, leaves nothing behind.
+pub const SCREEN_SHARE_LINE_AFTER_MS: u64 = 10_000;
+
+/// At most one share line per person per room this often (#746), however
+/// many times they share in between, as for joining voice: stopping to pick
+/// another window and sharing again doesn't add a second line.
+pub const SCREEN_SHARE_LINE_EVERY_MS: i64 = 10 * 60 * 1000;
+
 /// A poll's question, chars after trim (PROTOCOL §4, #474): as long as a
 /// message of the day, since it is read whole at the top of the card.
 pub const MAX_POLL_QUESTION_CHARS: usize = 300;

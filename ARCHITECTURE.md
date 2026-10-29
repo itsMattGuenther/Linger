@@ -346,12 +346,15 @@ CREATE TABLE messages (
                                                -- voice (#473); never last_message_id
   poll_closed     BLOB REFERENCES messages(id),-- on the line a closing poll leaves (#474):
                                                -- which poll; never last_message_id
-  dm_left         INTEGER NOT NULL DEFAULT 0   -- 1: the line saying somebody left a
+  dm_left         INTEGER NOT NULL DEFAULT 0,  -- 1: the line saying somebody left a
                                                -- group DM (#565); never last_message_id
+  screen_share    INTEGER NOT NULL DEFAULT 0   -- 1: the line saying somebody shared
+                                               -- their screen (#746); never last_message_id
 );
 CREATE INDEX idx_messages_room ON messages(room_id, id DESC);
 CREATE INDEX idx_messages_pinned ON messages(room_id, pinned_at) WHERE pinned_at IS NOT NULL;
 CREATE INDEX idx_messages_voice_join ON messages(room_id, author_id, created_at) WHERE voice_join = 1;
+CREATE INDEX idx_messages_screen_share ON messages(room_id, author_id, created_at) WHERE screen_share = 1;
 
 CREATE TABLE attachments (
   id              BLOB PRIMARY KEY,

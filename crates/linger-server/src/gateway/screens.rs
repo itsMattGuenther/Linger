@@ -414,6 +414,17 @@ impl Screens {
         Ok(socket)
     }
 
+    /// Whether `session` still shares in `room` on share socket `socket`:
+    /// the same share all along, never stopped or shared again in between
+    /// (`share_line.rs`, #746).
+    #[must_use]
+    pub fn holds_share(&self, session: &str, room: RoomId, socket: u64) -> bool {
+        lock(self)
+            .shares
+            .get(session)
+            .is_some_and(|share| share.room == room && share.socket == socket)
+    }
+
     /// `session`'s share socket `socket` closed. Answers the room to tell,
     /// when that ended a share. Its watchers stay connected with nothing to
     /// show.

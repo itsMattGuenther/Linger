@@ -154,6 +154,7 @@ mod tests {
             poll: None,
             poll_closed: None,
             left: None,
+            screen_share: None,
         }
     }
 

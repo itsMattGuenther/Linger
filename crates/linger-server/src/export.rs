@@ -1077,6 +1077,15 @@ fn message_markdown(
     if message.left == Some(true) {
         return format!("**{}** — {} left\n\n", clock(message.created_at), who);
     }
+    // The line written when somebody shared their screen (#746): who and
+    // when, never what.
+    if message.screen_share == Some(true) {
+        return format!(
+            "**{}** — {} shared their screen\n\n",
+            clock(message.created_at),
+            who
+        );
+    }
     // The line written when a poll closed (#474): its body already says it.
     if message.poll_closed.is_some() {
         return format!("**{}** — {}\n\n", clock(message.created_at), message.body);
@@ -1520,6 +1529,7 @@ mod tests {
             poll: None,
             poll_closed: None,
             left: None,
+            screen_share: None,
         };
         let written = message_markdown(
             &line,
@@ -1552,6 +1562,7 @@ mod tests {
             poll: None,
             poll_closed: None,
             left: Some(true),
+            screen_share: None,
         };
         let written = message_markdown(
             &line,
@@ -1561,6 +1572,42 @@ mod tests {
             &HashMap::new(),
         );
         assert_eq!(written, "**20:50** — somebody who is gone left\n\n");
+    }
+
+    /// A line saying somebody shared their screen reads as one line in the
+    /// archive, who and when and never what (#746).
+    #[test]
+    fn a_share_line_is_who_and_when_and_nothing_under_it() {
+        let line = Message {
+            id: MessageId::new(),
+            room_id: RoomId::new(),
+            author_id: UserId::new(),
+            body: crate::share_line::BODY.to_string(),
+            reply_to: None,
+            attachments: Vec::new(),
+            reactions: Vec::new(),
+            pinned_at: None,
+            edited_at: None,
+            deleted_at: None,
+            created_at: 20 * 3_600_000 + 50 * 60_000,
+            motd: None,
+            voice_join: None,
+            poll: None,
+            poll_closed: None,
+            left: None,
+            screen_share: Some(true),
+        };
+        let written = message_markdown(
+            &line,
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
+        );
+        assert_eq!(
+            written,
+            "**20:50** — somebody who is gone shared their screen\n\n"
+        );
     }
 
     /// A poll reads as its question and who picked what, not the words an
@@ -1601,6 +1648,7 @@ mod tests {
             }),
             poll_closed: None,
             left: None,
+            screen_share: None,
         };
         let written = message_markdown(
             &asked,

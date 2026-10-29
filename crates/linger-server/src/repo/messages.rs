@@ -33,6 +33,7 @@ fn row_to_message(row: &SqliteRow) -> Result<Message, ApiError> {
         motd: row.get::<bool, _>("motd").then_some(true),
         voice_join: row.get::<bool, _>("voice_join").then_some(true),
         left: row.get::<bool, _>("dm_left").then_some(true),
+        screen_share: row.get::<bool, _>("screen_share").then_some(true),
         // `repo::polls::hydrate` fills the poll in, and the closed line's
         // question and result; the row only says which poll a line is about.
         poll: None,

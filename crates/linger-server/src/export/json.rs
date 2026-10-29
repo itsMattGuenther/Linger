@@ -87,8 +87,8 @@ struct Record<'a> {
     /// The same moment in unix milliseconds.
     at_ms: i64,
     /// `message`, `poll`, `motd` (set the message of the day), `voice_join`,
-    /// `left` (a group DM), or `poll_closed`: the last three are lines the
-    /// server wrote, not words anybody typed.
+    /// `left` (a group DM), `screen_share` or `poll_closed`: the last four
+    /// are lines the server wrote, not words anybody typed.
     kind: &'static str,
     /// `null` for somebody who is no longer on the server.
     author: Option<Person<'a>>,
@@ -163,6 +163,8 @@ pub fn message(
         "voice_join"
     } else if message.left == Some(true) {
         "left"
+    } else if message.screen_share == Some(true) {
+        "screen_share"
     } else if message.poll_closed.is_some() {
         "poll_closed"
     } else if message.poll.is_some() {

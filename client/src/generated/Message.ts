@@ -57,4 +57,17 @@ poll_closed?: PollClosed,
  * Like the line saying somebody joined voice it never makes a DM look
  * new, never notifies, and can't be edited or reacted to.
  */
-left?: boolean, };
+left?: boolean, 
+/**
+ * `true` on the line the server writes when somebody shares their
+ * screen in the room's voice and keeps sharing (#746): its author is who
+ * shares, its body "shared their screen". Left out on every other
+ * message, so an app that doesn't know the field shows it as that
+ * person saying "shared their screen". An app that knows it says
+ * "is sharing their screen", with Watch, while they still are.
+ *
+ * It never says what is shared (hard rule 2). Like the line saying
+ * somebody joined voice it never makes a room look new, never notifies,
+ * and can't be edited or reacted to.
+ */
+screen_share?: boolean, };

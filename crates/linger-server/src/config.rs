@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use linger_core::limits::{
     DEFAULT_POOL_BYTES, DEFAULT_SIGNUPS_PER_HOUR, MAX_FILE_BYTES, PRESENCE_GRACE_MS,
-    SCREEN_ALIVE_MS, VOICE_JOIN_LINE_AFTER_MS,
+    SCREEN_ALIVE_MS, SCREEN_SHARE_LINE_AFTER_MS, VOICE_JOIN_LINE_AFTER_MS,
 };
 
 use crate::auth::{DEFAULT_PASSWORD_CHECKS_AT_ONCE, MAX_PASSWORD_CHECKS_AT_ONCE};
@@ -122,6 +122,11 @@ pub struct Config {
     /// environment variable; there is nothing for a host to tune. Tests
     /// shorten it rather than wait.
     pub voice_line_after: Duration,
+    /// How long a screen share lasts before the room gets a line saying
+    /// somebody is sharing (#746): `SCREEN_SHARE_LINE_AFTER_MS`. Not an
+    /// environment variable, like `voice_line_after`. Tests shorten it
+    /// rather than wait.
+    pub share_line_after: Duration,
     /// How long a session's presence outlasts a socket that dropped without
     /// a goodbye, waiting for its app to resume (#654): `PRESENCE_GRACE_MS`.
     /// Not an environment variable, like `voice_line_after`. Tests shorten it
@@ -412,6 +417,7 @@ impl Config {
             voice_forwarding,
             voice_from_domain,
             voice_line_after: Duration::from_millis(VOICE_JOIN_LINE_AFTER_MS),
+            share_line_after: Duration::from_millis(SCREEN_SHARE_LINE_AFTER_MS),
             presence_grace: Duration::from_millis(PRESENCE_GRACE_MS),
             screen_alive: Duration::from_millis(SCREEN_ALIVE_MS),
             trusted_proxies: trusted_proxies(std::env::var("LINGER_TRUSTED_PROXIES").ok())?,
@@ -1196,6 +1202,7 @@ mod tests {
             voice_forwarding: None,
             voice_from_domain: None,
             voice_line_after: Duration::from_millis(VOICE_JOIN_LINE_AFTER_MS),
+            share_line_after: Duration::from_millis(SCREEN_SHARE_LINE_AFTER_MS),
             presence_grace: Duration::from_millis(PRESENCE_GRACE_MS),
             screen_alive: Duration::from_millis(SCREEN_ALIVE_MS),
             trusted_proxies: TrustedProxies::default(),

@@ -25,6 +25,7 @@ pub mod repo;
 pub mod reset;
 pub mod routes;
 pub mod setup;
+pub mod share_line;
 pub mod state;
 pub mod status_fields;
 pub mod storage;

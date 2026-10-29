@@ -216,6 +216,14 @@ async fn share(state: &AppState, signed: Signed, shape: Shape, mut sink: Sink, m
         return close(&mut sink, Closing::NotInVoice).await;
     }
     state.gateway.announce_screens(signed.room);
+    // The room's line saying they're sharing, once the share has lasted (#746).
+    crate::share_line::after_share(
+        state.clone(),
+        signed.session_id.clone(),
+        signed.user_id,
+        signed.room,
+        socket,
+    );
     let (mut alive, gone) = alive_every(state);
     let mut heard = Instant::now();
     loop {

@@ -24,6 +24,7 @@ const ROOM_SELECT: &str = "
            (SELECT MAX(m.id) FROM messages m
              WHERE m.room_id = r.id AND m.deleted_at IS NULL
                AND m.motd = 0 AND m.voice_join = 0 AND m.dm_left = 0
+               AND m.screen_share = 0
                AND m.poll_closed IS NULL) AS last_message_id
     FROM rooms r";
 

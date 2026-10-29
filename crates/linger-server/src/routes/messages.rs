@@ -312,10 +312,12 @@ async fn edit(
         ));
     }
     // Nor the line saying somebody joined voice (#473), that a poll closed
-    // (#474), or that somebody left a group DM (#565): nobody typed them.
+    // (#474), that somebody left a group DM (#565) or shared their screen
+    // (#746): nobody typed them.
     if message.voice_join == Some(true)
         || message.poll_closed.is_some()
         || message.left == Some(true)
+        || message.screen_share == Some(true)
     {
         return Err(ApiError::validation("That line can't be edited."));
     }
@@ -493,12 +495,13 @@ async fn add_reaction(
     if message.deleted_at.is_some() {
         return Err(ApiError::not_found("That message is gone."));
     }
-    // A line the server wrote about somebody joining voice, a poll closing or
-    // somebody leaving a group DM isn't something anybody said (#473, #474,
-    // #565).
+    // A line the server wrote about somebody joining voice, a poll closing,
+    // somebody leaving a group DM or sharing their screen isn't something
+    // anybody said (#473, #474, #565, #746).
     if message.voice_join == Some(true)
         || message.poll_closed.is_some()
         || message.left == Some(true)
+        || message.screen_share == Some(true)
     {
         return Err(ApiError::validation("Nobody can react to that line."));
     }

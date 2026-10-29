@@ -378,6 +378,9 @@ mod tests {
             voice_line_after: std::time::Duration::from_millis(
                 linger_core::limits::VOICE_JOIN_LINE_AFTER_MS,
             ),
+            share_line_after: std::time::Duration::from_millis(
+                linger_core::limits::SCREEN_SHARE_LINE_AFTER_MS,
+            ),
             screen_alive: std::time::Duration::from_millis(linger_core::limits::SCREEN_ALIVE_MS),
             presence_grace: std::time::Duration::from_millis(
                 linger_core::limits::PRESENCE_GRACE_MS,

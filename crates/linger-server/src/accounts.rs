@@ -164,10 +164,11 @@ async fn erase_what_they_wrote(
     id: UserId,
     now: i64,
 ) -> Result<Erased, ApiError> {
-    // Everything they wrote except the quiet lines saying they joined voice
-    // or left a DM, which are about them being there rather than anything
-    // they said, and carry no words of theirs.
-    const THEIRS: &str = "author_id = ? AND deleted_at IS NULL AND voice_join = 0 AND dm_left = 0";
+    // Everything they wrote except the quiet lines saying they joined voice,
+    // left a DM or shared their screen, which are about them being there
+    // rather than anything they said, and carry no words of theirs.
+    const THEIRS: &str =
+        "author_id = ? AND deleted_at IS NULL AND voice_join = 0 AND dm_left = 0 AND screen_share = 0";
 
     let rows: Vec<(Vec<u8>, Vec<u8>)> =
         sqlx::query_as(&format!("SELECT id, room_id FROM messages WHERE {THEIRS}"))

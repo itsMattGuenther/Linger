@@ -576,6 +576,7 @@ type Message = {
   poll?: Poll;                                 // the poll this message asks (#474), below
   poll_closed?: PollClosed;                    // on the line a closing poll leaves (#474), below
   left?: true;                                 // the line saying its author left a group DM (§3.1, #565)
+  screen_share?: true;                         // the line saying its author shared their screen (§8, #746)
 }
 ```
 
@@ -590,7 +591,7 @@ your own twice is one, and taking back one you never left is `204` too.
 |---|---|
 | `422 VALIDATION_FAILED` "A reaction is one emoji." | the key is words, two emoji, a lone skin tone or joiner (the twelve names reactions had before #485 included) |
 | `404 NOT_FOUND` "That emoji isn't on this server." | `emoji:<id>` names no emoji this server has, or writes the id another way |
-| `422 VALIDATION_FAILED` "Nobody can react to that line." | the line a closing poll leaves, or one saying somebody joined voice or left a group DM |
+| `422 VALIDATION_FAILED` "Nobody can react to that line." | the line a closing poll leaves, or one saying somebody joined voice, left a group DM or shared their screen |
 | `403 FORBIDDEN` "Reactions are off in this room." | the host turned them off (§3); taking one back is still allowed |
 | `409 CONFLICT` "This message has six different reactions, the most it can hold. Add yours to one of them." | it has `MAX_REACTIONS_PER_MESSAGE` (6) different emoji already, and this isn't one of them |
 
@@ -611,7 +612,8 @@ line saying somebody joined voice (`voice_join`, §8): nobody typed it. Its body
 as them saying so; it is never a room's `last_message_id`, search passes over it, and a
 client neither notifies nor sounds for it. The line saying somebody left a group DM
 (`left`, §3.1) is the same in every way, with the body "left"; whoever left can't reach
-it to edit it anyway.
+it to edit it anyway. So is the line saying somebody shared their screen
+(`screen_share`, §8 "Screen sharing"), with the body "shared their screen".
 
 **Polls** (SPEC §4.18, #474). A question the host or a co-host asks a room, which everybody
 in it answers with a click.
@@ -793,8 +795,8 @@ off:
   makes one, and the files on them go with it (the sweep after the delete takes them).
   So do their reactions, their votes in polls still open, and a message of the day they
   set. A closed poll keeps how it came out (SPEC §4.18), so a vote in one stays,
-  nameless. The quiet lines saying they joined voice or left a DM stay: they carry no
-  words of theirs.
+  nameless. The quiet lines saying they joined voice, left a DM or shared their screen
+  stay: they carry no words of theirs.
 
 **The `users` row stays, emptied, and keeps the name taken.** Everything else that
 points at an account (messages, files, invites, emoji, polls, reports) would stop the
@@ -1979,6 +1981,26 @@ WebRTC track.
 
 Both are left out otherwise, and by a server from before this. A share or a watch
 starting, switching or ending sends the room a new `voice.state`, whole, as joining does.
+That is all an app needs to tell everybody in that voice a share started (SPEC §4.20,
+#746): a live `voice.state` whose peer has a `screen` it didn't have before, never a
+`ready`'s list or a resume's replay.
+
+**Sharing puts a quiet line in the room** (SPEC §4.20, #746), as joining voice does. A
+share the server has taken starts a wait of
+`linger-core::limits::SCREEN_SHARE_LINE_AFTER_MS` (10 s). If the same share is still
+going when it ends (the same session, room and socket: not stopped, nor shared again,
+in between), the server writes a `Message` in the room from that person, body "shared
+their screen", `screen_share: true`, and sends it as `message.create` to the room's
+members, a DM's only to its people. It doesn't when that person already has a share line
+in that room from the last `SCREEN_SHARE_LINE_EVERY_MS` (ten minutes), counted from the
+lines stored, with the check and the write one statement, so two of somebody's computers
+sharing together write one line; nor in an archived room. The line says who, never what:
+the server never learns what's shared (hard rule 2). Like a join line it is never a
+room's `last_message_id`, search passes over it, it can't be edited or reacted to, and an
+app neither notifies nor sounds for it. An app that knows the field says "is sharing
+their screen", with Watch, while that person's newest share line is theirs and they
+still share in that voice; an app from before it shows them saying "shared their
+screen".
 
 **A screen socket is one session's, and lives inside its seat.** Its first message, text,
 within `linger-core::limits::SCREEN_HELLO_MS` (10 s), says who it is and what for:
@@ -2282,3 +2304,9 @@ app, the server and the watching app are from before it or after:
 
 A new watcher's `{ op: "sound" }` is ignored by an old server (an `op` it doesn't know,
 above), and an old server drops any sound packet as a frame of an unknown version.
+
+**A share starting (#746)** works both ways too. The sound for a share starting, Watch
+in the voice bar and Watch staying lit are an app's own, drawn from `voice.state`, so
+they work on any server that passes screens on. The line in the conversation is the
+server's: a server from before it writes none, and an app from before it shows the line
+as an ordinary message from whoever shared, "shared their screen".

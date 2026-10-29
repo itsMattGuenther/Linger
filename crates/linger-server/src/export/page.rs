@@ -441,6 +441,8 @@ impl Run {
             Some("joined voice".to_string())
         } else if message.left == Some(true) {
             Some("left".to_string())
+        } else if message.screen_share == Some(true) {
+            Some("shared their screen".to_string())
         } else {
             message
                 .poll_closed
