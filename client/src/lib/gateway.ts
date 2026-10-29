@@ -640,6 +640,27 @@ function matchesPending(pending: Message, confirmed: Message): boolean {
 }
 
 /** Fold a fetched page (the server sends newest-first) into what we hold. */
+/**
+ * The stand-in ids (`sentAs`, #750) of the sends still in `messages`. The
+ * rest went with the history let go of, and so did their rows; kept, the
+ * map would grow with every send for as long as the connection lasts.
+ */
+function sentAsHeld(
+  sentAs: Record<MessageId, MessageId> | undefined,
+  messages: readonly Message[],
+): Record<MessageId, MessageId> | undefined {
+  if (sentAs === undefined) return undefined;
+  const held: Record<MessageId, MessageId> = {};
+  let any = false;
+  for (const message of messages) {
+    const standIn = sentAs[message.id];
+    if (standIn === undefined) continue;
+    held[message.id] = standIn;
+    any = true;
+  }
+  return any ? held : undefined;
+}
+
 function mergePage(list: Message[], page: Message[]): Message[] {
   if (page.length === 0) return list;
   const older = [...page].sort(byId);
@@ -1648,6 +1669,8 @@ async function fetchWindow(
     loading: false,
     loaded: true,
     pending: stream.pending,
+    // A send still held keeps its stand-in's rows through a page (#750).
+    sentAs: sentAsHeld(stream.sentAs, messages),
     opened,
   });
   return pageEnds ? "end" : "window";
@@ -1789,11 +1812,13 @@ export function trimHistory(
   const start = Math.max(0, from - KEPT_BEYOND_VIEW);
   const end = Math.min(stream.messages.length, to + 1 + KEPT_BEYOND_VIEW);
   if (start === 0 && end === stream.messages.length) return;
+  const messages = stream.messages.slice(start, end);
   putStream(server, roomId, {
     ...stream,
-    messages: stream.messages.slice(start, end),
+    messages,
     atStart: start === 0 && stream.atStart,
     atEnd: end === stream.messages.length && stream.atEnd,
+    sentAs: sentAsHeld(stream.sentAs, messages),
   });
 }
 
@@ -1817,11 +1842,8 @@ export function releaseOtherRooms(server: string, openRoomId: RoomId): void {
       changed = true;
     } else if (stream.messages.length > PAGE_SIZE) {
       changed = true;
-      streams[roomId] = {
-        ...stream,
-        messages: stream.messages.slice(-PAGE_SIZE),
-        atStart: false,
-      };
+      const messages = stream.messages.slice(-PAGE_SIZE);
+      streams[roomId] = { ...stream, messages, atStart: false, sentAs: sentAsHeld(stream.sentAs, messages) };
     } else {
       streams[roomId] = stream;
     }

@@ -975,6 +975,51 @@ describe("letting go of history", () => {
     expect(stream?.atStart).toBe(false);
   });
 
+  /** The growing room, with a send answered as its newest message (#750). */
+  async function sendingRoom(): Promise<{ api: AuthedApi; room: ReturnType<typeof growingRoom> }> {
+    const room = growingRoom(10_000);
+    const api = { ...fakeApi(HOME, room.get), post: async () => room.grow() } as unknown as AuthedApi;
+    await connect(api);
+    arrive(HOME, ready({ user: person("u-matt", "Matt") }));
+    await openRoom(api, "r-garage");
+    return { api, room };
+  }
+
+  const sentAs = () => serverState(HOME).streams["r-garage"]?.sentAs;
+
+  it("lets a send's stand-in id go with its message when the room lets history go (#750)", async () => {
+    const { api, room } = await sendingRoom();
+    await sendMessage(api, "r-garage", "first");
+    expect(Object.keys(sentAs() ?? {})).toEqual([id(10_001)]);
+    // Everybody else talks on, until the send is out of the newest page.
+    for (let n = 0; n < 120; n += 1) arrive(HOME, { s: n + 2, op: "message.create", d: room.grow() } as ServerFrame);
+    releaseOtherRooms(HOME, "r-porch");
+    expect(held()).not.toContain(id(10_001));
+    expect(sentAs()).toBeUndefined();
+
+    await sendMessage(api, "r-garage", "second");
+    expect(Object.keys(sentAs() ?? {})).toEqual([id(10_122)]);
+    await scrollBack(api, 8);
+    trimHistory(HOME, "r-garage", id(9_300), id(9_320));
+    expect(held()).not.toContain(id(10_122));
+    expect(sentAs()).toBeUndefined();
+  });
+
+  it("keeps a send's stand-in id through reading forwards while its message is held (#750)", async () => {
+    const { api, room } = await sendingRoom();
+    await sendMessage(api, "r-garage", "first");
+    for (let n = 0; n < 49; n += 1) arrive(HOME, { s: n + 2, op: "message.create", d: room.grow() } as ServerFrame);
+    await scrollBack(api, 8);
+    // The newer end goes down to the send: the room is behind, the send still held.
+    trimHistory(HOME, "r-garage", id(9_690), id(9_701));
+    expect(held().at(-1)).toBe(id(10_001));
+    expect(serverState(HOME).streams["r-garage"]?.atEnd).toBe(false);
+
+    await loadNewer(api, "r-garage");
+    expect(held().at(-1)).toBe(id(10_050));
+    expect(sentAs()).toEqual({ [id(10_001)]: expect.stringMatching(/^pending:/) });
+  });
+
   it("reads back to the newest without a gap after letting the newer end go", async () => {
     const room = growingRoom(10_000);
     const api = fakeApi(HOME, room.get);
