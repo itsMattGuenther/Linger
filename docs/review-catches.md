@@ -69,6 +69,14 @@ to be right for every shape that window takes.
   `xvfb-run` writes down the environment the app would have had. Rule: test
   what a script does, not what its source says (`docs/testing-strategy.md`).
 
+## Docs naming a file that isn't there
+
+- **#767: the testing strategy named a test that only #768 adds.** Merged
+  first, the docs would have pointed at a file that didn't exist yet.
+  *Missed because* nothing checks that a file the docs name exists, so a
+  rename or a delete leaves every doc naming it stale too. *Changed:* #768
+  merges first; #770 is a check that every file the living docs name exists.
+
 ## Tests written from the case in mind, not from the ways things fail
 
 - **#758: a download cut off half way.** The retry test dropped a
