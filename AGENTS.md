@@ -124,11 +124,20 @@ pass.
   Describe the remaining checks explicitly; missing acceptance evidence is not a
   reason to leave an issue looking unclaimed. Linked issues close on merge when
   repository auto-closing is enabled, so finish their acceptance checks before merging.
+- **A real review catch strengthens the project, not only the code it was on.**
+  When a reviewer (Greptile, which reviews every pull request, or a person)
+  finds a real problem, fix it, then say in the pull request why our own checks
+  missed it, and close that gap: a test or check that would have caught it,
+  code shaped so the mistake is hard to make again, or a rule in the docs. Do
+  it in the same pull request, or file an issue for it before merging, and add
+  the catch to `docs/review-catches.md`. A comment that's wrong gets a reply
+  saying why, and a line there too. Never take a reviewer's fix with GitHub's
+  one-click "commit suggestion": it makes the bot a co-author (hard rule 1).
 - `agents/skills/` holds two skills for people's own agents (#147):
   `linger-report` turns a problem into a well-formed, private-safe issue, and
   `linger-contribute` is the short path from a fix to a PR under these rules. They
   restate rules from this file. When a rule here changes (the hard rules, branch
-  names, `scripts/check.sh`, PR linking), change them in the same commit. The
+  names, `scripts/check.sh`, PR linking, review catches), change them in the same commit. The
   `.github/ISSUE_TEMPLATE/` forms ask for what `linger-report` collects; keep the
   two in step too.
 

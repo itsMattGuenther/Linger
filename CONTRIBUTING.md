@@ -69,6 +69,11 @@ The repo is arranged so a session reads little and misses nothing:
   rules lint.
 - Docs move in the same commit as the behavior they describe (README rules are
   in `AGENTS.md`).
+- Greptile, an automated reviewer, comments on every PR within a few minutes.
+  When it finds a real problem, fix it by hand (not with GitHub's "commit
+  suggestion" button, which makes the bot a co-author) and add a test that
+  would have caught it; if a comment is wrong, reply saying why. What it has
+  caught, and what each catch changed, is in `docs/review-catches.md`.
 - Changes to `SPEC.md`, `ARCHITECTURE.md`, `PROTOCOL.md`, or `AGENTS.md` need
   Matt's review — CODEOWNERS enforces this. Those files are the source of
   truth, so they change deliberately or not at all.

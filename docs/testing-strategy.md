@@ -164,6 +164,38 @@ nobody had tested yet, such as an invite for Anyone running out (#246), DMs out
 of order (#248), line breaks dropped (#289), and video seeking (#222). Each
 was cheap to test, and the tests only came after.
 
+## What reviews have taught
+
+Every real catch a reviewer makes is a gap in these checks, so each one comes
+with a change that would have caught it first (`AGENTS.md`). The catches and
+what they changed are in [review-catches.md](review-catches.md); these are the
+rules that came out of them.
+
+- **Anything that talks over a network is tested through the ways a network
+  fails:** a refused connection, one dropped before any bytes, one cut off
+  half way, an error status (a 503), one that never answers, and an answer
+  that isn't what was asked for. Each with a stand-in server on this machine,
+  as `scripts/appimage-fetch-test.sh` does. Its first version tested a drop
+  before any bytes, not half way through (#758).
+- **A check that reads code or commands** (a lint, a parser, a rule about
+  which files a change touches) **starts from a table of tricky inputs**:
+  quoted and unquoted, with and without spaces, several commands on a line,
+  a command continued over lines, and every way to write what it looks for.
+  `scripts/workflow-downloads.test.mjs` took three rounds of review to get
+  there (#763).
+- **State worked out from a room's history, or kept beside it, is tested with
+  the history in every shape the app holds it:** older history only, the
+  newest not loaded, trimmed, paged back in, replaced by a window around a
+  message. The app never holds a whole conversation (#173), and two catches
+  came from assuming it does (#751, #759; #766 for the store).
+- **A check that proves the app does something starts where it isn't
+  already done.** An environment, a file or a setting the check inherits can
+  pass for what it's there to prove (#757; #765 for the packaged-app check).
+- **Scripts that look for system files look where every distro keeps them:**
+  `/usr/lib` (Arch), `/usr/lib64` (Fedora), `/usr/lib/x86_64-linux-gnu`
+  (Debian, Ubuntu). And never bind-mount a path that might be missing: Docker
+  makes an empty directory in its place (#757).
+
 ## A test that fails at random
 
 Don't just re-run it and move on. Sometimes the test is at fault: it waits a

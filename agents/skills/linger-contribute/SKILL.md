@@ -84,6 +84,11 @@ commits that carry them (`scripts/lint-rules.sh`).
 - Explain the change the way `AGENTS.md` asks: short, plain sentences for a
   smart friend who didn't read the code. Say what was wrong, what changed, how
   it was tested, and what still needs a real computer to confirm.
+- Greptile reviews every pull request. When it, or a person, finds a real
+  problem, fix it by hand (never GitHub's "commit suggestion" button: that
+  makes the bot a co-author), and add a test that would have caught it. Say in
+  the pull request why the tests missed it; the maintainer adds the catch to
+  `docs/review-catches.md`. If a comment is wrong, reply saying why.
 
 Only push and open the PR when the user says so, under their own GitHub
 account. Never merge it; the maintainer does that. Once it has merged, GitHub
