@@ -55,6 +55,41 @@
   color: var(--text-secondary);
 }
 
+/* Somebody else sharing their screen here, and Watch (#746): one line each,
+   the words giving way before the button. */
+.nx-voice-shares {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nx-voice-share {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  min-width: 0;
+  font-size: var(--text-meta);
+  line-height: var(--line-meta);
+  color: var(--text-secondary);
+}
+
+.nx-voice-share-mark {
+  display: inline-flex;
+  flex: none;
+  color: var(--icon-muted);
+}
+
+.nx-voice-share-words {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Your controls, as symbols spaced as in the room's voice line (#216, #230). */
 .nx-voice-controls {
   display: flex;

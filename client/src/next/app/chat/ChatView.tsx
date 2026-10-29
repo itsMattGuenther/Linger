@@ -18,7 +18,7 @@ import { SharingBox, type SharingBoxProps } from "../screen/SharingBox";
 import type { ShareControl } from "../screen/ShareButton";
 import { PaneBoundary } from "../Boundary";
 import { Composer, type ComposerProps } from "./Composer";
-import { Conversation, type ConversationProps } from "./Conversation";
+import { Conversation, type ConversationProps, type ConversationShares } from "./Conversation";
 import { ImageViewer } from "./ImageViewer";
 import type { MessageActions } from "./MessageRow";
 import { MotdStrip } from "./MotdStrip";
@@ -237,6 +237,38 @@ function titleOf(header: PaneHeaderProps): string {
 }
 
 /**
+ * Who shares a screen in the conversation's voice, for its lines saying
+ * somebody shared (#746): the same object for as long as who shares, and
+ * whose you could Watch, stay the same, so a frame that changes neither
+ * draws no row again.
+ */
+function useShares(screen: ChatPane["screen"] | undefined): ConversationShares | undefined {
+  const live = screen ? [...screen.sharing].sort().join(" ") : null;
+  const watch = screen?.watch;
+  const watchable = watch
+    ? watch.sharers
+        .filter((one) => one.session !== watch.watching)
+        .map((one) => `${one.user.id} ${one.session}`)
+        .sort()
+        .join("\n")
+    : "";
+  const onWatch = useRef(watch?.onWatch);
+  onWatch.current = watch?.onWatch;
+  return useMemo(() => {
+    if (live === null) return undefined;
+    const sessions = new Map(watchable === "" ? [] : watchable.split("\n").map((pair) => pair.split(" ") as [string, string]));
+    return {
+      live: new Set(live === "" ? [] : live.split(" ")),
+      watchable: new Set(sessions.keys()),
+      onWatch: (person: string) => {
+        const session = sessions.get(person);
+        if (session !== undefined) onWatch.current?.(session);
+      },
+    };
+  }, [live, watchable]);
+}
+
+/**
  * Conversations (docs/design/buddy-list.md, "Conversations beside the
  * list"): tabs in the title bar, and under them the showing conversation
  * with its header, a room's message of the day, its voice, its messages,
@@ -257,6 +289,7 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
   const messages = pane?.stream.messages;
   const stage = pane?.screen?.stage ?? null;
   const screen = useStage(stage !== null);
+  const shares = useShares(pane?.screen);
 
   const setReply = useCallback((tab: string, message: Message | null) => {
     setReplies((held) => {
@@ -424,6 +457,7 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
               blocked={pane.blocked}
               customEmoji={pane.customEmoji}
               editing={editing?.tab === pane.id ? editing.id : null}
+              shares={shares}
               empty={
                 pane.header.kind === "room"
                   ? `Nothing's been said in ${titleOf(pane.header)} yet.`

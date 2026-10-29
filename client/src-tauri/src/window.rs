@@ -112,6 +112,23 @@ fn at_message(url: String, message: Option<&str>) -> Result<String, String> {
     }
 }
 
+/// A share to open a conversation watching (#746): Watch pressed in the
+/// list's voice bar, for a share in that conversation's voice. The sharer's
+/// session id, added to the address only when it is one.
+fn watching(url: String, session: Option<&str>) -> Result<String, String> {
+    match session {
+        None => Ok(url),
+        Some(id)
+            if !id.is_empty()
+                && id.len() <= 64
+                && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') =>
+        {
+            Ok(format!("{url}&watch={}", escape(id)))
+        }
+        Some(_) => Err("not a session id".into()),
+    }
+}
+
 /// The Settings window's label: one, whichever window asked for it.
 const SETTINGS: &str = "settings";
 
@@ -208,12 +225,13 @@ fn escape(value: &str) -> String {
 }
 
 /// What a conversation's own window, already open, is told when asked to
-/// show a message in it.
+/// show a message in it, or to watch a share in its voice (#746).
 #[derive(Clone, serde::Serialize)]
 struct OpenConversation<'a> {
     server: &'a str,
     room: &'a str,
     message: Option<&'a str>,
+    watch: Option<&'a str>,
 }
 
 /// Open one conversation in a window of its own, or bring its window forward.
@@ -233,18 +251,23 @@ pub async fn next_open_conversation(
     room: String,
     kind: String,
     message: Option<String>,
+    watch: Option<String>,
 ) -> Result<(), String> {
     if window.label() != OWNER {
         return Err("only the list window opens windows".into());
     }
-    let url = at_message(conversation_url(&server, &room)?, message.as_deref())?;
+    let url = watching(
+        at_message(conversation_url(&server, &room)?, message.as_deref())?,
+        watch.as_deref(),
+    )?;
     let (width, height) = conversation_size(&kind)?;
     let label = conversation_label(&server, &room);
     if let Some(open) = app.get_webview_window(&label) {
         let _ = open.unminimize();
         let _ = open.set_focus();
-        // Asked for a message: the window already showing the conversation goes to it.
-        if message.is_some() {
+        // Asked for a message, or to watch a share: the window already
+        // showing the conversation goes to it.
+        if message.is_some() || watch.is_some() {
             return app
                 .emit_to(
                     label.as_str(),
@@ -253,6 +276,7 @@ pub async fn next_open_conversation(
                         server: &server,
                         room: &room,
                         message: message.as_deref(),
+                        watch: watch.as_deref(),
                     },
                 )
                 .map_err(|e| e.to_string());
@@ -664,8 +688,8 @@ mod tests {
     }
     use super::{
         at_message, attention_target, conversation_label, conversation_size, conversation_url,
-        escape, is_origin, is_viewer, on_hyprland, settings_url, tool_window, MEDIA, OWNER, SEARCH,
-        SETTINGS,
+        escape, is_origin, is_viewer, on_hyprland, settings_url, tool_window, watching, MEDIA,
+        OWNER, SEARCH, SETTINGS,
     };
 
     /// A DM points at its own window, then the list, where the tabs are
@@ -904,6 +928,20 @@ mod tests {
         );
         for bad in ["", "m1&window=settings", "../x", &"m".repeat(65)] {
             assert!(at_message(url.clone(), Some(bad)).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn a_conversation_opens_watching_a_share_only_when_it_is_a_session_id() {
+        let url = conversation_url("https://home.example", "r-general").unwrap();
+        assert_eq!(watching(url.clone(), None).unwrap(), url);
+        let session = "0199c2a1b3f47d2e8a6b5c4d3e2f1a0b";
+        assert_eq!(
+            watching(url.clone(), Some(session)).unwrap(),
+            format!("{url}&watch={session}")
+        );
+        for bad in ["", "s1&window=settings", "../x", &"s".repeat(65)] {
+            assert!(watching(url.clone(), Some(bad)).is_err(), "{bad}");
         }
     }
 

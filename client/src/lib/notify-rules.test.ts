@@ -79,6 +79,12 @@ describe("what is worth interrupting somebody for", () => {
     expect(notifyReason(left, me, [{ target_user_id: callie.id, room_id: null }])).toBeNull();
   });
 
+  it("says nothing about somebody sharing their screen, even somebody you asked to hear from (#746)", () => {
+    const shared = { ...message("shared their screen"), screen_share: true };
+    expect(notifyReason(shared, me, [])).toBeNull();
+    expect(notifyReason(shared, me, [{ target_user_id: callie.id, room_id: null }])).toBeNull();
+  });
+
   it("says nothing about a poll or a poll closing, whoever they name (#474)", () => {
     const asked = { ...message("**Poll:** @matt which faction?"), poll: { question: "Which faction?", choices: [{ text: "Horde", voter_ids: [] }, { text: "Alliance", voter_ids: [] }], multi: false, closes_at: 9e12, closed_at: null, closed_by: null } };
     expect(notifyReason(asked, me, [])).toBeNull();

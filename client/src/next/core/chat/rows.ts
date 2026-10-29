@@ -78,16 +78,21 @@ export function chatRows(
       afterLine = true;
       continue;
     }
-    // Somebody leaving a group DM (#565): a quiet line of its own, like a
-    // join's. One taken back by somebody in it just isn't there.
-    if (message.left === true && message.deleted_at !== null) continue;
+    // Somebody leaving a group DM (#565), or sharing their screen (#746): a
+    // quiet line of its own, like a join's. One taken back just isn't there.
+    if ((message.left === true || message.screen_share === true) && message.deleted_at !== null) continue;
     const reply = message.reply_to !== null && message.deleted_at === null;
     // A message-of-the-day line says who set it on its own line (#464), a
-    // poll always says who asked (#474), and a poll's closed line and a line
-    // saying somebody left (#565) are lines of their own; what's said after
-    // any of them isn't part of it, so each starts a group of its own, and so
-    // does what follows.
-    const apart = message.motd === true || (message.poll != null && message.deleted_at === null) || message.poll_closed != null || message.left === true;
+    // poll always says who asked (#474), and a poll's closed line and the
+    // lines saying somebody left (#565) or shared their screen (#746) are
+    // lines of their own; what's said after any of them isn't part of it, so
+    // each starts a group of its own, and so does what follows.
+    const apart =
+      message.motd === true ||
+      (message.poll != null && message.deleted_at === null) ||
+      message.poll_closed != null ||
+      message.left === true ||
+      message.screen_share === true;
     rows.push({
       kind: "message",
       key: row.key,
@@ -118,6 +123,17 @@ export function sameRow(a: ChatRow, b: ChatRow): boolean {
     case "joins":
       return b.kind === "joins" && a.messages.length === b.messages.length && a.messages.every((message, at) => message === b.messages[at]);
   }
+}
+
+/**
+ * Each person's newest line saying they shared their screen (#746), by the
+ * line's id. Only that one can say they're sharing now: an older one is a
+ * share that's over, whatever they're doing since.
+ */
+export function newestShareLines(rows: readonly ChatRow[]): ReadonlySet<MessageId> {
+  const newest = new Map<string, MessageId>();
+  for (const row of rows) if (row.kind === "message" && row.message.screen_share === true) newest.set(row.message.author_id, row.message.id);
+  return new Set(newest.values());
 }
 
 /** Where each message sits in the rows, for jumping to one. */

@@ -10,11 +10,12 @@ import { nameless } from "../../../lib/gone";
 import { mayActOn } from "../../../lib/host";
 import { useResizeAnchor } from "../../../lib/resize";
 import { sessionLabel } from "../../../lib/time";
-import { type ChatRow, chatRows, rowIndex, sameRow } from "../../core/chat/rows";
+import { type ChatRow, chatRows, newestShareLines, rowIndex, sameRow } from "../../core/chat/rows";
 import { observeScrollNow } from "../../core/chat/scrollWatch";
 import { Button, Icon } from "../../kit";
 import { JoinLine } from "./JoinLine";
 import { LeftLine } from "./LeftLine";
+import { ShareLine, type ShareLineState } from "./ShareLine";
 import { PollClosedLine } from "./PollClosedLine";
 import { onIPhone, onPhone } from "../../core/phone";
 import { type MessageActions, MessageRow } from "./MessageRow";
@@ -107,6 +108,21 @@ export interface ConversationProps {
   /** "Back to the newest", out of a historical window. */
   onBackToNewest: () => void;
   actions: Omit<MessageActions, "jumpTo">;
+  /** Who shares a screen in this conversation's voice now, for its share lines (#746). */
+  shares?: ConversationShares;
+}
+
+/**
+ * Who shares a screen in a conversation's voice now (#746), by user id: what
+ * its lines saying somebody shared need to say whether it's still going.
+ */
+export interface ConversationShares {
+  /** Everybody sharing, you too. */
+  live: ReadonlySet<string>;
+  /** The shares you could Watch: somebody else's, that you aren't watching. */
+  watchable: ReadonlySet<string>;
+  /** Watch that person's share: joins voice first when you aren't in it. */
+  onWatch: (person: string) => void;
 }
 
 /**
@@ -154,6 +170,12 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
   const idNow = useRef(id);
   idNow.current = id;
   const indexOf = useMemo(() => rowIndex(rows), [rows]);
+  const newestShares = useMemo(() => newestShareLines(rows), [rows]);
+  // Share lines call Watch through this, so a new `shares` draws only the
+  // lines whose state it changed.
+  const sharesNow = useRef(props.shares);
+  sharesNow.current = props.shares;
+  const watchShare = useCallback((person: string) => sharesNow.current?.onWatch(person), []);
   const indexNow = useRef(indexOf);
   indexNow.current = indexOf;
   const byId = useMemo(() => new Map(messages.map((message) => [message.id, message])), [messages]);
@@ -622,6 +644,8 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
                     emoji={emojiByName}
                     mediaUrl={props.mediaUrl}
                     actions={actions}
+                    share={row.kind === "message" ? shareState(row.message, newestShares, props.shares) : undefined}
+                    onWatchShare={watchShare}
                   />
                 </div>
               );
@@ -639,6 +663,15 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
     </div>
   );
 });
+
+/**
+ * Where a line saying somebody shared their screen stands (#746): only
+ * their newest one can be still going. Left out for every other row.
+ */
+function shareState(message: Message, newest: ReadonlySet<MessageId>, shares: ConversationShares | undefined): ShareLineState | undefined {
+  if (message.screen_share !== true || !newest.has(message.id) || !shares?.live.has(message.author_id)) return undefined;
+  return shares.watchable.has(message.author_id) ? "watch" : "live";
+}
 
 interface RowViewProps {
   row: ChatRow;
@@ -661,6 +694,9 @@ interface RowViewProps {
   emoji: CustomEmojiByName;
   mediaUrl: (path: string) => string;
   actions: MessageActions;
+  /** On a line saying somebody shared their screen: whether it's still going (#746). */
+  share: ShareLineState | undefined;
+  onWatchShare: (person: string) => void;
 }
 
 function sameRowView(a: RowViewProps, b: RowViewProps): boolean {
@@ -687,6 +723,8 @@ const RowView = memo(function RowView({
   emoji,
   mediaUrl,
   actions,
+  share,
+  onWatchShare,
 }: RowViewProps) {
   switch (row.kind) {
     case "divider": {
@@ -722,6 +760,12 @@ const RowView = memo(function RowView({
       // Somebody leaving a group DM (#565): a quiet line saying who. Shown
       // even for somebody you blocked: it's who can still read what you say.
       if (message.left === true) return <LeftLine message={message} person={people.get(message.author_id)} gone={gone} />;
+      // Somebody sharing their screen (#746): a quiet line saying who, with
+      // Watch while it's going. Shown for somebody you blocked too, as their
+      // seat in voice is: who's sharing isn't something they said.
+      if (message.screen_share === true) {
+        return <ShareLine message={message} person={people.get(message.author_id)} gone={gone} state={share} onWatch={onWatchShare} />;
+      }
       if (blocked?.has(message.author_id) && message.deleted_at === null && !shown) {
         return <BlockedLine who={people.get(message.author_id)?.display_name ?? nameless(message.author_id, gone)} onShow={() => onShow(message.id)} />;
       }

@@ -1729,3 +1729,34 @@ computer's sound, off until the sharer turns it on, kept on that computer.
 - **Linux shares the picture alone for now.** The desktop's portal gives no sound, and
   leaving Linger's own voice out of a PipeWire capture means finding Linger's streams in
   the graph and leaving them out (a filter or a null sink). macOS doesn't share yet.
+
+**Everybody in voice knows a share started** (Matt, 2026-10-29, #746). With seven in a
+room's voice somebody started sharing and most of the room didn't notice: there was no
+sound for anybody but the sharer, and the only signs were a small mark on a chip and a
+Watch in a conversation they weren't reading. Matt picked from mockups of five ideas
+(https://claude.ai/artifact/1ZKbTde5oXpP3qBFYA3uD2):
+
+- **A sound for everybody in that voice**, two soft chords stepping up ("B" of three
+  candidates): the only cue with notes together, so it reads as something to look at, a
+  DM's cousin, and never as a join or the watching cue. **The person sharing hears it
+  too**, once the share is really going (Matt): it tells them it worked, and what the
+  room just heard. For somebody else's share it rings when they hadn't shared in the
+  last minute, measured from when they stopped, as the watching cue is (#735): stopping
+  to pick another window doesn't ring the room again, however long the first share ran.
+- **Watch stays lit, not just while it's new.** The issue's mockups lit Watch for a
+  share's first minute and then calmed it, by the rule that amber means new. Matt chose
+  to keep it lit for as long as somebody shares and you aren't watching: a share is
+  something to look at the whole time it's going. Join steps down to an outline beside a
+  lit Watch, so there are never two lamps side by side.
+- **Watch in the list's voice bar**, on a line saying who's sharing, so it's in reach
+  from any room. It opens the room's conversation where conversations open, watching:
+  the ask travels with the open, beside the list or to the room's own window (`watch` on
+  the shell's `next_open_conversation`, next to `message`).
+- **A quiet line in the conversation**, written by the server like "joined voice", by
+  the same rules (ten seconds, once per person per room in ten minutes). The tense comes
+  from the app: "is sharing" with Watch while that person's newest line is theirs and
+  they still share, "shared" for good once they stop. Its body says "shared their
+  screen", so an older app shows it sensibly.
+- **No desktop notification.** Banners are for what's addressed to you (SPEC §4.2); the
+  sound already reaches somebody looking at another app, and over a game it would be one
+  more pop-up.

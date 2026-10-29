@@ -48,8 +48,10 @@ it("ignores own, deleted and edited messages, and a room already being read", ()
   expect(played).toEqual(["dm"]);
 });
 
-it("a line nobody typed makes no sound, banner or taskbar flash, in a room or a DM (#464, #473, #565)", async () => {
+it("a line nobody typed makes no sound, banner or taskbar flash, in a room or a DM (#464, #473, #565, #746)", async () => {
   setDmAlerts(() => true);
+  // Nor is somebody sharing their screen in a DM's voice: the chords are voice's, not a message's (SPEC §4.20).
+  considerFrame(server, { op: "message.create", s: 4, d: { ...message, body: "shared their screen", screen_share: true } }, snapshot);
   // Somebody joining a DM's voice isn't a DM: no chime, and nothing rings (SPEC §4.14).
   considerFrame(server, { op: "message.create", s: 1, d: { ...message, body: "joined voice", voice_join: true } }, snapshot);
   // Nor is somebody leaving a group DM (SPEC §4.13).

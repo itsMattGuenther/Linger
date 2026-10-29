@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import type { User } from "../../../generated/User";
 import { volumeLabel } from "../../../lib/voice";
 import { onPhone } from "../../core/phone";
-import { Chip, IconButton, MarkerCrowd, Name, VoiceGlyph } from "../../kit";
+import { Button, Chip, Icon, IconButton, MarkerCrowd, Name, VoiceGlyph } from "../../kit";
 import { markerFor } from "../markers";
 import { useTalkSeats } from "../useTalkSeats";
 import { ShareButton, type ShareControl } from "../screen/ShareButton";
@@ -80,6 +80,12 @@ export interface VoiceDockProps {
     /** Why your last share ended by itself, said for a while: the room was full, the line dropped. */
     stopped?: string | null;
   };
+  /**
+   * Who else in this voice is sharing their screen, and Watch (#746): in
+   * reach from whatever room you're reading. A share you're watching says
+   * so instead.
+   */
+  watch?: { sharers: readonly { session: string; user: User; watching: boolean }[]; onWatch: (session: string) => void };
 }
 
 /**
@@ -93,7 +99,7 @@ export interface VoiceDockProps {
  * seats for you and whoever just talked, and everybody as a crowd of markers
  * that light while they talk and open everyone by name.
  */
-export function VoiceDock({ where, people, muted, deafened, line, server, onGoToRoom, onMute, onDeafen, onLeave, onVolume, onTakeOut, share }: VoiceDockProps) {
+export function VoiceDock({ where, people, muted, deafened, line, server, onGoToRoom, onMute, onDeafen, onLeave, onVolume, onTakeOut, share, watch }: VoiceDockProps) {
   // A thumb's size on the phone (#429), a pointer's elsewhere.
   const controlSize = onPhone() ? "lg" : "sm";
   // Whose volume is open, and the chip (or crowd) it opened from.
@@ -237,6 +243,33 @@ export function VoiceDock({ where, people, muted, deafened, line, server, onGoTo
           {...(onTakeOut && !open.user.is_host ? { onTakeOut: () => onTakeOut(open) } : {})}
           onClose={closeVolume}
         />
+      ) : null}
+      {watch && watch.sharers.length > 0 ? (
+        <ul className="nx-voice-shares" aria-label="Screens shared here">
+          {watch.sharers.map((one) => (
+            <li key={one.session} className="nx-voice-share">
+              <span className="nx-voice-share-mark" aria-hidden="true">
+                <Icon name="screen" size="sm" />
+              </span>
+              {one.watching ? (
+                <span className="nx-voice-share-words">
+                  You're watching <Name person={one.user} size="inline" />
+                  {"'s screen"}
+                </span>
+              ) : (
+                <>
+                  <span className="nx-voice-share-words">
+                    <Name person={one.user} size="inline" /> is sharing their screen
+                  </span>
+                  {/* Named for whose with several, as the voice line's are: it's the button's name too. */}
+                  <Button size="sm" variant="primary" onClick={() => watch.onWatch(one.session)}>
+                    {watch.sharers.length > 1 ? `Watch ${one.user.display_name}` : "Watch"}
+                  </Button>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
       ) : null}
       {share?.stopped ? (
         <p className="nx-voice-line" role="status">

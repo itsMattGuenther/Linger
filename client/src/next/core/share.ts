@@ -243,11 +243,16 @@ export interface WindowOpener {
   /**
    * Beside the list, in the list window: a tab for this conversation, or it
    * showing, at a message if one is named (#337); a preview, when a person
-   * was opened from the list (#351).
+   * was opened from the list (#351); watching a share in its voice, by its
+   * session, when Watch was pressed somewhere else (#746).
    */
-  side(server: string, roomId: RoomId, messageId?: MessageId, preview?: boolean): void;
-  /** This conversation in a window of its own, or that window brought forward, at a message if one is named. */
-  conversation(server: string, roomId: RoomId, kind: "room" | "dm", messageId?: MessageId): void;
+  side(server: string, roomId: RoomId, messageId?: MessageId, preview?: boolean, watch?: string): void;
+  /**
+   * This conversation in a window of its own, or that window brought
+   * forward, at a message if one is named, or watching a share in its voice
+   * (#746).
+   */
+  conversation(server: string, roomId: RoomId, kind: "room" | "dm", messageId?: MessageId, watch?: string): void;
   /** The Settings window, on a section and one of your servers if they are named (#719). */
   settings(section?: string, server?: string): void;
   /** Search's or Media's window, or that window brought forward (decision 15). */
@@ -268,9 +273,10 @@ export interface Sharing {
    * Show a conversation: in the window it was popped out into, if it has one,
    * otherwise where conversations open (beside the list, or a window of its own).
    * `preview`: a person opened from the list, whose tab beside the list the
-   * next person takes over until it's kept (#351).
+   * next person takes over until it's kept (#351). `watch`: a share in its
+   * voice, by session, to watch there once it's showing (#746).
    */
-  open(server: string, roomId: RoomId, messageId?: MessageId, how?: { preview?: boolean }): void;
+  open(server: string, roomId: RoomId, messageId?: MessageId, how?: { preview?: boolean; watch?: string }): void;
   /**
    * An intent from the conversations beside the list: the same as any
    * window's, from the list window itself, without a trip through the shell.
@@ -417,13 +423,13 @@ export async function shareAsOwner(
     if (state.dms.some((dm) => dm.id === roomId)) return "dm";
     return state.rooms.some((room) => room.id === roomId) ? "room" : null;
   };
-  const inOwnWindow = (server: string, roomId: RoomId, messageId?: MessageId, known?: "room" | "dm") => {
+  const inOwnWindow = (server: string, roomId: RoomId, messageId?: MessageId, known?: "room" | "dm", watch?: string) => {
     const kind = known ?? kindOf(server, roomId);
-    if (kind !== null) opener?.conversation(server, roomId, kind, messageId);
+    if (kind !== null) opener?.conversation(server, roomId, kind, messageId, watch);
   };
-  const open = (server: string, roomId: RoomId, messageId?: MessageId, known?: "room" | "dm", preview = false) => {
-    if (loadMode(store) === "windows" || ownWindow(server, roomId)) inOwnWindow(server, roomId, messageId, known);
-    else opener?.side(server, roomId, messageId, preview);
+  const open = (server: string, roomId: RoomId, messageId?: MessageId, known?: "room" | "dm", preview = false, watch?: string) => {
+    if (loadMode(store) === "windows" || ownWindow(server, roomId)) inOwnWindow(server, roomId, messageId, known, watch);
+    else opener?.side(server, roomId, messageId, preview, watch);
   };
 
   // What a window asked for: the same for any window, the tabs beside the
@@ -659,7 +665,7 @@ export async function shareAsOwner(
       stopWatching();
       for (const stop of stops) stop();
     },
-    open: (server, roomId, messageId, how) => open(server, roomId, messageId, undefined, how?.preview === true),
+    open: (server, roomId, messageId, how) => open(server, roomId, messageId, undefined, how?.preview === true, how?.watch),
     local: (intent) => carryOut({ ...intent, v: PROTOCOL, id: "", from: SIDE }),
     localNotify: notify,
     localPassword: password,

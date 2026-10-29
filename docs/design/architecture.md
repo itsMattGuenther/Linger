@@ -363,9 +363,11 @@ one.
   command: `next_open_settings { section, server }` for Settings, on one of
   your servers when one's named (#719; an open Settings hears both in
   `next:section`), and
-  `next_open_conversation { server, room, kind }` for a conversation in its
-  own window, labelled from the conversation so asking again brings the same
-  window forward. Opening a conversation from the list shows it in its own
+  `next_open_conversation { server, room, kind, message?, watch? }` for a
+  conversation in its own window, labelled from the conversation so asking
+  again brings the same window forward; at a message, or watching a share in
+  its voice (Watch in the voice bar, #746), when one is named, which an open
+  window hears in `next:open`. Opening a conversation from the list shows it in its own
   window if it has one, and otherwise where conversations open: beside the
   list, or a window of its own (`Sharing.open` in `core/share.ts`). Rust builds the URL from a fixed pattern: no page can open
   an arbitrary URL, and only `main` may call the command. That is least privilege, as ARCHITECTURE §7 asks. The

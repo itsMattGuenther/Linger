@@ -54,13 +54,17 @@ export function ChatWindow() {
   return <OwnWindow following={held.following} />;
 }
 
-/** The conversation this window was opened on (window.rs, `next_open_conversation`), if it's one of yours. */
-function openedOn(apis: ReadonlyMap<string, AuthedApi>): { tab: TabKey; message: MessageId | null } | null {
+/**
+ * The conversation this window was opened on (window.rs,
+ * `next_open_conversation`), if it's one of yours: at a message, or to
+ * watch a share in its voice (#746), if one was named.
+ */
+function openedOn(apis: ReadonlyMap<string, AuthedApi>): { tab: TabKey; message: MessageId | null; watch: string | null } | null {
   const query = new URLSearchParams(window.location.search);
   const server = query.get("server");
   const room = query.get("room");
   if (server === null || room === null || !apis.has(server)) return null;
-  return { tab: { server, roomId: room }, message: query.get("message") };
+  return { tab: { server, roomId: room }, message: query.get("message"), watch: query.get("watch") };
 }
 
 function OwnWindow({ following }: { following: Following }) {
@@ -78,6 +82,7 @@ function OwnWindow({ following }: { following: Following }) {
     return tab && text !== null ? { conversation: keyOf(tab), text } : null;
   });
   const [firstMessage] = useState(() => (opened && opened.message !== null ? { tab: opened.tab, id: opened.message } : null));
+  const [firstWatch] = useState(() => (opened && opened.watch !== null ? { tab: opened.tab, session: opened.watch } : null));
   // A brand new DM reaches this window as its own frame, after the list
   // asked for it: until it's been seen, it isn't taken for gone.
   const waiting = useRef(tab !== null && conversationIn(serverState(tab.server), tab.roomId) === null);
@@ -89,24 +94,26 @@ function OwnWindow({ following }: { following: Following }) {
     [intend],
   );
   // A window of its own: no voice bar, so your share from here gets its box here (#360).
-  const view = useConversationPane({ apis, intend, active: gone ? null : tab, find, show, firstSeed, firstMessage, shareBox: true });
-  const { servers, goToMessage, askFocus, draftOf, tabItem } = view;
+  const view = useConversationPane({ apis, intend, active: gone ? null : tab, find, show, firstSeed, firstMessage, firstWatch, shareBox: true });
+  const { servers, goToMessage, watchShare, askFocus, draftOf, tabItem } = view;
 
   const closeWindow = useCallback(() => {
     reporter.current?.stop();
     if (isTauri()) void getCurrentWindow().close();
   }, []);
 
-  // Brought forward on a message (a search hit, a banner) while already
-  // open: the shell hands it over as an event (window.rs, `next_open_conversation`).
+  // Brought forward on a message (a search hit, a banner), or to watch a
+  // share in its voice (#746), while already open: the shell hands it over
+  // as an event (window.rs, `next_open_conversation`).
   useEffect(() => {
     if (!isTauri() || tab === null) return;
     let stop: (() => void) | null = null;
     let quit = false;
     void tauriBus()
-      .listen<{ server: string; room: string; message?: string | null }>("next:open", ({ server, room, message }) => {
+      .listen<{ server: string; room: string; message?: string | null; watch?: string | null }>("next:open", ({ server, room, message, watch }) => {
         if (server !== tab.server || room !== tab.roomId) return;
         if (message) goToMessage(tab, message);
+        if (watch) watchShare(tab, watch);
         askFocus();
       })
       .then((unlisten) => {
@@ -117,7 +124,7 @@ function OwnWindow({ following }: { following: Following }) {
       quit = true;
       stop?.();
     };
-  }, [tab, goToMessage, askFocus]);
+  }, [tab, goToMessage, watchShare, askFocus]);
 
   // Signed out of its server, or the conversation's gone (a room archived,
   // a DM you were taken out of) once its server has said what exists: the

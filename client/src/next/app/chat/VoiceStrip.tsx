@@ -185,6 +185,10 @@ export const VoiceStrip = memo(function VoiceStrip({
         ? here.slice(0, fit.count)
         : [you ?? "", ...seats].flatMap((id) => people.get(id) ?? []);
   const talking = here.some((user) => speaking.has(user.id));
+  // A share you aren't watching has its Watch lit in the lamp (Matt, #746),
+  // and Join steps down beside it: Watch joins voice too, and two lit
+  // buttons side by side would say neither.
+  const unwatched = watch ? watch.sharers.filter((one) => one.session !== watch.watching) : [];
   return (
     <div className="nx-strip" data-kind={strip.kind} role="group" aria-label="Voice in this conversation">
       <VoiceGlyph speaking={talking} mine={strip.kind === "mine"} />
@@ -206,13 +210,17 @@ export const VoiceStrip = memo(function VoiceStrip({
       {problem ?? takenOutWords ?? <p ref={line} className="nx-strip-words">{here.length > shown.length ? words.some : words.all}</p>}
       {fix}
       {watch
-        ? watch.sharers
-            .filter((one) => one.session !== watch.watching)
-            .map((one) => (
-              <Button key={one.session} size="sm" variant="secondary" icon="screen" onClick={press(() => watch.onWatch(one.session), strip.kind !== "mine")}>
-                {watch.sharers.length > 1 ? `Watch ${one.user.display_name}` : "Watch"}
-              </Button>
-            ))
+        ? unwatched.map((one) => (
+            <Button
+              key={one.session}
+              size="sm"
+              variant="primary"
+              icon="screen"
+              onClick={press(() => watch.onWatch(one.session), strip.kind !== "mine")}
+            >
+              {watch.sharers.length > 1 ? `Watch ${one.user.display_name}` : "Watch"}
+            </Button>
+          ))
         : null}
       {strip.kind === "mine" && controls ? (
         <YourControls
@@ -226,7 +234,7 @@ export const VoiceStrip = memo(function VoiceStrip({
       ) : strip.kind === "mine" ? (
         <span className="nx-strip-here">You're in voice here</span>
       ) : (
-        <Button size="sm" variant={strip.action === "join" ? "primary" : "secondary"} icon="mic" onClick={press(onJoin, true)}>
+        <Button size="sm" variant={strip.action === "join" && unwatched.length === 0 ? "primary" : "secondary"} icon="mic" onClick={press(onJoin, true)}>
           {VOICE_ACTION_WORDS[strip.action]}
         </Button>
       )}

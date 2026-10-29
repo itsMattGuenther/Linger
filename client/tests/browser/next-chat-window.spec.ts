@@ -59,6 +59,16 @@ test("the message box keeps room to type in a window narrower than it was made f
   }
 });
 
+// Watch pressed in the list's voice bar (#746) opens the room's own window,
+// if it has one, with the share named in its address (window.rs).
+test("opened to watch a share in its voice, the window watches it; without one named, it only offers Watch (#746)", async ({ page }) => {
+  await open(page, "room=r-general&shared&watch=s-jules");
+  await expect(page.getByRole("region", { name: "Jules's screen" })).toBeVisible();
+  await open(page, "room=r-general&shared");
+  await expect(page.getByRole("group", { name: "Voice in this conversation" }).getByRole("button", { name: "Watch" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Jules's screen" })).toHaveCount(0);
+});
+
 test("catches up with the list window and opens the conversation, with a borrowed sign-in", async ({ page }) => {
   await open(page);
   await expect(page.getByRole("region", { name: "#general" })).toBeVisible();

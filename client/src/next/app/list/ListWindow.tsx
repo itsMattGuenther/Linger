@@ -97,7 +97,7 @@ import { arrivalsBetween, CARD_EVERY_MS, cardsHushed, CHIME_EVERY_MS, due, loadA
 import { loadSoundPrefs, playSound } from "../../../lib/sound";
 import type { InVoice } from "../chat/VoiceStrip";
 import { VoiceDock, type VoiceDockProps } from "./VoiceDock";
-import { useSharesFromHere } from "../../../lib/screen/probe";
+import { hasWebCodecs, useSharesFromHere } from "../../../lib/screen/probe";
 import { type ScreenShareState, useScreenShare, useShareStopped } from "../../../lib/screen/share";
 import { shareSoundOn, useCapturesSound } from "../../../lib/screen/sound";
 import { stopWatching } from "../../../lib/screen/watch";
@@ -632,12 +632,12 @@ function Servers({
 
   // Show a conversation beside the list: its tab, the side unfolded, and
   // the list window brought forward if it was behind or in the tray.
-  const openBeside = useRef<(server: string, roomId: RoomId, messageId?: MessageId, preview?: boolean) => void>(() => undefined);
-  openBeside.current = (server, roomId, messageId, preview = false) => {
+  const openBeside = useRef<(server: string, roomId: RoomId, messageId?: MessageId, preview?: boolean, watch?: string) => void>(() => undefined);
+  openBeside.current = (server, roomId, messageId, preview = false, watch) => {
     if (!apisRef.current.has(server)) return;
     const tab = { server, roomId };
     if (conversationIn(serverState(server), roomId) === null) unseen.current.add(keyOf(tab));
-    const opening = { tab, message: messageId ?? null, preview };
+    const opening = { tab, message: messageId ?? null, preview, watch: watch ?? null };
     if (handle.current) handle.current.open(opening);
     else if (unfoldedNow.current) waitingOpens.current.push(opening);
     else {
@@ -662,7 +662,7 @@ function Servers({
     bringForward();
   };
   useEffect(() => {
-    showBeside = (server, roomId, messageId, preview) => openBeside.current(server, roomId, messageId, preview);
+    showBeside = (server, roomId, messageId, preview, watch) => openBeside.current(server, roomId, messageId, preview, watch);
     showToolBeside = (which) => openToolBeside.current(which);
     return () => {
       showBeside = null;
@@ -903,7 +903,16 @@ function Servers({
   const voice = useMemo(() => {
     if (!voiceState || voiceServer === null) return undefined;
     const screensOn = infos[voiceServer]?.screens === true && !onPhone() && canShare;
-    const dock = voiceDock(voiceState, talkingNow(voiceState), voiceServer, talkKey, screensOn ? { api: apisRef.current.get(voiceServer) ?? null, share: shareHere, stopped: shareStopped?.server === voiceServer ? shareStoppedWords(shareStopped.why) : null, sound: soundOffered } : null);
+    // Watch is offered wherever this device plays screens, a phone too (#746).
+    const watchOn = infos[voiceServer]?.screens === true && hasWebCodecs();
+    const dock = voiceDock(
+      voiceState,
+      talkingNow(voiceState),
+      voiceServer,
+      talkKey,
+      screensOn ? { api: apisRef.current.get(voiceServer) ?? null, share: shareHere, stopped: shareStopped?.server === voiceServer ? shareStoppedWords(shareStopped.why) : null, sound: soundOffered } : null,
+      watchOn,
+    );
     if (!dock || !several) return dock;
     const info = infos[voiceServer];
     const inVoice = voiceState.myVoice ? (voiceState.voice[voiceState.myVoice.roomId]?.length ?? 0) : 0;
@@ -1394,10 +1403,10 @@ function closeToTray(on: boolean): void {
 
 /** The desktop shell's window commands (src-tauri/src/window.rs); only this window may call them. */
 const shell: WindowOpener = {
-  side: (server, roomId, messageId, preview) => showBeside?.(server, roomId, messageId, preview),
-  conversation: (server, roomId, kind, messageId) => {
+  side: (server, roomId, messageId, preview, watch) => showBeside?.(server, roomId, messageId, preview, watch),
+  conversation: (server, roomId, kind, messageId, watch) => {
     if (!isTauri()) return;
-    void invoke("next_open_conversation", { server, room: roomId, kind, message: messageId ?? null }).catch((error: unknown) =>
+    void invoke("next_open_conversation", { server, room: roomId, kind, message: messageId ?? null, watch: watch ?? null }).catch((error: unknown) =>
       console.error("could not open the conversation's window", error),
     );
   },
@@ -1594,7 +1603,7 @@ function localStore(): Storage | null {
 /** This window's sharing, once it has started: it knows which conversations have their own windows. */
 let sharing: Sharing | null = null;
 /** Beside the list, once the list is drawn (`openBeside` in `Servers`). */
-let showBeside: ((server: string, roomId: RoomId, messageId?: MessageId, preview?: boolean) => void) | null = null;
+let showBeside: ((server: string, roomId: RoomId, messageId?: MessageId, preview?: boolean, watch?: string) => void) | null = null;
 /** Media or Search beside the list, once it's drawn. */
 let showToolBeside: ((which: "media" | "search") => void) | null = null;
 /** Settings over the list, on the phone only, once the list is drawn. */
@@ -1605,11 +1614,12 @@ const EVERY_SECTION = { hosting: "any", severalServers: true, windows: true };
 /**
  * Show a conversation: in its own window if it was popped out into one,
  * otherwise where conversations open (core/share.ts, `open`): beside the
- * list, or each in a window of its own.
+ * list, or each in a window of its own. `watch`: a share in its voice to
+ * watch there, by session (#746).
  */
-function openChat(server: string, room: RoomId, messageId?: MessageId, preview = false): void {
-  if (sharing) sharing.open(server, room, messageId, { preview });
-  else showBeside?.(server, room, messageId, preview);
+function openChat(server: string, room: RoomId, messageId?: MessageId, preview = false, watch?: string): void {
+  if (sharing) sharing.open(server, room, messageId, { preview, ...(watch === undefined ? {} : { watch }) });
+  else showBeside?.(server, room, messageId, preview, watch);
 }
 
 /** Something this computer kept, or null where storage is refused. */
@@ -1694,12 +1704,15 @@ function voiceDock(
   server: string,
   talkKey: string,
   screen: { api: ServerSession["api"] | null; share: ScreenShareState | null; stopped: string | null; sound: boolean } | null,
+  watchOn: boolean,
 ): VoiceDockProps | undefined {
   const model = voiceModel(state, speaking, talkKeyName(talkKey));
   if (model === null) return undefined;
+  const watch = watchOn ? watchOf(state, server, model.roomId) : null;
   return {
     ...model,
     ...(screen ? { share: { ...shareOf(state, server, model.roomId, screen.api, screen.share, screen.sound), stopped: screen.stopped } } : {}),
+    ...(watch ? { watch } : {}),
     onGoToRoom: () => openChat(server, model.roomId),
     onMute: (muted) => void setVoiceMuted(server, muted).catch(() => undefined),
     onDeafen: (deafened) => void setVoiceDeafened(server, deafened).catch(() => undefined),
@@ -1744,6 +1757,26 @@ function shareOf(state: GatewayState, server: string, roomId: string, api: Serve
         }
       : null,
   };
+}
+
+/**
+ * Who else in your voice is sharing their screen, and Watch, for the voice
+ * bar (#746): in reach whatever room you're reading. Watch opens that room's
+ * conversation where conversations open, and starts watching there. A share
+ * you're watching, in any window, says so instead: the server's word for
+ * this connection's seat.
+ */
+function watchOf(state: GatewayState, server: string, roomId: RoomId): VoiceDockProps["watch"] | null {
+  const users = new Map(state.users.map((user) => [user.id, user]));
+  const watching = myScreen(state)?.watching ?? null;
+  const sharers = sharersIn(state, roomId)
+    .filter((one) => one.session !== state.sessionId)
+    .flatMap((one) => {
+      const user = users.get(one.userId);
+      return user ? [{ session: one.session, user, watching: one.session === watching }] : [];
+    });
+  if (sharers.length === 0) return null;
+  return { sharers, onWatch: (session) => openChat(server, roomId, undefined, false, session) };
 }
 
 function hostOf(baseUrl: string): string {

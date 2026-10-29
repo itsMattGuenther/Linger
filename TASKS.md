@@ -1079,6 +1079,20 @@ and not as a WebRTC track. Branch `feat/360-screen-sharing`. Numbers are `T-19xx
   desktop's screen-sharing portal gives no sound, and a PipeWire capture of what's
   playing would need Linger's own output streams found by their node and left out (a
   filter or a null sink), so the call never goes back out.
+- 🟡 **T-1917 · Everybody in voice knows a share started** (Matt, 2026-10-29, #746) — in
+  a room of seven nobody noticed a share start. Picked from mockups
+  (https://claude.ai/artifact/1ZKbTde5oXpP3qBFYA3uD2): two soft chords for everybody in
+  that voice, the person sharing too (`share` in `chimes.ts`, `ShareCues` in
+  `lib/sound-events.ts`, its own switch, on); Watch lit the whole time a share you aren't
+  watching goes on, Join an outline beside it; a line in the list's voice bar with Watch,
+  which opens the room watching it, beside the list or in its own window (`watch` on
+  `next_open_conversation`); and a quiet line in the conversation written by the server
+  (`share_line.rs`, `Message.screen_share`, migration 0026). No desktop notification.
+  Tests: `tests/screen_share_line.rs`, `sound-events.test.ts`, `sound-player.test.ts`,
+  `rows.test.ts`, `next-screen.spec.ts`, `next-list-window.spec.ts`,
+  `next-chat-window.spec.ts`, `next-settings.spec.ts`, `chime-onset.spec.ts`, the shell's
+  `window.rs`. **Still to do:** hear it in a real call, and Watch from the voice bar on a
+  real desktop with the room in its own window.
 - ⬜ **T-1909 · Streaming a game** — later. The computer's sound is T-1916 (#736), and
   a Linux share encoded on the graphics card T-1914 (#733).
 

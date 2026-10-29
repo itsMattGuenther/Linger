@@ -77,6 +77,13 @@ type HeaderKnockNow = { phase: "knocking" | "knocked"; problem?: undefined } | {
 
 const NO_MESSAGES: readonly Message[] = [];
 const NO_SERVERS: readonly string[] = [];
+/**
+ * How long Watch pressed in the voice bar waits for the conversation it
+ * opened to show and offer the share (#746): a fresh window loading, its
+ * server's details arriving. Past that, it's let go rather than starting
+ * a screen later, out of nowhere.
+ */
+const WATCH_ASK_MS = 15_000;
 
 /** Where your voice seat is, as a tab id, on whichever server has it. */
 function voiceSeatOf(servers: Readonly<Record<string, GatewayState>>): string | null {
@@ -115,6 +122,8 @@ export interface PaneHost {
   firstSeed?: { conversation: string; text: string } | null;
   /** The message the first conversation was opened on (a search hit, a banner), if any. */
   firstMessage?: { tab: TabKey; id: MessageId } | null;
+  /** A share the first conversation was opened to watch, by session: Watch pressed in the voice bar (#746). */
+  firstWatch?: { tab: TabKey; session: string } | null;
   /**
    * Mute, Deafen and Leave on the voice line. A window of its own asks the
    * list window, which answers with the sound to play (#241); beside the
@@ -151,6 +160,8 @@ export interface ConversationPane {
   tabItem: (tab: TabKey, showing: boolean) => TabItem | null;
   /** Go to a message in a conversation once it's in reach (CONV-17). */
   goToMessage: (tab: TabKey, id: MessageId) => void;
+  /** Watch a share in a conversation's voice once it shows and offers it: Watch pressed in the voice bar (#746). */
+  watchShare: (tab: TabKey, session: string) => void;
   /** Put the cursor in the box: the conversation was opened, or its window was. */
   askFocus: () => void;
   /** A draft that came with a conversation from another window, for its box. */
@@ -167,7 +178,7 @@ export interface ConversationPane {
  * name opens. The place that holds it decides which conversation shows and
  * what surrounds it.
  */
-export function useConversationPane({ apis, intend, active, find, show, firstSeed = null, firstMessage = null, voiceControl = askTheList, onTyped, among = NO_SERVERS, shareBox = false }: PaneHost): ConversationPane {
+export function useConversationPane({ apis, intend, active, find, show, firstSeed = null, firstMessage = null, firstWatch = null, voiceControl = askTheList, onTyped, among = NO_SERVERS, shareBox = false }: PaneHost): ConversationPane {
   // A name in a conversation opens that person's card (PPL-6), the same card
   // the list shows, beside the name. Your own opens yours, as friends see it
   // (#271).
@@ -255,6 +266,26 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
     soundOn: active ? infos[active.server]?.screenSound === true : false,
     shareBox,
   });
+
+  // Watch pressed in the voice bar for a share here (#746): handed to the
+  // conversation's own Watch once it shows and offers that share, which
+  // starts it here, in the window showing the conversation. Asked of a share
+  // that's gone, or not taken up in a few seconds, it lets go.
+  const [watchAsk, setWatchAsk] = useState<{ tab: string; session: string; at: number } | null>(() =>
+    firstWatch ? { tab: keyOf(firstWatch.tab), session: firstWatch.session, at: Date.now() } : null,
+  );
+  const watchShare = useCallback((tab: TabKey, session: string) => setWatchAsk({ tab: keyOf(tab), session, at: Date.now() }), []);
+  useEffect(() => {
+    if (watchAsk === null) return;
+    if (Date.now() - watchAsk.at > WATCH_ASK_MS) {
+      setWatchAsk(null);
+      return;
+    }
+    if (watchAsk.tab !== paneId || screen === undefined) return;
+    setWatchAsk(null);
+    const watch = screen.watch;
+    if (watch && watch.watching !== watchAsk.session && watch.sharers.some((one) => one.session === watchAsk.session)) watch.onWatch(watchAsk.session);
+  }, [watchAsk, paneId, screen]);
 
   const land = useLanding(api, roomId, state);
   const read = useReading(intend, active, state, land.ready);
@@ -480,7 +511,7 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
       />
     ) : null;
 
-  return { pane, card: cardView, servers, several, serverTag, tabItem, goToMessage, askFocus, seedDraft, draftOf };
+  return { pane, card: cardView, servers, several, serverTag, tabItem, goToMessage, watchShare, askFocus, seedDraft, draftOf };
 }
 
 // The pane's functions are made by the functions below, never inside the

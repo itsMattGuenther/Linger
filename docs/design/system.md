@@ -740,8 +740,14 @@ couldn't in `--text-secondary` meta text where the black warning goes. A
 watched screen carrying sound has a `speaker` / `speakerOff` `IconButton` in
 its bar, and on a computer a `Slider`, `--audio-volume-w` wide, for how loud
 it is for you; on a device that can't play it the button is `unavailable`
-and says why. Nothing about a share is drawn in the lamp but the pressed button: a
-screen being shared isn't something new for you.
+and says why. **Watch is lit** (a `primary` `Button`, Matt, 2026-10-29, #746) wherever
+it's offered for a share you aren't watching, the whole time the share is going: in the
+voice line, and in the list's voice bar. Beside a lit Watch, Join is `secondary`, never two
+lamps side by side. The voice bar says who else is sharing on a line of its own under the
+chips (`.nx-voice-share`): the `screen` glyph in `--icon-muted`, their `Name` inline and
+"is sharing their screen" in `--text-secondary` meta text, ending in "…" before the `sm`
+Watch, one line for each share; while you watch it, "You're watching Jules's screen" and no
+button. Nothing else about a share is drawn in the lamp but the pressed Share button.
 
 ### Card and Popover
 
@@ -988,12 +994,21 @@ replaces an unread count.
   line, ending in "…" where it runs out; never a number. It starts a group of
   its own, so whoever speaks next is named. No actions, no hover. Somebody you
   blocked isn't in it. Its layout is `QuietLine.css`, which the poll's closed
-  line and the line saying somebody left share.
+  line and the lines saying somebody left or shared their screen share.
 - **The line saying somebody left a group DM** (#565, `app/chat/LeftLine.tsx`):
   the join line's twin, one per leave: the `leave` glyph in `--icon-faint`, then
   "Callie left" in `--text-muted` at the meta size, the name `dim`, its time
   showing. A line of its own, no actions, no hover. Shown for somebody you
   blocked too: it says who can no longer read what you write.
+- **The line saying somebody shared their screen** (#746,
+  `app/chat/ShareLine.tsx`): the join line's twin, one per share line: the
+  `screen` glyph in `--icon-faint`, then "Jules is sharing their screen" in
+  `--text-muted` at the meta size, the name `dim`, its time showing, and
+  ` · Watch`, a `nx-quiet-link` like a closed poll's See results, while Jules's
+  newest share line is this one, they still share in that voice and you
+  aren't watching it. Over, it says "Jules shared their screen", with no link.
+  Who, never what. A line of its own, no actions, no hover; shown for somebody
+  you blocked too, as their seat in voice is.
 - **Leaving a group DM** (#565, `app/LeaveGroup.tsx`): a ⋯ (`more`) on the
   group's row and at the end of its header, never on a one-to-one DM. It opens a
   menu with one item, "Leave this group…" (`leave` icon, `danger`), and that
@@ -1206,6 +1221,7 @@ it catches, and nowhere else (AGENTS.md hard rule 4).
 | Polls (#474): the card's question, rows, a fill for each share and the voters' dots with names, never a number; voting picks, moves and takes back a vote, whoever asked included; sixteen dots then the people mark listing everybody, on one row; only whoever asked has Close poll; closed, no boxes and the winner bold; the closed line, grey, with See results going to the poll; `/poll` says what it does, opens the panel with the question, Enter moves down the choices, and Post poll sends question, choices, pick-any and length; Escape puts it away; anybody else is told who can and keeps their words; a poll bolds a room but never sounds or notifies, and its closed line does neither; closes-when wording | `next-poll.spec.ts`, `core/chat/poll.test.ts`, `core/chat/rows.test.ts`, `lib/notify.test.ts`, `lib/notify-rules.test.ts`, `lib/gateway.test.ts`, `lib/time.test.ts`, `crates/linger-server/tests/polls.rs` |
 | Leaving a group DM (#565): its ⋯ on the row and in the header, never on a one-to-one DM; the row's ⋯ stays while its menu is open; the question's words, opening on Stay; Stay changes nothing and puts focus back; Leave takes the row and its tab away, and its own window closes; a refusal is said and the group stays; on the phone the menu and question rise from the bottom and nothing sticks out; somebody else leaving is one grey line, nothing new, never a sound, and a group down to two stays a group (no card, no Knock, no person lead, never their row) | `next-side.spec.ts`, `next-chat-window.spec.ts`, `next-phone.spec.ts`, `core/list.test.ts`, `core/newDm.test.ts`, `core/chat/rows.test.ts`, `lib/gateway.test.ts`, `lib/notify.test.ts`, `lib/notify-rules.test.ts`, `crates/linger-server/tests/dms.rs`, `crates/linger-server/tests/dm_leaks.rs` |
 | Somebody joining voice (#473): one grey line, the name grey too, its words where a name starts and its time showing; whoever speaks next is named; joins with nothing said between share a line; three names, sixteen markers with names, and the people mark listing everybody, on one line with no number; the same in a DM; never new, never a sound or a banner, in a room or a DM; a person's arriving and leaving chimes once a minute apiece | `next-voice-join.spec.ts`, `core/chat/rows.test.ts`, `lib/notify.test.ts`, `lib/notify-rules.test.ts`, `lib/gateway.test.ts`, `lib/gateway.voice.test.ts`, `crates/linger-server/tests/voice_join_line.rs` |
+| A screen share starting (#746): Watch lit in the voice line and the voice bar the whole time a share you aren't watching goes on, Join an outline beside it; the voice bar's line saying who's sharing, its Watch inside the bar, and "You're watching" with no button while you do; Watch there opens the room beside the list watching it, and a conversation's own window opened to watch does; the quiet line live with Watch for the person's newest share, over for an older one or once they stop, never a number, a sound or a banner; the chords for everybody in that voice and the person sharing, once a minute for each person, never for a share already going, a fresh session or a replay; its own switch, on, with Play; the server writes the line after ten seconds, once per person per room in ten minutes, never searched, edited or reacted to, a DM's only to its people | `next-screen.spec.ts`, `next-list-window.spec.ts`, `next-chat-window.spec.ts`, `next-settings.spec.ts`, `chime-onset.spec.ts`, `lib/sound-events.test.ts`, `lib/sound-player.test.ts`, `core/chat/rows.test.ts`, `core/settings.test.ts`, `lib/notify.test.ts`, `lib/notify-rules.test.ts`, `crates/linger-server/tests/screen_share_line.rs`, `src-tauri/src/window.rs` |
 | A room's message of the day (#464): whole under the header beside the topic, with who set it; folded to one line that stays folded after a restart and opens for a new one; `/motd` sets it for the host or a co-host, with a line over the box from `/m`, and anybody else's box says who can and keeps the words; `/motd` alone clears it; its line in the room, with no Edit; it never makes a room look new or notifies; the same on the phone; set beside the topic in Settings, sent only when changed | `next-motd.spec.ts`, `next-settings.spec.ts`, `core/chat/motd.test.ts`, `core/chat/rows.test.ts`, `lib/notify-rules.test.ts`, `lib/gateway.test.ts`, `crates/linger-server/tests/motd.rs` |
 | The conversation: names on one edge, on a line of their own with no colon; every message's words, wrapped lines and continuations on another, 16px in, whoever wrote them; a name far too long moves nobody's words at 780, 420 and 360, and shows whole at 780; rows edge to edge; groups 8px apart; a one-line continuation 24px; title bar, header, voice strip and box 40px; nothing clipped without "…" | `next-chat.spec.ts` › built on the system |
 | The conversation never moves a reader: arrivals and older history leave the view still; at the end it follows; the reply line and edit box keep the end in view | `next-chat.spec.ts` › reading and arriving, the row menu, the keyboard |

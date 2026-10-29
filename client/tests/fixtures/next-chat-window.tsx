@@ -15,7 +15,9 @@
  * refuses knocks, as the fourth in an hour; `?servers` signs in to the
  * guild too; `?as=eli` is Eli's window, not yours, to see how the room shows
  * you; `?many=600` puts that many older
- * messages before the evening in #general; `&message=` opens at one. The photo
+ * messages before the evening in #general; `&message=` opens at one, and
+ * `&watch=s-jules` opens watching Jules's share, which `?shared` has going in
+ * #general's voice, with you in it, on a server that passes screens (#746). The photo
  * loads only where something serves
  * `PHOTO_PATH` (the spec does). Mute, Deafen and Leave are made by the list
  * window, which answers with their sound (#241): `?hold` has it take a
@@ -46,9 +48,10 @@ if (!query.has("server")) query.set("server", SERVER);
 history.replaceState(null, "", `${location.pathname}?${query.toString()}`);
 
 const night = evening(serverState(SERVER));
-// Your voice seat, as the list window shares it (`?ptt`, `?talking`).
+// Your voice seat, as the list window shares it (`?ptt`, `?talking`, `?shared`).
+const seated = query.has("ptt") || query.has("talking") || query.has("shared");
 const seat =
-  query.has("ptt") || query.has("talking")
+  seated
     ? {
         roomId: "r-general",
         muted: false,
@@ -73,7 +76,10 @@ const desktop = fakeDesktop({
   },
   others: query.has("servers") ? { [GUILD]: guild(serverState(GUILD)) } : {},
   // `?novoice`: the main server says it carries no voice (#306).
-  infos: { [SERVER]: { name: SERVER_NAME, accent: "amber", ...(query.has("novoice") ? { voice: false } : {}) }, [GUILD]: serverInfo[GUILD] },
+  infos: {
+    [SERVER]: { name: SERVER_NAME, accent: "amber", ...(query.has("novoice") ? { voice: false } : {}), ...(query.has("shared") ? { screens: true } : {}) },
+    [GUILD]: serverInfo[GUILD],
+  },
   ownerState: {
     ...night,
     ...(query.get("as") === "eli" ? { me: people.eli } : {}),
@@ -81,8 +87,17 @@ const desktop = fakeDesktop({
     // `?ptt`: in voice in #general with push-to-talk, the key up: the
     // microphone closed, but not muted, so the server lists you as on (#232).
     // `?talking`: in voice there with an open microphone, and talking.
-    voice:
-      query.has("ptt") || query.has("talking")
+    // `?shared`: in voice there, and Jules sharing their screen (#746), as
+    // the server lists the seats: yours under the session the owner shares.
+    voice: query.has("shared")
+      ? {
+          ...night.voice,
+          "r-general": [
+            ...(night.voice["r-general"] ?? []).map((peer) => (peer.user_id === people.jules.id ? { ...peer, screen: { fps: 30 as const } } : peer)),
+            { session_id: "s-evening", user_id: people.matt.id, controls: { muted: false, deafened: false } },
+          ],
+        }
+      : seated
         ? {
             ...night.voice,
             "r-general": [...(night.voice["r-general"] ?? []), { session_id: "s-matt", user_id: people.matt.id, controls: { muted: false, deafened: false } }],

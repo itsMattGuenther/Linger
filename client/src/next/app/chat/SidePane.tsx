@@ -20,6 +20,8 @@ export interface SideOpen {
   message?: MessageId | null;
   /** A person opened from the list (#351): the next one takes this tab over until it's kept. */
   preview?: boolean;
+  /** A share in its voice to watch there, by session: Watch pressed in the voice bar (#746). */
+  watch?: string | null;
 }
 
 /** What the list window may ask of the side while it's out. */
@@ -92,6 +94,7 @@ export const SidePane = memo(function SidePane({ apis, intend, tabs, setTabs, fi
     return first && text !== null ? { conversation: keyOf(first.tab), text } : null;
   });
   const [firstMessage] = useState(() => (first?.message ? { tab: first.tab, id: first.message } : null));
+  const [firstWatch] = useState(() => (first?.watch ? { tab: first.tab, session: first.watch } : null));
   const active = tabs.active;
   const conversation = active && !isTool(active) ? active : null;
   const tool = active && isTool(active) ? active.tool : null;
@@ -109,14 +112,15 @@ export const SidePane = memo(function SidePane({ apis, intend, tabs, setTabs, fi
   // The servers with a tab here: only their changes draw the side (#533).
   const tabServers = tabs.open.flatMap((tab) => (isTool(tab) ? [] : [tab.server])).join(" ");
   const among = useMemo(() => (tabServers === "" ? [] : [...new Set(tabServers.split(" "))]), [tabServers]);
-  const view = useConversationPane({ apis, intend, active: conversation, find, show, firstSeed, firstMessage, voiceControl, onTyped, among });
-  const { goToMessage, askFocus, seedDraft, draftOf, tabItem } = view;
+  const view = useConversationPane({ apis, intend, active: conversation, find, show, firstSeed, firstMessage, firstWatch, voiceControl, onTyped, among });
+  const { goToMessage, watchShare, askFocus, seedDraft, draftOf, tabItem } = view;
 
   // A conversation opened while the side is out: to the message first, so
   // the room opens once, around it (#266), then its tab, and the cursor.
   const opened = useCallback(
-    ({ tab, message, preview }: SideOpen) => {
+    ({ tab, message, preview, watch }: SideOpen) => {
       if (message) goToMessage(tab, message);
+      if (watch) watchShare(tab, watch);
       setTabs((held) => (onPhone() ? pushTab(held, tab) : preview ? previewTab(held, tab) : openTab(held, tab)));
       askFocus();
       // Back from a window of its own, perhaps with a draft.
@@ -124,7 +128,7 @@ export const SidePane = memo(function SidePane({ apis, intend, tabs, setTabs, fi
       const text = store ? takeDraft(store, keyOf(tab), Date.now()) : null;
       if (text !== null) seedDraft(keyOf(tab), text);
     },
-    [goToMessage, setTabs, askFocus, seedDraft],
+    [goToMessage, watchShare, setTabs, askFocus, seedDraft],
   );
   useEffect(() => bind({ open: opened, draftOf }), [bind, opened, draftOf]);
 

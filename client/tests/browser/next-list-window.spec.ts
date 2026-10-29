@@ -1099,27 +1099,73 @@ test("somebody starting to watch your screen plays its chime here; watching some
   const jules = { session_id: "s-jules", user_id: "u-jules" };
   const dave = { session_id: "s-dave", user_id: "u-dave" };
 
-  // Watching Jules's screen: you starting, and Eli starting after you, play nothing.
+  // Watching Jules's screen: you starting, and Eli starting after you, play
+  // nothing. Jules's share starting plays its own chords (#746).
   await voice([me, eli, jules]);
   await expect.poll(sounds).toEqual(["voice-join"]);
   // Past the player's guard against a burst: one voice sound per 100 ms.
   await page.waitForTimeout(150);
   await voice([{ ...me, watching: "s-jules" }, eli, { ...jules, screen: { fps: 60 } }]);
   await voice([{ ...me, watching: "s-jules" }, { ...eli, watching: "s-jules" }, { ...jules, screen: { fps: 60 } }]);
+  await expect.poll(sounds).toEqual(["voice-join", "share"]);
   // Dave joining voice does sound, so the silence before it was this window choosing.
   await voice([{ ...me, watching: "s-jules" }, { ...eli, watching: "s-jules" }, { ...jules, screen: { fps: 60 } }, dave]);
-  await expect.poll(sounds).toEqual(["voice-join", "peer-join"]);
+  await expect.poll(sounds).toEqual(["voice-join", "share", "peer-join"]);
   await page.waitForTimeout(300);
-  expect(await sounds()).toEqual(["voice-join", "peer-join"]);
+  expect(await sounds()).toEqual(["voice-join", "share", "peer-join"]);
 
-  // Sharing your own: starting is silent, and Eli starting to watch it plays the chime, once.
+  // Sharing your own: it starting plays the share's chords for you too
+  // (#746), and Eli starting to watch it plays the chime, once.
   const sharing = { ...me, screen: { fps: 60 } };
   await voice([sharing, eli, jules, dave]);
+  await expect.poll(sounds).toEqual(["voice-join", "share", "peer-join", "share"]);
   await voice([sharing, { ...eli, watching: me.session_id }, jules, dave]);
-  await expect.poll(sounds).toEqual(["voice-join", "peer-join", "watcher"]);
+  await expect.poll(sounds).toEqual(["voice-join", "share", "peer-join", "share", "watcher"]);
   await voice([sharing, { ...eli, watching: me.session_id }, jules, dave]);
   await page.waitForTimeout(300);
-  expect(await sounds()).toEqual(["voice-join", "peer-join", "watcher"]);
+  expect(await sounds()).toEqual(["voice-join", "share", "peer-join", "share", "watcher"]);
+});
+
+// Matt, #746: in a room of seven, somebody started sharing and most of the
+// room didn't notice. Everybody in that voice hears it start, and the voice
+// bar offers Watch whatever room is open.
+test("a share starting in your voice plays its chords here, the voice bar offers Watch, and Watch opens the room watching it (#746)", async ({ page }) => {
+  await open(page, "?one&screens");
+  const bar = await joinGeneral(page);
+  const sounds = async () => (await did(page)).filter((line) => line.startsWith("sound:")).map((line) => line.slice("sound:".length));
+  // A key here opens this window's audio, so silence below is a choice.
+  await page.keyboard.press("Shift");
+  const voice = (peers: object[]) =>
+    page.evaluate((peers) => window.core?.frame("https://good-company.example", { op: "voice.state", d: { room_id: "r-general", peers } } as never), peers);
+  const me = { session_id: "s-good-company.example", user_id: "u-matt", forwarded: true };
+  const eli = { session_id: "s-eli", user_id: "u-eli" };
+  const jules = { session_id: "s-jules", user_id: "u-jules" };
+  const julesSharing = { ...jules, screen: { fps: 30 } };
+
+  await voice([me, eli, jules]);
+  await expect.poll(sounds).toEqual(["voice-join"]);
+  await voice([me, eli, julesSharing]);
+  await expect.poll(sounds).toEqual(["voice-join", "share"]);
+  const shares = bar.getByRole("list", { name: "Screens shared here" });
+  await expect(shares).toHaveText(/Jules is sharing their screen/);
+  await expect(shares.getByRole("button", { name: "Watch" })).toHaveAttribute("data-variant", "primary");
+  // Stopping to pick another window and sharing again rings nothing more.
+  await voice([me, eli, jules]);
+  await expect(shares).toHaveCount(0);
+  await voice([me, eli, julesSharing]);
+  await page.waitForTimeout(300);
+  expect(await sounds()).toEqual(["voice-join", "share"]);
+
+  // Eli sharing too: a line each, each Watch named for whose it is.
+  await voice([me, { ...eli, screen: { fps: 60 } }, julesSharing]);
+  await expect(shares.getByRole("listitem")).toHaveCount(2);
+  await expect(shares.getByRole("button", { name: "Watch Eli" })).toBeVisible();
+
+  // Watch: #general opens beside the list, and Jules's screen with it.
+  await page.setViewportSize({ width: 1120, height: 820 });
+  await shares.getByRole("button", { name: "Watch Jules" }).click();
+  await expect(page.getByRole("region", { name: "Jules's screen" })).toBeVisible();
+  await expect(page.getByRole("tab", { selected: true })).toHaveText(/general/);
 });
 
 // Join and Leave redraw the strip's buttons under the pointer: Deafen where

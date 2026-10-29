@@ -344,7 +344,7 @@ test("pops the showing tab out into its own window, and its draft goes with it",
   await page.getByRole("button", { name: "Open in its own window" }).click();
   await expect
     .poll(async () => (await did(page)).filter((line) => line.startsWith("next_open_conversation")))
-    .toEqual([`next_open_conversation:${JSON.stringify({ server: HOME, room: "r-general", kind: "room", message: null })}`]);
+    .toEqual([`next_open_conversation:${JSON.stringify({ server: HOME, room: "r-general", kind: "room", message: null, watch: null })}`]);
   await expect(page.getByRole("tab")).toHaveText([/Jules/]);
   const left = await page.evaluate((key) => window.localStorage.getItem(key), `linger.next.handoff.${HOME}#r-general`);
   expect(JSON.parse(left ?? "{}")).toMatchObject({ text: "half a thought" });

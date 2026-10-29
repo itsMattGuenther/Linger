@@ -27,6 +27,45 @@ test("somebody sharing is marked on their chip, and Watch sits beside Join when 
   await expect.poll(() => did(page)).toContain("watch:s-jules");
 });
 
+// Matt, #746: somebody in voice didn't notice a share start, so Watch is lit
+// in the lamp the whole time a share you aren't watching is going.
+test("a share's Watch is lit, and Join steps down beside it to an outline (#746)", async ({ page }) => {
+  await chat(page, "?voice=others&screen=shared");
+  const strip = page.getByRole("group", { name: "Voice in this conversation" });
+  await expect(strip.getByRole("button", { name: "Watch" })).toHaveAttribute("data-variant", "primary");
+  await expect(strip.getByRole("button", { name: "Join" })).toHaveAttribute("data-variant", "secondary");
+  // In voice there's no Join, and Watch is still lit.
+  await chat(page, "?voice=mine&screen=shared");
+  await expect(strip.getByRole("button", { name: "Watch" })).toHaveAttribute("data-variant", "primary");
+  // With nobody sharing, Join is the lit one again.
+  await chat(page, "?voice=others");
+  await expect(strip.getByRole("button", { name: "Join" })).toHaveAttribute("data-variant", "primary");
+});
+
+test("a line says who's sharing, with Watch, while they are; an older one, and one that's over, only that they shared (#746)", async ({ page }) => {
+  await chat(page, "?voice=others&screen=shared&shares");
+  const lines = page.locator("[data-share]");
+  await expect(lines).toHaveCount(2);
+  // Jules's first share is over; the newest line is the share going now.
+  await expect(lines.nth(0)).toHaveText(/Jules shared their screen/);
+  await expect(lines.nth(0).getByRole("button")).toHaveCount(0);
+  await expect(lines.nth(1)).toHaveText(/Jules is sharing their screen · Watch/);
+  // Never what's shared: the words are who, and that's all.
+  await expect(lines.nth(1).locator(".nx-quiet-text")).toHaveText("Jules is sharing their screen · Watch");
+  await lines.nth(1).getByRole("button", { name: "Watch" }).click();
+  await expect.poll(() => did(page)).toContain("watch:s-jules");
+});
+
+test("a share line has no Watch while you watch it, and says it's over once nobody shares (#746)", async ({ page }) => {
+  await chat(page, "?voice=mine&screen=watching&shares");
+  const newest = page.locator("[data-share]").last();
+  await expect(newest).toHaveAttribute("data-share", "live");
+  await expect(newest.locator(".nx-quiet-text")).toHaveText("Jules is sharing their screen");
+  await chat(page, "?voice=mine&shares");
+  await expect(page.locator("[data-share]").last()).toHaveAttribute("data-share", "over");
+  await expect(page.locator("[data-share]").last().locator(".nx-quiet-text")).toHaveText("Jules shared their screen");
+});
+
 test("in voice, Share asks which speed and starts at the one picked", async ({ page }) => {
   await chat(page, "?voice=mine&screen=shared");
   const strip = page.getByRole("group", { name: "Voice in this conversation" });
@@ -346,6 +385,31 @@ test("the list marks the room and the person sharing, and says so in words", asy
   await expect(page.getByRole("button", { name: /^Jules, .*sharing their screen/ }).first()).toBeVisible();
   // Nobody else is marked.
   await expect(page.getByRole("button", { name: /^Eli, .*sharing their screen/ })).toHaveCount(0);
+});
+
+test("the voice bar says who's sharing, with Watch lit, from whatever room you're reading (#746)", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.goto("/tests/fixtures/next-list.html?voice&screen=shared");
+  await page.evaluate(() => document.fonts.ready);
+  const shares = page.getByRole("list", { name: "Screens shared here" });
+  await expect(shares.getByRole("listitem")).toHaveCount(1);
+  await expect(shares.getByRole("listitem")).toHaveText(/Jules is sharing their screen/);
+  const watch = shares.getByRole("button", { name: "Watch" });
+  await expect(watch).toHaveAttribute("data-variant", "primary");
+  // The words give way before the button: it stays inside the bar.
+  const bar = await page.getByRole("region", { name: /^In voice in/ }).boundingBox();
+  const button = await watch.boundingBox();
+  expect(bar && button && button.x + button.width <= bar.x + bar.width).toBe(true);
+  await watch.click();
+  await expect.poll(() => page.locator("body").getAttribute("data-opened")).toContain("watch:s-jules");
+});
+
+test("watching it, the voice bar says so instead of offering Watch (#746)", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.goto("/tests/fixtures/next-list.html?voice&screen=watching");
+  const shares = page.getByRole("list", { name: "Screens shared here" });
+  await expect(shares.getByRole("listitem")).toHaveText("You're watching Jules's screen");
+  await expect(shares.getByRole("button")).toHaveCount(0);
 });
 
 test("your share in the voice bar: a copy, who's watching by name, and Stop", async ({ page }) => {

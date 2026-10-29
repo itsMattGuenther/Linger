@@ -55,6 +55,10 @@
  *   removed, which isn't drawn. Each reaction asked for is written to
  *   `body[data-did]` as `react:<id>:<key>:on|off`, and put in place as the
  *   server would. `&reactfail`: the server refuses them.
+ * - `?shares`: lines saying somebody shared their screen (#746). In #general
+ *   Jules shared an hour ago, Dave said something, and Jules shared again,
+ *   the newest thing there. With `?screen=shared` Jules is still sharing, so
+ *   the newest line says so, with Watch; `watching`, you watch it.
  * - `?gone`: somebody whose account was deleted (#650) said the newest thing
  *   in #general, which Sam answers, and somebody the host removed said the
  *   one before, as did a third person neither: the app doesn't know them.
@@ -299,6 +303,21 @@ function withPolls(list: Message[], raid: boolean): Message[] {
   };
   return [...list, faction, server, said, closed];
 }
+
+/** A line saying somebody shared their screen (#746), as the server writes one. */
+function shareLine(id: string, authorId: string, at: number): Message {
+  return { id, room_id: "r-general", author_id: authorId, body: "shared their screen", reply_to: null, attachments: [], reactions: [], pinned_at: null, edited_at: null, deleted_at: null, created_at: at, screen_share: true };
+}
+
+/** `?shares`: Jules shared an hour ago, Dave answered, and Jules shared again. */
+function withShares(list: Message[]): Message[] {
+  const last = list.at(-1);
+  if (!last) return list;
+  const start = last.created_at;
+  const said: Message = { ...last, id: `${last.id}s2`, author_id: people.dave.id, body: "the route looks good", reply_to: null, reactions: [], attachments: [], created_at: start + 120_000 };
+  return [...list, shareLine(`${last.id}s1`, people.jules.id, start + 60_000), said, shareLine(`${last.id}s3`, people.jules.id, start + 180_000)];
+}
+if (query.has("shares")) ALL["r-general"] = withShares(ALL["r-general"] ?? []);
 
 /** A line saying somebody joined voice (#473), as the server writes one. */
 function joinLine(roomId: string, id: string, authorId: string, at: number): Message {

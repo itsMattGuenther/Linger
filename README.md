@@ -98,7 +98,8 @@ This is not an attempt to build a better platform. It's an attempt to not need o
   send it or throw it away. Up to five minutes.
 - **Screen sharing** in voice: share a screen or one window from the Windows
   or Linux app at 30 or 60 frames a second, and everybody in that voice can watch it
-  above the conversation, on a computer or a phone. Your system's own picker
+  above the conversation, on a computer or a phone. Everybody in the call hears
+  a share start, and Watch is one press away from any room. Your system's own picker
   chooses what's shared, and Linger never learns a window's name. From
   Windows the computer's sound can go with it, without the call's own voices,
   and everybody can hear it. It's never recorded. Cameras aren't a feature.

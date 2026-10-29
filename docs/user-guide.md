@@ -890,6 +890,10 @@ too, just under its voice line. Stop is in the tray menu too, for when a slide
 show covers everything. Sharing works from the Windows and Linux apps; macOS comes later.
 A phone watches but doesn't share.
 
+Everybody in the call hears two soft chords when your share starts, and so do
+you, once it's really going: it tells you everybody else heard it too. (More
+on that under watching, below.)
+
 When somebody starts watching, you hear a soft sound, different from somebody
 joining voice, so you know without looking at the box. Only you hear it, at
 most once a minute for each person, and nothing plays when somebody stops
@@ -934,8 +938,21 @@ with your notes? You don't have to share again: Presenter View's **Display
 Settings** has **Swap Presenter View and Slide Show**. The small copy beside
 Stop shows what everybody sees.
 
+When somebody in your call starts sharing, you hear two soft chords, whatever
+you're looking at, a game included. Somebody stopping to pick another window
+and sharing again doesn't ring again. It's on until you turn it off:
+**Settings → Sound & Voice → Someone starts sharing a screen**. Quiet hours
+leave it on, like the voice sounds.
+
 Somebody sharing has a small monitor beside their name, in the list and in
-voice, and the room's voice line offers **Watch**. Watch joins that room's
+voice, and the room's voice line offers **Watch**, lit up the whole time
+they share. The voice bar at the bottom of the list says "Jules is sharing
+their screen" with a Watch of its own, so it's one press away from whatever
+room you're reading: it opens the room and the screen together. While you
+watch, it says "You're watching Jules's screen" instead. The room's
+conversation gets a quiet grey line too, "Jules is sharing their screen ·
+Watch", for anybody reading it; once they stop it says "Jules shared their
+screen". It never says what's shared, and it calls nobody. Watch joins that room's
 voice first if you weren't in it, since watching is being there, and the
 screen opens above the room's conversation, which carries on underneath. Drag
 the line between them to give either more room, or press **Full screen**
@@ -1207,8 +1224,9 @@ screen; once it has moved to the notification center, clicking it just brings
 Linger up.
 
 For chimes, open **Settings → Sound & Voice**. Voice-session joins, leaves and
-moves, mute/deafen changes, DMs, knocks and somebody starting to watch a screen
-you're sharing have sounds by default. Ordinary
+moves, mute/deafen changes, DMs, knocks, somebody in your call starting to
+share a screen, and somebody starting to watch a screen you're sharing have
+sounds by default. Ordinary
 room-message sounds start off. Turn each category on or off, press **play**
 beside it to preview, or use **Mute all notification sounds**. Play always
 sounds, even during quiet hours or with a category switched off, so you can
@@ -1216,7 +1234,7 @@ hear what you are choosing. Quiet hours, when you turn them on, silence
 DM, room-message, knock and door chimes between 22:00 and 08:00 on your computer's
 clock. Once they're on, **Quiet from** and **Quiet until** move the window in
 half-hour steps: 21:00 to 06:00 for an early night, or 02:00 to 12:00 if you
-sleep late. Voice, mute/deafen and watching sounds still play during quiet hours,
+sleep late. Voice, mute/deafen, sharing and watching sounds still play during quiet hours,
 because they answer something you're doing in a call, and voice chat itself is
 never affected.
 

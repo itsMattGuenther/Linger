@@ -79,12 +79,14 @@ const base = query.has("away")
     })()
   : night;
 // `?screen=shared`: Jules shares their screen in #general's voice (#360), and
-// Eli watches it. `?screen=sharing`: you share, Eli and Jules watching.
+// Eli watches it; `=watching`, you watch it too. `?screen=sharing`: you
+// share, Eli and Jules watching.
 const SCREEN = query.get("screen");
 const screenOf = (peer: VoicePeer): VoicePeer => {
-  if (SCREEN === "shared") {
+  if (SCREEN === "shared" || SCREEN === "watching") {
     if (peer.user_id === people.jules.id) return { ...peer, screen: { fps: 30 as const } };
     if (peer.user_id === people.eli.id) return { ...peer, watching: "s-jules" };
+    if (SCREEN === "watching" && peer.user_id === people.matt.id) return { ...peer, watching: "s-jules" };
   }
   if (SCREEN === "sharing") {
     if (peer.user_id === people.matt.id) return { ...peer, screen: { fps: 60 as const } };
@@ -360,6 +362,10 @@ function OneServer() {
                       // `=stopped`: your last share didn't start, and the bar says why.
                       stopped: SCREEN === "stopped" ? "Three people are sharing here already, so yours didn't start." : null,
                     },
+                    // `=shared`: Jules's share, and Watch (#746); `=watching` you watch it.
+                    ...(SCREEN === "shared" || SCREEN === "watching"
+                      ? { watch: { sharers: [{ session: "s-jules", user: people.jules, watching: SCREEN === "watching" }], onWatch: (session: string) => note(`watch:${session}`) } }
+                      : {}),
                   }
                 : {}),
               // `?raid`: chips and the everyone card open volumes (#197).
