@@ -448,6 +448,13 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
   // edit box opening, a link card arriving) keeps the end in view. The
   // virtualizer means to do this itself, but it scrolls before the list has
   // grown and the browser clamps the scroll to the old height.
+  //
+  // At the end means within the conversation's bottom padding of it. A row
+  // growing where it is (a reaction, an edit) overflows the list before the
+  // list grows to hold it, without the padding under it, so that clamp stops
+  // short by the padding, and its scroll event said you'd left the end: the
+  // list then grew and nothing followed it (#760). Within the padding, the
+  // newest row is still on screen whole.
   const rowsBox = useRef<HTMLDivElement | null>(null);
   const { containerRef } = virtualizer;
   const rowsRef = useCallback(
@@ -465,9 +472,10 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
     const inner = rowsBox.current;
     if (!element || !inner) return;
     const gap = () => element.scrollHeight - element.scrollTop - element.clientHeight;
-    let pinned = gap() <= 2;
+    const atTheEnd = () => gap() <= 2 + (Number.parseFloat(getComputedStyle(element).paddingBottom) || 0);
+    let pinned = atTheEnd();
     const remember = () => {
-      pinned = gap() <= 2;
+      pinned = atTheEnd();
     };
     const observer = new ResizeObserver(() => {
       if (!pinned || !atEndNow.current || !landing.current.done || jumping.current) return;

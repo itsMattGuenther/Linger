@@ -290,7 +290,8 @@ export function fakeDesktop({ label, ownerState, others = {}, infos = {}, query,
     const where = url.origin === SERVER ? "" : url.origin;
     note(`${method} ${where}${path}${url.search}${auth ? ` as ${auth.replace("Bearer ", "")}` : ""}`);
     const body = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : {};
-    await new Promise((settle) => window.setTimeout(settle, 20));
+    // `?netms=N`: every answer takes N ms, as over a real network (#760).
+    await new Promise((settle) => window.setTimeout(settle, Number(query.get("netms") ?? "20")));
     if (query.has("expired") && auth === "Bearer token-1") return refuse(401, "UNAUTHENTICATED", "Your sign-in ran out.");
 
     const own = routes?.(method, path, url, body);

@@ -254,6 +254,21 @@ rules that came out of them:
 
 ## Browser tests
 
+- **Check what the person sees, at the speed a real server answers.** A
+  sent message once landed below the bottom of the conversation, only its
+  name showing, and every test passed: the test page's server answered in
+  20 ms, and the tests looked for the message's words, not for them on
+  screen (#750). Something that appears or changes in a conversation gets
+  checked on screen (`toBeInViewport`, or its box against the
+  conversation's), and the chat window's test page can answer as slowly as
+  a real server: `?netms=N` for every request, `?sendms=N` more for a send.
+  `next-newest-lands.spec.ts` does each thing that adds or changes the
+  newest row while you're at the bottom (a message, long or short, a reply,
+  a burst, a photo with and without its size, a link card, an edit, a
+  reaction, a poll, a join or share line) at 250 ms, and checks the row is
+  on screen whole and read. A change to a row that's already there waits
+  until the conversation is still first: changed while it was still being
+  followed down, the follow carried it to the end and hid the slip (#760).
 - The same tests run in Chromium, the engine of WebView2 on Windows, and in
   WebKit, the engine under WebKitGTK on Linux. WebKit is slower and finds
   timing problems Chromium doesn't.
