@@ -40,7 +40,7 @@ export class PeerCueLimit {
    * of them if so. One of them due is enough: a crowd arriving together
    * sounds once, and anybody new among them is worth it.
    */
-  allow(cue: "peer-join" | "peer-leave", people: readonly string[], now: number): boolean {
+  allow(cue: SoundCue, people: readonly string[], now: number): boolean {
     const due = people.some((person) => {
       const at = this.last.get(`${cue}\u0000${person}`);
       return at === undefined || now - at >= this.every;
@@ -197,66 +197,93 @@ export class WatchCues {
   }
 }
 
-/**
- * Who started sharing a screen in this frame, and who stopped (#746).
- * Starting is in the voice you're in, and needs a live `voice.state` with
- * you seated there before and after: joining a voice where somebody is
- * sharing already, and a fresh session's list, say where things stand, not
- * who just started. Your own share starting is in it too. Stopping counts
- * in any room, by person, for the minute below.
- */
-export function shareChange(frame: ServerFrame, before: GatewayState, after: GatewayState): { started: { session: string; person: string }[]; stopped: string[] } {
-  if (frame.op !== "voice.state") return { started: [], stopped: [] };
-  const roomId = frame.d.room_id;
-  const old = before.voice[roomId] ?? [];
-  const next = after.voice[roomId] ?? [];
-  const sharingNow = new Set(next.filter((peer) => peer.screen).map((peer) => peer.session_id));
-  const stopped = [...new Set(old.filter((peer) => peer.screen && !sharingNow.has(peer.session_id)).map((peer) => peer.user_id))];
-  const me = before.sessionId;
-  const seated = (peers: readonly VoicePeer[]) => peers.some((peer) => peer.session_id === me);
-  if (me === null || me !== after.sessionId || before.myVoice?.roomId !== roomId || !seated(old) || !seated(next)) return { started: [], stopped };
-  const sharedBefore = new Set(old.filter((peer) => peer.screen).map((peer) => peer.session_id));
-  const started = next.filter((peer) => peer.screen && !sharedBefore.has(peer.session_id)).map((peer) => ({ session: peer.session_id, person: peer.user_id }));
-  return { started, stopped };
+/** One share, by its session and its person. */
+export interface ShareSeat {
+  session: string;
+  person: string;
 }
 
 /**
- * The chords for a screen share starting in the voice you're in (#746): so
- * somebody in voice who's reading another room, or playing a game, knows
- * there's something to watch. One for each server, in the window that holds
- * the connection (the list window), the only one that plays what frames
- * bring.
+ * Who started sharing a screen in this frame, and who stopped (#746), in
+ * the voice you're in. Both need a live `voice.state` with you seated there
+ * before and after: joining a voice where somebody is sharing already, a
+ * fresh session's list, and leaving, say where things stand, not who just
+ * started or stopped. Your own share is in it too. A share that ended
+ * because its person left voice isn't a stop: their leaving says so.
+ */
+export function shareChange(frame: ServerFrame, before: GatewayState, after: GatewayState): { started: ShareSeat[]; stopped: ShareSeat[] } {
+  const none = { started: [], stopped: [] };
+  if (frame.op !== "voice.state") return none;
+  const roomId = frame.d.room_id;
+  const old = before.voice[roomId] ?? [];
+  const next = after.voice[roomId] ?? [];
+  const me = before.sessionId;
+  const seated = (peers: readonly VoicePeer[]) => peers.some((peer) => peer.session_id === me);
+  if (me === null || me !== after.sessionId || before.myVoice?.roomId !== roomId || !seated(old) || !seated(next)) return none;
+  const sharedBefore = new Set(old.filter((peer) => peer.screen).map((peer) => peer.session_id));
+  const sharingNow = new Set(next.filter((peer) => peer.screen).map((peer) => peer.session_id));
+  const stillHere = new Set(next.map((peer) => peer.session_id));
+  const seat = (peer: VoicePeer): ShareSeat => ({ session: peer.session_id, person: peer.user_id });
+  return {
+    started: next.filter((peer) => peer.screen && !sharedBefore.has(peer.session_id)).map(seat),
+    stopped: old.filter((peer) => peer.screen && !sharingNow.has(peer.session_id) && stillHere.has(peer.session_id)).map(seat),
+  };
+}
+
+/**
+ * The chords for a screen share starting or stopping in the voice you're in
+ * (#746): so somebody in voice who's reading another room, or playing a
+ * game, knows there's something to watch, and that it's over. One for each
+ * server, in the window that holds the connection (the list window), the
+ * only one that plays what frames bring.
  *
- * - Everybody in that voice hears it, the person sharing too: for them it
- *   says their share really is going, every time it starts.
- * - For anybody else's share it rings when they hadn't shared in the last
- *   minute ({@link PEER_CUE_EVERY_MS}), as the watching cue (#735) does, so
- *   stopping to pick another window doesn't ring the room again, however long
- *   the first share ran. Their second computer starting to share while the
- *   first still does is the same share.
- * - Nothing for shares already going when you join voice or connect, or for
- *   a resume's replay: what a replay changed is noted, so the minute holds
- *   across a reconnect, and nothing plays.
+ * - Everybody in that voice hears them, the person sharing too: for them
+ *   they say their share really is going, or has really ended, every time.
+ * - For anybody else's share, the start and the stop each sound at most
+ *   once a minute for each person ({@link PEER_CUE_EVERY_MS}), as joining
+ *   and leaving voice do (#473), Matt's pick: stopping to pick another
+ *   window and sharing again sounds the stop, then the start, once, and any
+ *   more of it inside that minute is quiet. Their second computer starting
+ *   or stopping while the first still shares is the same share.
+ * - Nothing for a share already going when you join voice or connect, for a
+ *   resume's replay, or for a share that ended because its person left
+ *   voice: the leave sound says that.
+ * - One frame with a start and a stop in it (two people) sounds the start:
+ *   it's the one with something to watch, and the player takes one sound of
+ *   a kind at a time.
  */
 export class ShareCues {
-  /** When each person last stopped sharing. */
-  readonly #stopped = new Map<string, number>();
+  readonly #limit: PeerCueLimit;
 
   constructor(
     private readonly play: (cue: SoundCue) => void,
-    private readonly every = PEER_CUE_EVERY_MS,
-  ) {}
+    every = PEER_CUE_EVERY_MS,
+  ) {
+    this.#limit = new PeerCueLimit(every);
+  }
 
   /** Play what one frame calls for. `live` is false for a frame from a resume's replay. */
   hear(frame: ServerFrame, before: GatewayState, after: GatewayState, live: boolean, now: number): void {
+    if (!live || frame.op !== "voice.state") return;
     const { started, stopped } = shareChange(frame, before, after);
-    for (const person of stopped) this.#stopped.set(person, now);
-    if (!live || started.length === 0 || frame.op !== "voice.state") return;
-    const sharing = new Set((before.voice[frame.d.room_id] ?? []).filter((peer) => peer.screen).map((peer) => peer.user_id));
-    const news = started.some(
-      (one) => one.session === before.sessionId || (!sharing.has(one.person) && now - (this.#stopped.get(one.person) ?? Number.NEGATIVE_INFINITY) >= this.every),
-    );
-    if (news) this.play("share");
+    if (started.length === 0 && stopped.length === 0) return;
+    const roomId = frame.d.room_id;
+    const sharers = (peers: readonly VoicePeer[]) => new Set(peers.filter((peer) => peer.screen).map((peer) => peer.user_id));
+    const sharedBefore = sharers(before.voice[roomId] ?? []);
+    const sharingNow = sharers(after.voice[roomId] ?? []);
+    const me = before.sessionId;
+    // A person's other computer still sharing, or already sharing, is the same share.
+    const starts = started.filter((one) => one.session === me || !sharedBefore.has(one.person));
+    const stops = stopped.filter((one) => one.session === me || !sharingNow.has(one.person));
+    if (this.#due("share", starts, me, now)) this.play("share");
+    else if (this.#due("share-stop", stops, me, now)) this.play("share-stop");
+  }
+
+  /** Whether these say something: your own share always does, anybody else's once a minute. */
+  #due(cue: "share" | "share-stop", shares: readonly ShareSeat[], me: string | null, now: number): boolean {
+    if (shares.length === 0) return false;
+    if (shares.some((one) => one.session === me)) return true;
+    return this.#limit.allow(cue, shares.map((one) => one.person), now);
   }
 }
 

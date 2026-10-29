@@ -285,14 +285,14 @@ function shareRoom() {
   };
 }
 
-describe("the chords for a screen share starting (#746)", () => {
+describe("the chords for a screen share starting and stopping (#746)", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(Date.parse("2026-10-29T20:00:00Z"));
   });
   afterEach(() => vi.useRealTimers());
 
-  it("ring for everybody in that voice when somebody starts sharing, once", () => {
+  it("ring for everybody in that voice when somebody starts sharing, and step down when they stop", () => {
     const here = shareRoom();
     here.voice([ME, ELI, JULES]);
     here.voice([ME, ELI, JULES_SHARING]);
@@ -304,51 +304,54 @@ describe("the chords for a screen share starting (#746)", () => {
     // Somebody else starting too is.
     here.voice([ME, { ...ELI, screen: { fps: 60 } }, JULES_SHARING]);
     expect(here.played).toEqual(["share", "share"]);
+    // Jules stopping.
+    here.voice([ME, { ...ELI, screen: { fps: 60 } }, JULES]);
+    expect(here.played).toEqual(["share", "share", "share-stop"]);
   });
 
-  it("ring for the person sharing too, every time their own share starts", () => {
+  it("ring for the person sharing too, every time their own share starts and stops", () => {
     const here = shareRoom();
     here.voice([ME, ELI]);
-    here.voice([SHARING, ELI]);
-    expect(here.played).toEqual(["share"]);
-    // Stopping to pick another window and sharing again: it says so again.
-    later(5_000);
-    here.voice([ME, ELI]);
-    later(5_000);
-    here.voice([SHARING, ELI]);
-    expect(here.played).toEqual(["share", "share"]);
+    for (let again = 0; again < 3; again += 1) {
+      here.voice([SHARING, ELI]);
+      later(5_000);
+      here.voice([ME, ELI]);
+      later(5_000);
+    }
+    expect(here.played).toEqual(["share", "share-stop", "share", "share-stop", "share", "share-stop"]);
   });
 
-  it("don't ring again when somebody stops to pick another window, however long they'd shared", () => {
+  it("sound a stop and a start for stopping to pick another window, once a minute apiece, as joining and leaving voice do", () => {
     const here = shareRoom();
     here.voice([ME, JULES]);
     here.voice([ME, JULES_SHARING]);
     later(20 * 60_000);
-    for (let again = 0; again < 3; again += 1) {
-      here.voice([ME, JULES]);
-      later(20_000);
-      here.voice([ME, JULES_SHARING]);
-      later(5 * 60_000);
-    }
-    expect(here.played).toEqual(["share"]);
-    // A whole minute without sharing, and back: that's news again.
+    // Picking another window: the stop, then the start.
     here.voice([ME, JULES]);
-    later(59_999);
+    later(15_000);
     here.voice([ME, JULES_SHARING]);
-    expect(here.played).toEqual(["share"]);
+    expect(here.played).toEqual(["share", "share-stop", "share"]);
+    // Doing it again inside the minute is quiet, both ways.
+    later(20_000);
     here.voice([ME, JULES]);
+    later(10_000);
+    here.voice([ME, JULES_SHARING]);
+    expect(here.played).toEqual(["share", "share-stop", "share"]);
+    // A minute on, each is news again.
     later(60_000);
+    here.voice([ME, JULES]);
+    later(5_000);
     here.voice([ME, JULES_SHARING]);
-    expect(here.played).toEqual(["share", "share"]);
+    expect(here.played).toEqual(["share", "share-stop", "share", "share-stop", "share"]);
   });
 
-  it("are silent for a share already going when you join, a fresh session's list, and a resume's replay", () => {
+  it("are silent for a share already going when you join, a fresh session's list, a resume's replay, and your leaving", () => {
     // Joining a voice where Jules is sharing already.
     const joining = shareRoom();
     joining.voice([JULES_SHARING]);
     joining.voice([JULES_SHARING, ME]);
     expect(joining.played).toEqual([]);
-    // A fresh session's snapshot with a share in it.
+    // A fresh session's snapshot with a share in it, or without the one there was.
     const fresh = shareRoom();
     fresh.voice([ME, JULES]);
     fresh.hear({ s: 1, op: "ready", d: { session_id: "s-me-2", user: MATT, users: [MATT], rooms: [], dms: [], presence: [], voice: [{ room_id: "r-1", peers: [ME, JULES_SHARING] }] } });
@@ -358,12 +361,22 @@ describe("the chords for a screen share starting (#746)", () => {
     resumed.voice([ME, JULES]);
     resumed.voice([ME, JULES_SHARING], true);
     resumed.voice([ME, JULES_SHARING]);
-    expect(resumed.played).toEqual([]);
-    // A replay's stop holds the minute too: stopping and starting across a reconnect is one share.
     resumed.voice([ME, JULES], true);
-    later(10_000);
-    resumed.voice([ME, JULES_SHARING]);
+    resumed.voice([ME, JULES]);
     expect(resumed.played).toEqual([]);
+    // You leaving voice while somebody shares, or while you share, isn't a stop.
+    const leaving = shareRoom();
+    leaving.voice([SHARING, JULES_SHARING]);
+    leaving.voice([JULES_SHARING]);
+    expect(leaving.played).toEqual([]);
+  });
+
+  it("are silent when a share ends because its person left voice: the leave sound says so", () => {
+    const here = shareRoom();
+    here.voice([ME, JULES]);
+    here.voice([ME, JULES_SHARING]);
+    here.voice([ME]);
+    expect(here.played).toEqual(["share"]);
   });
 
   it("are silent for a share in a voice you aren't in, and a second computer of the same person's", () => {
@@ -371,18 +384,29 @@ describe("the chords for a screen share starting (#746)", () => {
     here.voice([ME]);
     here.voice([JULES], false, "r-2");
     here.voice([JULES_SHARING], false, "r-2");
+    here.voice([JULES], false, "r-2");
     expect(here.played).toEqual([]);
-    // Jules's desktop starting to share while the laptop still does is the same share.
+    // Jules's desktop starting while the laptop shares is the same share, and so is it stopping.
     here.voice([ME, JULES, JULES_DESKTOP]);
     here.voice([ME, JULES_SHARING, JULES_DESKTOP]);
     expect(here.played).toEqual(["share"]);
     here.voice([ME, JULES_SHARING, { ...JULES_DESKTOP, screen: { fps: 60 } }]);
+    here.voice([ME, JULES_SHARING, JULES_DESKTOP]);
     expect(here.played).toEqual(["share"]);
   });
 
-  it("tell who started and who stopped, by person", () => {
-    const before: GatewayState = { ...serverState("https://sharing.example"), sessionId: "s-me", myVoice: seat({ roomId: "r-1" }), voice: { "r-1": [ME, ELI, JULES_SHARING] } };
+  it("sound the start when one person starts and another stops at once", () => {
+    const here = shareRoom();
+    here.voice([ME, ELI, JULES]);
+    here.voice([ME, ELI, JULES_SHARING]);
+    later(5 * 60_000);
+    here.voice([ME, { ...ELI, screen: { fps: 60 } }, JULES]);
+    expect(here.played).toEqual(["share", "share"]);
+  });
+
+  it("tell who started and who stopped, and leave out somebody who left", () => {
+    const before: GatewayState = { ...serverState("https://sharing.example"), sessionId: "s-me", myVoice: seat({ roomId: "r-1" }), voice: { "r-1": [ME, ELI, JULES_SHARING, { ...DEX, screen: { fps: 30 } }] } };
     const frame: ServerFrame = { s: 3, op: "voice.state", d: { room_id: "r-1", peers: [ME, { ...ELI, screen: { fps: 60 } }, JULES] } };
-    expect(shareChange(frame, before, apply(before, frame))).toEqual({ started: [{ session: "s-eli", person: "u-eli" }], stopped: ["u-jules"] });
+    expect(shareChange(frame, before, apply(before, frame))).toEqual({ started: [{ session: "s-eli", person: "u-eli" }], stopped: [{ session: "s-jules", person: "u-jules" }] });
   });
 });

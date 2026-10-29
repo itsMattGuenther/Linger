@@ -182,7 +182,7 @@ describe("notification sound policy", () => {
 
   it("master mute wins over every category", async () => {
     const sound = await import("./sound");
-    for (const cue of ["voice-join", "voice-move", "peer-leave", "mute", "deafen", "dm", "room", "knock", "door", "watcher", "share"] as const) {
+    for (const cue of ["voice-join", "voice-move", "peer-leave", "mute", "deafen", "dm", "room", "knock", "door", "watcher", "share", "share-stop"] as const) {
       const prefs = { ...sound.DEFAULT_SOUND_PREFS, muted: true, categories: { voice: true, controls: true, dms: true, rooms: true, knocks: true, door: true, watchers: true, shares: true } };
       expect(sound.cueAllowed(cue, prefs, new Date(2026, 8, 17, 14))).toBe(false);
       expect(sound.cueAllowed(cue, prefs, new Date(2026, 8, 17, 3))).toBe(false);
@@ -259,6 +259,7 @@ describe("notification sound policy", () => {
     const sound = await import("./sound");
     sound.unlockAudio();
     expect(sound.categoryOf("share")).toBe("shares");
+    expect(sound.categoryOf("share-stop")).toBe("shares");
     expect(sound.QUIET_HOURS_SILENCE).not.toContain("shares");
     expect(sound.DEFAULT_SOUND_PREFS.categories.shares).toBe(true);
     // 3am, inside quiet hours: it plays, and a DM doesn't.

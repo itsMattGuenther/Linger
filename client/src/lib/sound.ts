@@ -72,7 +72,7 @@ const VOLUME_KEY = "linger.sound.volume";
 export const SOUND_CATEGORIES = ["voice", "controls", "dms", "rooms", "knocks", "door", "watchers", "shares"] as const;
 export type SoundCategory = typeof SOUND_CATEGORIES[number];
 export type SoundCue = "voice-join" | "voice-leave" | "voice-move" | "peer-join" | "peer-leave"
-  | "mute" | "unmute" | "deafen" | "undeafen" | "dm" | "room" | "knock" | "door" | "watcher" | "share";
+  | "mute" | "unmute" | "deafen" | "undeafen" | "dm" | "room" | "knock" | "door" | "watcher" | "share" | "share-stop";
 
 export const DEFAULT_SOUND_PREFS: SoundPrefs = {
   muted: false, quietHours: false,
@@ -80,8 +80,8 @@ export const DEFAULT_SOUND_PREFS: SoundPrefs = {
   // The door chime (decision 12) starts off: an arrival is a card first.
   // Somebody starting to watch your share (#735) starts on: while you
   // present, your share's box is usually under what you're showing.
-  // Somebody starting to share in your voice (#746) starts on: nobody
-  // noticed a share start in a room of seven before it had a sound.
+  // Somebody starting or stopping a share in your voice (#746) starts on:
+  // nobody noticed a share start in a room of seven before it had a sound.
   categories: { voice: true, controls: true, dms: true, rooms: false, knocks: true, door: false, watchers: true, shares: true },
   volume: 1,
 };
@@ -352,7 +352,7 @@ export function categoryOf(cue: SoundCue): SoundCategory {
   if (cue === "dm") return "dms";
   if (cue === "room") return "rooms";
   if (cue === "watcher") return "watchers";
-  if (cue === "share") return "shares";
+  if (cue === "share" || cue === "share-stop") return "shares";
   if (cue.startsWith("voice-") || cue.startsWith("peer-")) return "voice";
   return "controls";
 }

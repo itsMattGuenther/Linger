@@ -1740,9 +1740,15 @@ Watch in a conversation they weren't reading. Matt picked from mockups of five i
   candidates): the only cue with notes together, so it reads as something to look at, a
   DM's cousin, and never as a join or the watching cue. **The person sharing hears it
   too**, once the share is really going (Matt): it tells them it worked, and what the
-  room just heard. For somebody else's share it rings when they hadn't shared in the
-  last minute, measured from when they stopped, as the watching cue is (#735): stopping
-  to pick another window doesn't ring the room again, however long the first share ran.
+  room just heard. **Stopping steps the same chords down**, a touch softer (Matt, the
+  same day, after the PR opened), for everybody in that voice and the sharer, but not
+  for a share that ended because its person left voice: the leave sound says that.
+  For somebody else's share **the start and the stop each sound at most once a minute
+  for each person**, as voice arrivals and leavings do (#473). Matt picked that over a
+  stop alone (the room would hear it stop and never hear it come back) and over a stop
+  held back ten seconds in case the share returned (a real stop heard late): stopping
+  to pick another window sounds the stop, then the start, once, and any more of it
+  inside the minute is quiet.
 - **Watch stays lit, not just while it's new.** The issue's mockups lit Watch for a
   share's first minute and then calmed it, by the rule that amber means new. Matt chose
   to keep it lit for as long as somebody shares and you aren't watching: a share is

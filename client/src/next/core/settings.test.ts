@@ -130,10 +130,11 @@ describe("the Settings copy", () => {
     expect(DEFAULT_SOUND_PREFS.categories.watchers).toBe(true);
   });
 
-  it("has a row for a screen share starting, on by default, playing its own cue (#746)", () => {
+  it("has a row for a screen share starting and stopping, on by default, playing its own cue (#746)", () => {
     const row = CHIMES.find((chime) => chime.category === "shares");
-    expect(row).toMatchObject({ label: "Someone starts sharing a screen", cue: "share" });
-    expect(row?.hint).toMatch(/when yours starts too/);
+    expect(row).toMatchObject({ label: "Someone starts or stops sharing a screen", cue: "share" });
+    expect(row?.hint).toMatch(/stepping down when they stop/);
+    expect(row?.hint).toMatch(/You hear yours too/);
     expect(DEFAULT_SOUND_PREFS.categories.shares).toBe(true);
   });
 

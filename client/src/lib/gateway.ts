@@ -1087,8 +1087,9 @@ function watchCues(server: string): WatchCues {
 }
 
 /**
- * Each server's chords for a screen share starting in the voice you're in
- * (#746), played, like the cues above, only by the window that connects.
+ * Each server's chords for a screen share starting or stopping in the voice
+ * you're in (#746), played, like the cues above, only by the window that
+ * connects.
  */
 const shareCueSets = new Map<string, ShareCues>();
 function shareCues(server: string): ShareCues {
@@ -1325,8 +1326,8 @@ async function attachListeners(): Promise<void> {
       if (frame.op === "ready" || frame.op === "reports.changed" || madeCohost) void loadReports(links.get(server)?.api ?? null).catch(() => undefined);
       if (!replayed && frame.op === "knock") void playKnock();
       // Voice cues, somebody starting to watch your share (#735), and a
-      // share starting in your voice (#746), which note a replay's changes
-      // without playing them.
+      // share starting or stopping in your voice (#746). A replay plays
+      // none of them; the watching cue notes what it changed.
       const now = Date.now();
       const cue = replayed ? null : voiceCueToPlay(frame, before, next, peerCueLimit(server), now);
       watchCues(server).hear(frame, before, next, cue, !replayed, now);

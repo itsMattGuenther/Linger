@@ -1149,12 +1149,16 @@ test("a share starting in your voice plays its chords here, the voice bar offers
   const shares = bar.getByRole("list", { name: "Screens shared here" });
   await expect(shares).toHaveText(/Jules is sharing their screen/);
   await expect(shares.getByRole("button", { name: "Watch" })).toHaveAttribute("data-variant", "primary");
-  // Stopping to pick another window and sharing again rings nothing more.
+  // Stopping steps the chords down. Sharing again a moment later is quiet:
+  // the start, like the stop, sounds once a minute for each person, as
+  // joining and leaving voice do.
+  await page.waitForTimeout(150);
   await voice([me, eli, jules]);
   await expect(shares).toHaveCount(0);
+  await expect.poll(sounds).toEqual(["voice-join", "share", "share-stop"]);
   await voice([me, eli, julesSharing]);
   await page.waitForTimeout(300);
-  expect(await sounds()).toEqual(["voice-join", "share"]);
+  expect(await sounds()).toEqual(["voice-join", "share", "share-stop"]);
 
   // Eli sharing too: a line each, each Watch named for whose it is.
   await voice([me, { ...eli, screen: { fps: 60 } }, julesSharing]);

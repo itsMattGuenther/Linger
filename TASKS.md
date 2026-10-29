@@ -1082,8 +1082,9 @@ and not as a WebRTC track. Branch `feat/360-screen-sharing`. Numbers are `T-19xx
 - 🟡 **T-1917 · Everybody in voice knows a share started** (Matt, 2026-10-29, #746) — in
   a room of seven nobody noticed a share start. Picked from mockups
   (https://claude.ai/artifact/1ZKbTde5oXpP3qBFYA3uD2): two soft chords for everybody in
-  that voice, the person sharing too (`share` in `chimes.ts`, `ShareCues` in
-  `lib/sound-events.ts`, its own switch, on); Watch lit the whole time a share you aren't
+  that voice, the person sharing too, and the same stepping down when it stops (`share`
+  and `share-stop` in `chimes.ts`, `ShareCues` in `lib/sound-events.ts`, each once a
+  minute for each person, their own switch, on); Watch lit the whole time a share you aren't
   watching goes on, Join an outline beside it; a line in the list's voice bar with Watch,
   which opens the room watching it, beside the list or in its own window (`watch` on
   `next_open_conversation`); and a quiet line in the conversation written by the server

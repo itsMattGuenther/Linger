@@ -283,8 +283,8 @@ keyword-based system delivers it.
 
 **Notification chimes** (2026-09-17). Optional, short, quiet cues, with one
 master silence switch and separate controls for voice sessions, microphone/
-deafen controls, DMs, room messages, knocks, somebody starting to share a
-screen (#746) and somebody starting to watch yours (#735).
+deafen controls, DMs, room messages, knocks, somebody starting or stopping a
+screen share (#746) and somebody starting to watch yours (#735).
 Voice/control/DM/knock/sharing/watching sounds default on; ordinary
 room-message sounds default off. Quiet hours are
 listener-local, off until they opt in, and run 22:00–08:00 unless the listener
@@ -324,14 +324,19 @@ people's voice.
   Watch joins voice first for somebody outside it: while you share, a voice
   join waits two seconds, and if that person starts watching in that time,
   only the watching cue plays.
-- Sharing cue (#746, §4.20): everybody in a voice hears it when somebody there
-  starts sharing their screen, wherever their attention is. The person sharing
-  hears it too, once their share is really going, every time it starts. For
-  somebody else's share it sounds when they haven't shared in the last minute,
-  so stopping to pick another window doesn't ring the room again, however long
-  the first share ran. No cue for a share already going when you join voice or
-  connect, or a reconnect's replay. Two soft chords stepping up, the only cue
-  with notes together: a DM's cousin, never heard as a join.
+- Sharing cues (#746, §4.20): everybody in a voice hears one when somebody
+  there starts sharing their screen, wherever their attention is, and its
+  mirror when they stop. The person sharing hears them too, every time their
+  own share really starts or ends. For somebody else's share the start and the
+  stop each sound at most once a minute for each person, as voice arrivals and
+  leavings do (#473): stopping to pick another window and sharing again sounds
+  the stop, then the start, once, and any more of it inside that minute is
+  quiet. No cue for a share already going when you join voice or connect, a
+  reconnect's replay, or a share that ended because its person left voice (the
+  leave cue says it); one frame with a start and a stop sounds the start. Two
+  soft chords stepping up, the only cue with notes together, a DM's cousin,
+  never heard as a join; stopping, the same chords stepping down, a touch
+  softer.
 - DM/room-message cues: new messages from others, not messages currently being
   read in the focused app, edits, history loads, replay or duplicates. One
   short cue per message burst, not a sound per line. DMs remain membership-filtered.
@@ -1356,10 +1361,13 @@ seven somebody started sharing and most of the room didn't notice: no sound, and
 only signs were a small mark on a chip and a Watch in a room they weren't reading.
 
 - **A sound for everybody in that voice**, two soft chords stepping up, when a share
-  starts, the person sharing included: for them it says their share really is going.
-  At most once a minute for each person sharing, never for a share already going when
-  you join or reconnect. Its own switch among the notification chimes (§4.2), on by
-  default; quiet hours leave it alone, like the voice cues.
+  starts, and the same chords stepping down when it stops (Matt, 2026-10-29), the
+  person sharing included: for them they say their share really is going, or has
+  really ended. Each at most once a minute for each person sharing, as joining and
+  leaving voice are, never for a share already going when you join or reconnect, and
+  no stop for somebody who left voice (the leave sound says it). Their own switch
+  among the notification chimes (§4.2), on by default; quiet hours leave them alone,
+  like the voice cues.
 - **Watch is lit** (in the lamp) wherever it's offered, for as long as somebody shares
   and you aren't watching them: a share is something to look at the whole time it's
   going. Beside a lit Watch, Join is an outline: Watch joins voice too, and two lit

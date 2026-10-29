@@ -891,8 +891,8 @@ show covers everything. Sharing works from the Windows and Linux apps; macOS com
 A phone watches but doesn't share.
 
 Everybody in the call hears two soft chords when your share starts, and so do
-you, once it's really going: it tells you everybody else heard it too. (More
-on that under watching, below.)
+you, once it's really going: it tells you everybody else heard it too. When
+it stops, the same chords step down. (More on that under watching, below.)
 
 When somebody starts watching, you hear a soft sound, different from somebody
 joining voice, so you know without looking at the box. Only you hear it, at
@@ -939,10 +939,13 @@ Settings** has **Swap Presenter View and Slide Show**. The small copy beside
 Stop shows what everybody sees.
 
 When somebody in your call starts sharing, you hear two soft chords, whatever
-you're looking at, a game included. Somebody stopping to pick another window
-and sharing again doesn't ring again. It's on until you turn it off:
-**Settings → Sound & Voice → Someone starts sharing a screen**. Quiet hours
-leave it on, like the voice sounds.
+you're looking at, a game included, and the same chords stepping down when
+they stop. Each plays at most once a minute for each person, like the sounds
+for joining and leaving voice: somebody stopping to pick another window and
+sharing again plays the stop and then the start, and any more of that inside
+the minute is quiet. They're on until you turn them off: **Settings → Sound &
+Voice → Someone starts or stops sharing a screen**. Quiet hours leave them on,
+like the voice sounds.
 
 Somebody sharing has a small monitor beside their name, in the list and in
 voice, and the room's voice line offers **Watch**, lit up the whole time
@@ -1224,9 +1227,9 @@ screen; once it has moved to the notification center, clicking it just brings
 Linger up.
 
 For chimes, open **Settings → Sound & Voice**. Voice-session joins, leaves and
-moves, mute/deafen changes, DMs, knocks, somebody in your call starting to
-share a screen, and somebody starting to watch a screen you're sharing have
-sounds by default. Ordinary
+moves, mute/deafen changes, DMs, knocks, somebody in your call starting or
+stopping a screen share, and somebody starting to watch a screen you're
+sharing have sounds by default. Ordinary
 room-message sounds start off. Turn each category on or off, press **play**
 beside it to preview, or use **Mute all notification sounds**. Play always
 sounds, even during quiet hours or with a category switched off, so you can

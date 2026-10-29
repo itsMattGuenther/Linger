@@ -46,6 +46,9 @@ export const CHIMES: Record<Exclude<SoundCue, "knock">, Chime> = {
   // it's heard as something to look at, a DM's cousin, and never as a join.
   // Each note softer than a lone one, as two ring at once.
   share: { notes: [[A, E * 2], [B, F * 2]], gain: 0.021, spacing: 0.14, decay: 0.3 },
+  // And stopped (#746): the same chords stepping down, a touch softer, as
+  // leaving voice is beside joining it.
+  "share-stop": { notes: [[B, F * 2], [A, E * 2]], gain: 0.018, spacing: 0.14, decay: 0.3 },
 };
 
 function note(
