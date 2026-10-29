@@ -72,3 +72,6 @@ The repo is arranged so a session reads little and misses nothing:
 - Changes to `SPEC.md`, `ARCHITECTURE.md`, `PROTOCOL.md`, or `AGENTS.md` need
   Matt's review — CODEOWNERS enforces this. Those files are the source of
   truth, so they change deliberately or not at all.
+- Your name goes in the release notes. Every contribution that ships is thanked
+  there, by your GitHub handle, in the release it ships in, however small
+  (`docs/releasing.md`).
