@@ -313,6 +313,9 @@ export function fakeDesktop({ label, ownerState, others = {}, infos = {}, query,
     if (messagesOf && method === "GET") return json(page(decodeURIComponent(messagesOf[1] ?? ""), url.searchParams));
     if (messagesOf && method === "POST") {
       if (query.has("fail")) return refuse(503, "UNAVAILABLE", "The server is busy. Try again in a moment.");
+      // `?sendms=N`: a send takes N ms longer to come back, as it does over a
+      // real network, while the sent message is drawn waiting (#750).
+      await new Promise((settle) => window.setTimeout(settle, Number(query.get("sendms") ?? "0")));
       const message = newMessage(decodeURIComponent(messagesOf[1] ?? ""), people.matt.id, String(body.body ?? ""));
       return json(message, 201);
     }

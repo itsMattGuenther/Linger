@@ -35,6 +35,7 @@ export type ChatStream = Pick<
   | "atStart"
   | "atEnd"
   | "leftOff"
+  | "sentAs"
   | "land"
   | "now"
   | "previews"

@@ -141,6 +141,14 @@ export interface RoomStream {
    * is what every other reader of it (search, export, resume) depends on.
    */
   pending: PendingSend[];
+  /**
+   * Sends from here the server has confirmed, by the message's id, each with
+   * the made-up id its stand-in had (#750). The conversation draws the
+   * message in its stand-in's rows, so they keep the heights already
+   * measured; drawn as new rows, they were guessed short for a frame and a
+   * long message was left below the bottom. This device only, never sent.
+   */
+  sentAs?: Record<MessageId, MessageId>;
 }
 
 /** One not-yet-confirmed send, kept next to its room. */
@@ -906,10 +914,11 @@ export function apply(current: GatewayState, frame: ServerFrame): GatewayState {
         // (`sendMessage` below); either way should clear the stand-in.
         if (frame.op !== "message.create") return merged;
         const at = merged.pending.findIndex((one) => matchesPending(one.message, message));
-        if (at < 0) return merged;
+        const standIn = merged.pending[at];
+        if (standIn === undefined) return merged;
         const pending = [...merged.pending];
         pending.splice(at, 1);
-        return { ...merged, pending };
+        return { ...merged, pending, sentAs: { ...merged.sentAs, [message.id]: standIn.message.id } };
       });
       // Rooms nobody has opened have no stream to fold this into, and they are
       // exactly the rooms whose label has to change weight. So the newest id is
@@ -1941,24 +1950,37 @@ export async function sendMessage(
   let message: Message;
   try {
     message = await api.post<Message>(path, request);
-  } finally {
-    // Whichever confirms the send first — this answer, or the room's own
-    // announcement of it arriving first over the socket — clears the
-    // stand-in; the other is then a no-op (see `matchesPending`).
+  } catch (error) {
     clearStandIn();
+    throw error;
   }
 
+  // Whichever confirms the send first — this answer, or the room's own
+  // announcement of it arriving first over the socket — swaps the stand-in
+  // for the message; the other then finds no stand-in (see `matchesPending`).
   const stream = stateOf(server).streams[roomId];
-  if (linkFor(api) === null || !stream) return;
+  if (linkFor(api) === null || !stream) {
+    clearStandIn();
+    return;
+  }
   // Saying something out of a historical window puts you back at the newest
   // message. It cannot be folded into a February window — that is the gap this
   // store must never produce — and the alternative is a message you just sent
   // that does not appear anywhere.
   if (!stream.atEnd) {
+    clearStandIn();
     await leaveWindow(api, roomId);
     return;
   }
-  putStream(server, roomId, { ...stream, messages: mergeMessage(stream.messages, message) });
+  // In one change, so no render has neither, and the message takes over
+  // its stand-in's rows (`sentAs`, #750).
+  const standIn = stream.pending.find((one) => one.key === key);
+  putStream(server, roomId, {
+    ...stream,
+    messages: mergeMessage(stream.messages, message),
+    pending: standIn === undefined ? stream.pending : stream.pending.filter((one) => one !== standIn),
+    sentAs: standIn === undefined ? stream.sentAs : { ...stream.sentAs, [message.id]: standIn.message.id },
+  });
 }
 
 /**

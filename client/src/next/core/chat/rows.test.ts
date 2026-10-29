@@ -83,6 +83,28 @@ describe("the chat window's rows", () => {
     expect(heads(rows)).toEqual(["divider", ["m000001", true], "left-off", ["m000002", true], ["m000003", false]]);
   });
 
+  it("never opens the left-off line above a message of yours: it goes above the next one somebody else wrote (#750)", () => {
+    const rows = chatRows([message(1, "eli", T0), message(2, "matt", T0 + MIN), message(3, "eli", T0 + 2 * MIN)], [], {
+      atStart: true,
+      leftOff: "m000001",
+      me: "matt",
+    });
+    expect(heads(rows)).toEqual(["divider", ["m000001", true], ["m000002", true], "left-off", ["m000003", true]]);
+    // A send still waiting is yours too.
+    const waiting = chatRows([message(1, "eli", T0)], [message(900001, "matt", T0 + MIN)], { atStart: true, leftOff: "m000001", me: "matt" });
+    expect(waiting.some((row) => row.kind === "left-off")).toBe(false);
+  });
+
+  it("draws a confirmed send in the rows its stand-in had, its day's divider included (#750)", () => {
+    const later = T0 + 4 * 60 * MIN;
+    const waiting = chatRows([message(1, "eli", T0)], [{ ...message(900001, "matt", later), id: "pending:1" }], { atStart: true, leftOff: null, me: "matt" });
+    const sent = message(2, "matt", later);
+    const confirmed = chatRows([message(1, "eli", T0), sent], [], { atStart: true, leftOff: null, me: "matt", sentAs: { m000002: "pending:1" } });
+    expect(confirmed.map((row) => row.key)).toEqual(["divider:m000001", "m000001", "divider:pending:1", "pending:1"]);
+    expect(confirmed.map((row) => row.key)).toEqual(waiting.map((row) => row.key));
+    expect(confirmed.at(-1)).toMatchObject({ kind: "message", message: sent, pending: false });
+  });
+
   it("indexes messages by row, and finds the last one you can edit", () => {
     const messages = [message(1, "matt", T0), message(2, "eli", T0 + MIN), message(3, "matt", T0 + 2 * MIN, { deleted_at: T0 })];
     const rows = chatRows(messages, [], { atStart: true, leftOff: null });

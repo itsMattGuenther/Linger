@@ -42,6 +42,13 @@ export interface ChatRowOptions {
   atStart: boolean;
   /** The newest message read when the conversation was opened. */
   leftOff: MessageId | null;
+  /** Your user id: the left-off line never opens above a message of yours (#750). */
+  me?: string | null;
+  /**
+   * Messages sent from here, by id, with the id their stand-in had (#750).
+   * Each keeps its stand-in's row keys, so the rows it had stay measured.
+   */
+  sentAs?: Readonly<Record<MessageId, MessageId>>;
 }
 
 /**
@@ -58,7 +65,9 @@ export function chatRows(
   // The row just pushed was a line nobody typed (a message of the day, or a
   // join): what's said next isn't part of it, so it starts a group of its own.
   let afterLine = false;
-  for (const row of buildRows([...messages, ...pending], options)) {
+  const { sentAs } = options;
+  const keyOf = sentAs === undefined ? undefined : (message: Message) => sentAs[message.id] ?? message.id;
+  for (const row of buildRows([...messages, ...pending], { atStart: options.atStart, leftOff: options.leftOff, me: options.me, keyOf })) {
     if (row.kind !== "message") {
       rows.push(row);
       continue;

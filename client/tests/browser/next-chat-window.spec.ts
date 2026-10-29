@@ -166,6 +166,22 @@ test("sends what you type at once, and keeps the cursor in the box", async ({ pa
   expect(await did(page)).toContain("POST /rooms/r-general/messages as token-1");
 });
 
+// The page's evening is weeks ago, so a message sent now is the first of its
+// day: it comes with the day's divider, as the one in #750 did. Drawn waiting,
+// then swapped for the server's copy a moment later, a long one was left below
+// the bottom, only its name and time on screen, and never marked read.
+test("a long message you send is on screen whole once the server has it, with no left-off line above it (#750)", async ({ page }) => {
+  await open(page, "room=r-general&sendms=300");
+  await expect.poll(() => reads(page)).toEqual(["m000016"]);
+  await box(page).fill(`first thing this morning, ${"and plenty more to say about it, line after line, ".repeat(8)}`);
+  await page.keyboard.press("Enter");
+  // Read once it's in, which needs it on screen at the end.
+  await expect.poll(async () => (await reads(page)).length, { timeout: 4_000 }).toBe(2);
+  await expect(page.getByText("first thing this morning")).toBeInViewport({ ratio: 1 });
+  expect(await log(page).evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight)).toBeLessThanOrEqual(1);
+  await expect(log(page).getByText("you left off here")).toHaveCount(0);
+});
+
 test("typing is said through the list window's connection", async ({ page }) => {
   await open(page);
   await box(page).click();

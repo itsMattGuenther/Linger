@@ -32,7 +32,9 @@ the chat says who's sharing (#746); hosts: that line needs the server updated
 (migration 0026). The voice strip shows as many people as fit (#745). The
 iPhone app needs iOS 15 or later, which every iPhone that ran it before has
 (#743). On Linux with NVIDIA, a video in a conversation shows its picture
-again, not solid green, a regression from 0.5.3 (#756). **Thanks** (`docs/releasing.md`): @Gleasonmt for the iPhone app's iOS 15
+again, not solid green, a regression from 0.5.3 (#756). A long message you
+send is on screen whole, not left below the bottom with only your name
+showing, and "you left off here" no longer sits above it (#750). **Thanks** (`docs/releasing.md`): @Gleasonmt for the iPhone app's iOS 15
 minimum (#749), and @eGGnogSC for messages that show the moment they're sent
 (#133) and the sidebar that no longer scrolls sideways (#84). @eGGnogSC's work
 shipped back in September, before the notes thanked contributors, so it's

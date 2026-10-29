@@ -29,12 +29,21 @@ export interface BuildOptions {
   atStart: boolean;
   /**
    * The newest message you had read when you walked in. The "you left off here"
-   * line goes above the first message newer than this one.
+   * line goes above the first message newer than this one that somebody else
+   * wrote: one of yours is one you've read (SPEC §4.2, #750).
    *
    * Null when there is nothing to mark: a room you have never opened, or one
    * you have read to the end of.
    */
   leftOff?: MessageId | null;
+  /** Your user id, for the line above. */
+  me?: string | null;
+  /**
+   * A message's row key, when it isn't its id: a message you sent keeps the
+   * key its stand-in was drawn under while it waited on the server, so its
+   * rows stay measured (#750). Its divider's and line's keys follow it.
+   */
+  keyOf?: (message: Message) => string;
 }
 
 /** Build the rows for one room. `messages` must be oldest-first. */
@@ -43,6 +52,8 @@ export function buildRows(messages: readonly Message[], options: BuildOptions): 
   let previous: Message | null = null;
 
   const leftOff = options.leftOff ?? null;
+  const me = options.me ?? null;
+  const keyOf = options.keyOf ?? ((message: Message) => message.id);
   let placed = leftOff === null;
   // The line can only be drawn once the message on the *older* side of it is
   // loaded, or there is nothing older to load. Otherwise it would sit at the
@@ -56,15 +67,16 @@ export function buildRows(messages: readonly Message[], options: BuildOptions): 
     // one's heading (#512).
     const gap = previous === null ? Number.POSITIVE_INFINITY : Math.abs(message.created_at - previous.created_at);
     const opensSession = previous === null ? options.atStart : gap > SESSION_BREAK_MS;
-    const opensLeftOff = !placed && boundaryLoaded && leftOff !== null && message.id > leftOff;
+    const opensLeftOff = !placed && boundaryLoaded && leftOff !== null && message.id > leftOff && message.author_id !== me;
+    const key = keyOf(message);
 
     if (opensSession) {
-      rows.push({ kind: "divider", key: `divider:${message.id}`, at: message.created_at });
+      rows.push({ kind: "divider", key: `divider:${key}`, at: message.created_at });
     }
     // After the session divider and before the message: the session break is
     // about time passing, and "you left off here" is about this exact message.
     if (opensLeftOff) {
-      rows.push({ kind: "left-off", key: `left-off:${message.id}` });
+      rows.push({ kind: "left-off", key: `left-off:${key}` });
       placed = true;
     }
     if (leftOff !== null && message.id <= leftOff) boundaryLoaded = true;
@@ -79,7 +91,7 @@ export function buildRows(messages: readonly Message[], options: BuildOptions): 
       previous.author_id !== message.author_id ||
       gap > GROUP_BREAK_MS;
 
-    rows.push({ kind: "message", key: message.id, message, head });
+    rows.push({ kind: "message", key, message, head });
     previous = message;
   }
 

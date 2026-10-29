@@ -70,6 +70,8 @@ export interface ConversationProps {
   atEnd: boolean;
   /** The newest message read when the conversation was opened: where the line goes. */
   leftOff: MessageId | null;
+  /** Messages sent from here, with the id their stand-in had: drawn in its rows (#750). */
+  sentAs?: Readonly<Record<MessageId, MessageId>>;
   /**
    * Where to land once the history is in: the "you left off here" line, or
    * the newest message. `ready` is false while the first page is loading.
@@ -132,7 +134,7 @@ export interface ConversationShares {
  * older ones (SPEC §4.2). The window wires it to the store; it holds no data.
  */
 export const Conversation = memo(function Conversation(props: ConversationProps) {
-  const { id, messages, pending, atStart, atEnd, leftOff, land, people, me, now } = props;
+  const { id, messages, pending, atStart, atEnd, leftOff, sentAs, land, people, me, now } = props;
   const scroller = useRef<HTMLDivElement | null>(null);
   // The virtualizer as of the last render: whether something is scrolling
   // the conversation, and which rows it has measured.
@@ -164,7 +166,11 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
   const holdingNow = useRef(holding);
   holdingNow.current = holding;
 
-  const rows = useMemo(() => chatRows(listed, pending, { atStart: atStart && !holding, leftOff }), [listed, pending, atStart, holding, leftOff]);
+  const myId = me?.id ?? null;
+  const rows = useMemo(
+    () => chatRows(listed, pending, { atStart: atStart && !holding, leftOff, me: myId, sentAs }),
+    [listed, pending, atStart, holding, leftOff, myId, sentAs],
+  );
   const rowsNow = useRef(rows);
   rowsNow.current = rows;
   const idNow = useRef(id);

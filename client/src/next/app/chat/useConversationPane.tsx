@@ -446,6 +446,7 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
         atStart: stream?.atStart ?? false,
         atEnd: stream?.atEnd ?? true,
         leftOff: state.leftOff[room.id] ?? null,
+        sentAs: stream?.sentAs,
         land,
         now,
         previews,
