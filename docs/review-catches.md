@@ -76,6 +76,9 @@ to be right for every shape that window takes.
   *Missed because* nothing checks that a file the docs name exists, so a
   rename or a delete leaves every doc naming it stale too. *Changed:* #768
   merges first; #770 is a check that every file the living docs name exists.
+  Its first run found five more: a deleted walk-through script named twice,
+  the previous client's search folder, and a prototype on a deleted branch,
+  named twice. Each is now in `commit:path` form, which says where it is.
 
 ## Tests written from the case in mind, not from the ways things fail
 

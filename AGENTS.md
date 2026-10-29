@@ -160,6 +160,12 @@ Update it **in the same commit** as the change whenever you touch:
 You do not need to touch it for internal refactors, test changes, or anything invisible
 from outside the repo.
 
+`scripts/doc-paths.test.mjs`, in every run, fails when a living doc names a
+repository file that isn't there, so renaming or deleting a file means fixing
+the docs that name it in the same commit. A file that only exists at an older
+commit or on another branch is named in git's own notation,
+`218cc2b:scripts/desktop-check.py`.
+
 Two failure modes to watch for. First, a build step that "everyone knows" — the dev-box
 quirks in `CLAUDE.md` exist because they were not written down the first time. Second,
 the README promising something the code no longer does; that is worse than saying

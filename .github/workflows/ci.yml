@@ -403,6 +403,9 @@ jobs:
       - name: the AppImage's downloads are tried again through a slow server
         # One slow moment at ffmpeg.org failed a package build (#753).
         run: bash scripts/appimage-fetch-test.sh
+      - name: every file the living docs name exists
+        # A renamed or deleted file leaves every doc naming it stale (#770).
+        run: node --test scripts/doc-paths.test.mjs
       - name: the packaged-app checks start the app without the caller's WebKit, media and graphics settings
         # A workaround in the shell could pass for the fix it stands in for (#757, #765).
         run: node --test scripts/linux-next-env.test.mjs

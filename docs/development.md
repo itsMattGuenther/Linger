@@ -92,8 +92,8 @@ Obsolete PR runs are cancelled. Browser failures retain screenshots and traces
 for seven days.
 
 There is no automated signed-in desktop check yet. The three-person
-walk-through that drove the previous client (`scripts/desktop-check.py`) was
-retired with it (#306); a Buddy list version is T-1820. Until then, the
+walk-through that drove the previous client was retired with it (#306); it's
+still at `218cc2b:scripts/desktop-check.py`, and a Buddy list version is T-1820. Until then, the
 packaged checks below prove the app starts and plays sound, and the rest is
 tried by hand in the real app.
 

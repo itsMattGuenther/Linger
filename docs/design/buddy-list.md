@@ -134,9 +134,10 @@ of the screen, or fill the screen with rooms side by side.
 
 ## The prototype
 
-The clickable prototype (plain HTML and JavaScript, no server) lives on the
-`design/buddy-list` branch under `client/prototypes/buddy-list/`, with its
-switches (`?tabs`, `?servers`, `?still`) described there. The real client
+The clickable prototype (plain HTML and JavaScript, no server) was built on
+the `design/buddy-list` branch, since deleted. Its last version is at
+`7cf4e9b:client/prototypes/buddy-list/`, in git's notation for a path at a
+commit, with its switches (`?tabs`, `?servers`, `?still`) described there. The real client
 replaced it on `main`; the screenshots on this page are from it.
 
 ## The look

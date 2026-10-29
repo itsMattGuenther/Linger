@@ -76,6 +76,7 @@ version check, and the tests of these scripts themselves
 `scripts/package-deps.test.mjs`, `scripts/playwright-image.test.mjs`,
 `scripts/issue-label.test.mjs`, `scripts/action-pins.test.mjs`,
 `scripts/workflow-downloads.test.mjs`, `scripts/linux-next-env.test.mjs`,
+`scripts/doc-paths.test.mjs`,
 `scripts/startup-time.test.mjs`,
 `python3 scripts/linux-audio-check.test.py`,
 `scripts/android-signing-test.sh`, `scripts/tidy-branches-test.sh`,

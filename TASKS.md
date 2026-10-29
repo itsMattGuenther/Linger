@@ -269,7 +269,7 @@ sounds will extend.
 M10 adds the whole of search (see [m10.md](docs/tasks/m10.md)): the `message_fts`
 index kept by triggers in `0004_search.sql` (**nothing in Rust writes to it**),
 `GET /search` over `repo::search` with the query rebuilt rather than forwarded,
-and `client/src/search/` — the rail destination, `Ctrl`/`Cmd`+`K`, and landing on
+and the previous client's `218cc2b:client/src/search/` (gone with it, #306) — the rail destination, `Ctrl`/`Cmd`+`K`, and landing on
 a hit. Two pieces of it belong to the stream rather than to search and are worth
 knowing before touching either: **`around=` on `GET /rooms/:id/messages`**
 (PROTOCOL §4), which fetches a window centred on one message, and
@@ -538,8 +538,8 @@ Rules for this milestone:
   the ones with nobody in them and nothing new fold under "More rooms", in the
   host's order, with no number.
 - ⬜ **T-1820 · A desktop check for the Buddy list** — the three-person
-  walk-through `scripts/desktop-check.py` drove the previous client's screens
-  and was retired with it (#306); read it at commit `218cc2b` for a start.
+  walk-through that drove the previous client's screens was retired with it
+  (#306); for a start, read it with `git show 218cc2b:scripts/desktop-check.py`.
   The new one runs isolated Linux clients against a throwaway server, each
   with its own virtual display (Xvfb), private D-Bus session and empty
   profile, driven through `tauri-driver` and the native `WebKitWebDriver`.

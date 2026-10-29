@@ -12,8 +12,8 @@ Sources: SPEC §3–§5, PROTOCOL, ARCHITECTURE, TASKS and `docs/tasks/`, the us
 and host guides, and the old client's code in `client/src/**` and
 `client/src-tauri/src/**` (deleted after 0.4.3, #306; read it at commit
 `218cc2b`). The design is [`buddy-list.md`](buddy-list.md) plus
-the prototype (`client/prototypes/buddy-list/` on the `design/buddy-list`
-branch). The architecture and test
+the prototype (`7cf4e9b:client/prototypes/buddy-list/`; the branch it was
+built on is gone). The architecture and test
 layers are in [`architecture.md`](architecture.md), and the lessons every item
 must respect are in [`lessons.md`](lessons.md).
 

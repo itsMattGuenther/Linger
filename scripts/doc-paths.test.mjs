@@ -1,0 +1,150 @@
+// Every file the living docs name exists (#770). A file renamed or deleted
+// leaves every doc that names it pointing at nothing, and a contributor
+// following them loses an afternoon (AGENTS.md, "The README"). #767 nearly
+// merged a rule naming a test that only another pull request added.
+//
+// A name is a repository path in inline code, a fenced block or a link:
+// one that starts with a top-level directory (`scripts/check.sh`,
+// `client/src/lib/`), or a link relative to the doc it's in. A command's
+// `cd client &&` puts what follows under `client/`, and a span that is one
+// path may hold spaces (`assets/logo/Linger Pixel Porch Icon Set FINAL.png`).
+// Globs and placeholders (`*.spec.ts`, `<name>`, `$VAR`, `…`) aren't names,
+// and nor is what a build makes (`target/`, `dist/`, `node_modules/`). A file
+// that only exists at an older commit or on another branch is named in git's
+// own notation, `218cc2b:scripts/desktop-check.py`, and isn't checked. Left out: the
+// records of the past (`docs/tasks/`, `docs/decisions.md`,
+// `docs/review-catches.md`, `docs/releases/`), which name files that existed
+// then, on purpose.
+import assert from "node:assert/strict";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, normalize, relative } from "node:path";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
+
+const ROOT = fileURLToPath(new URL("../", import.meta.url));
+
+/** The top-level directories a path in the docs can start with. */
+const TOP = readdirSync(ROOT).filter((name) => !name.startsWith(".") || name === ".github" || name === ".cargo").filter((name) => {
+  try {
+    return statSync(join(ROOT, name)).isDirectory() && !["node_modules", "target"].includes(name);
+  } catch {
+    return false;
+  }
+});
+
+/** What a build or a run makes, never in the repository. */
+const MADE = /(?:^|\/)(?:target|dist|node_modules|test-results|playwright-report|gen)\//;
+
+/**
+ * The repository paths a doc names, each with its line: from inline code, fenced
+ * blocks and links. `from` is the doc's own path, for its relative links;
+ * `exists` says whether a span with spaces is one file's name.
+ */
+export function namedPaths(text, from = "README.md", top = TOP, exists = (path) => existsSync(join(ROOT, path))) {
+  const names = [];
+  const lines = text.split("\n");
+  let fenced = false;
+  const clean = (raw) => raw.replace(/^[("'[]+/, "").replace(/[)"'\],;:.]+$/, "").replace(/:\d+(?:-\d+)?$/, "").replace(/#.*$/, "");
+  for (const [at, line] of lines.entries()) {
+    if (/^\s*(```|~~~)/.test(line)) {
+      fenced = !fenced;
+      continue;
+    }
+    // A fenced line is a command run from the root, its comment left off.
+    const pieces = fenced ? [line.replace(/(^|\s)#.*$/, "")] : [...line.matchAll(/`([^`]+)`/g)].map((match) => match[1] ?? "");
+    for (const piece of pieces) {
+      // Where what follows runs from, after a `cd` in the same command: "" for
+      // the root, null once a `cd` goes somewhere this can't follow.
+      let base = "";
+      const add = (token) => {
+        if (!token.includes("/") || /[*?{}<>$…~]|\.\.\./.test(token) || MADE.test(token)) return;
+        if (!top.includes(token.split("/")[0] ?? "") || base === null) return;
+        names.push({ line: at + 1, path: base === "" ? token : normalize(join(base, token)) });
+      };
+      // A span that is one file's name, spaces and all.
+      const whole = clean(piece.trim());
+      if (!fenced && /\s/.test(whole) && top.includes(whole.split("/")[0] ?? "") && exists(whole)) {
+        add(whole);
+        continue;
+      }
+      const tokens = piece.split(/[\s=]+/);
+      for (const [index, raw] of tokens.entries()) {
+        if (raw === "cd") {
+          const to = tokens[index + 1] ?? "";
+          base = /^[\w.][\w./-]*$/.test(to) && (top.includes(to.split("/")[0] ?? "") || to.startsWith("..")) ? normalize(join(base ?? "", to)) : null;
+          if (base === ".") base = "";
+          continue;
+        }
+        if (tokens[index - 1] !== "cd") add(clean(raw));
+      }
+    }
+    if (fenced) continue;
+    for (const match of line.matchAll(/\]\(([^)\s]+)\)/g)) {
+      const target = (match[1] ?? "").replace(/#.*$/, "");
+      if (target === "" || /^[a-z][a-z0-9+.-]*:/i.test(target) || /[*<>$]/.test(target)) continue;
+      const path = normalize(join(dirname(from), target));
+      if (!path.startsWith("..")) names.push({ line: at + 1, path });
+    }
+  }
+  return names;
+}
+
+/** The living docs: what people and agents read to work on Linger today. */
+function livingDocs() {
+  const docs = ["README.md", "AGENTS.md", "CLAUDE.md", "GEMINI.md", "QWEN.md", "CONTRIBUTING.md", "SPEC.md", "ARCHITECTURE.md", "PROTOCOL.md", "TASKS.md"];
+  const past = ["docs/decisions.md", "docs/review-catches.md"];
+  const walk = (dir) =>
+    readdirSync(join(ROOT, dir), { withFileTypes: true }).flatMap((entry) => {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) return ["docs/tasks", "docs/releases"].includes(path) ? [] : walk(path);
+      return entry.name.endsWith(".md") && !past.includes(path) ? [path] : [];
+    });
+  return [...docs.filter((doc) => existsSync(join(ROOT, doc))), ...walk("docs"), ...walk("agents")];
+}
+
+test("names are found in code, fenced blocks and links; globs, placeholders and what a build makes are not names", () => {
+  const top = ["scripts", "client", "docs", ".github"];
+  const text = [
+    "Run `scripts/check.sh --all`, then `cd client && pnpm check`.",
+    "See [the guide](development.md#build) and [CI](../.github/workflows/ci.yml).",
+    "Tests live in `client/tests/browser/*.spec.ts` and `client/src/lib/rows.ts:41`.",
+    "Not these: `client/src-tauri/target/debug/linger-client`, `scripts/<name>.sh`, `$ROOT/scripts/x.sh`, https://example.com/scripts/x.",
+    "```",
+    "node scripts/linux-next-check.mjs PROGRAM --output DIR",
+    "cd client && node scripts/emoji-data.mjs",
+    "scripts/check.sh   # see docs/testing-strategy.md",
+    "```",
+    "The artwork is `docs/Linger Pixel Porch.png`, and the old walk-through is at `218cc2b:scripts/desktop-check.py`.",
+    "Then `scripts/android-signing.sh verify-bundle`.",
+  ].join("\n");
+  const exists = (path) => path === "docs/Linger Pixel Porch.png";
+  assert.deepEqual(namedPaths(text, "docs/x.md", top, exists), [
+    { line: 1, path: "scripts/check.sh" },
+    { line: 2, path: "docs/development.md" },
+    { line: 2, path: ".github/workflows/ci.yml" },
+    { line: 3, path: "client/src/lib/rows.ts" },
+    { line: 6, path: "scripts/linux-next-check.mjs" },
+    { line: 7, path: "client/scripts/emoji-data.mjs" },
+    { line: 8, path: "scripts/check.sh" },
+    { line: 10, path: "docs/Linger Pixel Porch.png" },
+    { line: 11, path: "scripts/android-signing.sh" },
+  ]);
+});
+
+test("the living docs are all read", () => {
+  // A reader that finds nothing passes everything; these are known to be there.
+  const docs = livingDocs();
+  for (const doc of ["README.md", "AGENTS.md", "docs/testing-strategy.md", "docs/design/system.md", "agents/skills/linger-contribute/SKILL.md"])
+    assert.ok(docs.includes(doc), `${doc} not read`);
+  assert.ok(!docs.some((doc) => doc.startsWith("docs/tasks/")), "the task archives are records of the past");
+  assert.ok(namedPaths(readFileSync(join(ROOT, "AGENTS.md"), "utf8"), "AGENTS.md").length > 10, "AGENTS.md names files");
+});
+
+test("every file the living docs name exists", () => {
+  const missing = livingDocs().flatMap((doc) =>
+    namedPaths(readFileSync(join(ROOT, doc), "utf8"), doc)
+      .filter(({ path }) => !existsSync(join(ROOT, path)))
+      .map(({ line, path }) => `${doc}:${line}: ${relative(".", path)}`),
+  );
+  assert.deepEqual(missing, []);
+});
