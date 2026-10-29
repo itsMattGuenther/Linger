@@ -26,6 +26,18 @@ default.
 
 ## How to run a task
 
+**Next release — what its notes owe so far.** Everybody in voice hears a screen
+share start and stop, Watch stays lit, the voice bar offers it, and a line in
+the chat says who's sharing (#746); hosts: that line needs the server updated
+(migration 0026). The voice strip shows as many people as fit (#745). The
+iPhone app needs iOS 15 or later, which every iPhone that ran it before has
+(#743). **Thanks** (`docs/releasing.md`): @Gleasonmt for the iPhone app's iOS 15
+minimum (#749), and @eGGnogSC (Kyle) for messages that show the moment they're
+sent (#133) and the sidebar that no longer scrolls sideways (#84). Kyle's
+shipped back in September, before the notes thanked contributors, so he's
+thanked here once; from now on everybody is thanked in the release their work
+ships in.
+
 **0.5.3 release — prepared 2026-10-27, screen sharing fixed on Linux and with
 sound.** Watching works in the Linux app with NVIDIA's or VA-API's hardware
 decoders installed (#730), and a computer drawing without the graphics card
