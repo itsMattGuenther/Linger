@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Tests for `scripts/appimage-fetch.sh`: a download that fails once, by a reset
-# connection, a 503 or a server that never answers, is tried again and
-# arrives; a file that isn't the one pinned is refused and nothing of it is
+# connection, one cut off half way, a 503 or a server that never answers, is
+# tried again and arrives whole; a file that isn't the one pinned is refused and nothing of it is
 # kept; a kept copy is used without asking, and a damaged one is fetched
 # again (#753). Also that the AppImage scripts download only through it.
 #
 # A stand-in server on this machine plays ffmpeg.org: /reset/ drops the first
-# connection, /busy/ answers the first request 503, /hang/ never answers the
-# first, and each sends the file after; /wrong/ sends another file; /file/
+# connection, /cut/ drops it half way through the file, /busy/ answers the
+# first request 503, /hang/ never answers the first, and each sends the file
+# after; /wrong/ sends another file; /file/
 # always sends it. It counts the requests for each. No network needed.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -29,6 +30,11 @@ const server = createServer((req, res) => {
   asked[kind] = (asked[kind] ?? 0) + 1;
   const first = asked[kind] === 1;
   if (kind === "reset" && first) return req.socket.destroy();
+  // Half the file, then the connection drops: a retry must not keep these bytes.
+  if (kind === "cut" && first) {
+    res.writeHead(200, { "content-length": file.length });
+    return res.write(file.subarray(0, file.length / 2), () => setTimeout(() => req.socket.destroy(), 50));
+  }
   if (kind === "busy" && first) return res.writeHead(503).end();
   if (kind === "hang" && first) return;
   send(res, kind === "wrong" ? other : file);
@@ -55,7 +61,7 @@ refused() { ! fetch "$1"; }
 fetches_nothing_itself() { ! grep -nE "^[^#]*\b(curl|wget)\b" "$@"; }
 fresh() { rm -rf "$work/kept" "$work/out"; }
 
-for kind in reset busy hang; do
+for kind in reset cut busy hang; do
   fresh
   check "a $kind on the first try is tried again, and the file arrives" fetch "$kind"
   check "  ... and it's the file pinned" arrived
