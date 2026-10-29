@@ -3,8 +3,12 @@
 // (#765). #757's review found #756's own workaround would have passed for
 // the fix; this is every such setting, not a list of the known ones.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { cleanEnvironment, SETTING_FAMILIES } from "./linux-next-env.mjs";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -50,10 +54,54 @@ test("a shell with none of them has nothing to name", () => {
   assert.deepEqual(cleanEnvironment({ PATH: "/usr/bin", HOME: "/home/someone" }).dropped, []);
 });
 
-test("the packaged-app check starts the app from it, not from the shell", () => {
-  const check = read("scripts/linux-next-check.mjs");
-  assert.match(check, /const \{ env, dropped \} = cleanEnvironment\(process\.env\);/);
-  assert.doesNotMatch(check, /\.\.\.process\.env/);
+// The check run for real, with stand-ins for what it starts the app with:
+// `xvfb-run` writes down the environment it was given and exits, so the check
+// stops there. That environment is what the app would have had (#768's
+// review: a test of the source alone passed a launch that ignored it).
+test("the packaged-app check starts the app with that environment, and nothing from the shell", () => {
+  const work = mkdtempSync(join(tmpdir(), "linger-next-env-"));
+  try {
+    const bin = join(work, "bin");
+    mkdirSync(bin);
+    const stand = (name, body) => {
+      writeFileSync(join(bin, name), `#!/bin/sh\n${body}\n`);
+      chmodSync(join(bin, name), 0o755);
+    };
+    stand("pkg-config", "echo -I/nowhere");
+    stand("cc", 'while [ "$#" -gt 0 ]; do if [ "$1" = -o ]; then : > "$2"; fi; shift; done');
+    stand("xvfb-run", 'env > "$CAPTURE_ENVIRONMENT_TO"; exit 0');
+    const capture = join(work, "env.txt");
+    const shell = {
+      PATH: `${bin}:${process.env.PATH}`,
+      HOME: work,
+      CAPTURE_ENVIRONMENT_TO: capture,
+      WEBKIT_GST_DISABLE_GL_SINK: "0",
+      __EGL_VENDOR_LIBRARY_FILENAMES: "/usr/share/glvnd/egl_vendor.d/50_mesa.json",
+      LIBGL_ALWAYS_SOFTWARE: "1",
+      GDK_SCALE: "2",
+      GST_PLUGIN_FEATURE_RANK: "nvh264dec:MAX",
+    };
+    const run = spawnSync(process.execPath, [fileURLToPath(new URL("linux-next-check.mjs", import.meta.url)), "/bin/true", "--output", join(work, "out")], {
+      env: shell,
+      encoding: "utf8",
+      timeout: 30_000,
+    });
+    assert.match(run.stdout, /left out of the app's environment, from this shell: GDK_SCALE, GST_PLUGIN_FEATURE_RANK, LIBGL_ALWAYS_SOFTWARE, WEBKIT_GST_DISABLE_GL_SINK, __EGL_VENDOR_LIBRARY_FILENAMES/);
+    const given = Object.fromEntries(
+      readFileSync(capture, "utf8")
+        .split("\n")
+        .filter((line) => line.includes("="))
+        .map((line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]),
+    );
+    for (const key of ["WEBKIT_GST_DISABLE_GL_SINK", "__EGL_VENDOR_LIBRARY_FILENAMES", "LIBGL_ALWAYS_SOFTWARE", "GDK_SCALE", "GST_PLUGIN_FEATURE_RANK"])
+      assert.equal(given[key], undefined, `${key} reached the app`);
+    // What the check means to set, it set.
+    assert.equal(given.GDK_BACKEND, "x11");
+    assert.equal(given.GTK3_MODULES, join(work, "out", "probe.so"));
+    assert.equal(given.WEBKIT_DISABLE_DMABUF_RENDERER, "1");
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
 });
 
 test("the audio check leaves out the same families", () => {
