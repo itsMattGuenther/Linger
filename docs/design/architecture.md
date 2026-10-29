@@ -49,6 +49,18 @@ gaps, read positions without counts, and DM filtering. It is covered by about
 1,350 lines of tests. Rewriting it would re-learn all of that. The new client
 changes how things look and how windows work, not what a message is.
 
+**State kept beside a room's history goes in one place.** The store never
+holds a whole conversation: pages load above and below, history is let go of
+behind you (#173), other rooms are trimmed when you open one, and a search hit
+replaces the window. About eight places change a room's messages. State kept
+beside them, one entry per message, has to follow every one of those changes,
+and when each place had to remember it by hand, two didn't (#759). So every
+write of a room's history goes through `inStep` in `src/lib/gateway.ts`, which
+drops an entry when its message is let go of and keeps it while its message is
+held, whichever change it was (#766). Today that is `sentAs` (#750). A new
+piece of such state is added there, and to the test that walks every history
+change ("keeps each send's stand-in id in step...", `gateway.test.ts`).
+
 With the old UI deleted (#306), `src/next/` could move up to `src/` in one
 mechanical commit. It hasn't: every path in these docs and the tests would
 move with it, for no change anybody sees.

@@ -1020,6 +1020,72 @@ describe("letting go of history", () => {
     expect(sentAs()).toEqual({ [id(10_001)]: expect.stringMatching(/^pending:/) });
   });
 
+  // Every way the app changes a room's history, one after another, with the
+  // same two things true after each: no entry for a message that isn't held,
+  // and an entry for every send from here held ever since it was sent. Each
+  // way once had to remember `sentAs` by hand, and two didn't (#759, #766).
+  it("keeps each send's stand-in id in step with its message through every change to the history (#766)", async () => {
+    const { api, room } = await sendingRoom();
+    let frame = 1;
+    const kept = new Set<string>();
+    const check = (after: string) => {
+      const holds = new Set(held());
+      for (const sent of [...kept]) if (!holds.has(sent)) kept.delete(sent);
+      const entries = Object.keys(sentAs() ?? {});
+      expect(entries.filter((entry) => !holds.has(entry)), `${after}: entries for messages let go of`).toEqual([]);
+      expect([...kept].filter((sent) => !entries.includes(sent)), `${after}: sends still held without their entry`).toEqual([]);
+    };
+    const send = async (body: string) => {
+      await sendMessage(api, "r-garage", body);
+      kept.add(held().at(-1) ?? "");
+      check(`sending "${body}"`);
+    };
+    const live = (count: number) => {
+      for (let n = 0; n < count; n += 1) arrive(HOME, { s: ++frame, op: "message.create", d: room.grow() } as ServerFrame);
+      check(`${count} live messages`);
+    };
+    const newest = () => Number(held().at(-1)?.slice(1));
+
+    await send("one");
+    await send("two");
+    live(3);
+    const [one, two] = [...kept];
+    arrive(HOME, { s: ++frame, op: "message.update", d: { ...message(Number(one?.slice(1))), body: "one, edited", edited_at: 1 } } as ServerFrame);
+    check("an edit");
+    arrive(HOME, { s: ++frame, op: "reaction.update", d: { message_id: one ?? "", key: "👍", count: 1, user_ids: ["u-eli"] } } as ServerFrame);
+    check("a reaction");
+    arrive(HOME, { s: ++frame, op: "message.delete", d: { id: two ?? "", room_id: "r-garage" } } as ServerFrame);
+    check("a delete");
+
+    await scrollBack(api, 8);
+    check("older pages");
+    // The newer end goes down to the newest send: the room is behind, the send still held.
+    const sendAt = Number(two?.slice(1));
+    trimHistory(HOME, "r-garage", id(sendAt - 311), id(sendAt - 300));
+    expect(held().at(-1)).toBe(two);
+    check("the newer end let go of, down to a send");
+    await loadNewer(api, "r-garage");
+    check("read forwards from there");
+    trimHistory(HOME, "r-garage", id(sendAt - 700), id(sendAt - 690));
+    check("the newer end let go of, sends and all");
+    for (let read = 0; read < 20 && serverState(HOME).streams["r-garage"]?.atEnd !== true; read += 1) await loadNewer(api, "r-garage");
+    check("read forwards to the newest");
+
+    await send("three");
+    live(120);
+    releaseOtherRooms(HOME, "r-porch");
+    check("another room opened, the send out of the newest page");
+    await send("four");
+    releaseOtherRooms(HOME, "r-porch");
+    check("another room opened, the send in the newest page");
+
+    await openAround(api, "r-garage", id(newest() - 400));
+    check("a window around an older message");
+    await leaveWindow(api, "r-garage");
+    check("back to the newest");
+    await send("five");
+  });
+
   it("reads back to the newest without a gap after letting the newer end go", async () => {
     const room = growingRoom(10_000);
     const api = fakeApi(HOME, room.get);

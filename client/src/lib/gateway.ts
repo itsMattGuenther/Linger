@@ -640,27 +640,6 @@ function matchesPending(pending: Message, confirmed: Message): boolean {
 }
 
 /** Fold a fetched page (the server sends newest-first) into what we hold. */
-/**
- * The stand-in ids (`sentAs`, #750) of the sends still in `messages`. The
- * rest went with the history let go of, and so did their rows; kept, the
- * map would grow with every send for as long as the connection lasts.
- */
-function sentAsHeld(
-  sentAs: Record<MessageId, MessageId> | undefined,
-  messages: readonly Message[],
-): Record<MessageId, MessageId> | undefined {
-  if (sentAs === undefined) return undefined;
-  const held: Record<MessageId, MessageId> = {};
-  let any = false;
-  for (const message of messages) {
-    const standIn = sentAs[message.id];
-    if (standIn === undefined) continue;
-    held[message.id] = standIn;
-    any = true;
-  }
-  return any ? held : undefined;
-}
-
 function mergePage(list: Message[], page: Message[]): Message[] {
   if (page.length === 0) return list;
   const older = [...page].sort(byId);
@@ -692,7 +671,34 @@ function withStream(
   if (!stream) return current;
   const next = change(stream);
   if (next === stream) return current;
-  return { ...current, streams: { ...current.streams, [roomId]: next } };
+  return { ...current, streams: { ...current.streams, [roomId]: inStep(stream, next) } };
+}
+
+/**
+ * A room's history as it's kept (#766): whatever changed it, the state kept
+ * beside its messages stays in step with them. Every write of a room's
+ * history goes through here (`putStream`, `withStream`, `releaseOtherRooms`),
+ * so such state is kept in step in one place, not by each of the places that
+ * change the history: two of them once forgot (#759).
+ *
+ * `sentAs` (#750), the stand-in id each send from here had: an entry goes
+ * when its message is let go of, so the map doesn't grow for as long as the
+ * connection lasts, and stays while its message is held, even through a
+ * change that built the room afresh without it (a page read forwards).
+ */
+function inStep(previous: RoomStream | undefined, next: RoomStream): RoomStream {
+  const sentAs = next.sentAs ?? previous?.sentAs;
+  if (sentAs === undefined) return next;
+  const kept: Record<MessageId, MessageId> = {};
+  let count = 0;
+  for (const message of next.messages) {
+    const standIn = sentAs[message.id];
+    if (standIn === undefined) continue;
+    kept[message.id] = standIn;
+    count += 1;
+  }
+  if (count === Object.keys(sentAs).length) return sentAs === next.sentAs ? next : { ...next, sentAs };
+  return { ...next, sentAs: count === 0 ? undefined : kept };
 }
 
 /**
@@ -1528,7 +1534,7 @@ export async function send(server: string, frame: ClientFrame): Promise<boolean>
 /** Put one room's stream into the snapshot, creating it if it is new. */
 function putStream(server: string, roomId: RoomId, stream: RoomStream): void {
   const current = stateOf(server);
-  publish(server, { ...current, streams: { ...current.streams, [roomId]: stream } });
+  publish(server, { ...current, streams: { ...current.streams, [roomId]: inStep(current.streams[roomId], stream) } });
 }
 
 /** Numbers each opening of a room (`RoomStream.opened`). */
@@ -1669,8 +1675,6 @@ async function fetchWindow(
     loading: false,
     loaded: true,
     pending: stream.pending,
-    // A send still held keeps its stand-in's rows through a page (#750).
-    sentAs: sentAsHeld(stream.sentAs, messages),
     opened,
   });
   return pageEnds ? "end" : "window";
@@ -1818,7 +1822,6 @@ export function trimHistory(
     messages,
     atStart: start === 0 && stream.atStart,
     atEnd: end === stream.messages.length && stream.atEnd,
-    sentAs: sentAsHeld(stream.sentAs, messages),
   });
 }
 
@@ -1843,7 +1846,7 @@ export function releaseOtherRooms(server: string, openRoomId: RoomId): void {
     } else if (stream.messages.length > PAGE_SIZE) {
       changed = true;
       const messages = stream.messages.slice(-PAGE_SIZE);
-      streams[roomId] = { ...stream, messages, atStart: false, sentAs: sentAsHeld(stream.sentAs, messages) };
+      streams[roomId] = inStep(stream, { ...stream, messages, atStart: false });
     } else {
       streams[roomId] = stream;
     }
