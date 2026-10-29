@@ -399,6 +399,9 @@ jobs:
       - name: a package fetch that runs out of time tries the next mirror
         # A mirror can turn slow after it was timed (#717).
         run: bash scripts/apt-install-test.sh
+      - name: the AppImage's downloads are tried again through a slow server
+        # One slow moment at ffmpeg.org failed a package build (#753).
+        run: bash scripts/appimage-fetch-test.sh
       - name: the Linux packages ask for the media plugins shared videos need
         # Without the AAC and H.264 decoders a shared video plays silent, or
         # not at all (#358).

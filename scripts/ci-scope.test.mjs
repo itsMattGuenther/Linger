@@ -20,7 +20,7 @@ test("browser assertions alone need no package rebuild", () => {
 });
 test("the packaged audio and video checks' own files rebuild only the packages", () => {
   for (const path of ["scripts/linux-audio-check.py", "scripts/video-runtime-probe.js", "scripts/fixtures/tone-h264-aac.mp4",
-    "scripts/appimage-ffmpeg.sh", "scripts/appimage-ffmpeg-check.sh"])
+    "scripts/appimage-ffmpeg.sh", "scripts/appimage-ffmpeg-check.sh", "scripts/appimage-fetch.sh", "scripts/appimage-fetch-test.sh"])
     assert.deepEqual(active([path]), ["packages"], path);
 });
 test("the startup measurement is run by hand, and only its own tests run for it", () => {

@@ -30,14 +30,15 @@ COMMIT=07333c6
 SHA256=36a2d7e274d12e1050d0e9ecfe11d339ed54720b2bec464c286d53f8b07f5c62
 URL="https://github.com/tauri-apps/binary-releases/releases/download/linuxdeploy-$COMMIT/linuxdeploy-x86_64.AppImage"
 
+here="$(cd "$(dirname "$0")" && pwd)"
 tools="${XDG_CACHE_HOME:-$HOME/.cache}/tauri"
 mkdir -p "$tools"
 target="$tools/linuxdeploy-x86_64.AppImage"
 download="$(mktemp "$tools/linuxdeploy.XXXXXX")"
 trap 'rm -f "$download"' EXIT
 
-curl -sSfL --retry 3 -o "$download" "$URL"
-echo "$SHA256  $download" | sha256sum --check --quiet
+# Retried through a slow GitHub, and kept for the next build (#753).
+"$here/appimage-fetch.sh" "$URL" "$SHA256" "$download"
 chmod +x "$download"
 mv "$download" "$target"
 echo "linuxdeploy $COMMIT at $target"

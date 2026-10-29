@@ -21,20 +21,21 @@
 # Usage: scripts/appimage-ffmpeg.sh PREFIX
 #   Builds into PREFIX/lib. Put PREFIX/lib on LD_LIBRARY_PATH for `tauri build`,
 #   so the AppImage bundler takes these libraries instead of the system's.
-# Needs a C compiler, make, nasm and curl.
+# Needs a C compiler, make, nasm, curl and sha256sum.
 set -euo pipefail
 
 VERSION=4.4.2
 SHA256=af419a7f88adbc56c758ab19b4c708afbcae15ef09606b82b855291f6a6faa93
 
+here="$(cd "$(dirname "$0")" && pwd)"
 prefix="${1:?usage: scripts/appimage-ffmpeg.sh PREFIX}"
 mkdir -p "$prefix"
 prefix="$(cd "$prefix" && pwd)"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
-curl -fsSL "https://ffmpeg.org/releases/ffmpeg-$VERSION.tar.xz" -o "$work/ffmpeg.tar.xz"
-echo "$SHA256  $work/ffmpeg.tar.xz" | sha256sum -c --quiet
+# Retried through a slow ffmpeg.org, and kept for the next build (#753).
+"$here/appimage-fetch.sh" "https://ffmpeg.org/releases/ffmpeg-$VERSION.tar.xz" "$SHA256" "$work/ffmpeg.tar.xz"
 tar -xJf "$work/ffmpeg.tar.xz" -C "$work"
 cd "$work/ffmpeg-$VERSION"
 

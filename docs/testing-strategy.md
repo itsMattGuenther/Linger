@@ -78,7 +78,8 @@ version check, and the tests of these scripts themselves
 `scripts/startup-time.test.mjs`,
 `python3 scripts/linux-audio-check.test.py`,
 `scripts/android-signing-test.sh`, `scripts/tidy-branches-test.sh`,
-`scripts/apt-mirrors-test.sh`, and `scripts/apt-install-test.sh`).
+`scripts/apt-mirrors-test.sh`, `scripts/apt-install-test.sh`, and
+`scripts/appimage-fetch-test.sh`).
 
 **One required check.** GitHub requires only `all green` before a merge. It
 waits for every other `ci.yml` job and passes when each passed or was skipped
@@ -309,6 +310,16 @@ rules that came out of them:
     install half way.
   A healthy first mirror and a kept copy change nothing; the run's log says
   which mirror was used and whether the copy was.
+- **The AppImage's two downloads**, FFmpeg's source from ffmpeg.org and
+  linuxdeploy from GitHub, go through `scripts/appimage-fetch.sh`. One slow
+  moment at ffmpeg.org failed a package build on 2026-10-29: curl waited
+  133 s to connect and nothing tried again (#753). Each try now has 30 s to
+  connect and five minutes to finish, and a failed one is tried again five
+  times, the log saying so. Both files are pinned by checksum and kept in
+  GitHub's cache, so most runs ask neither server, and a kept copy is checked
+  against its checksum before it's used. `scripts/appimage-fetch-test.sh`
+  has a stand-in server drop, turn away (503) or never answer the first
+  request, and checks the file still arrives.
 - The page server runs on port 1421. `LINGER_TEST_PORT=1431` (any free port)
   moves it, so a second copy of the repository, such as a git worktree, can
   run its browser tests while the first runs its own.

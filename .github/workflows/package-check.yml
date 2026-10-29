@@ -81,6 +81,15 @@ jobs:
             librsvg2-dev libasound2-dev build-essential curl wget file libxdo-dev patchelf libarchive-tools nasm
             gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-pulseaudio gstreamer1.0-libav
             libunwind-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev xvfb xauth dbus-x11 pulseaudio pulseaudio-utils rpm
+      - name: Downloads for the AppImage, kept between runs
+        # FFmpeg's source and linuxdeploy, so most runs don't ask ffmpeg.org
+        # or GitHub for them; scripts/appimage-fetch.sh checks a kept copy
+        # against its pinned checksum before using it (#753).
+        if: runner.os == 'Linux'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/linger-downloads
+          key: appimage-downloads-${{ hashFiles('scripts/appimage-ffmpeg.sh', 'scripts/appimage-linuxdeploy.sh') }}
       - name: FFmpeg for the AppImage
         # Only the decoders a shared video needs, about 4 MB, rather than the
         # 45 MB Ubuntu's own FFmpeg would bring (#358).

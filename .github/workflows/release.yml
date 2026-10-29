@@ -164,6 +164,17 @@ jobs:
         with:
           workspaces: client/src-tauri
 
+      - name: Downloads for the AppImage, kept between runs
+        # FFmpeg's source and linuxdeploy, usually the package check's copy
+        # on main, so a release needn't ask ffmpeg.org or GitHub for them;
+        # scripts/appimage-fetch.sh checks a kept copy against its pinned
+        # checksum before using it (#753).
+        if: matrix.os == 'ubuntu-22.04'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/linger-downloads
+          key: appimage-downloads-${{ hashFiles('scripts/appimage-ffmpeg.sh', 'scripts/appimage-linuxdeploy.sh') }}
+
       - name: FFmpeg for the AppImage
         # Only the decoders a shared video needs, about 4 MB, rather than the
         # 45 MB Ubuntu's own FFmpeg would bring (#358).
