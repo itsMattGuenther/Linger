@@ -76,22 +76,30 @@ if ((gpu)); then
   # NVIDIA's driver draws with its own EGL, which must match the kernel's
   # driver exactly, so it comes from this machine, not from Arch's packages:
   # the EGL vendor and its core, the GBM backend and allocator it draws
-  # buffers with, and the EGL platform that joins them (egl-gbm). Each at
-  # the name the loader asks for. Without them the third run is skipped and
-  # says so.
-  if [[ -n $nvidia && -e /usr/lib/libEGL_nvidia.so.0 && -e /usr/lib/gbm/nvidia-drm_gbm.so && -e /usr/lib/libnvidia-egl-gbm.so.1 ]]; then
+  # buffers with, and the EGL platform that joins them (egl-gbm). Each from
+  # wherever this machine keeps them (Arch's /usr/lib, Fedora's /usr/lib64,
+  # Debian's and Ubuntu's /usr/lib/x86_64-linux-gnu), at the name and place
+  # Arch's loader asks for. Without them the third run is skipped and says
+  # so. A file that isn't there is never mounted: Docker would make an empty
+  # directory in its place.
+  nvlib=""
+  for dir in /usr/lib /usr/lib64 /usr/lib/x86_64-linux-gnu; do
+    if [[ -e $dir/libEGL_nvidia.so.0 ]]; then nvlib=$dir; break; fi
+  done
+  vendor=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
+  platform=/usr/share/egl/egl_external_platform.d/15_nvidia_gbm.json
+  if [[ -n $nvidia && -n $nvlib && -e $nvlib/gbm/nvidia-drm_gbm.so && -e $nvlib/libnvidia-egl-gbm.so.1 && -e $vendor && -e $platform ]]; then
     devices+=(--device "$nvidia")
     [[ -e /dev/nvidia-modeset ]] && devices+=(--device /dev/nvidia-modeset)
     for lib in libEGL_nvidia.so.0 libGLESv2_nvidia.so.2 libnvidia-allocator.so.1 libnvidia-egl-gbm.so.1; do
-      devices+=(-v "$(realpath "/usr/lib/$lib"):/usr/lib/$lib:ro")
+      [[ -e $nvlib/$lib ]] && devices+=(-v "$(realpath "$nvlib/$lib"):/usr/lib/$lib:ro")
     done
     # The driver's own libraries load these by their versioned names.
-    for lib in /usr/lib/libnvidia-{eglcore,glsi,gpucomp,tls,glvkspirv}.so.*.*; do
+    for lib in "$nvlib"/libnvidia-{eglcore,glsi,gpucomp,tls,glvkspirv}.so.*.*; do
       [[ -e $lib ]] && devices+=(-v "$lib:/usr/lib/$(basename "$lib"):ro")
     done
-    devices+=(-v "$(realpath /usr/lib/gbm/nvidia-drm_gbm.so):/usr/lib/gbm/nvidia-drm_gbm.so:ro")
-    devices+=(-v /usr/share/glvnd/egl_vendor.d/10_nvidia.json:/usr/share/glvnd/egl_vendor.d/10_nvidia.json:ro)
-    devices+=(-v /usr/share/egl/egl_external_platform.d/15_nvidia_gbm.json:/usr/share/egl/egl_external_platform.d/15_nvidia_gbm.json:ro)
+    devices+=(-v "$(realpath "$nvlib/gbm/nvidia-drm_gbm.so"):/usr/lib/gbm/nvidia-drm_gbm.so:ro")
+    devices+=(-v "$vendor:$vendor:ro" -v "$platform:$platform:ro")
   elif [[ -n $nvidia ]]; then
     echo "linux-arch-check: NVIDIA's card is here, but not its EGL and GBM libraries, so the page won't draw on it (#756)" >&2
     nvidia=""

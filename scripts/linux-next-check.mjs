@@ -90,7 +90,9 @@ for (const key of ["WEBKIT_DISABLE_DMABUF_RENDERER", "WEBKIT_DISABLE_COMPOSITING
 if (!values["webkit-gpu"]) Object.assign(env, { WEBKIT_DISABLE_DMABUF_RENDERER: "1", WEBKIT_DISABLE_COMPOSITING_MODE: "1" });
 if (values["gdk-gl-disable"]) env.GDK_GL = "disable";
 else delete env.GDK_GL;
-for (const key of ["WEBKIT_WEB_RENDER_DEVICE_FILE", "WEBKIT_DMABUF_RENDERER_DISABLE_GBM", "WEBKIT_DMABUF_RENDERER_FORCE_SHM"]) delete env[key];
+// The app's own startup must supply the GL sink switch (#756), so somebody's
+// workaround in their shell can't pass for it.
+for (const key of ["WEBKIT_WEB_RENDER_DEVICE_FILE", "WEBKIT_DMABUF_RENDERER_DISABLE_GBM", "WEBKIT_DMABUF_RENDERER_FORCE_SHM", "WEBKIT_GST_DISABLE_GL_SINK"]) delete env[key];
 if (values["render-device"] !== undefined) {
   env.WEBKIT_WEB_RENDER_DEVICE_FILE = values["render-device"];
   // Somebody's own setting wins over Linger's choice (linux_startup.rs), so
