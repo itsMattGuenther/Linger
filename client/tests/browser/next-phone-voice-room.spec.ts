@@ -135,3 +135,79 @@ test("leaving says so, lets the microphone go, and stops every voice", async ({ 
   await expect.poll(() => sfuState(page)).toBe("none");
   await expect(strip(page).getByRole("button", { name: "Join" })).toBeVisible();
 });
+
+// #747 on the phone: the strip is the only voice line a conversation has, so
+// its chips open each person's volume. A chip takes a tap a thumb's height,
+// and the volume rises from the bottom, as the phone's menus do.
+test("a chip on the strip takes a tap a thumb's height, and its volume rises from the bottom and is heard (#747)", async ({ page }) => {
+  await inGeneral(page, "&seven");
+  await join(page);
+  const eli = strip(page).getByRole("button", { name: /^Eli's volume/ });
+  const chipBox = await eli.boundingBox();
+  const stripBox = await strip(page).boundingBox();
+  if (!chipBox || !stripBox) throw new Error("no strip");
+  // Above the chip itself, still on the strip: it counts.
+  expect(chipBox.y - stripBox.y).toBeGreaterThan(10);
+  await page.mouse.click(chipBox.x + chipBox.width / 2, stripBox.y + 3);
+  const card = page.getByRole("dialog", { name: "Eli's volume" });
+  await expect(card).toBeVisible();
+  await card.evaluate((node) => Promise.all(node.getAnimations().map((one) => one.finished)));
+  // The whole width, on the bottom edge.
+  const viewport = page.viewportSize();
+  const cardBox = await card.boundingBox();
+  expect(cardBox && viewport && cardBox.x === 0 && Math.round(cardBox.width) === viewport.width).toBe(true);
+  expect(cardBox && viewport && Math.abs(cardBox.y + cardBox.height - viewport.height) <= 1).toBe(true);
+  await expect(card.getByText("Only for you, on this phone.")).toBeVisible();
+  // Heard at once: a phone plays each voice through an element of its own.
+  await card.getByRole("slider").focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect
+    .poll(() => page.evaluate(() => [...document.querySelectorAll<HTMLAudioElement>("audio[data-voice]")].some((audio) => Math.abs(audio.volume - 0.95) < 0.001)))
+    .toBe(true);
+  // A tap on the dimmed conversation closes it.
+  await page.mouse.click(viewport ? viewport.width / 2 : 200, 300);
+  await expect(card).toHaveCount(0);
+  await expect(strip(page).getByRole("button", { name: "Eli's volume, 95%" })).toBeVisible();
+});
+
+test("\"and others\" on the phone rises everyone from the bottom, without raising the keyboard (#747)", async ({ page }) => {
+  await inGeneral(page, "&seven");
+  await join(page);
+  const others = strip(page).getByRole("button", { name: "and others" });
+  const box = await others.boundingBox();
+  const stripBox = await strip(page).boundingBox();
+  if (!box || !stripBox) throw new Error("no strip");
+  // Below the words, still on the strip: it counts.
+  await page.mouse.click(box.x + box.width / 2, stripBox.y + stripBox.height - 4);
+  const everyone = page.getByRole("dialog", { name: "Everyone in voice in #general" });
+  await expect(everyone).toBeVisible();
+  const search = everyone.getByRole("textbox", { name: "Find somebody in voice in #general" });
+  await expect(search).toBeVisible();
+  await expect(search).not.toBeFocused();
+  await everyone.getByRole("list", { name: "In voice in #general" }).getByRole("button", { name: /^Callie's volume/ }).click();
+  await expect(everyone).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Callie's volume" })).toBeVisible();
+});
+
+test("the list's voice bar on the phone: a chip takes a tap a thumb's height, and its volume rises from the bottom (#747)", async ({ page }) => {
+  await inGeneral(page, "&seven");
+  await join(page);
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  const bar = page.getByRole("region", { name: /^In voice in #general/ });
+  const eli = bar.getByRole("button", { name: /^Eli's volume/ });
+  await expect(eli).toBeVisible();
+  const chipBox = await eli.boundingBox();
+  if (!chipBox) throw new Error("no chip");
+  // In the space under the chip, before the next line of chips: it counts.
+  await page.mouse.click(chipBox.x + chipBox.width / 2, chipBox.y + chipBox.height + 8);
+  const card = page.getByRole("dialog", { name: "Eli's volume" });
+  await expect(card).toBeVisible();
+  await card.evaluate((node) => Promise.all(node.getAnimations().map((one) => one.finished)));
+  const viewport = page.viewportSize();
+  const cardBox = await card.boundingBox();
+  expect(cardBox && viewport && cardBox.x === 0 && Math.abs(cardBox.y + cardBox.height - viewport.height) <= 1).toBe(true);
+  // The lines of chips stand apart enough that the taps never meet.
+  const tops = await bar.locator(".nx-voice-seats > li").evaluateAll((items) => [...new Set(items.map((item) => Math.round(item.getBoundingClientRect().top)))]);
+  expect(tops).toHaveLength(2);
+  expect((tops[1] ?? 0) - (tops[0] ?? 0)).toBeGreaterThanOrEqual(44);
+});

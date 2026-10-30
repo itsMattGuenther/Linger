@@ -26,6 +26,7 @@ import {
   setVoiceMuted,
   setVoicePushToTalk,
   setVoiceTalking,
+  setVoiceVolumeOf,
   type SharedLocal,
   setNotifyRule,
   sharedLocalOf,
@@ -191,6 +192,12 @@ export type Intent =
    * default): the call you're in carries on through them at once (#249).
    */
   | { kind: "voice.devices"; input: string | null; output: string | null }
+  /**
+   * How loud somebody in your voice plays for you, 0 to 2, from their chip
+   * on a conversation's voice line (#747). Kept on this computer, never sent
+   * to the server (SPEC §4.14); the list window runs voice, so it plays it.
+   */
+  | { kind: "voice.volume"; server: string; user: string; volume: number }
   /** Pop a tab out into a window of its own. */
   | { kind: "popout"; server: string; roomId: RoomId }
   /** A conversation in its own window goes back beside the list, as a tab. */
@@ -526,6 +533,10 @@ export async function shareAsOwner(
         void voiceChooseDevices({ input: intent.input, output: intent.output }).catch(() => undefined);
         return;
       }
+      case "voice.volume":
+        if (!sessions().has(intent.server) || typeof intent.user !== "string" || typeof intent.volume !== "number" || !Number.isFinite(intent.volume)) return;
+        setVoiceVolumeOf(intent.server, intent.user, intent.volume);
+        return;
       case "voice.join": {
         const api = sessions().get(intent.server);
         if (!api) return;

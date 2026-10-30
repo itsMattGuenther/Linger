@@ -1028,7 +1028,10 @@ keeps your mute/deafen choices; leaving and joining starts afresh.
 **Per-person volume stays on this computer.** Remember each adjusted level
 by server and user, across leaving, restarting and the other person reconnecting.
 Two sessions of the same person share that level. Unadjusted people remain at
-100%. Volume never crosses the wire and deafen never overwrites it.
+100%. Volume never crosses the wire and deafen never overwrites it. A person's
+volume opens from their chip in the voice bar, and from their chip on the
+voice line of the conversation you're in voice in (#747). On any other room's
+line the chips open nothing: there's nobody to set a volume for until you join.
 
 **Leaving is leaving.** Closing the app, losing the network, or joining voice somewhere
 else all end it, and the people you were talking to see you go. You are in voice in at
@@ -1151,7 +1154,9 @@ room that line stands in for the room's own, so the phone never offers to move y
 voice: leave, then join. Sound comes out of the speaker, or a headset when one is
 connected, and there is no push-to-talk: Mute is how a phone goes quiet. Nobody plays
 louder than as sent on a phone (the web engine's player goes no further), so its
-per-person volume tops out at 100%. A locked phone stays in the call (the call bar,
+per-person volume tops out at 100%. There a person's volume, and everyone in a
+big room by name, rise from the bottom of the screen as its menus do, and each
+chip takes a tap a thumb's height (#747). A locked phone stays in the call (the call bar,
 above). Ringing a closed phone into a voice room would need push, so that stays out
 (§4.14).
 

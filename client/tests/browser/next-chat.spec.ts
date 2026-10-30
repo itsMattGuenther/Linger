@@ -836,6 +836,116 @@ test.describe("voice here", () => {
     }
   });
 
+  // #747: in a call, people clicked somebody on the strip to turn them down,
+  // and nothing happened. In the room you're in voice in, a chip opens the
+  // voice bar's volume card, under it; anywhere else the chips open nothing.
+  test("in voice here, a chip opens that person's volume under it, and a change is heard at once (#747)", async ({ page }) => {
+    await open(page, "?voice=mine");
+    const strip = page.getByRole("group", { name: "Voice in this conversation" });
+    const people = strip.getByRole("list", { name: "In voice here" });
+    // Your own chip opens nothing: your volume isn't yours to set.
+    await expect(people.getByRole("button")).toHaveCount(2);
+    await expect(people.getByRole("listitem").filter({ hasText: "you" }).getByRole("button")).toHaveCount(0);
+    const eli = people.getByRole("button", { name: "Eli's volume, 100%" });
+    await expect(eli).toHaveAttribute("aria-expanded", "false");
+    await eli.click();
+    const card = page.getByRole("dialog", { name: "Eli's volume" });
+    await expect(card).toBeVisible();
+    await expect(eli).toHaveAttribute("aria-expanded", "true");
+    // Under the chip: the strip is at the top of the conversation.
+    await card.evaluate((node) => Promise.all(node.getAnimations().map((one) => one.finished)));
+    const [chipBox, cardBox] = [await eli.boundingBox(), await card.boundingBox()];
+    expect(chipBox && cardBox && cardBox.y >= chipBox.y + chipBox.height).toBe(true);
+    expect(chipBox && cardBox && Math.abs(cardBox.x - chipBox.x) <= 1).toBe(true);
+    // The slider has the keyboard, and every step is asked for at once.
+    const slider = card.getByRole("slider", { name: "How loud Eli is for you" });
+    await expect(slider).toBeFocused();
+    await page.keyboard.press("ArrowLeft");
+    expect(await did(page)).toEqual(["volume:u-eli:0.95"]);
+    await expect(card.getByText("Only for you, on this computer.")).toBeVisible();
+    // Escape closes it and gives the keyboard back to the chip.
+    await page.keyboard.press("Escape");
+    await expect(card).toHaveCount(0);
+    await expect(eli).toBeFocused();
+    // A second click on the chip closes what the first opened.
+    await eli.click();
+    await expect(card).toBeVisible();
+    await eli.click();
+    await expect(card).toHaveCount(0);
+  });
+
+  for (const [query, where] of [["?voice=others", "out of voice"], ["?voice=elsewhere&raid", "in voice in another room"]] as const) {
+    test(`${where}, a room's chips and its "and others" open nothing (#747)`, async ({ page }) => {
+      await open(page, query);
+      const strip = page.getByRole("group", { name: "Voice in this conversation" });
+      await expect(strip.getByRole("list", { name: "In voice here" }).getByRole("listitem").first()).toBeVisible();
+      await expect(strip.getByRole("list", { name: "In voice here" }).getByRole("button")).toHaveCount(0);
+      await expect(strip.locator(".nx-strip-others")).toHaveCount(0);
+    });
+  }
+
+  test("\"and others\" opens everyone in voice by name, and picking somebody opens their volume (#747)", async ({ page }) => {
+    await page.setViewportSize({ width: 560, height: 790 });
+    await open(page, "?voice=mine&seven");
+    const strip = page.getByRole("group", { name: "Voice in this conversation" });
+    const others = strip.getByRole("button", { name: "and others" });
+    await others.click();
+    const everyone = page.getByRole("dialog", { name: "Everyone in voice in #general" });
+    await expect(everyone).toBeVisible();
+    await expect(others).toHaveAttribute("aria-expanded", "true");
+    // Under the words, everybody but you, in order; Dave's turned down.
+    await everyone.evaluate((node) => Promise.all(node.getAnimations().map((one) => one.finished)));
+    const [othersBox, cardBox] = [await others.boundingBox(), await everyone.boundingBox()];
+    expect(othersBox && cardBox && cardBox.y >= othersBox.y + othersBox.height).toBe(true);
+    const rows = everyone.getByRole("list", { name: "In voice in #general" }).getByRole("listitem");
+    await expect(rows).toHaveText([/^Callie$/, /^Dave.*60%$/, /^Eli/, /^Jen$/, /^Jules$/, /^Sam$/]);
+    // On a computer the search box has the keyboard; Enter picks the first found.
+    await expect(everyone.getByRole("textbox", { name: "Find somebody in voice in #general" })).toBeFocused();
+    await page.keyboard.type("da");
+    await page.keyboard.press("Enter");
+    await expect(everyone).toHaveCount(0);
+    const card = page.getByRole("dialog", { name: "Dave's volume" });
+    await expect(card.getByRole("slider")).toHaveAttribute("aria-valuetext", "60%");
+    await card.getByRole("button", { name: "Back to 100%" }).click();
+    expect(await did(page)).toEqual(["volume:u-dave:1"]);
+    // Closed, the keyboard goes back to "and others", which opened it.
+    await page.keyboard.press("Escape");
+    await expect(others).toBeFocused();
+  });
+
+  test("the host takes somebody out of voice from the strip's card, as from the voice bar's (#747, #423)", async ({ page }) => {
+    await open(page, "?voice=mine&takeout");
+    const strip = page.getByRole("group", { name: "Voice in this conversation" });
+    await strip.getByRole("button", { name: /^Eli's volume/ }).click();
+    const card = page.getByRole("dialog", { name: "Eli's volume" });
+    await card.getByRole("button", { name: "Take out of voice" }).click();
+    await expect.poll(() => did(page)).toEqual(["takeout:u-eli"]);
+    await expect(card).toHaveCount(0);
+
+    // Refused: the card stays, and says why.
+    await open(page, "?voice=mine&takeout&takeoutfail");
+    await strip.getByRole("button", { name: /^Eli's volume/ }).click();
+    await card.getByRole("button", { name: "Take out of voice" }).click();
+    await expect(card.getByRole("alert")).toHaveText("They aren't in voice there.");
+
+    // Without the right to, the card only has the volume.
+    await open(page, "?voice=mine");
+    await strip.getByRole("button", { name: /^Eli's volume/ }).click();
+    await expect(card.getByRole("slider")).toBeVisible();
+    await expect(card.getByRole("button", { name: "Take out of voice" })).toHaveCount(0);
+  });
+
+  test("somebody leaving voice closes their card (#747)", async ({ page }) => {
+    await open(page, "?voice=mine");
+    const strip = page.getByRole("group", { name: "Voice in this conversation" });
+    await strip.getByRole("button", { name: /^Jules's volume/ }).click();
+    const card = page.getByRole("dialog", { name: "Jules's volume" });
+    await expect(card).toBeVisible();
+    await page.evaluate(() => window.chat?.leaveVoice("u-jules"));
+    await expect(card).toHaveCount(0);
+    await expect(strip.getByRole("list", { name: "In voice here" }).getByRole("listitem")).toHaveText(["you", "Eli"]);
+  });
+
   test("in voice elsewhere: offers to move, in words", async ({ page }) => {
     await open(page, "?voice=elsewhere");
     const strip = page.getByRole("group", { name: "Voice in this conversation" });

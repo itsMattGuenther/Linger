@@ -1229,6 +1229,36 @@ describe("a viewer window sharing the owner's connection", () => {
     follower.stop();
   });
 
+  it("a volume from a conversation's own window is played by the owner, and anything else is dropped (#747)", async () => {
+    const { owner, viewer, core } = await windows();
+    const api = fakeOwnerApi(["token-1"]);
+    await owner.gateway.connect(api as never);
+    await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]));
+    evening().slice(0, 3).forEach(core);
+    const follower = await viewer.mirror.followOwner(viewer.bus);
+    const played = () => invoked.filter((call) => call.cmd === "voice_volume").map((call) => call.args);
+
+    await follower.intend({ kind: "voice.join", server: HOME, roomId: "r-general" });
+    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.roomId).toBe("r-general"));
+    const me = owner.gateway.serverState(HOME).sessionId;
+    core({ s: 4, op: "voice.state", d: { room_id: "r-general", peers: [{ session_id: me ?? "", user_id: "u-matt", forwarded: true }, { session_id: "s-eli", user_id: "u-eli", forwarded: true }] } } as ServerFrame);
+    await vi.waitFor(() => expect(owner.gateway.serverState(HOME).myVoice?.volumes["s-eli"]).toBe(1));
+    invoked.length = 0;
+
+    await follower.intend({ kind: "voice.volume", server: HOME, user: "u-eli", volume: 0.4 });
+    await vi.waitFor(() => expect(played()).toEqual([{ baseUrl: HOME, peer: "s-eli", volume: 0.4 }]));
+    // The window that asked hears the new level as the owner keeps it.
+    await vi.waitFor(() => expect(viewer.gateway.serverState(HOME).myVoice?.volumes["s-eli"]).toBe(0.4));
+    // Not a number, not a level, or a server you aren't on: dropped. (Joining
+    // may play the saved level again; it's never anything but 0.4.)
+    await follower.intend({ kind: "voice.volume", server: HOME, user: "u-eli", volume: "loud" } as never);
+    await follower.intend({ kind: "voice.volume", server: HOME, user: "u-eli", volume: Number.NaN });
+    await follower.intend({ kind: "voice.volume", server: "https://elsewhere.example", user: "u-eli", volume: 0.1 });
+    await new Promise((settle) => setTimeout(settle, 20));
+    expect(played().every((call) => call.baseUrl === HOME && call.peer === "s-eli" && call.volume === 0.4)).toBe(true);
+    follower.stop();
+  });
+
   it("a server that isn't answering holds up neither the other servers nor the window", async () => {
     const { owner, viewer, core } = await windows();
     const AWAY = "https://away.example";

@@ -11,6 +11,12 @@
  * - `?voice=mine`: you're in voice in #general. `elsewhere`: you're in voice
  *   in #listening-room. `off`: nobody is in voice anywhere. `none`: the
  *   server carries no voice at all; its host hasn't set it up (#306).
+ *   `&seven`: Dave, Callie, Sam and Jen are in #general's voice too, seven
+ *   with you, as on a game night. Where you're in voice, a chip opens that
+ *   person's volume (#747), written to `body[data-did]` as
+ *   `volume:<user>:<level>`; you turned Dave down to 60%. `&takeout`: their
+ *   card can take them out of voice too (`takeout:<user>`), `&takeoutfail`
+ *   refused.
  * - `?big`: #general holds 5,000 messages, all at once. `&paged`: loaded
  *   150 at a time from the newest, as the store pages them.
  * - `?fail`: every send is refused, 120 ms after it's sent. `?fail=held`:
@@ -64,7 +70,8 @@
  *   one before, as did a third person neither: the app doesn't know them.
  *
  * `window.chat` lets a test make things happen: a message arriving, someone
- * typing. What the page was asked to do is written to `body[data-did]`.
+ * typing, somebody leaving voice. What the page was asked to do is written to
+ * `body[data-did]`.
  */
 import { StrictMode, useCallback, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -102,6 +109,8 @@ const LONG = query.has("long");
 const VOICE_FAIL = query.get("voicefail");
 const ASKED = query.has("picked") ? { input: "USB Microphone", output: "Headphones" } : { input: null, output: null };
 const RAID = query.has("raid");
+/** How loud people play for you (#747): you turned Dave down. */
+const VOLUMES: ReadonlyMap<string, number> = new Map([["u-dave", 0.6]]);
 const everyone: ReadonlyMap<string, User> = new Map(
   [...Object.values(people), ...(RAID ? RAIDERS : [])].map((user) => [
     user.id,
@@ -116,7 +125,7 @@ const tabOf = (roomId: string): TabKey => ({ server: SERVER, roomId });
 const IN_ROOM: Record<string, string[]> = { "r-general": ["u-matt", "u-eli", "u-jules"], "r-listening": ["u-dave"] };
 const inVoice = (roomId: string): string[] => {
   if (VOICE === "off" || VOICE === "none") return [];
-  const others = roomId === "r-general" ? ["u-eli", "u-jules", ...(RAID ? RAIDERS.map((user) => user.id) : [])] : [];
+  const others = roomId === "r-general" ? ["u-eli", "u-jules", ...(query.has("seven") ? ["u-dave", "u-callie", "u-sam", "u-jen"] : []), ...(RAID ? RAIDERS.map((user) => user.id) : [])] : [];
   const mine = (VOICE === "mine" && roomId === "r-general") || (VOICE === "elsewhere" && roomId === "r-listening");
   return mine ? ["u-matt", ...others] : others;
 };
@@ -351,6 +360,8 @@ declare global {
       refuse: () => void;
       /** Who is talking now, by user id. */
       talk: (userIds: string[]) => void;
+      /** Somebody leaves voice, wherever they were in it (#747). */
+      leaveVoice: (userId: string) => void;
     };
   }
 }
@@ -481,6 +492,7 @@ function Fixture() {
   const serial = useRef(0);
   const loading = useRef(false);
   const [speaking, setSpeaking] = useState<ReadonlySet<string>>(SPEAKING);
+  const [leftVoice, setLeftVoice] = useState<ReadonlySet<string>>(() => new Set());
 
   const activeRoom = tabs.active?.roomId ?? null;
   const activeRef = useRef(activeRoom);
@@ -517,11 +529,12 @@ function Fixture() {
     typing: (roomId, userIds) => setTyping((all) => ({ ...all, [roomId]: userIds })),
     refuse: () => refusals.splice(0).forEach((refuse) => refuse()),
     talk: (userIds) => setSpeaking(new Set(userIds)),
+    leaveVoice: (userId) => setLeftVoice((left) => new Set(left).add(userId)),
   };
 
   const items: TabItem[] = tabs.open.map((tab) => {
     const room = byRoom.get(tab.roomId);
-    const voice = inVoice(tab.roomId);
+    const voice = inVoice(tab.roomId).filter((id) => !leftVoice.has(id));
     const mine = myVoice === keyOf(tab);
     const dm = room?.kind === "dm" ? dmPeople(room) : [];
     const [only] = dm;
@@ -664,6 +677,24 @@ function Fixture() {
   }, []);
   const onJoin = useCallback(() => note("join"), []);
   const onPickDevice = useCallback(() => note("settings:sound"), []);
+  // Volumes from the strip's chips (#747): Dave's is turned down. `?takeout`:
+  // you can take people out of voice, and `&takeoutfail` has it refused.
+  const volume = useMemo(
+    () => ({
+      where: "#general",
+      of: VOLUMES,
+      onVolume: (user: string, level: number) => note(`volume:${user}:${level}`),
+      ...(query.has("takeout")
+        ? {
+            onTakeOut: async (user: string) => {
+              note(`takeout:${user}`);
+              return query.has("takeoutfail") ? "They aren't in voice there." : null;
+            },
+          }
+        : {}),
+    }),
+    [],
+  );
   // Your controls in the room you're in voice in (#216), as the chat window passes them.
   const controls = useMemo(
     () => ({ muted: false, deafened: false, onMute: () => note("mute"), onDeafen: () => note("deafen"), onLeave: () => note("leave") }),
@@ -676,7 +707,7 @@ function Fixture() {
     if (!room) return null;
     const id = keyOf(tabs.active);
     const mine = held[activeRoom] ?? { messages: [], from: 0 };
-    const voice = inVoice(activeRoom);
+    const voice = inVoice(activeRoom).filter((id) => !leftVoice.has(id));
     return {
       id,
       header:
@@ -698,6 +729,8 @@ function Fixture() {
               controls: myVoice === id ? controls : undefined,
               failed: VOICE_FAIL === null ? undefined : { ...voiceStartProblem(VOICE_FAIL, query.has("windows"), ASKED), detail: VOICE_FAIL },
               takenOut: query.has("takenout") && myVoice !== id,
+              // Each person's volume from their chip, where you're in voice (#747).
+              volume: myVoice === id ? volume : undefined,
             },
       screen: room.id === "r-general" && SCREEN !== null ? screenPane(myVoice === id, hearing, loudness) : undefined,
       people: everyone,

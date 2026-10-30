@@ -438,6 +438,24 @@ test("in the room you're in voice in, the voice strip has your mute, deafen and 
   await expect.poll(async () => voiceControls(await did(page))).toEqual([{ control: "mute", on: true }, { control: "deafen", on: true }, { control: "leave" }]);
 });
 
+test("a volume set from the voice strip's chip is asked of the list window, which runs voice (#747)", async ({ page }) => {
+  await open(page, "room=r-general&talking");
+  const strip = page.getByRole("group", { name: "Voice in this conversation" });
+  await strip.getByRole("button", { name: "Eli's volume, 100%" }).click();
+  const card = page.getByRole("dialog", { name: "Eli's volume" });
+  await expect(card.getByRole("slider")).toBeFocused();
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("ArrowLeft");
+  await expect
+    .poll(async () => intents(await did(page)).filter((intent) => intent.kind === "voice.volume"))
+    .toEqual([
+      expect.objectContaining({ kind: "voice.volume", server: SERVER, user: "u-eli", volume: 0.95 }),
+      expect.objectContaining({ kind: "voice.volume", server: SERVER, user: "u-eli", volume: 0.9 }),
+    ]);
+  // Nobody else hears about it: it's never sent to the server.
+  expect((await did(page)).some((line) => line.includes("volume") && !line.startsWith("intent:"))).toBe(false);
+});
+
 test("Mute, Deafen and Leave on the voice strip sound in this window, once the list window has made the change (#241)", async ({ page }) => {
   // The list window takes a moment over each change (`?hold`), and writes
   // down how many sounds had started when it finished: none of that change's.

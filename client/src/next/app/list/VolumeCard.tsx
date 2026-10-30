@@ -3,12 +3,14 @@ import type { User } from "../../../generated/User";
 import { volumeLabel } from "../../../lib/voice";
 import { onPhone, thisDevice } from "../../core/phone";
 import { Button, Name, Popover, Slider } from "../../kit";
-import { useAbove } from "./useAbove";
+import { Sheet } from "./Sheet";
+import { type CardSide, useBeside } from "./useAbove";
 import "./VolumeCard.css";
 
 /**
  * How loud one person plays for you (decision 8, VOICE-10): opened from their
- * chip in the voice bar, just above it. From silent to twice as loud, saved
+ * chip in the voice bar, just above it, or on a conversation's voice line,
+ * just under it (#747); on the phone it rises from the bottom. From silent to twice as loud, saved
  * on this computer for that person on this server and never sent anywhere.
  * Every change is heard at once; there is nothing to save. The phone plays
  * each voice through the web engine's own player, which goes no louder than
@@ -21,6 +23,8 @@ export function VolumeCard({
   onVolume,
   onTakeOut,
   onClose,
+  side = "above",
+  sheet = false,
 }: {
   user: User;
   /** 0 to 2; 1 is as they sent it. */
@@ -34,22 +38,26 @@ export function VolumeCard({
    */
   onTakeOut?: () => Promise<string | null>;
   onClose: () => void;
+  /** Over the chip (the voice bar), or under it (the conversation's voice line, #747). */
+  side?: CardSide;
+  /** On the phone (#747): risen from the bottom over the page dimmed, as its menus are (SPEC §4.15). */
+  sheet?: boolean;
 }) {
   const phone = onPhone();
   const loudest = phone ? 1 : 2;
   const [taking, setTaking] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const body = useRef<HTMLDivElement | null>(null);
-  // Over the chip (the voice bar is at the bottom of the list), never off the window.
-  const at = useAbove(anchor, body);
+  // Beside the chip (over it in the voice bar, under it on a voice line), never off the window.
+  const at = useBeside(anchor, body, side);
 
   // The slider has the keyboard as soon as it opens.
   useEffect(() => {
     body.current?.querySelector<HTMLInputElement>("input")?.focus();
   }, []);
 
-  return (
-    <Popover label={`${user.display_name}'s volume`} at={at} onClose={onClose}>
+  const card = (
+    <Popover label={`${user.display_name}'s volume`} at={sheet ? undefined : at} onClose={onClose}>
       <div className="nx-volume" ref={body}>
         <p className="nx-volume-who">
           <Name person={user} size="control" />
@@ -95,4 +103,5 @@ export function VolumeCard({
       </div>
     </Popover>
   );
+  return sheet ? <Sheet onClose={onClose}>{card}</Sheet> : card;
 }

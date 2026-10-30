@@ -52,9 +52,7 @@ export function voiceModel(state: GatewayState, speaking: ReadonlySet<string>, t
   const mine = state.myVoice;
   const me = state.me;
   if (mine === null || me === null) return null;
-  const room = state.rooms.find((held) => held.id === mine.roomId);
-  const dm = state.dms.find((held) => held.id === mine.roomId);
-  const where = room ? `#${room.name}` : dm ? dmLabel(dm, state.users, me.id, new Set(state.deletedUsers)) : "a room";
+  const where = voiceWhere(state, mine.roomId);
   const peers = voicePeersIn(state, mine.roomId);
   const ids = new Set(peers.map((peer) => peer.user_id));
   ids.add(me.id);
@@ -83,6 +81,17 @@ export function voiceModel(state: GatewayState, speaking: ReadonlySet<string>, t
     deafened: mine.deafened,
     line: microphoneLine(mine.audio, waitingForKey(mine), talkKey, mine.refused),
   };
+}
+
+/**
+ * Where a voice is, as the voice bar and the everyone card name it:
+ * "#general", or a DM's people (#747: the conversation's voice line too).
+ */
+export function voiceWhere(state: GatewayState, roomId: string): string {
+  const room = state.rooms.find((held) => held.id === roomId);
+  if (room) return `#${room.name}`;
+  const dm = state.dms.find((held) => held.id === roomId);
+  return dm && state.me ? dmLabel(dm, state.users, state.me.id, new Set(state.deletedUsers)) : "a room";
 }
 
 /**

@@ -4,6 +4,9 @@ import { type RefObject, useEffect, useLayoutEffect, useReducer, useState } from
 const GAP = 4;
 const EDGE = 8;
 
+/** Which side of what opened it a card sits on. */
+export type CardSide = "above" | "below";
+
 /**
  * Where a card from the voice bar sits: just above what opened it (the bar
  * is at the bottom of the list), lined up with its left edge, never off the
@@ -12,6 +15,16 @@ const EDGE = 8;
  * and shrinks as people come and go, and the opener moves with it.
  */
 export function useAbove(anchor: RefObject<HTMLElement | null>, body: RefObject<HTMLElement | null>): { x: number; y: number } {
+  return useBeside(anchor, body, "above");
+}
+
+/**
+ * Where a card sits beside what opened it: above it, as from the voice bar
+ * at the bottom of the list, or below it, as from a conversation's voice
+ * line at the top of the conversation (#747). Lined up with the opener's
+ * left edge and never off the window, as `useAbove` says.
+ */
+export function useBeside(anchor: RefObject<HTMLElement | null>, body: RefObject<HTMLElement | null>, side: CardSide): { x: number; y: number } {
   const [at, setAt] = useState({ x: EDGE, y: EDGE });
   const [, redraw] = useReducer((count: number) => count + 1, 0);
   useLayoutEffect(() => {
@@ -22,7 +35,10 @@ export function useAbove(anchor: RefObject<HTMLElement | null>, body: RefObject<
     if (!card || !node || !node.isConnected) return;
     const opener = node.getBoundingClientRect();
     const { offsetWidth: width, offsetHeight: height } = card;
-    const y = Math.max(EDGE, Math.round(opener.top) - GAP - height);
+    const y =
+      side === "above"
+        ? Math.max(EDGE, Math.round(opener.top) - GAP - height)
+        : Math.max(EDGE, Math.min(Math.round(opener.bottom) + GAP, window.innerHeight - height - EDGE));
     const x = Math.max(EDGE, Math.min(Math.round(opener.left), window.innerWidth - width - EDGE));
     setAt((held) => (held.x === x && held.y === y ? held : { x, y }));
   });

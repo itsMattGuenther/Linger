@@ -255,6 +255,11 @@ is typed, versioned and handled in one place (`Intent` in `core/share.ts`):
 - `voice.pushtotalk`: Settings turned push-to-talk on or off, or picked its
   key. Joining only reads the choice, so this applies it to the call you're
   in at once (#231), and tells the list window's voice bar which key to name;
+- `voice.volume`: how loud somebody in your voice plays for you, set from
+  their chip on a conversation's voice line (#747). The owner plays it and
+  keeps it on this computer, as the voice bar's card does; it never reaches
+  a server (SPEC §4.14). It names the person, not a session: the owner finds
+  their seats;
 - `voice.devices`: Settings picked another microphone or speakers. It applies
   to the call you're in at once (#249): the devices are reopened in place,
   under the call. Out of voice it does nothing, since the next join reads what

@@ -93,6 +93,24 @@ export function voiceHere(state: GatewayState, roomId: RoomId): string[] {
 }
 
 /**
+ * How loud each person in your voice plays for you, by user id (VOICE-10),
+ * for their chips on the conversation's voice line (#747). Empty anywhere
+ * but the room you're in voice in: there's nobody to set a volume for until
+ * you join. Somebody on two computers plays as loud on both; the first seat
+ * speaks for them, as in the voice bar (core/voice.ts).
+ */
+export function volumesHere(state: GatewayState, roomId: RoomId): ReadonlyMap<string, number> {
+  const levels = new Map<string, number>();
+  const mine = state.myVoice;
+  if (!mine || mine.roomId !== roomId) return levels;
+  for (const peer of voicePeersIn(state, roomId)) {
+    if (peer.user_id === state.me?.id || levels.has(peer.user_id)) continue;
+    levels.set(peer.user_id, mine.volumes[peer.session_id] ?? 1);
+  }
+  return levels;
+}
+
+/**
  * Where a conversation opens (SPEC §4.2): on the "you left off here" line
  * when something arrived since you last read it, otherwise at the newest
  * message. Decided once per visit, after the read positions have arrived.

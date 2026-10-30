@@ -32,6 +32,7 @@ import {
   useServersAmong,
   useServersPick,
   sendReport,
+  takeOutWith,
 } from "../../../lib/gateway";
 import { useLinkPreviews, wantPreviews } from "../../../lib/previews";
 import { absoluteUrl } from "../../../lib/url";
@@ -39,7 +40,7 @@ import { onWindows, voiceStartProblem } from "../../../lib/voice";
 import { downloadFile } from "../../core/download";
 import { onPhone } from "../../core/phone";
 import { tauriBus } from "../../core/bus";
-import { conversationIn, dmPeople, micsHere, peopleInRoom, tabModel, typingIn, voiceHere } from "../../core/chat/conversation";
+import { conversationIn, dmPeople, micsHere, peopleInRoom, tabModel, typingIn, voiceHere, volumesHere } from "../../core/chat/conversation";
 import { keepDraft, keptDraft } from "../../core/chat/keptDrafts";
 import { type MentionPerson, mentionable as mentionableIn } from "../../core/chat/mentions";
 import { foldMotd, motdFolded } from "../../core/chat/motd";
@@ -50,7 +51,7 @@ import { cardSafety, hostName, reportsReachCohosts, said } from "../../core/safe
 import { personRow, talkingFirstIds } from "../../core/list";
 import type { Intent, VoiceControlQuestion } from "../../core/share";
 import { keyOf, type TabKey } from "../../core/tabs";
-import { talkingNow } from "../../core/voice";
+import { talkingNow, voiceWhere } from "../../core/voice";
 import { pressVoiceControl } from "../../core/voiceControl";
 import { markerOf, type TabItem } from "../../kit";
 import { PersonCard } from "../list/PersonCard";
@@ -373,7 +374,10 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
     [files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusAsk, seed, onDraft, keep, voiceMessage, motdBox, pollBox],
   );
 
-  const { onJoin, onPickDevice, onMute, onDeafen, onLeave } = useMemo(() => voiceCalls(active, intend, voiceControl), [active, intend, voiceControl]);
+  const { onJoin, onPickDevice, onMute, onDeafen, onLeave, onVolume } = useMemo(() => voiceCalls(active, intend, voiceControl), [active, intend, voiceControl]);
+  // The host or a co-host takes somebody out of voice from their chip's card
+  // (#423, #424), on the voice line as in the voice bar (#747).
+  const onTakeOut = useMemo(() => (api && room && mayHost ? (user: string) => takeOutWith(api, room.id, user) : undefined), [api, room?.id, mayHost]);
 
   const pane = ((): ChatPane | null => {
     if (!active || !state || !room || paneId === null) return null;
@@ -417,6 +421,12 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
         controls:
           state.myVoice?.roomId === room.id
             ? { muted: state.myVoice.muted, deafened: state.myVoice.deafened, onMute, onDeafen, onLeave }
+            : undefined,
+        // Each person's volume from their chip (#747), only where you're in
+        // voice: it's how loud they play for you.
+        volume:
+          state.myVoice?.roomId === room.id
+            ? { where: voiceWhere(state, room.id), of: volumesHere(state, room.id), onVolume, ...(onTakeOut ? { onTakeOut } : {}) }
             : undefined,
         // The last try at starting voice here failed (#261): the strip says why.
         failed:
@@ -712,6 +722,11 @@ function voiceCalls(active: TabKey | null, intend: PaneHost["intend"], voiceCont
     onMute: (muted: boolean) => voiceControl({ control: "mute", on: muted }),
     onDeafen: (deafened: boolean) => voiceControl({ control: "deafen", on: deafened }),
     onLeave: () => voiceControl({ control: "leave" }),
+    // How loud somebody plays for you, from their chip (#747): the list
+    // window runs voice, so it plays it, and keeps it on this computer.
+    onVolume: (user: string, volume: number) => {
+      if (active) void intend({ kind: "voice.volume", server: active.server, user, volume }).catch(() => undefined);
+    },
   };
 }
 

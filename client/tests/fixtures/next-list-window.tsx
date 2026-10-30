@@ -93,6 +93,7 @@ import { Counted } from "./next/commits";
 import type { Message } from "../../src/generated/Message";
 import type { Report } from "../../src/generated/Report";
 import type { User } from "../../src/generated/User";
+import type { VoicePeer } from "../../src/generated/VoicePeer";
 import { json, served } from "./next/desktop";
 import { customEmoji, SERVER, SERVER_NAME, evening, messages, people } from "./next/evening";
 import { collections, fakeMedia, fakeSearch } from "./next/finds";
@@ -116,6 +117,22 @@ const states: Record<string, GatewayState> = {
   [GUILD]: guild(serverState(GUILD)),
   [LISBON]: lisbon(serverState(LISBON)),
 };
+// `?seven`: Dave, Callie, Sam and Jen are in #general's voice too, seven with
+// you once you join, as on a game night (#747). With `?sfu` they're silent.
+const GAME_NIGHT = ["u-dave", "u-callie", "u-sam", "u-jen"];
+const good = states[SERVER];
+if (query.has("seven") && good) {
+  states[SERVER] = {
+    ...good,
+    voice: {
+      ...good.voice,
+      "r-general": [
+        ...(good.voice["r-general"] ?? []),
+        ...GAME_NIGHT.map((user): VoicePeer => ({ session_id: `s-${user.slice(2)}`, user_id: user, controls: { muted: false, deafened: false } })),
+      ],
+    },
+  };
+}
 // `?guest`: Eli hosts The Good Company, and you don't (T-1605). `?cohost`:
 // the same, with you a co-host (#424). `?cohosts`: Dave is a co-host.
 if (query.has("guest") || query.has("cohost") || query.has("cohosts")) {
@@ -950,6 +967,7 @@ const sfu = query.has("sfu")
       [
         { session: "s-eli", loudness: 0.5 },
         { session: "s-jules", loudness: 0 },
+        ...(query.has("seven") ? GAME_NIGHT.map((user) => ({ session: `s-${user.slice(2)}`, loudness: 0 })) : []),
       ],
       query.has("bitrate") ? Number(query.get("bitrate")) : null,
     )

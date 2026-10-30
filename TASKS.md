@@ -37,7 +37,9 @@ send is on screen whole, not left below the bottom with only your name
 showing, and "you left off here" no longer sits above it (#750). A
 reaction or an edit on the newest message keeps the conversation at its very
 end, not a few pixels short, and messages arriving in a burst no longer leave
-the newest below the bottom (#760). **Thanks** (`docs/releasing.md`): @Gleasonmt for the iPhone app's iOS 15
+the newest below the bottom (#760). In a call, a click on somebody on the
+conversation's voice line opens their volume, as in the voice bar; on a phone it
+rises from the bottom, and the people there are easier to tap (#747). **Thanks** (`docs/releasing.md`): @Gleasonmt for the iPhone app's iOS 15
 minimum (#749), and @eGGnogSC for messages that show the moment they're sent
 (#133) and the sidebar that no longer scrolls sideways (#84). @eGGnogSC's work
 shipped back in September, before the notes thanked contributors, so it's
@@ -560,6 +562,19 @@ Rules for this milestone:
   and the conversations drags (after he tried it). Still to do: trying it on
   Windows 11 and Hyprland (unfolding near a screen's edge, a snapped window,
   a tiled one).
+- 🟡 **T-1822 · Somebody's volume from the voice strip** (Matt, 2026-10-30, #747) — in a
+  call of seven, people clicked somebody on a conversation's voice strip to turn them
+  down, and nothing happened. Picked from mockups
+  (https://claude.ai/artifact/E2eeSHXyE8VcjrwZB2fzX6): in the room you're in voice in,
+  each chip but yours opens the voice bar's volume card under it, and "and others"
+  opens everyone by name; in any other room the chips open nothing (revisit in a new
+  issue if that feels wrong). A conversation in its own window asks the list window
+  (`voice.volume`). On the phone, the volume and everyone rise from the bottom
+  (`app/list/Sheet.tsx`), in the voice bar too, and each chip takes a tap a thumb's
+  height. Tests: `next-chat.spec.ts`, `next-chat-window.spec.ts`,
+  `next-list-window.spec.ts`, `next-phone-voice-room.spec.ts`, `share.test.ts`,
+  `gateway.voice.test.ts`. **Still to do:** use it in a real call, on a computer and
+  on a phone.
 - 🟡 **T-1810 · Parity and the switch** — the new client became the default in
   0.4.0 and the old one was deleted after 0.4.3 (#306). Still to do: every
   `parity.md` item proved, and SPEC §3/§5 rewritten from `system.md`.

@@ -166,3 +166,25 @@
   width: var(--row-1);
   height: var(--row-1);
 }
+
+/* On the phone (#747), each chip takes a tap a thumb's height while it looks
+   as it does on a computer: the lines of chips move apart to make room for
+   it, and the bar's own spacing keeps the taps clear of the rows around. */
+:root[data-shell="phone"] .nx-voice {
+  gap: var(--space-2-5);
+}
+
+:root[data-shell="phone"] .nx-voice-people,
+:root[data-shell="phone"] .nx-voice-seats {
+  row-gap: calc(var(--row-1) - var(--control-sm));
+}
+
+:root[data-shell="phone"] .nx-voice button.k-chip {
+  position: relative;
+}
+
+:root[data-shell="phone"] .nx-voice button.k-chip::after {
+  content: "";
+  position: absolute;
+  inset: calc((var(--row-1) - var(--control-sm)) / -2) calc(var(--space-1-5) / -2);
+}

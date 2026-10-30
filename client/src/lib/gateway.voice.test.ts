@@ -63,6 +63,7 @@ const {
   setVoicePushToTalk,
   setVoiceTalking,
   setVoiceVolume,
+  setVoiceVolumeOf,
   snapshotOf,
   unfollow,
   voicePeersIn,
@@ -446,6 +447,26 @@ describe("voice in the store", () => {
     const calls = invoked.filter((call) => call.cmd.startsWith("voice_"));
     expect(calls.map((call) => call.cmd)).toEqual(["voice_controls", "voice_volume"]);
     // Native code applies the audio gates before reporting controls to the server.
+    expect(invoked.some((call) => call.cmd === "gateway_send")).toBe(false);
+  });
+
+  it("a volume set by who somebody is reaches each of their seats, never yours or a stranger's (#747)", async () => {
+    await seated(HOME);
+    arrive(HOME, voiceState("r-garage", [["s-me", "u-matt"], ["s-1", "u-amy"], ["s-2", "u-amy"], ["s-3", "u-bo"]]));
+    await vi.waitFor(() => expect(serverState(HOME).myVoice?.volumes["s-3"]).toBe(1));
+    invoked.length = 0;
+
+    // Amy on two computers is as loud on both; Bo is untouched.
+    setVoiceVolumeOf(HOME, "u-amy", 0.5);
+    expect(serverState(HOME).myVoice?.volumes).toMatchObject({ "s-1": 0.5, "s-2": 0.5, "s-3": 1 });
+    // You, and somebody not in your voice, have nothing to set.
+    setVoiceVolumeOf(HOME, "u-matt", 0.2);
+    setVoiceVolumeOf(HOME, "u-nobody", 0.2);
+    expect(invoked.filter((call) => call.cmd === "voice_volume").map((call) => [call.args.peer, call.args.volume])).toEqual([
+      ["s-1", 0.5],
+      ["s-2", 0.5],
+    ]);
+    // Never told to anybody: it stays on this computer.
     expect(invoked.some((call) => call.cmd === "gateway_send")).toBe(false);
   });
 

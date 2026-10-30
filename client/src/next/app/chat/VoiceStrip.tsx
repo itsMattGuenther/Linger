@@ -1,7 +1,7 @@
 import { type MouseEvent, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { User } from "../../../generated/User";
-import { startProblemWords, type StartProblem } from "../../../lib/voice";
+import { startProblemWords, type StartProblem, volumeLabel } from "../../../lib/voice";
 import { QUIET_MOVE_WORDS, stripFit, VOICE_ACTION_WORDS, type StripFit, type StripMeasure, type VoiceStrip as Strip } from "../../core/chat/voice";
 import { verbFor } from "../../core/chat/words";
 import { copyText } from "../../core/copy";
@@ -9,6 +9,9 @@ import { onPhone } from "../../core/phone";
 import { Button, Chip, IconButton, markerOf, Name, Popover, VoiceGlyph } from "../../kit";
 import { useTalkSeats } from "../useTalkSeats";
 import { ShareButton, type ShareControl } from "../screen/ShareButton";
+import { EveryoneCard } from "../list/EveryoneCard";
+import type { VoiceDockPerson } from "../list/VoiceDock";
+import { VolumeCard } from "../list/VolumeCard";
 import "./VoiceStrip.css";
 
 /**
@@ -48,6 +51,21 @@ export interface StripWatch {
   onWatch: (session: string) => void;
 }
 
+/**
+ * Each person's volume, from their chip, in the room you're in voice in
+ * (#747): the voice bar's card, under the chip. The list window runs voice
+ * and acts on it.
+ */
+export interface StripVolume {
+  /** "#general", or a DM's people: the everyone card says where. */
+  where: string;
+  /** How loud each person plays for you, 0 to 2, by user id; 1 when it isn't here. */
+  of: ReadonlyMap<string, number>;
+  onVolume: (id: string, volume: number) => void;
+  /** The host or a co-host taking somebody out of voice (#423, #424); never offered on the host's chip. */
+  onTakeOut?: (id: string) => Promise<string | null>;
+}
+
 /** Why the last start here failed, as the strip says it, and the shell's whole reason (#261, #273). */
 export type StripProblem = StartProblem & { detail: string };
 
@@ -65,6 +83,7 @@ export const VoiceStrip = memo(function VoiceStrip({
   sharing,
   watch,
   share,
+  volume,
 }: {
   strip: Strip;
   /** Everyone the strip names, by id. */
@@ -102,10 +121,25 @@ export const VoiceStrip = memo(function VoiceStrip({
   watch?: StripWatch;
   /** Share your screen, beside your controls, when you're in voice here (#360). */
   share?: ShareControl;
+  /**
+   * Each person's volume from their chip (#747). Only in the room you're in
+   * voice in: anywhere else the chips are plain, since there's nobody to set
+   * a volume for until you join.
+   */
+  volume?: StripVolume;
 }) {
   const showFailed = failed && strip.kind !== "mine" ? failed : undefined;
   const showTakenOut = takenOut === true && strip.kind !== "mine" && !showFailed;
   const [why, setWhy] = useState<DOMRect | null>(null);
+  // Whose volume is open (#747), or everyone's, from "and others", and what
+  // opened it, for the card to sit under and the keyboard to go back to.
+  const [volumeOf, setVolumeOf] = useState<string | null>(null);
+  const [everyone, setEveryone] = useState(false);
+  const opener = useRef<HTMLElement | null>(null);
+  // The level last set from the open card. A conversation in a window of its
+  // own hears the list window's answer a moment later; until then the card
+  // shows what was set, so the next step goes on from there, not back.
+  const [setTo, setSetTo] = useState<{ id: string; volume: number } | null>(null);
   // A double-click on the strip is one click, and for a moment after Join
   // or Leave redraws the buttons a click doesn't count (#510): it was meant
   // for the button that was there. Whoever double-clicks everything joins
@@ -120,6 +154,21 @@ export const VoiceStrip = memo(function VoiceStrip({
   const ids = strip.kind === "mine" || strip.kind === "others" ? strip.people : NOBODY;
   const here = ids.flatMap((id) => people.get(id) ?? []);
   const you = strip.kind === "mine" && meId !== null && ids.includes(meId) ? meId : null;
+  // Volumes, in the room you're in voice in (#747). Somebody who left voice
+  // has nothing to set, and leaving it yourself closes the cards: they don't
+  // come back open when you join again.
+  const volumes = strip.kind === "mine" ? volume : undefined;
+  const heard = volumes ? here.filter((user) => user.id !== meId) : NO_USERS;
+  const openOf = volumeOf === null ? undefined : heard.find((user) => user.id === volumeOf);
+  const everyoneOpen = everyone && volumes !== undefined;
+  useEffect(() => {
+    if (volumeOf !== null && !openOf) setVolumeOf(null);
+    if (everyone && !everyoneOpen) setEveryone(false);
+  }, [volumeOf, openOf, everyone, everyoneOpen]);
+  // Once the card closes, the shared level is the one to show.
+  useEffect(() => {
+    if (volumeOf === null) setSetTo(null);
+  }, [volumeOf]);
   const words = stripWords(strip.kind, here.length, showFailed, showTakenOut);
   const { fit, measuring, list, line, ruler } = useStripFit(here, you, words, mics, sharing);
   // A room too big for its chips, that you're in (#197): you first, then
@@ -201,13 +250,87 @@ export const VoiceStrip = memo(function VoiceStrip({
               active={speaking.has(user.id)}
               sharing={sharing?.has(user.id)}
               state={micState(mics?.get(user.id))}
+              {...(volumes && user.id !== meId
+                ? {
+                    actionLabel: `${user.display_name}'s volume, ${volumeLabel(volumes.of.get(user.id) ?? 1)}`,
+                    expanded: volumeOf === user.id,
+                    onActivate: (event: MouseEvent<HTMLButtonElement>) => {
+                      setEveryone(false);
+                      if (volumeOf === user.id) {
+                        setVolumeOf(null);
+                        return;
+                      }
+                      opener.current = event.currentTarget;
+                      setVolumeOf(user.id);
+                    },
+                  }
+                : {})}
             >
               {user.id === meId ? "you" : <Name person={user} size="control" />}
             </Chip>
           </li>
         ))}
       </ul>
-      {problem ?? takenOutWords ?? <p ref={line} className="nx-strip-words">{here.length > shown.length ? words.some : words.all}</p>}
+      {problem ?? takenOutWords ?? (
+        <p ref={line} className="nx-strip-words">
+          {/* "and others" opens everyone by name, as the voice bar's crowd does (#197). */}
+          {volumes && here.length > shown.length && !measuring ? (
+            <button
+              type="button"
+              className="nx-strip-others"
+              aria-haspopup="dialog"
+              aria-expanded={everyone}
+              onClick={(event) => {
+                setVolumeOf(null);
+                opener.current = event.currentTarget;
+                setEveryone((open) => !open);
+              }}
+            >
+              {words.some}
+            </button>
+          ) : here.length > shown.length ? (
+            words.some
+          ) : (
+            words.all
+          )}
+        </p>
+      )}
+      {volumes && openOf ? (
+        <VolumeCard
+          user={openOf}
+          volume={setTo?.id === openOf.id ? setTo.volume : (volumes.of.get(openOf.id) ?? 1)}
+          anchor={opener}
+          side="below"
+          sheet={onPhone()}
+          onVolume={(level) => {
+            setSetTo({ id: openOf.id, volume: level });
+            volumes.onVolume(openOf.id, level);
+          }}
+          // Never on the host's chip (#424): a co-host can't take the host out.
+          {...(volumes.onTakeOut && !openOf.is_host ? { onTakeOut: takeOutOf(volumes.onTakeOut, openOf.id) } : {})}
+          onClose={() => {
+            setVolumeOf(null);
+            opener.current?.focus();
+          }}
+        />
+      ) : null}
+      {volumes && everyoneOpen ? (
+        <EveryoneCard
+          people={heard.map((user): VoiceDockPerson => ({ user, speaking: speaking.has(user.id), you: false, controls: mics?.get(user.id) ?? null, volume: volumes.of.get(user.id) ?? 1 }))}
+          where={volumes.where}
+          anchor={opener}
+          side="below"
+          sheet={onPhone()}
+          onPick={(person) => {
+            setEveryone(false);
+            setVolumeOf(person.user.id);
+          }}
+          onClose={() => {
+            setEveryone(false);
+            opener.current?.focus();
+          }}
+        />
+      ) : null}
       {fix}
       {watch
         ? unwatched.map((one) => (
@@ -249,6 +372,11 @@ export const VoiceStrip = memo(function VoiceStrip({
 });
 
 const NOBODY: readonly string[] = [];
+const NO_USERS: readonly User[] = [];
+
+function takeOutOf(takeOut: (id: string) => Promise<string | null>, id: string): () => Promise<string | null> {
+  return () => takeOut(id);
+}
 const TAKEN_OUT = "You were taken out of voice.";
 const EVERYBODY: StripFit = { kind: "all" };
 

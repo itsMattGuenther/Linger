@@ -2537,6 +2537,15 @@ export async function joinVoice(
 export async function takeOutOfVoice(server: string, roomId: RoomId, userId: UserId): Promise<string | null> {
   const api = links.get(server)?.api;
   if (!api) return "Not connected to this server.";
+  return takeOutWith(api, roomId, userId);
+}
+
+/**
+ * `takeOutOfVoice` with a server's API in hand: a conversation in a window
+ * of its own has the API but no connection (#747). Null when it's done, or
+ * why not, in words.
+ */
+export async function takeOutWith(api: AuthedApi, roomId: RoomId, userId: UserId): Promise<string | null> {
   try {
     await api.takeOutOfVoice(roomId, userId);
     return null;
@@ -2756,6 +2765,20 @@ export function setVoiceVolume(server: string, peer: string, volume: number): vo
     void voiceVolume(server, seat.session_id, level);
   }
   publish(server, { ...current, myVoice: { ...mine, volumes } });
+}
+
+/**
+ * `setVoiceVolume` for a person rather than one of their seats: a
+ * conversation's voice line names people (#747), and asks the list window,
+ * which runs voice, by who they are. Nothing happens for somebody who isn't
+ * in your voice on that server, or for you.
+ */
+export function setVoiceVolumeOf(server: string, userId: string, volume: number): void {
+  const current = stateOf(server);
+  const mine = current.myVoice;
+  if (mine === null || userId === current.me?.id) return;
+  const seat = (current.voice[mine.roomId] ?? []).find((one) => one.user_id === userId);
+  if (seat) setVoiceVolume(server, seat.session_id, volume);
 }
 
 /**

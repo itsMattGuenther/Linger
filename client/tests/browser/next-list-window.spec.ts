@@ -1211,6 +1211,34 @@ test("a double-click on the strip's Join joins once, neither muted nor deafened;
   expect(await joins()).toHaveLength(1);
 });
 
+// #747: the strip beside the list is in the window that runs voice, so a
+// volume set from one of its chips is played at once, kept as the voice bar's
+// is, and shown there too.
+test("a volume set from the strip beside the list is played at once, and the voice bar shows it too (#747)", async ({ page }) => {
+  await page.setViewportSize({ width: 1120, height: 820 });
+  await open(page, "?one");
+  await page.getByRole("list", { name: "Rooms" }).getByRole("button", { name: /^#general\b/ }).click();
+  const strip = page.getByRole("group", { name: "Voice in this conversation" });
+  await strip.getByRole("button", { name: "Join", exact: true }).click();
+  await expect(strip.getByRole("group", { name: "Your voice" })).toBeVisible();
+  await strip.getByRole("button", { name: "Eli's volume, 100%" }).click();
+  await expect(page.getByRole("dialog", { name: "Eli's volume" }).getByRole("slider")).toBeFocused();
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("ArrowLeft");
+  // Joining plays everybody at their saved level first, 100% here; then the two steps.
+  const played = async () =>
+    (await did(page))
+      .filter((line) => line.startsWith("voice_volume:"))
+      .map((line) => JSON.parse(line.slice("voice_volume:".length)) as Record<string, unknown>)
+      .filter((call) => call.volume !== 1);
+  await expect.poll(played).toEqual([
+    { baseUrl: "https://good-company.example", peer: "s-eli", volume: 0.95 },
+    { baseUrl: "https://good-company.example", peer: "s-eli", volume: 0.9 },
+  ]);
+  await expect(strip.getByRole("button", { name: "Eli's volume, 90%" })).toBeVisible();
+  await expect(page.getByRole("region", { name: /^In voice in #general/ }).getByRole("button", { name: "Eli's volume, 90%" })).toBeVisible();
+});
+
 // The foot's standing lines (decision 1): said only while true.
 const notes = (page: Page) => page.locator("[data-screen='list-notes'] .nx-note");
 

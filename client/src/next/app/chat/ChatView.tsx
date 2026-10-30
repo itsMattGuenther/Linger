@@ -24,7 +24,7 @@ import type { MessageActions } from "./MessageRow";
 import { MotdStrip } from "./MotdStrip";
 import { PaneHeader, type PaneHeaderProps } from "./PaneHeader";
 import { Typing, type TypingNow } from "./Typing";
-import { type InVoice, InVoiceLine, type StripControls, type StripProblem, type StripWatch, VoiceStrip } from "./VoiceStrip";
+import { type InVoice, InVoiceLine, type StripControls, type StripProblem, type StripVolume, type StripWatch, VoiceStrip } from "./VoiceStrip";
 import "./ChatView.css";
 
 /** What the window supplies about the showing conversation's history. */
@@ -80,6 +80,8 @@ export interface ChatPane {
     failed?: StripProblem;
     /** The host took you out of voice here (#423). */
     takenOut?: boolean;
+    /** Each person's volume from their chip, when you're in voice here (#747). */
+    volume?: StripVolume;
   } | null;
   /**
    * Screens shared in this conversation's voice (SPEC §4.20, #360): the one
@@ -417,6 +419,7 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
                 onJoin={pane.voice.onJoin}
                 onPickDevice={pane.voice.onPickDevice}
                 controls={pane.voice.controls}
+                volume={pane.voice.volume}
                 failed={pane.voice.failed}
                 takenOut={pane.voice.takenOut}
                 sharing={pane.screen?.sharing}

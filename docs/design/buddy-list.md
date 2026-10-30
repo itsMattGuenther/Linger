@@ -351,8 +351,9 @@ Khruangbin…`), which suits smaller windows.
   a conversation's own window, and you stay in voice.
 - **Only Leave, or moving voice to another room, ends it.** You are in voice in
   one room at a time, across every server.
-- **Mute, Deafen and Leave live in one place:** a voice bar at the bottom of the
-  buddy list, which is always open.
+- **Mute, Deafen and Leave are always in reach** in a voice bar at the bottom of
+  the buddy list, which is always open, and on the voice line of the room you're
+  in voice in (#216).
 - **A big room fits the bar** (#197). Past six people the bar shows six seats, you and
   whoever just talked, two lines of three, and everybody as a dot in their color under
   them, ringed in the lamp while they talk. A new talker takes the seat of whoever
@@ -362,6 +363,14 @@ Khruangbin…`), which suits smaller windows.
   (#745), then "and others", and recounts as the window changes. In a big room
   you're in, that's you and as many seats for whoever just talked as the widest
   names among them would fill, so how many never changes while people talk.
+- **Somebody's volume opens from their chip** in the voice bar, over it, and
+  on the strip of the room you're in voice in, under it (#747). There "and
+  others" opens everyone by name, as the bar's dots do. In a room you're not
+  in voice in, the chips open nothing (Matt, 2026-10-30: you can only click
+  once you've joined). On the phone the volume and everyone rise from the
+  bottom, as its menus do, and each chip takes a tap a thumb's height: the
+  strip's whole height, and in the bar the lines of chips stand apart to make
+  room.
 - **The tab of your voice room** shows moving sound bars.
 - **Other rooms offer "Move voice here"** (or "Talk here instead" when they're
   quiet), so moving is never mistaken for a fresh join.

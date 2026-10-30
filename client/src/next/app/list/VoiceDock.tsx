@@ -223,6 +223,7 @@ export function VoiceDock({ where, people, muted, deafened, line, server, onGoTo
           people={others}
           where={where}
           anchor={crowd}
+          sheet={onPhone()}
           // Somebody found: their volume card, over the crowd, in this one's place.
           onPick={(person) => {
             setEveryone(false);
@@ -237,6 +238,7 @@ export function VoiceDock({ where, people, muted, deafened, line, server, onGoTo
           user={open.user}
           volume={open.volume ?? 1}
           anchor={opener}
+          sheet={onPhone()}
           onVolume={(volume) => onVolume(open, volume)}
           // Never on the host's chip (#424): your own chip opens no card, so
           // whoever opened the host's is a co-host, who can't take the host out.

@@ -2,13 +2,14 @@ import { type RefObject, useEffect, useRef, useState } from "react";
 import { volumeLabel } from "../../../lib/voice";
 import { Icon, Name, Popover, Row, RowList, TextField, VoiceGlyph } from "../../kit";
 import { markerFor } from "../markers";
-import { useAbove } from "./useAbove";
+import { Sheet } from "./Sheet";
+import { type CardSide, useBeside } from "./useAbove";
 import type { VoiceDockPerson } from "./VoiceDock";
 import "./EveryoneCard.css";
 
 /**
  * Everyone in a big voice room by name (#197), opened from its crowd of
- * markers: to see who's there, and to find somebody to make quieter or
+ * markers, or from "and others" on the voice line (#747): to see who's there, and to find somebody to make quieter or
  * louder. Alphabetical, so a name stays put while people talk; talking shows
  * as the bars beside a name. Picking somebody opens their volume card in its
  * place. You aren't listed: your own seat is always first in the bar.
@@ -19,6 +20,8 @@ export function EveryoneCard({
   anchor,
   onPick,
   onClose,
+  side = "above",
+  sheet = false,
 }: {
   /** Everyone in voice but you. */
   people: VoiceDockPerson[];
@@ -28,23 +31,29 @@ export function EveryoneCard({
   anchor: RefObject<HTMLElement | null>;
   onPick: (person: VoiceDockPerson) => void;
   onClose: () => void;
+  side?: CardSide;
+  /**
+   * On the phone (#747): risen from the bottom, as its menus are. The search
+   * box waits to be tapped there: the keyboard would cover the names.
+   */
+  sheet?: boolean;
 }) {
   const [find, setFind] = useState("");
   const body = useRef<HTMLDivElement | null>(null);
-  const at = useAbove(anchor, body);
+  const at = useBeside(anchor, body, side);
 
-  // The search box has the keyboard as soon as it opens.
+  // The search box has the keyboard as soon as it opens, but on a phone.
   useEffect(() => {
-    body.current?.querySelector<HTMLInputElement>("input")?.focus();
-  }, []);
+    if (!sheet) body.current?.querySelector<HTMLInputElement>("input")?.focus();
+  }, [sheet]);
 
   const wanted = find.trim().toLocaleLowerCase();
   const shown = [...people]
     .sort((a, b) => a.user.display_name.localeCompare(b.user.display_name))
     .filter((person) => wanted === "" || person.user.display_name.toLocaleLowerCase().includes(wanted) || person.user.username.toLocaleLowerCase().includes(wanted));
 
-  return (
-    <Popover label={`Everyone in voice in ${where}`} at={at} onClose={onClose}>
+  const card = (
+    <Popover label={`Everyone in voice in ${where}`} at={sheet ? undefined : at} onClose={onClose}>
       <div className="nx-everyone" ref={body}>
         <p className="nx-everyone-head">
           <span className="nx-everyone-label">In voice</span>
@@ -86,6 +95,7 @@ export function EveryoneCard({
       </div>
     </Popover>
   );
+  return sheet ? <Sheet onClose={onClose}>{card}</Sheet> : card;
 }
 
 /** Beside a name: their microphone off, as its control's glyph, and the bars while they talk. */
