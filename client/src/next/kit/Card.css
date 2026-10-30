@@ -36,6 +36,18 @@
     var(--surface-popover);
 }
 
+/* In a `Sheet` on the phone (#747, #776): the sheet is its frame, and what it
+   holds can shrink to the sheet, the tallest part scrolling. */
+.k-popover[data-sheet="yes"] {
+  display: flex;
+  flex-direction: column;
+  width: auto;
+  max-width: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 .k-popover-close {
   position: absolute;
   top: var(--space-2);

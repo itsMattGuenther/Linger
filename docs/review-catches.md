@@ -121,16 +121,26 @@ to be right for every shape that window takes.
   level from the card itself. *Changed:* once the list window answers its
   step, the card follows the shared level again, and an answer to an older
   step doesn't count; a test answers late and changes the level elsewhere
-  (`next-chat.spec.ts`).
+  (`next-chat.spec.ts`). Rule (#776): a value shared between windows is
+  tested changing in another window while it's showing
+  (`docs/testing-strategy.md`).
 - **#774: a second chip's card kept the first one's state**, in the voice
   bar since #423 as well as the new strip. Its slider didn't get the
   keyboard, and a refusal to take somebody out stayed on it. *Missed
   because* every test opened one card and closed it. *Changed:* each
   person's card is its own (`key`), with a test in the strip and in the bar
-  going straight from one chip to the next.
+  going straight from one chip to the next. The person cards were already
+  keyed; these two were the only ones that weren't. Rule (#776): a card that
+  opens from one of several things is tested going straight from one to the
+  next.
 - **#774: the phone's sheet ran off a phone held sideways.** Everyone,
   nine and a half rows and a search box, was taller than the screen, so the
   search box and Close went off its top. *Missed because* every phone test
   uses one upright screen. *Changed:* a sheet is never taller than the screen
   and its names scroll, with a test held sideways
-  (`next-phone-voice-room.spec.ts`).
+  (`next-phone-voice-room.spec.ts`). The gap was a second copy: the phone
+  had three ways of rising from the bottom (a menu, the report form and this
+  one), each setting its own height, and the new one forgot. *Changed*
+  (#776): every sheet rises in the kit's one `Sheet`, which sets the height
+  for all of them, and one kit test opens a menu, a card and a plain sheet on
+  a short screen. Rule: a phone screen is tried held sideways.

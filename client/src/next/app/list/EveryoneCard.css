@@ -57,3 +57,11 @@
   font-style: italic;
   color: var(--text-muted);
 }
+
+/* In a sheet on the phone (#747): never taller than the sheet, which is never
+   taller than the screen; the names scroll, and the head and search stay. */
+.k-popover[data-sheet="yes"] .nx-everyone,
+.k-popover[data-sheet="yes"] .nx-everyone-list {
+  flex: 1;
+  min-height: 0;
+}

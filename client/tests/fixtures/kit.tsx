@@ -42,6 +42,7 @@ import {
   SectionLabel,
   Select,
   SettingRow,
+  Sheet,
   Swatch,
   Slider,
   Splitter,
@@ -290,6 +291,55 @@ function MenuDemo() {
             if (reason === "escape" || reason === "tab") document.querySelector<HTMLElement>("[data-testid='menu-trigger'] button")?.focus();
           }}
         />
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The phone's sheets (#776), each far taller than a short screen: a menu, a
+ * card and a sheet of its own, the three ways something rises from the
+ * bottom. Each opens from its button and closes from the dimmed page.
+ */
+function SheetDemo() {
+  const [open, setOpen] = useState<"menu" | "card" | "plain" | null>(null);
+  const close = () => setOpen(null);
+  const many = Array.from({ length: 30 }, (_, at) => `Line ${at + 1}`);
+  return (
+    <div className="g-row">
+      <Button size="sm" variant="secondary" onClick={() => setOpen("menu")}>
+        A tall menu sheet
+      </Button>
+      <Button size="sm" variant="secondary" onClick={() => setOpen("card")}>
+        A tall card sheet
+      </Button>
+      <Button size="sm" variant="secondary" onClick={() => setOpen("plain")}>
+        A tall sheet
+      </Button>
+      {open === "menu" ? (
+        <Menu
+          label="A tall menu"
+          anchor={{ top: 0, left: 0, right: 0, bottom: 0 }}
+          sheet={{ head: "Thirty things to do" }}
+          items={many.map((line) => ({ id: line, label: line, onSelect: close }))}
+          onClose={close}
+        />
+      ) : null}
+      {open === "card" ? (
+        <Popover label="A tall card" sheet onClose={close}>
+          {many.map((line) => (
+            <p key={line}>{line}</p>
+          ))}
+        </Popover>
+      ) : null}
+      {open === "plain" ? (
+        <Sheet onClose={close}>
+          <div role="dialog" aria-label="A tall sheet">
+            {many.map((line) => (
+              <p key={line}>{line}</p>
+            ))}
+          </div>
+        </Sheet>
       ) : null}
     </div>
   );
@@ -704,6 +754,10 @@ function Gallery() {
 
       <Section id="menus" title="Menus">
         <MenuDemo />
+      </Section>
+
+      <Section id="sheets" title="Sheets">
+        <SheetDemo />
       </Section>
 
       <Section id="options" title="Option lists">

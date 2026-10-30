@@ -1,5 +1,6 @@
 import { type CSSProperties, type ReactNode, useEffect, useRef } from "react";
 import { IconButton } from "./IconButton";
+import { Sheet } from "./Sheet";
 import "./Card.css";
 
 function tintStyle(tint: string | undefined): CSSProperties | undefined {
@@ -22,7 +23,9 @@ export function Card({ children, tint }: { children: ReactNode; tint?: string })
 /**
  * Something that floats over the window: a person's card, a menu, a picker.
  * A dialog with a name, a close button, and Escape to close. Where it floats
- * is the caller's business (`at`); its size is its own.
+ * is the caller's business (`at`); its size is its own. With `sheet` (the
+ * phone, SPEC §4.15) it rises from the bottom in a `Sheet` instead, which
+ * sets its size, and a tap on the dimmed page closes it too.
  */
 export function Popover({
   label,
@@ -31,6 +34,7 @@ export function Popover({
   tint,
   arrow = "none",
   at,
+  sheet = false,
 }: {
   label: string;
   children: ReactNode;
@@ -40,6 +44,8 @@ export function Popover({
   arrow?: "left" | "right" | "none";
   /** Fixed position in the window, in pixels. Without it, it sits in the flow. */
   at?: { x: number; y: number };
+  /** Risen from the bottom, the whole width, on the phone: `at` is left out. */
+  sheet?: boolean;
 }) {
   const box = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -50,13 +56,14 @@ export function Popover({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
-  const style: CSSProperties = { ...tintStyle(tint), ...(at ? { position: "fixed", left: at.x, top: at.y } : {}) };
-  return (
+  const style: CSSProperties = { ...tintStyle(tint), ...(at && !sheet ? { position: "fixed", left: at.x, top: at.y } : {}) };
+  const card = (
     <div
       ref={box}
       className="k-popover"
       data-kit="Popover"
-      data-arrow={arrow}
+      data-sheet={sheet ? "yes" : undefined}
+      data-arrow={sheet ? "none" : arrow}
       data-tinted={tint ? "yes" : undefined}
       role="dialog"
       aria-label={label}
@@ -70,4 +77,5 @@ export function Popover({
       {children}
     </div>
   );
+  return sheet ? <Sheet onClose={onClose}>{card}</Sheet> : card;
 }

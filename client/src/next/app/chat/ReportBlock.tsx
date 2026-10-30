@@ -2,7 +2,7 @@ import { type FormEvent, type ReactNode, useEffect, useLayoutEffect, useRef, use
 import { createPortal } from "react-dom";
 import { onPhone } from "../../core/phone";
 import { useBackButton } from "../useBackButton";
-import { Button, Icon, type MenuAnchor, Popover, TextField } from "../../kit";
+import { Button, Icon, type MenuAnchor, Popover, Sheet, TextField } from "../../kit";
 import "./ReportBlock.css";
 
 /**
@@ -186,14 +186,12 @@ export function FloatingForm({ anchor, label, onClose, children }: { anchor: Men
 
 function SheetForm({ label, onClose, children }: { label: string; onClose: () => void; children: ReactNode }) {
   useBackButton(true, onClose);
-  return createPortal(
-    <>
-      <div className="k-menu-scrim" aria-hidden="true" onClick={onClose} />
+  return (
+    <Sheet onClose={onClose}>
       <div className="nx-report-sheet" role="dialog" aria-label={label}>
         {children}
       </div>
-    </>,
-    document.body,
+    </Sheet>
   );
 }
 

@@ -2,6 +2,7 @@ import { type KeyboardEvent, type ReactNode, useEffect, useLayoutEffect, useRef,
 import { createPortal } from "react-dom";
 import { Icon, type IconName } from "./Icon";
 import { type Anchor, placeBeside } from "./place";
+import { Sheet } from "./Sheet";
 import "./Menu.css";
 
 export interface MenuItem {
@@ -193,15 +194,7 @@ export function Menu({
       ))}
     </div>
   );
-  return createPortal(
-    sheet ? (
-      <>
-        <div className="k-menu-scrim" aria-hidden="true" onClick={() => onClose("outside")} />
-        {menu}
-      </>
-    ) : (
-      menu
-    ),
-    document.body,
-  );
+  // A sheet's scrim takes the tap that closes it, as the click, not the press (#704).
+  if (sheet) return <Sheet onClose={() => onClose("outside")}>{menu}</Sheet>;
+  return createPortal(menu, document.body);
 }

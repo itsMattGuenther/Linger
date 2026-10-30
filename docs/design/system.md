@@ -531,7 +531,7 @@ message's Reply, Edit and Delete.
 - **`checked`** makes an item an on/off choice (`menuitemcheckbox`), like a
   server's Quiet: a tick in the lamp at its end when it's on.
 - **`sheet`** (the phone, SPEC §4.15): the same items rise from the bottom of
-  the screen, full width over a dimmed scrim (`--scrim`), with an optional
+  the screen in a `Sheet` (below), with an optional
   `head` line saying what they're for ("Eli: No plans, no agenda…"). A
   message is held for them, since a phone has no hover for its ···, and Copy
   text is one of them, since holding can't select its words. The hold is
@@ -681,7 +681,7 @@ person lets go (the pointer comes up, or the key that moved it is released,
 however long it was held), for something to do once, like playing a sample.
 It's used for a person's volume, over their chip in the voice bar and under
 it on a conversation's voice line (`app/list/VolumeCard.tsx`, #747; on the
-phone it rises from the bottom, `app/list/Sheet.tsx`), for the sound volume in Settings → Sound &
+phone it rises from the bottom in a `Sheet`), for the sound volume in Settings → Sound &
 Voice, which plays one chime when let go of, and for a shared audio file's
 timeline and volume (`app/chat/AudioCard.tsx`).
 
@@ -760,6 +760,26 @@ button. Nothing else about a share is drawn in the lamp but the pressed Share bu
   - It is a named `dialog`, with a close button and Escape.
   - It can point left or right at what opened it.
   - `at` places it; its size is its own.
+  - `sheet` (the phone) has it rise from the bottom in a `Sheet` instead,
+    which sets its size: a person's volume, everyone in a big room (#747).
+
+### Sheet
+
+How something shows over the page on the phone (SPEC §4.15): risen from the
+bottom, the whole width, over the page dimmed (`--scrim`), in a thumb's
+reach. A `Menu` with `sheet`, a `Popover` with `sheet` and a report form
+(`app/chat/ReportBlock.tsx`) all rise in this one (#776), so the rules are
+set once:
+
+- **Never taller than the screen:** 90% of it at most, held sideways too, so
+  the page still shows above it. What it holds scrolls inside it, the
+  tallest part first (everyone's names, not their search box).
+- **Its own frame:** the top corners rounded, a hairline along the top, the
+  popover surface, and clear of the phone's home bar
+  (`safe-area-inset-bottom`). What's in it drops its own frame.
+- **A tap on the dimmed page closes it.** The scrim takes the tap's click,
+  not its press, so it never lands on what was under it (#704). Back is the
+  caller's (`useBackButton`), since the kit doesn't know the shell.
 
 ### Notice, VoiceGlyph, Swatch, Spinner
 
@@ -1249,6 +1269,7 @@ it catches, and nowhere else (AGENTS.md hard rule 4).
 | DM alerts: a banner for every DM titled by who wrote it, the taskbar asked to point at the window it would show in, nothing while you're reading it or using Linger, through a Quiet server, one banner per burst, on unless turned off on this computer, and nothing until the app says how to read that setting | `lib/notify.test.ts`, `lib/notify-rules.test.ts`, `core/dmAlerts.test.ts`, `next-settings-window.spec.ts`; the window it points at in `src-tauri/src/window.rs` |
 | A big room (#197): six seats, you and whoever just talked, two lines of three, 24px, each as wide as its column; a seat changes hands only when somebody new talks, to whoever spoke longest ago, and nobody moves while they talk, in the voice bar and the conversation's strip; everybody a marker in the crowd, lit while talking, no digit in the bar; the crowd opens everyone but you, alphabetical, searchable, Enter opening the first one's volume, Escape giving the crowd the keyboard back; a small room's bar as before | `core/seats.test.ts`, `next-list.spec.ts` › raid night, `next-chat.spec.ts` › in a big room you're in, `kit.spec.ts` › a big voice room's crowd; a seat is as wide as its column |
 | Somebody's volume from the conversation's voice line (#747): in the room you're in voice in, every chip but yours opens the voice bar's card, under it, the slider with the keyboard and every step played at once, Escape giving the chip the keyboard back; "and others" opens everyone by name under it; the host's card can take them out, refused saying why; a card closes when its person leaves voice; in any other room the chips and "and others" open nothing; from a conversation in its own window the level is asked of the list window and never sent; beside the list it's played at once and the voice bar shows it; on the phone, the strip's chips and "and others" take a tap the strip's whole height, the voice bar's lines stand 44px apart for theirs, and the card and everyone rise from the bottom the whole width, heard at once, everyone's search box waiting to be tapped, and held sideways the sheet fits the screen with its names scrolling; an open card follows the level once its step is answered and shows a change made elsewhere; another chip's card straight after one is that person's own, in the strip and the bar; a chip that widens on a full line has the strip counted again, never left squeezed (#775) | `next-chat.spec.ts` › voice here (#747), a chip that widens on a full line; `next-chat-window.spec.ts` › a volume set from the voice strip's chip; `next-list-window.spec.ts` › a volume set from the strip beside the list; `next-phone-voice-room.spec.ts` (#747); `core/share.test.ts` › a volume from a conversation's own window; `gateway.voice.test.ts` › a volume set by who somebody is |
+| Every phone sheet (#776): a menu, a card and a plain one, each far taller than a short screen, fits it: its bottom on the screen's, the whole width, at most 90% of the height, what it holds scrolling inside, and a tap on the dimmed page closing it | `kit.spec.ts` › a tall menu sheet, a tall card sheet, a tall sheet |
 | A big server's People (#197): past twelve people here or away, the people you talk to, then "Everyone else" folded, with no Away group and no digit in any heading; a room's row shows up to sixteen markers | `core/list.test.ts` › a big server's People, `next-list.spec.ts` › raid night |
 | One line per person (#197): off to start; on, every person's row is 32px with no second line, the status in a tooltip and the row's name; turned on in Settings, an open list follows at once | `next-list.spec.ts` › one line per person, `next-settings-window.spec.ts` |
 | No color literal outside `tokens.css` | `discipline.test.ts` › writes no color outside styles/tokens.css |

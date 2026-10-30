@@ -22,6 +22,7 @@ export { Row, RowList, type RowLead, type RowProps } from "./Row";
 export { SectionLabel, type SectionLabelProps } from "./SectionLabel";
 export { Select, type SelectOption, type SelectProps } from "./Select";
 export { SettingRow } from "./SettingRow";
+export { Sheet } from "./Sheet";
 export { Spinner } from "./Spinner";
 export { Swatch } from "./Swatch";
 export { Slider } from "./Slider";

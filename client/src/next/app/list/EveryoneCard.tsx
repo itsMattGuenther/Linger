@@ -2,7 +2,7 @@ import { type RefObject, useEffect, useRef, useState } from "react";
 import { volumeLabel } from "../../../lib/voice";
 import { Icon, Name, Popover, Row, RowList, TextField, VoiceGlyph } from "../../kit";
 import { markerFor } from "../markers";
-import { Sheet } from "./Sheet";
+import { useBackButton } from "../useBackButton";
 import { type CardSide, useBeside } from "./useAbove";
 import type { VoiceDockPerson } from "./VoiceDock";
 import "./EveryoneCard.css";
@@ -41,6 +41,8 @@ export function EveryoneCard({
   const [find, setFind] = useState("");
   const body = useRef<HTMLDivElement | null>(null);
   const at = useBeside(anchor, body, side);
+  // Risen on the phone, Back closes it, as it does the phone's other sheets.
+  useBackButton(sheet, onClose);
 
   // The search box has the keyboard as soon as it opens, but on a phone.
   useEffect(() => {
@@ -52,8 +54,8 @@ export function EveryoneCard({
     .sort((a, b) => a.user.display_name.localeCompare(b.user.display_name))
     .filter((person) => wanted === "" || person.user.display_name.toLocaleLowerCase().includes(wanted) || person.user.username.toLocaleLowerCase().includes(wanted));
 
-  const card = (
-    <Popover label={`Everyone in voice in ${where}`} at={sheet ? undefined : at} onClose={onClose}>
+  return (
+    <Popover label={`Everyone in voice in ${where}`} at={at} sheet={sheet} onClose={onClose}>
       <div className="nx-everyone" ref={body}>
         <p className="nx-everyone-head">
           <span className="nx-everyone-label">In voice</span>
@@ -95,7 +97,6 @@ export function EveryoneCard({
       </div>
     </Popover>
   );
-  return sheet ? <Sheet onClose={onClose}>{card}</Sheet> : card;
 }
 
 /** Beside a name: their microphone off, as its control's glyph, and the bars while they talk. */

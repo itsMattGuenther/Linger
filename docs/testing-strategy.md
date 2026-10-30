@@ -200,6 +200,20 @@ rules that came out of them.
   what came out, as `scripts/linux-next-env.test.mjs` does with `xvfb-run`
   (#768). A test that reads files on purpose (a lint over the workflows, two
   lists kept equal) is the exception, and says so.
+- **A card or popover that opens from one of several things** (a person's
+  chip, a row) **is tested going straight from one to the next** while it's
+  open: the second must be that one's own, with the keyboard and nothing
+  left from the first. Every test that opened one card and closed it missed
+  that the voice bar's card kept the last one's refusal (#774).
+- **A value shared between windows is tested changing in another window
+  while it's showing**, after a change made here and before the owner's
+  answer to it: a card that held its own level until it closed showed none
+  of the changes made in the voice bar (#774).
+- **A phone screen is tried held sideways**, short and wide, as well as
+  upright. Whatever rises from the bottom does so in the kit's `Sheet`,
+  which is never taller than the screen; its own test covers every kind
+  (`kit.spec.ts`, #776). One built outside it ran off a phone held
+  sideways (#774).
 - **Scripts that look for system files look where every distro keeps them:**
   `/usr/lib` (Arch), `/usr/lib64` (Fedora), `/usr/lib/x86_64-linux-gnu`
   (Debian, Ubuntu). And never bind-mount a path that might be missing: Docker

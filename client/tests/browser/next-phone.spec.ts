@@ -715,7 +715,7 @@ test.describe("held with a finger, on an iPhone too", () => {
     await expect(sheet.locator(".k-menu-head")).toHaveText(/^Eli: No plans, no agenda/);
     await expect(sheet.locator("[data-kit='MenuItem']")).toHaveText(["Reply", "Copy text", "Pin", "Report to host…"]);
     // A tap on the dimmed page closes it.
-    await page.locator(".k-menu-scrim").tap();
+    await page.locator(".k-sheet-scrim").tap();
     await expect(sheet).toHaveCount(0);
 
     // A tap is a tap.
@@ -950,7 +950,7 @@ test.describe("a row held with a finger raises its actions from the bottom (#704
     await touch.down(await middle(eli));
     await expect(sheet(page)).toBeVisible();
     await touch.up();
-    await page.locator(".k-menu-scrim").tap({ position: { x: 200, y: 300 } });
+    await page.locator(".k-sheet-scrim").tap({ position: { x: 200, y: 300 } });
     await expect(sheet(page)).toHaveCount(0);
     await page.waitForTimeout(300);
     await expect(screen(page)).toHaveCount(0);

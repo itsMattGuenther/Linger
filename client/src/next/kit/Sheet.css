@@ -1,0 +1,35 @@
+/* The phone's sheet (SPEC §4.15): risen from the bottom over the page dimmed.
+   The one place a sheet's size and look are set (#776); what's in it drops
+   its own frame. Tokens only. */
+.k-sheet-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-popover);
+  background: var(--scrim);
+}
+
+/* Never taller than the screen, held sideways too, with the page still
+   showing above it. */
+.k-sheet {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: var(--z-popover);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(var(--window-height) * 0.9);
+  overflow: hidden;
+  padding-bottom: env(safe-area-inset-bottom);
+  border-top: 1px solid var(--white-a10);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  background: var(--surface-popover);
+  box-shadow: var(--shadow-popover);
+}
+
+/* What it holds fills it, and scrolls when it's taller. */
+.k-sheet > * {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}

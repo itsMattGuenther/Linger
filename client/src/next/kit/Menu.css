@@ -102,25 +102,16 @@
   color: var(--text-accent);
 }
 
-/* On a phone (SPEC §4.15): a sheet across the bottom, over the page dimmed,
-   with rows a thumb can hit. */
-.k-menu-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-popover);
-  background: var(--scrim);
-}
-
+/* On a phone (SPEC §4.15): in a `Sheet` across the bottom, which sets its
+   size and look, with rows a thumb can hit. */
 .k-menu[data-sheet="yes"] {
-  top: auto;
-  right: 0;
-  bottom: 0;
-  left: 0;
+  position: static;
   width: auto;
-  max-height: calc(var(--window-height) * 0.7);
-  padding: var(--space-2) var(--space-2) calc(var(--space-2) + env(safe-area-inset-bottom));
-  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-  border-bottom: 0;
+  padding: var(--space-2);
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
 }
 
 .k-menu[data-sheet="yes"] .k-menu-item {

@@ -45,3 +45,9 @@
   line-height: var(--line-meta);
   color: var(--text-danger);
 }
+
+/* In a sheet on the phone (#747): the whole width. */
+.k-popover[data-sheet="yes"] .nx-volume {
+  width: auto;
+  max-width: none;
+}

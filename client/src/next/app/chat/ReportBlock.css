@@ -80,18 +80,7 @@
   width: min(var(--picker-w), calc(100vw - var(--space-4)));
 }
 
-/* On the phone: risen from the bottom, the whole width, over the page dimmed. */
+/* On the phone: in a `Sheet`, risen from the bottom, which sets its size. */
 .nx-report-sheet {
-  position: fixed;
-  right: 0;
-  bottom: var(--phone-keyboard-gap, 0);
-  left: 0;
-  z-index: var(--z-popover);
-  max-height: calc(var(--window-height) * 0.9);
-  overflow-y: auto;
-  padding: var(--space-4) var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom));
-  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-  border-top: 1px solid var(--white-a10);
-  background: var(--surface-popover);
-  box-shadow: var(--shadow-popover);
+  padding: var(--space-4);
 }

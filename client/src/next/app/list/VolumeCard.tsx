@@ -3,7 +3,7 @@ import type { User } from "../../../generated/User";
 import { volumeLabel } from "../../../lib/voice";
 import { onPhone, thisDevice } from "../../core/phone";
 import { Button, Name, Popover, Slider } from "../../kit";
-import { Sheet } from "./Sheet";
+import { useBackButton } from "../useBackButton";
 import { type CardSide, useBeside } from "./useAbove";
 import "./VolumeCard.css";
 
@@ -50,14 +50,16 @@ export function VolumeCard({
   const body = useRef<HTMLDivElement | null>(null);
   // Beside the chip (over it in the voice bar, under it on a voice line), never off the window.
   const at = useBeside(anchor, body, side);
+  // Risen on the phone, Back closes it, as it does the phone's other sheets.
+  useBackButton(sheet, onClose);
 
   // The slider has the keyboard as soon as it opens.
   useEffect(() => {
     body.current?.querySelector<HTMLInputElement>("input")?.focus();
   }, []);
 
-  const card = (
-    <Popover label={`${user.display_name}'s volume`} at={sheet ? undefined : at} onClose={onClose}>
+  return (
+    <Popover label={`${user.display_name}'s volume`} at={at} sheet={sheet} onClose={onClose}>
       <div className="nx-volume" ref={body}>
         <p className="nx-volume-who">
           <Name person={user} size="control" />
@@ -103,5 +105,4 @@ export function VolumeCard({
       </div>
     </Popover>
   );
-  return sheet ? <Sheet onClose={onClose}>{card}</Sheet> : card;
 }

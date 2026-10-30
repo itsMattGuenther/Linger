@@ -570,7 +570,7 @@ Rules for this milestone:
   opens everyone by name; in any other room the chips open nothing (revisit in a new
   issue if that feels wrong). A conversation in its own window asks the list window
   (`voice.volume`). On the phone, the volume and everyone rise from the bottom
-  (`app/list/Sheet.tsx`), in the voice bar too, and each chip takes a tap a thumb's
+  (the kit's `Sheet`, #776), in the voice bar too, and each chip takes a tap a thumb's
   height. Tests: `next-chat.spec.ts`, `next-chat-window.spec.ts`,
   `next-list-window.spec.ts`, `next-phone-voice-room.spec.ts`, `share.test.ts`,
   `gateway.voice.test.ts`. **Still to do:** use it in a real call, on a computer and

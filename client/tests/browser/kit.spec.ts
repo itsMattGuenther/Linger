@@ -428,6 +428,34 @@ test("a tab dragged along the row lands where it's dropped, and a small wobble i
   await expect(window.locator("[data-dragged='yes']")).toHaveCount(0);
 });
 
+// #776: the phone had three sheets, each sizing itself, and #747's ran off a
+// phone held sideways. Every sheet rises in the kit's `Sheet` now: a menu, a
+// card, or anything else. On a short screen each fits, its bottom on the
+// screen's, the whole width, and what it holds scrolls inside it.
+for (const [button, role, name] of [
+  ["A tall menu sheet", "menu", "A tall menu"],
+  ["A tall card sheet", "dialog", "A tall card"],
+  ["A tall sheet", "dialog", "A tall sheet"],
+] as const) {
+  test(`${button.toLowerCase()} fits a short screen, the whole width, and scrolls inside (#776)`, async ({ page }) => {
+    await page.getByRole("button", { name: button, exact: true }).click();
+    await page.setViewportSize({ width: 860, height: 300 });
+    const inside = page.getByRole(role, { name, exact: true });
+    await expect(inside).toBeVisible();
+    const sheet = page.locator("[data-kit='Sheet']");
+    await sheet.evaluate((node) => Promise.all(node.getAnimations({ subtree: true }).map((one) => one.finished)));
+    const box = await sheet.boundingBox();
+    expect(box && box.y >= 0 && Math.abs(box.y + box.height - 300) <= 1 && box.x === 0 && Math.round(box.width) === 860).toBe(true);
+    expect(box && box.height <= 300 * 0.9 + 1).toBe(true);
+    // Taller than it: what it holds scrolls, and its end can be reached.
+    const scrolls = await sheet.evaluate((node) => [...node.querySelectorAll("*")].some((part) => part.scrollHeight > part.clientHeight + 1 && getComputedStyle(part).overflowY === "auto"));
+    expect(scrolls).toBe(true);
+    // A tap on the dimmed page closes it.
+    await page.mouse.click(430, 10);
+    await expect(inside).toHaveCount(0);
+  });
+}
+
 test("a menu opens on its first item, moves with the arrows, and gives focus back when it closes", async ({ page }) => {
   const trigger = page.getByTestId("menu-trigger").getByRole("button", { name: "Actions for Eli's message" });
   const menu = page.getByRole("menu", { name: "Actions for Eli's message" });
