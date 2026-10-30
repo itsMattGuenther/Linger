@@ -360,7 +360,8 @@ Khruangbin…`), which suits smaller windows.
   spoke longest ago, so nobody moves while they talk. The dots open everyone by name,
   with a search box; picking somebody opens their volume.
 - **A conversation's voice strip shows as many people as fit its one line**
-  (#745), then "and others", and recounts as the window changes. In a big room
+  (#745), then "and others", and recounts as the window changes, or as a
+  chip's width does when a name's face arrives late (#775). In a big room
   you're in, that's you and as many seats for whoever just talked as the widest
   names among them would fill, so how many never changes while people talk.
 - **Somebody's volume opens from their chip** in the voice bar, over it, and

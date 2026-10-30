@@ -419,6 +419,20 @@ function drifted(list: Element, measure: StripMeasure): boolean {
   });
 }
 
+/** Watch the chips on the line now, and stop watching any that have gone. */
+function watchEach({ watch, chips, each }: { watch: ResizeObserver; chips: Element; each: Set<Element> }): void {
+  for (const chip of chips.children) {
+    if (each.has(chip)) continue;
+    watch.observe(chip);
+    each.add(chip);
+  }
+  for (const chip of each) {
+    if (chip.parentElement === chips) continue;
+    watch.unobserve(chip);
+    each.delete(chip);
+  }
+}
+
 function sameFit(a: StripFit, b: StripFit): boolean {
   return a.kind === b.kind && (a.kind !== "first" || b.kind !== "first" || a.count === b.count) && (a.kind !== "seats" || b.kind !== "seats" || a.seats === b.seats);
 }
@@ -466,13 +480,19 @@ function useStripFit(here: readonly User[], you: string | null, words: StripWord
   });
   // Recount whenever the line's room changes. The list and the words are
   // watched, not the strip: a button coming or going on the line changes
-  // their room without changing the strip's width.
-  const watched = useRef<{ watch: ResizeObserver; chips: Element; said: Element } | null>(null);
+  // their room without changing the strip's width. Each chip is watched too:
+  // a face that arrives after a full line was measured changes the chips'
+  // widths and not the line's, and WebKit doesn't always say it arrived
+  // (#747's repeated runs found the strip left squeezed that way).
+  const watched = useRef<{ watch: ResizeObserver; chips: Element; said: Element; each: Set<Element> } | null>(null);
   useEffect(() => {
     const chips = list.current;
     const said = line.current;
     const now = watched.current;
-    if (now && now.chips === chips && now.said === said) return;
+    if (now && now.chips === chips && now.said === said) {
+      watchEach(now);
+      return;
+    }
     now?.watch.disconnect();
     watched.current = null;
     if (!chips || !said || typeof ResizeObserver === "undefined") return;
@@ -488,7 +508,8 @@ function useStripFit(here: readonly User[], you: string | null, words: StripWord
     });
     watch.observe(chips);
     watch.observe(said);
-    watched.current = { watch, chips, said };
+    watched.current = { watch, chips, said, each: new Set() };
+    watchEach(watched.current);
   });
   useEffect(
     () => () => {

@@ -814,6 +814,39 @@ test.describe("voice here", () => {
     });
   }
 
+  // Found by #747's repeated WebKit runs: the chips were measured while a
+  // face was still loading and filled the line to within half a pixel, so
+  // the line had nothing left over. When the face arrived the chips widened,
+  // but the line and its words kept their sizes, WebKit didn't say the face
+  // had arrived, and the strip stayed squeezed with nobody behind "and
+  // others". Here the line is filled exactly, then one chip widens.
+  test("a chip that widens on a full line has the strip counted again, not squeezed (#745, #747)", async ({ page }) => {
+    await open(page, "?voice=mine&seven");
+    const strip = page.getByRole("group", { name: "Voice in this conversation" });
+    const chips = strip.getByRole("list", { name: "In voice here" }).getByRole("listitem");
+    await expect(chips).toHaveCount(7);
+    await expect(strip.getByRole("button", { name: "and others" })).toHaveCount(0);
+    // Take up exactly what's left after the chips, so the line is full.
+    const { left, padding } = await strip.evaluate((node) => ({
+      left: node.querySelector(".nx-strip-words")?.getBoundingClientRect().width ?? 0,
+      padding: parseFloat(getComputedStyle(node).paddingRight),
+    }));
+    await page.addStyleTag({ content: `.nx-strip { padding-right: ${padding + left}px; }` });
+    await expect.poll(() => strip.locator(".nx-strip-words").evaluate((words) => words.getBoundingClientRect().width)).toBeLessThan(0.5);
+    await expect(chips).toHaveCount(7);
+    // One chip widens, as when its face arrives; nothing else changes size.
+    await page.addStyleTag({ content: `.nx-strip [data-user="u-jen"] .k-chip-text { letter-spacing: 6px; }` });
+    await expect(strip.getByRole("button", { name: "and others" })).toBeVisible();
+    expect(await chips.count()).toBeLessThan(7);
+    const squeezed = await chips.evaluateAll((items) =>
+      items.some((item) => {
+        const chip = item.querySelector(".k-chip");
+        return chip !== null && chip.scrollWidth > item.getBoundingClientRect().width + 1;
+      }),
+    );
+    expect(squeezed).toBe(false);
+  });
+
   test("with everybody fitting, the strip shows them all and no \"and others\" (#745)", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 790 });
     await open(page, "?voice=mine");
