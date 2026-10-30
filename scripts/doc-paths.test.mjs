@@ -16,21 +16,20 @@
 // `docs/review-catches.md`, `docs/releases/`), which name files that existed
 // then, on purpose.
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, normalize, relative } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 
-/** The top-level directories a path in the docs can start with. */
-const TOP = readdirSync(ROOT).filter((name) => !name.startsWith(".") || name === ".github" || name === ".cargo").filter((name) => {
-  try {
-    return statSync(join(ROOT, name)).isDirectory() && !["node_modules", "target"].includes(name);
-  } catch {
-    return false;
-  }
-});
+/**
+ * The top-level directories a path in the docs can start with. Written out,
+ * not read from what's there: a directory renamed or deleted whole must leave
+ * its names failing, not unread (#771's review). A test below fails when a new
+ * one isn't added here.
+ */
+const TOP = [".cargo", ".github", "agents", "assets", "client", "crates", "deploy", "docs", "packaging", "scripts"];
 
 /** What a build or a run makes, never in the repository. */
 const MADE = /(?:^|\/)(?:target|dist|node_modules|test-results|playwright-report|gen)\//;
@@ -61,9 +60,16 @@ export function namedPaths(text, from = "README.md", top = TOP, exists = (path) 
         if (!top.includes(token.split("/")[0] ?? "") || base === null) return;
         names.push({ line: at + 1, path: base === "" ? token : normalize(join(base, token)) });
       };
-      // A span that is one file's name, spaces and all.
+      // A span that is one file's name, spaces and all: one that's there, or
+      // one with no command in it that ends in an extension, there or not, so
+      // a missing one is named whole (#771's review). A command with an
+      // argument (`scripts/x.sh verify`) is read word by word.
       const whole = clean(piece.trim());
-      if (!fenced && /\s/.test(whole) && top.includes(whole.split("/")[0] ?? "") && exists(whole)) {
+      const first = whole.split(/\s/)[0] ?? "";
+      const oneName =
+        exists(whole) ||
+        (!exists(first) && !/\s-|&&|\||;|=|\[/.test(whole) && /\.[A-Za-z0-9]{1,6}$/.test(whole));
+      if (!fenced && /\s/.test(whole) && top.includes(whole.split("/")[0] ?? "") && oneName) {
         add(whole);
         continue;
       }
@@ -79,8 +85,10 @@ export function namedPaths(text, from = "README.md", top = TOP, exists = (path) 
       }
     }
     if (fenced) continue;
-    for (const match of line.matchAll(/\]\(([^)\s]+)\)/g)) {
-      const target = (match[1] ?? "").replace(/#.*$/, "");
+    // A link's target, plain or in angle brackets, which may hold spaces
+    // (`[art](<assets/logo/Linger Pixel Porch.png>)`; #771's review).
+    for (const match of line.matchAll(/\]\(<([^>]+)>\)|\]\(([^)\s<]+)\)/g)) {
+      const target = decodeURI(match[1] ?? match[2] ?? "").replace(/#.*$/, "");
       if (target === "" || /^[a-z][a-z0-9+.-]*:/i.test(target) || /[*<>$]/.test(target)) continue;
       const path = normalize(join(dirname(from), target));
       if (!path.startsWith("..")) names.push({ line: at + 1, path });
@@ -129,6 +137,30 @@ test("names are found in code, fenced blocks and links; globs, placeholders and 
     { line: 10, path: "docs/Linger Pixel Porch.png" },
     { line: 11, path: "scripts/android-signing.sh" },
   ]);
+});
+
+test("a name under a directory that's gone, a missing name with spaces and an angle-bracket link are read whole", () => {
+  const text = [
+    "The old art was in `assets/old/Porch Icon FINAL.png`; the sounds were in `sounds/knock.ogg`.",
+    "See [the art](<assets/logo/Old Porch Icon.png>) and [the guide](<../docs/gone guide.md>).",
+    "Run `scripts/android-signing.sh verify-bundle` after.",
+  ].join("\n");
+  // Nothing in this text exists; `sounds/` isn't a directory the repository has.
+  const exists = () => false;
+  assert.deepEqual(namedPaths(text, "docs/x.md", ["assets", "docs", "scripts", "sounds"], exists), [
+    { line: 1, path: "assets/old/Porch Icon FINAL.png" },
+    { line: 1, path: "sounds/knock.ogg" },
+    { line: 2, path: "docs/assets/logo/Old Porch Icon.png" },
+    { line: 2, path: "docs/gone guide.md" },
+    { line: 3, path: "scripts/android-signing.sh" },
+  ]);
+});
+
+test("every top-level directory is one a name can start with", () => {
+  const dirs = readdirSync(ROOT, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && ![".git", "node_modules", "target"].includes(entry.name))
+    .map((entry) => entry.name);
+  assert.deepEqual(dirs.filter((dir) => !TOP.includes(dir)), [], "add the new directory to TOP");
 });
 
 test("the living docs are all read", () => {
