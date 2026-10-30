@@ -16,6 +16,7 @@
 // `docs/review-catches.md`, `docs/releases/`), which name files that existed
 // then, on purpose.
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, normalize, relative } from "node:path";
 import test from "node:test";
@@ -33,6 +34,36 @@ const TOP = [".cargo", ".github", "agents", "assets", "client", "crates", "deplo
 
 /** What a build or a run makes, never in the repository. */
 const MADE = /(?:^|\/)(?:target|dist|node_modules|test-results|playwright-report|gen)\//;
+
+/** A link's optional title, after its target: "t", 't' or (t). */
+const TITLE = String.raw`(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?`;
+const INLINE = new RegExp(String.raw`\]\(\s*(?:<([^>]*)>|([^)\s<]+))${TITLE}\s*\)`, "g");
+const REFERENCE = /^ {0,3}\[[^\]]+\]:\s*(?:<([^>]*)>|(\S+))?/;
+const ON_NEXT_LINE = /^\s*(?:<([^>]*)>|(\S+))/;
+const ATTRIBUTE = /\b(?:src|href)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/gi;
+
+/**
+ * Every link target on a Markdown line, in every form it can take (#771's
+ * review found the forms one at a time, so here is the table): an inline
+ * link or image, plain or in angle brackets (which may hold spaces), with or
+ * without a title; a reference's definition, its target on the line or the
+ * next; and an HTML tag's src or href, quoted either way or not at all.
+ */
+export function linkTargets(line, next = "") {
+  const found = [];
+  for (const match of line.matchAll(INLINE)) found.push(match[1] ?? match[2] ?? "");
+  const reference = REFERENCE.exec(line);
+  if (reference) {
+    const target = reference[1] ?? reference[2];
+    if (target !== undefined) found.push(target);
+    else {
+      const below = ON_NEXT_LINE.exec(next);
+      if (below) found.push(below[1] ?? below[2] ?? "");
+    }
+  }
+  for (const match of line.matchAll(ATTRIBUTE)) found.push(match[1] ?? match[2] ?? match[3] ?? "");
+  return found;
+}
 
 /**
  * The repository paths a doc names, each with its line: from inline code, fenced
@@ -85,13 +116,7 @@ export function namedPaths(text, from = "README.md", top = TOP, exists = (path) 
       }
     }
     if (fenced) continue;
-    // A link's target: plain or in angle brackets, which may hold spaces
-    // (`[art](<assets/logo/Linger Pixel Porch.png>)`; #771's review), a
-    // reference's (`[guide]: docs/development.md`), or an HTML tag's, as the
-    // README's logo is (`<img src="assets/logo/...">`).
-    const targets = /\]\(<([^>]+)>\)|\]\(([^)\s<]+)\)|^\s*\[[^\]]+\]:\s*(?:<([^>]+)>|(\S+))|\b(?:src|href)="([^"]+)"/g;
-    for (const match of line.matchAll(targets)) {
-      const raw = match[1] ?? match[2] ?? match[3] ?? match[4] ?? match[5] ?? "";
+    for (const raw of linkTargets(line, lines[at + 1] ?? "")) {
       let target = raw;
       try {
         target = decodeURI(raw);
@@ -171,11 +196,36 @@ test("a name under a directory that's gone, a missing name with spaces, and angl
   ]);
 });
 
+test("every form a Markdown or HTML link takes is read", () => {
+  const table = [
+    ["[a](docs/a.md)", ["docs/a.md"]],
+    ["![a](docs/a.png)", ["docs/a.png"]],
+    ["[a](<docs/a b.md>)", ["docs/a b.md"]],
+    ['[a](docs/a.md "A title")', ["docs/a.md"]],
+    ["[a](docs/a.md 'A title')", ["docs/a.md"]],
+    ["[a](docs/a.md (A title))", ["docs/a.md"]],
+    ['[a](<docs/a b.md> "A title")', ["docs/a b.md"]],
+    ["[a]: docs/a.md", ["docs/a.md"]],
+    ['[a]: <docs/a b.md> "A title"', ["docs/a b.md"]],
+    ['<img src="docs/a.png">', ["docs/a.png"]],
+    ["<img src='docs/a.png'>", ["docs/a.png"]],
+    ["<a href=docs/a.md>a</a>", ["docs/a.md"]],
+    ['<img alt="a" SRC = "docs/a.png">', ["docs/a.png"]],
+  ];
+  for (const [line, want] of table) assert.deepEqual(linkTargets(line), want, line);
+  // A reference's target on the line below it.
+  assert.deepEqual(linkTargets("[a]:", "    <docs/a b.md>"), ["docs/a b.md"]);
+  assert.deepEqual(linkTargets("[a]:", "   docs/a.md 'A title'"), ["docs/a.md"]);
+});
+
 test("every top-level directory is one a name can start with", () => {
-  const dirs = readdirSync(ROOT, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && ![".git", "node_modules", "target"].includes(entry.name))
-    .map((entry) => entry.name);
-  assert.deepEqual(dirs.filter((dir) => !TOP.includes(dir)), [], "add the new directory to TOP");
+  // The directories git keeps: not a local server's data/, an editor's
+  // .vscode/ or anything else the repository ignores (#771's review).
+  const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: ROOT, encoding: "utf8" })
+    .split("\0")
+    .filter((path) => path.includes("/"))
+    .map((path) => path.slice(0, path.indexOf("/")));
+  assert.deepEqual([...new Set(tracked)].filter((dir) => !TOP.includes(dir)), [], "add the new directory to TOP");
 });
 
 test("the living docs are all read", () => {

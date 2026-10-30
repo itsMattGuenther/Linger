@@ -107,3 +107,11 @@ to be right for every shape that window takes.
   whole; angle-bracket links are read. Closing it turned up two more forms
   nobody had flagged, reference links and the README's HTML tags, read now
   too. The rule now names a language's forms, not only its spacing.
+  A second round found more of both: HTML attributes quoted with `'` or not
+  at all, and a reference link's target on the next line, still unread; and
+  the test that every top-level directory is listed counted a local server's
+  `data/` and an editor's `.vscode/`, failing `check.sh` on a clean branch.
+  *Changed:* every link form is read by one function from one table
+  (`linkTargets`, 15 forms, a link's title among them, which nobody had
+  flagged), and the directories compared are the ones git tracks. Adding
+  forms one review at a time was the gap itself.
