@@ -85,10 +85,20 @@ export function namedPaths(text, from = "README.md", top = TOP, exists = (path) 
       }
     }
     if (fenced) continue;
-    // A link's target, plain or in angle brackets, which may hold spaces
-    // (`[art](<assets/logo/Linger Pixel Porch.png>)`; #771's review).
-    for (const match of line.matchAll(/\]\(<([^>]+)>\)|\]\(([^)\s<]+)\)/g)) {
-      const target = decodeURI(match[1] ?? match[2] ?? "").replace(/#.*$/, "");
+    // A link's target: plain or in angle brackets, which may hold spaces
+    // (`[art](<assets/logo/Linger Pixel Porch.png>)`; #771's review), a
+    // reference's (`[guide]: docs/development.md`), or an HTML tag's, as the
+    // README's logo is (`<img src="assets/logo/...">`).
+    const targets = /\]\(<([^>]+)>\)|\]\(([^)\s<]+)\)|^\s*\[[^\]]+\]:\s*(?:<([^>]+)>|(\S+))|\b(?:src|href)="([^"]+)"/g;
+    for (const match of line.matchAll(targets)) {
+      const raw = match[1] ?? match[2] ?? match[3] ?? match[4] ?? match[5] ?? "";
+      let target = raw;
+      try {
+        target = decodeURI(raw);
+      } catch {
+        // A stray % isn't an escape: the name as written.
+      }
+      target = target.replace(/#.*$/, "");
       if (target === "" || /^[a-z][a-z0-9+.-]*:/i.test(target) || /[*<>$]/.test(target)) continue;
       const path = normalize(join(dirname(from), target));
       if (!path.startsWith("..")) names.push({ line: at + 1, path });
@@ -139,11 +149,13 @@ test("names are found in code, fenced blocks and links; globs, placeholders and 
   ]);
 });
 
-test("a name under a directory that's gone, a missing name with spaces and an angle-bracket link are read whole", () => {
+test("a name under a directory that's gone, a missing name with spaces, and angle-bracket, reference and HTML links are read whole", () => {
   const text = [
     "The old art was in `assets/old/Porch Icon FINAL.png`; the sounds were in `sounds/knock.ogg`.",
     "See [the art](<assets/logo/Old Porch Icon.png>) and [the guide](<../docs/gone guide.md>).",
     "Run `scripts/android-signing.sh verify-bundle` after.",
+    '<p align="center"><img src="../assets/logo/old-logo.svg" alt="Linger"> <a href="../LICENSE">license</a> <a href="#top">top</a></p>',
+    "[guide]: <old guide.md>",
   ].join("\n");
   // Nothing in this text exists; `sounds/` isn't a directory the repository has.
   const exists = () => false;
@@ -153,6 +165,9 @@ test("a name under a directory that's gone, a missing name with spaces and an an
     { line: 2, path: "docs/assets/logo/Old Porch Icon.png" },
     { line: 2, path: "docs/gone guide.md" },
     { line: 3, path: "scripts/android-signing.sh" },
+    { line: 4, path: "assets/logo/old-logo.svg" },
+    { line: 4, path: "LICENSE" },
+    { line: 5, path: "docs/old guide.md" },
   ]);
 });
 

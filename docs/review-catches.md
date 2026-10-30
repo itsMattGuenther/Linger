@@ -97,3 +97,13 @@ to be right for every shape that window takes.
   the line is split as the shell splits it, and the table of tricky commands
   in `scripts/workflow-downloads.test.mjs` grew with each. Rule: a check that
   reads code or commands starts from that table (`docs/testing-strategy.md`).
+- **#771: the docs path check (#770) had three holes.** A directory deleted
+  whole left its names unread, since the directories were read from what was
+  there. A missing file name with spaces was reported cut at the first
+  space. And links in angle brackets, which `docs/development.md` uses for
+  the artwork, weren't read. *Missed because* the same gap as #763: its tests
+  were the forms the docs used that day. *Changed:* the directories are
+  written out, with a test that a new one is added; a spaced name is read
+  whole; angle-bracket links are read. Closing it turned up two more forms
+  nobody had flagged, reference links and the README's HTML tags, read now
+  too. The rule now names a language's forms, not only its spacing.
