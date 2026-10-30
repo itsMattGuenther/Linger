@@ -138,7 +138,9 @@ export const VoiceStrip = memo(function VoiceStrip({
   const opener = useRef<HTMLElement | null>(null);
   // The level last set from the open card. A conversation in a window of its
   // own hears the list window's answer a moment later; until then the card
-  // shows what was set, so the next step goes on from there, not back.
+  // shows what was set, so the next step goes on from there, not back. Once
+  // the answer for that step comes, the shared level shows again, so a change
+  // made somewhere else shows here too; an answer to an older step doesn't.
   const [setTo, setSetTo] = useState<{ id: string; volume: number } | null>(null);
   // A double-click on the strip is one click, and for a moment after Join
   // or Leave redraws the buttons a click doesn't count (#510): it was meant
@@ -161,14 +163,15 @@ export const VoiceStrip = memo(function VoiceStrip({
   const heard = volumes ? here.filter((user) => user.id !== meId) : NO_USERS;
   const openOf = volumeOf === null ? undefined : heard.find((user) => user.id === volumeOf);
   const everyoneOpen = everyone && volumes !== undefined;
+  const shared = openOf ? (volume?.of.get(openOf.id) ?? 1) : null;
   useEffect(() => {
     if (volumeOf !== null && !openOf) setVolumeOf(null);
     if (everyone && !everyoneOpen) setEveryone(false);
   }, [volumeOf, openOf, everyone, everyoneOpen]);
-  // Once the card closes, the shared level is the one to show.
   useEffect(() => {
-    if (volumeOf === null) setSetTo(null);
-  }, [volumeOf]);
+    if (setTo === null) return;
+    if (setTo.id !== volumeOf || (shared !== null && Math.abs(shared - setTo.volume) < 0.001)) setSetTo(null);
+  }, [setTo, volumeOf, shared]);
   const words = stripWords(strip.kind, here.length, showFailed, showTakenOut);
   const { fit, measuring, list, line, ruler } = useStripFit(here, you, words, mics, sharing);
   // A room too big for its chips, that you're in (#197): you first, then
@@ -297,6 +300,8 @@ export const VoiceStrip = memo(function VoiceStrip({
       )}
       {volumes && openOf ? (
         <VolumeCard
+          // Each person's own card: its focus, and nothing left from the last one's.
+          key={openOf.id}
           user={openOf}
           volume={setTo?.id === openOf.id ? setTo.volume : (volumes.of.get(openOf.id) ?? 1)}
           anchor={opener}

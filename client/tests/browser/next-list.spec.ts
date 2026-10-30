@@ -1160,6 +1160,21 @@ test.describe("in voice", () => {
     await expect(refused.getByRole("alert")).toHaveText("They aren't in voice there.");
   });
 
+  // Greptile on #774, true of the voice bar since its cards came in.
+  test("another chip's card, straight after one, is that person's own: the keyboard, and nothing left over (#747)", async ({ page }) => {
+    await page.goto("/tests/fixtures/next-list.html?voice&takeout&takeoutfail");
+    const bar = page.getByRole("region", { name: "In voice in #general" });
+    await bar.getByRole("button", { name: /^Eli's volume/ }).click();
+    const eli = page.getByRole("dialog", { name: "Eli's volume" });
+    await eli.getByRole("button", { name: "Take out of voice" }).click();
+    await expect(eli.getByRole("alert")).toBeVisible();
+    await bar.getByRole("button", { name: /^Jules's volume/ }).click();
+    const jules = page.getByRole("dialog", { name: "Jules's volume" });
+    await expect(jules.getByRole("slider")).toBeFocused();
+    await expect(jules.getByRole("alert")).toHaveCount(0);
+    await expect(eli).toHaveCount(0);
+  });
+
   test("the list scrolls above the bar and nothing is hidden under it", async ({ page }) => {
     await page.goto("/tests/fixtures/next-list.html?voice");
     const scroll = await page.locator(".nx-list-scroll").boundingBox();

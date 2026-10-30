@@ -968,6 +968,44 @@ test.describe("voice here", () => {
     await expect(card.getByRole("button", { name: "Take out of voice" })).toHaveCount(0);
   });
 
+  // Greptile on #774: the card held the level it set until it closed, so a
+  // change made in the voice bar or another window didn't show on it, and
+  // its next step undid that change.
+  test("an open card follows the level once its step is answered, and shows a change made elsewhere (#747)", async ({ page }) => {
+    await open(page, "?voice=mine");
+    await page.getByRole("group", { name: "Voice in this conversation" }).getByRole("button", { name: /^Eli's volume/ }).click();
+    const slider = page.getByRole("dialog", { name: "Eli's volume" }).getByRole("slider");
+    await expect(slider).toBeFocused();
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("ArrowLeft");
+    await expect(slider).toHaveAttribute("aria-valuetext", "90%");
+    // The answer to the first step comes after the second: the newer one stays.
+    await page.evaluate(() => window.chat?.volume("u-eli", 0.95));
+    await expect(slider).toHaveAttribute("aria-valuetext", "90%");
+    await page.evaluate(() => window.chat?.volume("u-eli", 0.9));
+    // Answered. Turned down in the voice bar, say: the card shows it.
+    await page.evaluate(() => window.chat?.volume("u-eli", 0.5));
+    await expect(slider).toHaveAttribute("aria-valuetext", "50%");
+    await page.keyboard.press("ArrowRight");
+    expect((await did(page)).at(-1)).toBe("volume:u-eli:0.55");
+  });
+
+  // Greptile on #774: a click on another chip with a card open kept the card,
+  // so its slider didn't get the keyboard and the last one's refusal stayed.
+  test("another chip's card, straight after one, is that person's own: the keyboard, and nothing left over (#747)", async ({ page }) => {
+    await open(page, "?voice=mine&takeout&takeoutfail");
+    const strip = page.getByRole("group", { name: "Voice in this conversation" });
+    await strip.getByRole("button", { name: /^Eli's volume/ }).click();
+    const eli = page.getByRole("dialog", { name: "Eli's volume" });
+    await eli.getByRole("button", { name: "Take out of voice" }).click();
+    await expect(eli.getByRole("alert")).toBeVisible();
+    await strip.getByRole("button", { name: /^Jules's volume/ }).click();
+    const jules = page.getByRole("dialog", { name: "Jules's volume" });
+    await expect(jules.getByRole("slider")).toBeFocused();
+    await expect(jules.getByRole("alert")).toHaveCount(0);
+    await expect(eli).toHaveCount(0);
+  });
+
   test("somebody leaving voice closes their card (#747)", async ({ page }) => {
     await open(page, "?voice=mine");
     const strip = page.getByRole("group", { name: "Voice in this conversation" });

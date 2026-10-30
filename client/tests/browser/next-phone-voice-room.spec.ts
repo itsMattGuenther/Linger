@@ -211,3 +211,25 @@ test("the list's voice bar on the phone: a chip takes a tap a thumb's height, an
   expect(tops).toHaveLength(2);
   expect((tops[1] ?? 0) - (tops[0] ?? 0)).toBeGreaterThanOrEqual(44);
 });
+
+// Greptile on #774: a sheet had no height limit, so everyone, nine and a half
+// rows and a search box, ran off the top of a phone held sideways, taking
+// the search box and Close with it.
+test("held sideways, everyone's sheet fits the screen, its search box and Close in reach, the names scrolling (#747)", async ({ page }) => {
+  await inGeneral(page, "&seven");
+  await join(page);
+  await page.setViewportSize({ width: 860, height: 300 });
+  await strip(page).getByRole("button", { name: "and others" }).click();
+  const everyone = page.getByRole("dialog", { name: "Everyone in voice in #general" });
+  await expect(everyone).toBeVisible();
+  await everyone.evaluate((node) => Promise.all(node.getAnimations().map((one) => one.finished)));
+  const inside = async (name: string, box: { y: number; height: number } | null) => {
+    expect(box, name).not.toBeNull();
+    expect(box && box.y >= 0 && box.y + box.height <= 300, `${name} is on the screen`).toBe(true);
+  };
+  await inside("the sheet", await everyone.boundingBox());
+  await inside("the search box", await everyone.getByRole("textbox").boundingBox());
+  await inside("Close", await everyone.getByRole("button", { name: "Close" }).boundingBox());
+  const names = everyone.getByRole("list", { name: "In voice in #general" });
+  expect(await names.evaluate((list) => list.closest(".nx-everyone-list")?.scrollHeight ?? 0)).toBeGreaterThan(await names.evaluate((list) => list.closest(".nx-everyone-list")?.clientHeight ?? 0));
+});

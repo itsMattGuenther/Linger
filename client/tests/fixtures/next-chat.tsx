@@ -362,6 +362,12 @@ declare global {
       talk: (userIds: string[]) => void;
       /** Somebody leaves voice, wherever they were in it (#747). */
       leaveVoice: (userId: string) => void;
+      /**
+       * How loud somebody plays for you, as the list window says it (#747):
+       * the answer to a step on their card, or a change made elsewhere. A
+       * step asked for isn't answered until this says so.
+       */
+      volume: (userId: string, level: number) => void;
     };
   }
 }
@@ -530,6 +536,7 @@ function Fixture() {
     refuse: () => refusals.splice(0).forEach((refuse) => refuse()),
     talk: (userIds) => setSpeaking(new Set(userIds)),
     leaveVoice: (userId) => setLeftVoice((left) => new Set(left).add(userId)),
+    volume: (userId, level) => setLevels((now) => new Map(now).set(userId, level)),
   };
 
   const items: TabItem[] = tabs.open.map((tab) => {
@@ -679,10 +686,11 @@ function Fixture() {
   const onPickDevice = useCallback(() => note("settings:sound"), []);
   // Volumes from the strip's chips (#747): Dave's is turned down. `?takeout`:
   // you can take people out of voice, and `&takeoutfail` has it refused.
+  const [levels, setLevels] = useState<ReadonlyMap<string, number>>(VOLUMES);
   const volume = useMemo(
     () => ({
       where: "#general",
-      of: VOLUMES,
+      of: levels,
       onVolume: (user: string, level: number) => note(`volume:${user}:${level}`),
       ...(query.has("takeout")
         ? {
@@ -693,7 +701,7 @@ function Fixture() {
           }
         : {}),
     }),
-    [],
+    [levels],
   );
   // Your controls in the room you're in voice in (#216), as the chat window passes them.
   const controls = useMemo(

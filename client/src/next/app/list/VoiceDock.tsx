@@ -235,6 +235,8 @@ export function VoiceDock({ where, people, muted, deafened, line, server, onGoTo
       ) : null}
       {open && onVolume && volumeOf ? (
         <VolumeCard
+          // Each person's own card: its focus, and nothing left from the last one's.
+          key={open.user.id}
           user={open.user}
           volume={open.volume ?? 1}
           anchor={opener}

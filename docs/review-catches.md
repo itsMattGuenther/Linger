@@ -115,3 +115,22 @@ to be right for every shape that window takes.
   (`linkTargets`, 15 forms, a link's title among them, which nobody had
   flagged), and the directories compared are the ones git tracks. Adding
   forms one review at a time was the gap itself.
+- **#774: an open volume card held its own level until it closed.** A change
+  made in the voice bar or another window didn't show on it, and its next
+  step undid that change. *Missed because* the tests only ever changed a
+  level from the card itself. *Changed:* once the list window answers its
+  step, the card follows the shared level again, and an answer to an older
+  step doesn't count; a test answers late and changes the level elsewhere
+  (`next-chat.spec.ts`).
+- **#774: a second chip's card kept the first one's state**, in the voice
+  bar since #423 as well as the new strip. Its slider didn't get the
+  keyboard, and a refusal to take somebody out stayed on it. *Missed
+  because* every test opened one card and closed it. *Changed:* each
+  person's card is its own (`key`), with a test in the strip and in the bar
+  going straight from one chip to the next.
+- **#774: the phone's sheet ran off a phone held sideways.** Everyone,
+  nine and a half rows and a search box, was taller than the screen, so the
+  search box and Close went off its top. *Missed because* every phone test
+  uses one upright screen. *Changed:* a sheet is never taller than the screen
+  and its names scroll, with a test held sideways
+  (`next-phone-voice-room.spec.ts`).
