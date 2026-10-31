@@ -49,7 +49,7 @@ to be right for every shape that window takes.
   its folder before writing, and `docs/development.md` and
   `docs/testing-strategy.md` say anything the phone app writes outside its
   temporary and cache folders is marked. The app's own folders were already
-  #790.
+  #790, fixed by `phone_backup.rs` (#798).
 - **#792: file checks ran on the async runtime**, in `shared_file`, which
   AGENTS.md says never happens. *Missed because* no check enforces it, and
   `shared.rs` copied `dropped.rs`, which does the same. *Changed:* the share

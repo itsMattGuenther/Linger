@@ -1620,7 +1620,7 @@ phones, as SPEC §4.15 says. Why it works the way it does:
   `allowBackup="false"` already covers its files folder. An App Group's folder
   is backed up unless marked, so the share extension marks its folder before
   writing, and the mark moves with it (#792). The iPhone app's own folders are
-  #790.
+  marked at start-up by `phone_backup.rs` (#790).
 - **Only the bytes of what was chosen, only after choosing.** The sheet is
   drawn from names and sizes; the files are read once a conversation is
   picked, so a long video doesn't sit in memory while the person decides.
