@@ -1616,6 +1616,11 @@ phones, as SPEC §4.15 says. Why it works the way it does:
   opens it themselves, so a share waits ten minutes, not one. Once it's in a
   message box or turned down it's deleted at once, and one nobody took is
   deleted when the app next starts, as is a copy the phone stopped partway.
+- **Out of backups, as the rest of the phone app is.** Android's
+  `allowBackup="false"` already covers its files folder. An App Group's folder
+  is backed up unless marked, so the share extension marks its folder before
+  writing, and the mark moves with it (#792). The iPhone app's own folders are
+  #790.
 - **Only the bytes of what was chosen, only after choosing.** The sheet is
   drawn from names and sizes; the files are read once a conversation is
   picked, so a long video doesn't sit in memory while the person decides.

@@ -8,7 +8,8 @@ import UniformTypeIdentifiers
 /// of its own: `shared/0/IMG_0001.jpeg`. They're written into
 /// `shared-incoming` and take the inbox's place with one move once every file
 /// is whole, so the app never reads half a file, and a new share replaces the
-/// last.
+/// last. The folder is marked to stay out of iCloud backups before anything
+/// goes in it.
 ///
 /// Then it opens `linger://shared` to bring Linger forward, where the list asks
 /// which conversation they're for. An extension can't open its app directly;
@@ -65,6 +66,15 @@ final class ShareViewController: UIViewController {
     try? files.removeItem(at: incoming)
     do {
       try files.createDirectory(at: incoming, withIntermediateDirectories: true)
+      // Out of iCloud backups before anything is written, as the rest of
+      // Linger is (SPEC §4.15, #792): an App Group's folder is backed up
+      // unless told otherwise. The mark is the folder's own, so it moves with
+      // it into `shared`, and on into the app's `shared-taken`. A share that
+      // can't be kept out isn't taken.
+      var outOfBackups = URLResourceValues()
+      outOfBackups.isExcludedFromBackup = true
+      var marked = incoming
+      try marked.setResourceValues(outOfBackups)
     } catch {
       finish(.nothing)
       return
