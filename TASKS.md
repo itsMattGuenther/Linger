@@ -677,8 +677,9 @@ macOS runners, or a friend's Mac.
   from the GitHub address, which nobody else can claim, and neither store lets
   it change after the first upload. **Phone backups leave Linger out**
   (SPEC §4.15; the opt-in was dropped 2026-10-03): Android's
-  `allowBackup="false"` does it there, and the iPhone's files still need
-  marking "don't back up" (T-1604, #779).
+  `allowBackup="false"` does it there, and on the iPhone the app marks its
+  folders "don't back up" and keeps its sign-ins to that phone (#790,
+  T-1604), for TestFlight testers to confirm.
   *Accept:* the app opens on a real phone, signs in, and stays connected across
   a wifi-to-mobile-data switch.
 
@@ -767,10 +768,16 @@ macOS runners, or a friend's Mac.
   the key, and uploads to TestFlight (docs/releasing.md, "The iPhone").
   `Info.ios.plist` has the microphone and camera wording and the encryption
   answer. **Before the App Store, not before a first TestFlight build:**
-  keeping the app out of iCloud backups, as the privacy page says. Files
-  need "don't back up" set on them. The Keychain entry (the `keyring` crate's
-  default) may be restorable to another phone, so it needs a
-  this-device-only setting. Also **voice with the phone locked**: there's no
+  keeping the app out of iCloud backups, as the privacy page says. **Built,
+  for TestFlight testers to confirm (#790):** each start marks the folders
+  the web view, the phone's networking and Tauri keep things in "don't back
+  up" (`src/phone_backup.rs`), and each sign-in is written to the Keychain
+  as `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`, so a backup can't
+  carry it to another phone; an older build's entries move over in place the
+  first time, so nobody is signed out (`src/secrets.rs`). The testers check
+  that they're still signed in after updating, and that Linger shows next to
+  nothing under the iPhone's iCloud backups; then #779's "Backups and the
+  Keychain" is ticked. Also **voice with the phone locked**: there's no
   background audio mode yet, so locking may end a call. Check it on a real
   iPhone first, with Matt's friend.
   **A privacy policy link inside the app**, which Apple's guideline 5.1.1(i)
