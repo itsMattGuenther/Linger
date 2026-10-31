@@ -749,7 +749,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
     // `?behind`: the release it runs, behind the newest (#772).
     if (query.has("behind")) return json({ ok: true, version: server === SERVER ? "0.4.0" : "0.4.1" });
     // `?tooold`: the oldest app it works with is newer than this one (#793).
-    if (tooOld.has(server)) return json({ ok: true, version: "0.5.4", oldest_app: "0.5.4" });
+    if (tooOld.has(server)) return json({ ok: true, version: "0.5.4", oldest_client: "0.5.4" });
     return new Response(null, { status: 204 });
   }
   const invite = /^\/auth\/invite\/(.+)$/.exec(path);

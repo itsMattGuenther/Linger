@@ -312,13 +312,13 @@ export function searchQuery(query: SearchRequest): string {
 }
 
 /**
- * `/health`'s `oldest_app` (#793), read from an answer as it came: a string
+ * `/health`'s `oldest_client` (#793), read from an answer as it came: a string
  * when it's there, null for anything else. Read field by field rather than
  * trusted, since a missing or odd answer must only ever mean "nothing said".
  */
-export function oldestAppIn(said: unknown): string | null {
-  if (typeof said !== "object" || said === null || !("oldest_app" in said)) return null;
-  const oldest: unknown = said.oldest_app;
+export function oldestClientIn(said: unknown): string | null {
+  if (typeof said !== "object" || said === null || !("oldest_client" in said)) return null;
+  const oldest: unknown = said.oldest_client;
   return typeof oldest === "string" ? oldest : null;
 }
 
@@ -334,12 +334,12 @@ export class PublicApi {
    * server there, as it always was; an answer without the field (a server
    * from before it), or one that can't be read, says nothing about apps.
    */
-  async health(signal?: AbortSignal): Promise<{ oldestApp: string | null }> {
+  async health(signal?: AbortSignal): Promise<{ oldestClient: string | null }> {
     const said = await withDeadline({ signal }, async (bounded) => {
       const response = await send(this.baseUrl, "GET", "/health", bounded);
       return response.status === 204 ? null : await response.json().catch(() => null);
     });
-    return { oldestApp: oldestAppIn(said) };
+    return { oldestClient: oldestClientIn(said) };
   }
 
   /**

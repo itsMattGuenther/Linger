@@ -1862,8 +1862,8 @@ break, as #315 had it: a block, used only when an old app truly can't work with
 a newer server, as voice before 0.4.1 couldn't (#306). Not something every
 release does.
 
-- **The server says it, the app decides.** `GET /health` sends `oldest_app`,
-  the constant `linger_core::OLDEST_APP`: no sign-in needed, so it still works
+- **The server says it, the app decides.** `GET /health` sends `oldest_client`,
+  the constant `linger_core::OLDEST_CLIENT`: no sign-in needed, so it still works
   when the break is in signing in, and hosts can't change it. The app compares
   it with its own version, so the server never learns who runs what (hard rule
   4). Anything that isn't a plain release number never blocks.

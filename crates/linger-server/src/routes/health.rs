@@ -24,6 +24,6 @@ async fn health(State(state): State<AppState>) -> Json<Health> {
     Json(Health {
         ok,
         version: env!("CARGO_PKG_VERSION").to_string(),
-        oldest_app: Some(linger_core::OLDEST_APP.to_string()),
+        oldest_client: Some(linger_core::OLDEST_CLIENT.to_string()),
     })
 }

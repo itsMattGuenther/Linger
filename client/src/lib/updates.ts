@@ -229,18 +229,18 @@ export function isOlderVersion(version: string, than: string): boolean {
 }
 
 /**
- * Whether this app is too old for a server (#793): the server's `oldest_app`
+ * Whether this app is too old for a server (#793): the server's `oldest_client`
  * is a newer release than the app's own. Never when either is missing or
  * isn't a plain release number (`isOlderVersion`): a block has to be sure,
  * and an odd answer, or a build whose version can't be read, keeps working
  * as it did.
  */
-export function needsNewerApp(app: string | null, oldestApp: string | null): boolean {
-  return app !== null && oldestApp !== null && isOlderVersion(app, oldestApp);
+export function needsNewerApp(app: string | null, oldestClient: string | null): boolean {
+  return app !== null && oldestClient !== null && isOlderVersion(app, oldestClient);
 }
 
 /**
- * The newest of several servers' `oldest_app`, for one sentence about them
+ * The newest of several servers' `oldest_client`, for one sentence about them
  * all (#793): an app at least that new works with every one. Unreadable ones
  * count for nothing.
  */
@@ -274,7 +274,7 @@ export async function newerAppFor(baseUrl: string, signal?: AbortSignal): Promis
   const app = await thisVersion();
   if (app === null) return null;
   const said = await new PublicApi(baseUrl).health(signal).catch(() => null);
-  const oldest = said?.oldestApp ?? null;
+  const oldest = said?.oldestClient ?? null;
   return needsNewerApp(app, oldest) ? oldest : null;
 }
 

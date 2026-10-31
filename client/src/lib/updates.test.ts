@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { oldestAppIn } from "./api";
+import { oldestClientIn } from "./api";
 import { isOlderVersion, needsNewerApp, newestOf, releaseNotesUrl, serverVersionLine, type UpdateCheck, updateLead, updateLine, WAIT_MS } from "./updates";
 
 describe("updateLine", () => {
@@ -170,15 +170,15 @@ describe("newestOf (#793)", () => {
   });
 });
 
-describe("oldestAppIn (#793)", () => {
+describe("oldestClientIn (#793)", () => {
   it("reads the field from /health's answer as it came, and nothing else", () => {
-    expect(oldestAppIn({ ok: true, version: "0.5.4", oldest_app: "0.4.1" })).toBe("0.4.1");
+    expect(oldestClientIn({ ok: true, version: "0.5.4", oldest_client: "0.4.1" })).toBe("0.4.1");
     // A server from before the field, an empty answer (204), or something that isn't Linger's.
-    expect(oldestAppIn({ ok: true, version: "0.5.3" })).toBeNull();
-    expect(oldestAppIn(null)).toBeNull();
-    expect(oldestAppIn("<html>")).toBeNull();
-    expect(oldestAppIn({ oldest_app: 4 })).toBeNull();
-    expect(oldestAppIn({ oldest_app: null })).toBeNull();
+    expect(oldestClientIn({ ok: true, version: "0.5.3" })).toBeNull();
+    expect(oldestClientIn(null)).toBeNull();
+    expect(oldestClientIn("<html>")).toBeNull();
+    expect(oldestClientIn({ oldest_client: 4 })).toBeNull();
+    expect(oldestClientIn({ oldest_client: null })).toBeNull();
   });
 });
 

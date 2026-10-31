@@ -73,7 +73,7 @@ export interface Door {
   invitePreview(code: string): Promise<{ valid: boolean; server_name: string | null }>;
   signInLinkPreview(code: string): Promise<{ valid: boolean; server_name: string | null; username: string | null; made_by: string | null }>;
   /** Whether anything answers, and the oldest app release it works with (#793). */
-  health(): Promise<{ oldestApp: string | null }>;
+  health(): Promise<{ oldestClient: string | null }>;
 }
 
 /**
@@ -105,16 +105,16 @@ export async function stepFor(
   const door = doorAt(link.baseUrl);
   try {
     if (link.kind === "server") {
-      const { oldestApp } = await door.health();
-      if (needsNewerApp(version, oldestApp) && oldestApp !== null) return { problem: newerAppWords(oldestApp) };
+      const { oldestClient } = await door.health();
+      if (needsNewerApp(version, oldestClient) && oldestClient !== null) return { problem: newerAppWords(oldestClient) };
       return { step: { kind: "login", baseUrl: link.baseUrl, serverName: null } };
     }
     // A link: no answer here says nothing; its own preview says whether
     // anybody's there.
     if (version !== null) {
       const said = await door.health().catch(() => null);
-      const oldestApp = said?.oldestApp ?? null;
-      if (needsNewerApp(version, oldestApp) && oldestApp !== null) return { problem: newerAppWords(oldestApp) };
+      const oldestClient = said?.oldestClient ?? null;
+      if (needsNewerApp(version, oldestClient) && oldestClient !== null) return { problem: newerAppWords(oldestClient) };
     }
     if (link.kind === "setup") {
       const preview = await door.setupPreview(link.token);

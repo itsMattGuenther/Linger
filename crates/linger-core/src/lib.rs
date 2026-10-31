@@ -56,7 +56,7 @@ pub const ENTRANCE_SOUNDS: [&str; 12] = [
 ];
 
 /// The oldest app release this server works with (#793, PROTOCOL §9), sent as
-/// `oldest_app` on `GET /health`. An app older than this doesn't connect to the
+/// `oldest_client` on `GET /health`. An app older than this doesn't connect to the
 /// server: it says so in plain words and offers the update instead of failing
 /// in some confusing way. The app decides, from its own version; the server
 /// never learns which version anybody runs (hard rule 4).
@@ -76,7 +76,7 @@ pub const ENTRANCE_SOUNDS: [&str; 12] = [
 /// (`a_server_works_with_its_own_app`): a server that turned away its own
 /// release's app would turn away everybody, and an app built from the same
 /// commit couldn't use it either.
-pub const OLDEST_APP: &str = "0.4.1";
+pub const OLDEST_CLIENT: &str = "0.4.1";
 
 /// Whether `key` names a bundled font.
 pub fn is_valid_font_key(key: &str) -> bool {
@@ -107,12 +107,12 @@ mod tests {
     fn a_server_works_with_its_own_app() {
         // A plain release number: anything else, the app ignores (#793), and
         // the block would silently never happen.
-        let oldest = release(OLDEST_APP).expect("OLDEST_APP is a plain release number");
+        let oldest = release(OLDEST_CLIENT).expect("OLDEST_CLIENT is a plain release number");
         let this = release(env!("CARGO_PKG_VERSION"))
             .expect("the crate's version is a plain release number");
         assert!(
             oldest <= this,
-            "OLDEST_APP ({OLDEST_APP}) is newer than this release ({}): its server would turn away its own app. \
+            "OLDEST_CLIENT ({OLDEST_CLIENT}) is newer than this release ({}): its server would turn away its own app. \
              Raise it no further than the version this is built as: bump the version in the same pull request \
              (docs/releasing.md).",
             env!("CARGO_PKG_VERSION"),

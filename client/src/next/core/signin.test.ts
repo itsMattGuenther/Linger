@@ -58,7 +58,7 @@ function doorThat(answers: { setup?: boolean; invite?: boolean; signIn?: boolean
       asked.push(`${baseUrl} health`);
       if (answers.down) throw new Error(answers.down);
       if (answers.healthDown) throw new Error("Couldn't reach it.");
-      return { oldestApp: answers.oldest ?? null };
+      return { oldestClient: answers.oldest ?? null };
     },
   });
   return { asked, doorAt };

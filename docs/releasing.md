@@ -78,7 +78,7 @@ produces a green release that no installed copy will accept.
   (12 months or the two releases before, whichever reaches further back), and the
   release *before* it says it's coming. At 1.0 itself, the window starts: say so in
   its notes.
-- **Raising `OLDEST_APP`** (`crates/linger-core/src/lib.rs`, #793), the oldest
+- **Raising `OLDEST_CLIENT`** (`crates/linger-core/src/lib.rs`, #793), the oldest
   app a server works with, which `GET /health` sends and every app compares with
   its own version. It's raised only when a change truly can't work with older
   apps, as voice before 0.4.1 couldn't (#306), never as a habit. **The notes of

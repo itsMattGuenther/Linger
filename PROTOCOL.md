@@ -2242,7 +2242,7 @@ told the thing.
 ## 9. Versioning
 
 ```
-GET /health              → { ok, version, oldest_app }  # no sign-in
+GET /health              → { ok, version, oldest_client }  # no sign-in
 ```
 
 `ok` says the server is up and its database answers; `version` is the release
@@ -2251,9 +2251,11 @@ to check a pasted address is a Linger server, and a host's app compares
 `version` with the newest release to say when their server is behind (#314).
 Every server since 0.2 answers with these two fields.
 
-`oldest_app` (#793) is the oldest app release the server works with, like
-`0.4.1`: `linger_core::OLDEST_APP`, a constant hosts can't change, since it's
-about what the code can do. A server from before it leaves it out. The app
+`oldest_client` (#793) is the oldest app release the server works with, like
+`0.4.1`: `linger_core::OLDEST_CLIENT`, a constant hosts can't change, since it's
+about what the code can do. It's named for the client, not the app, because no
+wire field is named for an app: none could ever carry what apps anybody has
+open (hard rule 2, checked by `client/src/next/privacy.test.ts`). A server from before it leaves it out. The app
 compares it with its own version; the server never learns which version an app
 runs (no telemetry). An app older than it:
 
@@ -2309,7 +2311,7 @@ every update for review.
   its notes (`docs/releasing.md`). Anybody whose app meets it is told in plain words, the
   server needs an update and to ask the host, or this app needs one, rather than a
   feature quietly not working. An app too old for a server is told by the server's
-  `oldest_app` (above, #793), raised by the change that leaves older apps behind.
+  `oldest_client` (above, #793), raised by the change that leaves older apps behind.
 - **One version number for the app and the server.** One release is a new app and a new
   server, from the same tag, and its notes say when something new needs the server
   updated. Releasing them apart would give each its own number, and every rule above

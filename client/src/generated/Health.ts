@@ -16,9 +16,11 @@ export type Health = { ok: boolean,
 version: string, 
 /**
  * The oldest app release this server works with, like `0.4.1`
- * (`linger_core::OLDEST_APP`). The app compares it with its own version and
+ * (`linger_core::OLDEST_CLIENT`). The app compares it with its own version and
  * doesn't connect when it's older (#793); the server never learns which
  * version an app runs. Always sent; a server from before this field
- * leaves it out, which the app reads as "any".
+ * leaves it out, which the app reads as "any". Named for the client, not
+ * the app: no wire field is named for an app, so none could ever carry
+ * what apps anybody has open (hard rule 2, `privacy.test.ts`).
  */
-oldest_app?: string, };
+oldest_client?: string, };
