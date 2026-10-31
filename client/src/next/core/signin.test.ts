@@ -7,6 +7,7 @@ import {
   type Entrance,
   keyringWords,
   loginReady,
+  newerAppWords,
   newPasswordReady,
   problemIn,
   readPasted,
@@ -29,8 +30,12 @@ const matt: User = {
   last_seen_at: null,
 };
 
-/** A server at an address that answers the way it's told to, writing down what it was asked. */
-function doorThat(answers: { setup?: boolean; invite?: boolean; signIn?: boolean; name?: string | null; down?: string }) {
+/**
+ * A server at an address that answers the way it's told to, writing down what
+ * it was asked. `oldest` is the oldest app it works with (#793); `healthDown`
+ * has only its `/health` not answer.
+ */
+function doorThat(answers: { setup?: boolean; invite?: boolean; signIn?: boolean; name?: string | null; down?: string; oldest?: string; healthDown?: boolean }) {
   const asked: string[] = [];
   const doorAt = (baseUrl: string): Door => ({
     setupPreview: async (token) => {
@@ -52,6 +57,8 @@ function doorThat(answers: { setup?: boolean; invite?: boolean; signIn?: boolean
     health: async () => {
       asked.push(`${baseUrl} health`);
       if (answers.down) throw new Error(answers.down);
+      if (answers.healthDown) throw new Error("Couldn't reach it.");
+      return { oldestClient: answers.oldest ?? null };
     },
   });
   return { asked, doorAt };
@@ -120,6 +127,59 @@ describe("signing in", () => {
     const ok = doorThat({});
     expect(await stepFor("home.example", ok.doorAt)).toEqual({ step: { kind: "login", baseUrl: "https://home.example", serverName: null } });
     expect(ok.asked).toEqual(["https://home.example health"]);
+  });
+
+  it("a server that needs a newer app says so before any form, whatever was pasted (#793)", async () => {
+    const words = "This server needs a newer Linger. It works with Linger 0.5.4 or newer. Update Linger, then try again.";
+    expect(newerAppWords("0.5.4")).toBe(words);
+    // A bare address: the one question it always asks says both.
+    const bare = doorThat({ oldest: "0.5.4" });
+    expect(await stepFor("home.example", bare.doorAt, "0.5.3")).toEqual({ problem: words });
+    expect(bare.asked).toEqual(["https://home.example health"]);
+    // A link: asked first, and the link itself is never looked at.
+    for (const pasted of ["https://home.example/invite/ABCD", "https://home.example/setup?token=t0k", "https://home.example/sign-in/abcd2345"]) {
+      const door = doorThat({ oldest: "0.5.4", name: "The Good Company" });
+      expect(await stepFor(pasted, door.doorAt, "0.5.3")).toEqual({ problem: words });
+      expect(door.asked).toEqual(["https://home.example health"]);
+    }
+  });
+
+  it("an app new enough, a server that doesn't say, or a version that can't be read, goes on as before (#793)", async () => {
+    const login = { step: { kind: "login", baseUrl: "https://home.example", serverName: null } };
+    expect(await stepFor("home.example", doorThat({ oldest: "0.5.4" }).doorAt, "0.5.4")).toEqual(login);
+    expect(await stepFor("home.example", doorThat({ oldest: "0.5.4" }).doorAt, "0.6.0")).toEqual(login);
+    expect(await stepFor("home.example", doorThat({}).doorAt, "0.5.3")).toEqual(login);
+    // Odd versions on either side never block.
+    expect(await stepFor("home.example", doorThat({ oldest: "0.5.4" }).doorAt, "0.5.3-dev")).toEqual(login);
+    expect(await stepFor("home.example", doorThat({ oldest: "soon" }).doorAt, "0.5.3")).toEqual(login);
+    expect(await stepFor("home.example", doorThat({ oldest: "0.5.4" }).doorAt, null)).toEqual(login);
+    // A link from a copy that can't read its version asks only what it did.
+    const unknown = doorThat({ oldest: "0.5.4", name: "The Good Company" });
+    expect(await stepFor("https://home.example/invite/ABCD", unknown.doorAt, null)).toEqual({
+      step: { kind: "register", baseUrl: "https://home.example", code: "ABCD", serverName: "The Good Company" },
+    });
+    expect(unknown.asked).toEqual(["https://home.example invite ABCD"]);
+    // A link whose server's /health doesn't answer: its preview still decides.
+    const quiet = doorThat({ healthDown: true, name: "The Good Company" });
+    expect(await stepFor("https://home.example/invite/ABCD", quiet.doorAt, "0.5.3")).toEqual({
+      step: { kind: "register", baseUrl: "https://home.example", code: "ABCD", serverName: "The Good Company" },
+    });
+    expect(quiet.asked).toEqual(["https://home.example health", "https://home.example invite ABCD"]);
+  });
+
+  it("the sign-in screen's check asks with this copy's version (#793)", async () => {
+    const door = doorThat({ oldest: "0.5.4" });
+    const entrance: Entrance = {
+      ...door.doorAt("https://home.example"),
+      login: () => Promise.reject(new Error("not asked")),
+      register: () => Promise.reject(new Error("not asked")),
+      setup: () => Promise.reject(new Error("not asked")),
+      redeemSignInLink: () => Promise.reject(new Error("not asked")),
+    };
+    const old = signInActions(() => entrance, async () => undefined, async () => "0.5.3");
+    expect(await old.check("home.example")).toEqual({ problem: newerAppWords("0.5.4") });
+    const unread = signInActions(() => entrance, async () => undefined);
+    expect(await unread.check("home.example")).toEqual({ step: { kind: "login", baseUrl: "https://home.example", serverName: null } });
   });
 
   it("says what went wrong in words, and asks nobody about something that isn't an address", async () => {

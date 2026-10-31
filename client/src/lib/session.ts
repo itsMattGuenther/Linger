@@ -22,6 +22,7 @@ import type { User } from "../generated/User";
 import { ApiError, AuthedApi, expiryOf, PublicApi, type Tokens } from "./api";
 import { forgetSession, loadSessions, saveSession } from "./ipc";
 import { hostOf } from "./link";
+import { newerAppFor } from "./updates";
 
 /** One signed-in server. */
 export interface ServerSession {
@@ -41,14 +42,25 @@ export interface WaitingServer {
   why: string | null;
 }
 
+/**
+ * A saved server that needs a newer app than this one (#793): its `/health`
+ * says so. Linger doesn't connect to it, and keeps its sign-in for the
+ * updated app, untouched: not refreshed, not forgotten.
+ */
+export interface BlockedServer {
+  baseUrl: string;
+  /** The oldest app release it works with, as the server said it. */
+  oldest: string;
+}
+
 export type SessionsState =
   | { status: "restoring" }
   /**
    * Every server we are signed into, oldest first (empty means signed out,
-   * unless some are still `waiting`), and the saved servers still being
-   * reached.
+   * unless some are still `waiting` or `blocked`), the saved servers still
+   * being reached, and the ones that need a newer app.
    */
-  | { status: "ready"; servers: ServerSession[]; waiting: WaitingServer[] };
+  | { status: "ready"; servers: ServerSession[]; waiting: WaitingServer[]; blocked: BlockedServer[] };
 
 export interface Sessions {
   state: SessionsState;
@@ -66,6 +78,11 @@ export interface Sessions {
   signOut: (baseUrl: string) => Promise<void>;
   /** Try a waiting server now rather than at its next turn. */
   retry: (baseUrl: string) => void;
+  /**
+   * A server that said, while Linger runs, that it needs a newer app (#793):
+   * let go of it without signing out, the sign-in kept for the updated app.
+   */
+  block: (baseUrl: string, oldest: string) => void;
 }
 
 /**
@@ -85,6 +102,8 @@ type Refreshed =
   | { kind: "refused"; notice: string }
   /** No answer, or not one we could read: the sign-in is kept. */
   | { kind: "unreachable"; why: string }
+  /** The server needs a newer app (#793): nothing was tried, and the sign-in is kept. */
+  | { kind: "blocked"; oldest: string }
   /** Signed out of while the try was under way, or nothing saved for it. */
   | { kind: "gone" };
 
@@ -125,8 +144,15 @@ function once(baseUrl: string, attempt: () => Promise<Refreshed>): Promise<Refre
   return next;
 }
 
-/** Trade one stored refresh token for a live one. */
+/**
+ * Trade one stored refresh token for a live one, once the server has said
+ * this app isn't too old for it (#793). That's asked first, of `/health`,
+ * which needs no sign-in: a break in signing in could otherwise refuse the
+ * token and end a sign-in that an updated app would still use.
+ */
 async function refreshSaved(baseUrl: string, refreshToken: string): Promise<Refreshed> {
+  const oldest = await newerAppFor(baseUrl);
+  if (oldest !== null) return { kind: "blocked", oldest };
   try {
     const fresh = await new PublicApi(baseUrl).refresh({ refresh_token: refreshToken });
     if (forgotten.has(baseUrl)) {
@@ -184,11 +210,12 @@ async function restore(): Promise<Restoring> {
   };
 }
 
-/** What the hook holds: the servers, the waiting ones, and whether the wait is over. */
+/** What the hook holds: the servers, the waiting ones, the ones too new for this app, and whether the wait is over. */
 interface Held {
   shown: boolean;
   servers: ServerSession[];
   waiting: WaitingServer[];
+  blocked: BlockedServer[];
 }
 
 /**
@@ -209,7 +236,7 @@ function withWaiting(waiting: readonly WaitingServer[], one: WaitingServer): Wai
 }
 
 export function useSessions(): Sessions {
-  const [held, setHeld] = useState<Held>({ shown: false, servers: [], waiting: [] });
+  const [held, setHeld] = useState<Held>({ shown: false, servers: [], waiting: [], blocked: [] });
   const [keyringNotice, setKeyringNotice] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const mounted = useRef(true);
@@ -233,7 +260,7 @@ export function useSessions(): Sessions {
   }, []);
 
   const state = useMemo<SessionsState>(
-    () => (held.shown ? { status: "ready", servers: held.servers, waiting: held.waiting } : { status: "restoring" }),
+    () => (held.shown ? { status: "ready", servers: held.servers, waiting: held.waiting, blocked: held.blocked } : { status: "restoring" }),
     [held],
   );
 
@@ -251,7 +278,28 @@ export function useSessions(): Sessions {
 
   /** Drop one server from the list, leaving the rest alone. */
   const remove = useCallback((baseUrl: string) => {
-    setHeld((was) => ({ ...was, servers: was.servers.filter((s) => s.baseUrl !== baseUrl) }));
+    setHeld((was) => ({ ...was, servers: was.servers.filter((s) => s.baseUrl !== baseUrl), blocked: was.blocked.filter((one) => one.baseUrl !== baseUrl) }));
+  }, []);
+
+  /**
+   * A server that needs a newer app (#793): off the list and the waiting
+   * list, onto the blocked one, with no more tries this launch. The app
+   * doesn't change version without restarting, so there's nothing to try
+   * again for. Its sign-in stays in the keyring as it is.
+   */
+  const block = useCallback((baseUrl: string, oldest: string) => {
+    const retry = retries.current.get(baseUrl);
+    if (retry?.timer != null) window.clearTimeout(retry.timer);
+    retries.current.delete(baseUrl);
+    if (forgotten.has(baseUrl)) return;
+    setHeld((was) =>
+      settled({
+        ...was,
+        servers: was.servers.filter((server) => server.baseUrl !== baseUrl),
+        waiting: was.waiting.filter((one) => one.baseUrl !== baseUrl),
+        blocked: [...was.blocked.filter((one) => one.baseUrl !== baseUrl), { baseUrl, oldest }],
+      }),
+    );
   }, []);
 
   /** Put a server in the list in its saved place, and off the waiting list. */
@@ -267,7 +315,12 @@ export function useSessions(): Sessions {
       // rail rather than sending it to the bottom of the list.
       const servers = at < 0 ? [...was.servers, session] : was.servers.map((server, index) => (index === at ? session : server));
       if (at < 0) servers.sort((a, b) => rank(a.baseUrl) - rank(b.baseUrl));
-      return settled({ ...was, servers, waiting: was.waiting.filter((one) => one.baseUrl !== session.baseUrl) });
+      return settled({
+        ...was,
+        servers,
+        waiting: was.waiting.filter((one) => one.baseUrl !== session.baseUrl),
+        blocked: was.blocked.filter((one) => one.baseUrl !== session.baseUrl),
+      });
     });
   }, []);
 
@@ -325,6 +378,9 @@ export function useSessions(): Sessions {
           return;
         case "unreachable":
           wait(baseUrl, result.why, null);
+          return;
+        case "blocked":
+          block(baseUrl, result.oldest);
           return;
         case "ok":
           await tries.current?.open(baseUrl, connect(baseUrl, result.tokens), mount);
@@ -434,5 +490,5 @@ export function useSessions(): Sessions {
 
   const retry = useCallback((baseUrl: string) => tries.current?.again(baseUrl), []);
 
-  return { state, keyringNotice, notice, addServer, signOut, retry };
+  return { state, keyringNotice, notice, addServer, signOut, retry, block };
 }

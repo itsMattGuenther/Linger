@@ -45,6 +45,11 @@
  * version `release-line.json` names. `?behind` has The Good Company, which
  * you host, run 0.4.0 while 0.4.1 is out.
  *
+ * A server that needs a newer app (#793): this copy is 0.3.6, and `?tooold`
+ * has Casa da Ribeira say on `/health` that it works with 0.5.4 or newer
+ * (`?tooold=all`: every server says so). `window.core.raise(server)` has a
+ * server say so from now on, as one updated while Linger runs would.
+ *
  * Conversations open beside the list (#337): The Good Company's rooms and
  * DMs answer with the evening's messages, and take new ones. The window's
  * own size is faked too (`?many=600` puts that many older messages before
@@ -109,7 +114,7 @@ import type { Report } from "../../src/generated/Report";
 import type { User } from "../../src/generated/User";
 import type { VoicePeer } from "../../src/generated/VoicePeer";
 import { json, served } from "./next/desktop";
-import { customEmoji, SERVER, SERVER_NAME, evening, messages, people } from "./next/evening";
+import { customEmoji, SERVER, SERVER_NAME, evening, messages, people, withLongWords } from "./next/evening";
 import { collections, fakeMedia, fakeSearch } from "./next/finds";
 import type { MediaKind } from "../../src/generated/MediaKind";
 import { GUILD, guild, LISBON, lisbon, serverInfo } from "./next/servers";
@@ -137,7 +142,8 @@ hearSounds(note);
 
 /** Each server as its store state, from the fixtures: every one answers, signed in or not. */
 const states: Record<string, GatewayState> = {
-  [SERVER]: evening(serverState(SERVER)),
+  // `?longwords`: a topic and a status longer than the header (#778).
+  [SERVER]: query.has("longwords") ? withLongWords(evening(serverState(SERVER))) : evening(serverState(SERVER)),
   [GUILD]: guild(serverState(GUILD)),
   [LISBON]: lisbon(serverState(LISBON)),
 };
@@ -484,6 +490,8 @@ declare global {
       link: (link: string) => void;
       /** With `?hold`, the server answers its health check from now on. */
       release: () => void;
+      /** The server says from now on that it works with 0.5.4 or newer (#793), as after its host updated it. */
+      raise: (server: string) => void;
       /** With `?savehold`, the iPhone's shell has the file, and the share sheet shows. */
       saved: () => void;
       /** With `?down`, the server that was down answers from now on. */
@@ -542,6 +550,9 @@ window.core = {
     deliver("next:link", null);
   },
   release: () => release(),
+  raise: (server) => {
+    tooOld.add(server);
+  },
   saved: () => showSheet(),
   up: () => {
     down = null;
@@ -569,6 +580,8 @@ window.core = {
 // --- the servers -----------------------------------------------------------
 
 let release: () => void = () => undefined;
+/** The servers that say they work with 0.5.4 or newer (#793): `?tooold` Casa da Ribeira, `?tooold=all` every one. */
+const tooOld = new Set<string>(query.has("tooold") ? (query.get("tooold") === "all" ? Object.keys(states) : [LISBON]) : []);
 /** With `?savehold`, the iPhone's share sheet waits for `window.core.saved()`. */
 let showSheet: () => void = () => undefined;
 const saving = new Promise<void>((settle) => {
@@ -736,6 +749,8 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
     if (query.has("hold")) await held;
     // `?behind`: the release it runs, behind the newest (#772).
     if (query.has("behind")) return json({ ok: true, version: server === SERVER ? "0.4.0" : "0.4.1" });
+    // `?tooold`: the oldest app it works with is newer than this one (#793).
+    if (tooOld.has(server)) return json({ ok: true, version: "0.5.4", oldest_client: "0.5.4" });
     return new Response(null, { status: 204 });
   }
   const invite = /^\/auth\/invite\/(.+)$/.exec(path);

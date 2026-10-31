@@ -228,3 +228,14 @@ on a world that has changed.
   make the same promise on a computer, where the windows that apply them
   read storage too; keeping it there needs Settings' announcement to carry
   the choice to them.
+- **#796: a card opened from a cut topic had five holes.** A topic taller
+  than the window lost its end; the card stayed where it opened when the
+  window narrowed; pressing the words again closed and reopened it; words a
+  late font cut stayed plain, with no button; and words that changed under an
+  open card were taken over by it. *Missed because* the tests used one window
+  size, a topic that fitted in the card, one press, fonts already loaded, and
+  nothing changing while it was open: the case in mind. *Changed:* a test for
+  each, failing before its fix (`next-chat-window.spec.ts`). Rule: a card is
+  tested with words taller than the window, the window resized while it's
+  open, its opener pressed again, and what it shows changing under it
+  (`docs/testing-strategy.md`).

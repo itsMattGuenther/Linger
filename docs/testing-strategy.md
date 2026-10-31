@@ -205,6 +205,10 @@ rules that came out of them.
   open: the second must be that one's own, with the keyboard and nothing
   left from the first. Every test that opened one card and closed it missed
   that the voice bar's card kept the last one's refusal (#774).
+- **A card or popover is tested at its limits:** words taller than the
+  window, the window resized while it's open, its opener pressed again, and
+  what it shows changing under it. A topic's card failed all four, and a late
+  font cutting words that fitted, the first time it was reviewed (#796).
 - **A value shared between windows is tested changing in another window
   while it's showing**, after a change made here and before the owner's
   answer to it: a card that held its own level until it closed showed none

@@ -40,14 +40,15 @@ import "../../src/next/styles/app.css";
 import { hearSounds } from "./next/audio";
 import { Counted } from "./next/commits";
 import { fakeDesktop, type Unnumbered } from "./next/desktop";
-import { SERVER, SERVER_NAME, evening, people } from "./next/evening";
+import { SERVER, SERVER_NAME, evening, people, withLongWords } from "./next/evening";
 import { GUILD, guild, serverInfo } from "./next/servers";
 
 const query = new URLSearchParams(location.search);
 if (!query.has("server")) query.set("server", SERVER);
 history.replaceState(null, "", `${location.pathname}?${query.toString()}`);
 
-const night = evening(serverState(SERVER));
+// `?longwords`: a topic and a status longer than the header (#778).
+const night = query.has("longwords") ? withLongWords(evening(serverState(SERVER))) : evening(serverState(SERVER));
 // Your voice seat, as the list window shares it (`?ptt`, `?talking`, `?shared`).
 const seated = query.has("ptt") || query.has("talking") || query.has("shared");
 const seat =

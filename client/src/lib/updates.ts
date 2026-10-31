@@ -17,6 +17,7 @@
  */
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { PublicApi } from "./api";
 
 /** A newer release, for a copy a package manager owns. */
 export interface NewerRelease {
@@ -225,6 +226,56 @@ export function isOlderVersion(version: string, than: string): boolean {
   if (aMajor !== bMajor) return aMajor < bMajor;
   if (aMinor !== bMinor) return aMinor < bMinor;
   return aPatch < bPatch;
+}
+
+/**
+ * Whether this app is too old for a server (#793): the server's `oldest_client`
+ * is a newer release than the app's own. Never when either is missing or
+ * isn't a plain release number (`isOlderVersion`): a block has to be sure,
+ * and an odd answer, or a build whose version can't be read, keeps working
+ * as it did.
+ */
+export function needsNewerApp(app: string | null, oldestClient: string | null): boolean {
+  return app !== null && oldestClient !== null && isOlderVersion(app, oldestClient);
+}
+
+/**
+ * The newest of several servers' `oldest_client`, for one sentence about them
+ * all (#793): an app at least that new works with every one. Unreadable ones
+ * count for nothing.
+ */
+export function newestOf(versions: readonly string[]): string | null {
+  let newest: string | null = null;
+  for (const version of versions) {
+    if (versionParts(version) === null) continue;
+    if (newest === null || isOlderVersion(newest, version)) newest = version;
+  }
+  return newest;
+}
+
+/** This copy's version, asked of the shell once per start: it can't change while Linger runs. */
+let running: Promise<string | null> | null = null;
+
+/** The version this copy was built as, asked once and kept; `null` outside the shell, or when it can't be read. */
+export function thisVersion(): Promise<string | null> {
+  running ??= appVersion().catch(() => null);
+  return running;
+}
+
+/**
+ * Whether the server at `baseUrl` needs a newer app than this one (#793):
+ * the release it asks for when it does, otherwise null. It asks `/health`,
+ * which needs no sign-in, so it still answers when the break is in signing
+ * in. No answer, or one without the field, is null: a server that can't be
+ * asked is somebody else's problem to report (the connection's), never a
+ * block. Asks nothing when this copy's version can't be read.
+ */
+export async function newerAppFor(baseUrl: string, signal?: AbortSignal): Promise<string | null> {
+  const app = await thisVersion();
+  if (app === null) return null;
+  const said = await new PublicApi(baseUrl).health(signal).catch(() => null);
+  const oldest = said?.oldestClient ?? null;
+  return needsNewerApp(app, oldest) ? oldest : null;
 }
 
 /** Whether two versions are the same release, both readable. */
