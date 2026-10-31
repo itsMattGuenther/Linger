@@ -34,7 +34,7 @@ import { isTalkButton, isTalkKey, talkKeyName } from "../../core/talkKey";
 import { ANYWHERE, type TalkEdge } from "../../core/talkHold";
 import { forgetNotifications, resetNotifications, setDmAlerts, setQuietServers, showNotice } from "../../../lib/notify";
 import { forgetPreviews } from "../../../lib/previews";
-import { type ServerSession, useSessions, type WaitingServer } from "../../../lib/session";
+import { type BlockedServer, type ServerSession, useSessions, type WaitingServer } from "../../../lib/session";
 import { dropPresence, lastInput, onBack, setAway, setPresenceLive, setPresenceRoom, startPresence } from "../../../lib/watchPresence";
 import type { MessageId } from "../../../generated/MessageId";
 import type { RoomId } from "../../../generated/RoomId";
@@ -73,7 +73,7 @@ import {
 } from "../../core/share";
 import { desktopOf, firstTimeInTray, loadCloseList, placeWords, trayNotice, type VoicePlace } from "../../core/closing";
 import { cardSafety } from "../../core/safety";
-import { BACKGROUND_GRACE_MS, onPhone, thisDevice, watchBackground, watchNetwork } from "../../core/phone";
+import { BACKGROUND_GRACE_MS, onIPhone, onPhone, thisDevice, watchBackground, watchNetwork } from "../../core/phone";
 import { type SettingsKey, settingsKeys } from "../../core/settings";
 import { Settings, type SettingsAsked, type SettingsHolder } from "../settings/SettingsWindow";
 import { useBackButton } from "../useBackButton";
@@ -83,9 +83,11 @@ import {
   checkForUpdate,
   type ComeBack,
   HOST_UPDATE_GUIDE_URL,
+  newerAppFor,
   newestVersion,
   onUpdateDownloaded,
   releaseNotesUrl,
+  thisVersion,
   type UpdateCheck,
   updateNow,
 } from "../../../lib/updates";
@@ -102,7 +104,7 @@ import { WindowMessage } from "../WindowMessage";
 import type { AwayNudge } from "./AwayNudge";
 import { ListView } from "./ListView";
 import "./ListWindow.css";
-import type { ServerListing } from "./ServerSection";
+import type { BlockedListing, ServerListing } from "./ServerSection";
 import type { AwayEverywhere } from "./YouEverywhere";
 import { type ArrivalCard, type KnockCard, KnockCards } from "./KnockCards";
 import { loadDmAlerts } from "../../core/dmAlerts";
@@ -145,7 +147,7 @@ function Owner() {
   // Nothing signed in has answered yet, and the person would rather sign in
   // somewhere now than wait (T-907).
   const [signInAnyway, setSignInAnyway] = useState(false);
-  const signIn = useMemo(() => signInActions((baseUrl) => new PublicApi(baseUrl), addServer), [addServer]);
+  const signIn = useMemo(() => signInActions((baseUrl) => new PublicApi(baseUrl), addServer, thisVersion), [addServer]);
 
   // "Open in Linger" on an invite page (#607): the link the shell was handed
   // goes in a paste box, here when nothing is signed in, and in the sign-in
@@ -208,11 +210,15 @@ function Owner() {
     );
   }
 
-  if (sessions.state.servers.length === 0 && sessions.state.waiting.length > 0 && !signInAnyway) {
+  // A server that needs a newer app (#793) shows in the list, dimmed, with
+  // the foot saying how to update, even when it's the only one: signing in
+  // again wouldn't help.
+  const blocked = sessions.state.blocked;
+  if (sessions.state.servers.length === 0 && sessions.state.waiting.length > 0 && blocked.length === 0 && !signInAnyway) {
     return <NotReached waiting={sessions.state.waiting} onRetry={sessions.retry} onSignIn={() => setSignInAnyway(true)} />;
   }
 
-  if (sessions.state.servers.length === 0) {
+  if (sessions.state.servers.length === 0 && blocked.length === 0) {
     // Signing in lives here until decision 16 says otherwise (parity SIGN-1).
     return (
       <SignInView
@@ -234,6 +240,8 @@ function Owner() {
     <Servers
       signedIn={sessions.state.servers}
       waiting={sessions.state.waiting}
+      blocked={blocked}
+      onBlocked={sessions.block}
       onRetry={sessions.retry}
       accounts={accounts}
       keyringNotice={sessions.keyringNotice}
@@ -277,11 +285,14 @@ function NotReached({ waiting, onRetry, onSignIn }: { waiting: readonly WaitingS
 const ServerLink = memo(function ServerLink({
   session,
   onInfo,
+  onBlocked,
   again,
   paused,
 }: {
   session: ServerSession;
   onInfo: (server: string, info: ListedInfo) => void;
+  /** The server needs a newer app than this one (#793), and the release it asks for. */
+  onBlocked: (server: string, oldest: string) => void;
   /** Counts up when Settings has just saved this server's name or color: ask for them now. */
   again: number;
   paused: boolean;
@@ -328,6 +339,26 @@ const ServerLink = memo(function ServerLink({
     setPresenceLive(baseUrl, status === "ready");
   }, [baseUrl, status]);
 
+  // A server updated while Linger runs can need a newer app than this one
+  // (#793): asked each time the connection comes back, which is what a
+  // server restarting after an update looks like, and each time a try to
+  // get it back fails, in case the break is in connecting. Not on the first
+  // connection: signing in, or back in at launch, has just asked
+  // (core/signin.ts, lib/session.ts). `/health` needs no sign-in.
+  const beenUp = useRef(false);
+  useEffect(() => {
+    if (status !== "ready" && status !== "waiting") return;
+    if (!beenUp.current) {
+      beenUp.current = status === "ready";
+      return;
+    }
+    const abort = new AbortController();
+    void newerAppFor(baseUrl, abort.signal).then((oldest) => {
+      if (oldest !== null && !abort.signal.aborted) onBlocked(baseUrl, oldest);
+    });
+    return () => abort.abort();
+  }, [baseUrl, status, onBlocked]);
+
   // Its name and color, which change about once ever: asked when the
   // connection comes up or comes back, then hourly while it stays up, and at
   // once when Settings has just saved them (core/serverInfo.ts, #536). A
@@ -344,6 +375,8 @@ const ServerLink = memo(function ServerLink({
 function Servers({
   signedIn,
   waiting,
+  blocked,
+  onBlocked,
   onRetry,
   accounts,
   keyringNotice,
@@ -352,6 +385,9 @@ function Servers({
 }: {
   signedIn: ServerSession[];
   waiting: readonly WaitingServer[];
+  /** Servers that need a newer app than this one (#793): not connected to. */
+  blocked: readonly BlockedServer[];
+  onBlocked: (server: string, oldest: string) => void;
   onRetry: (server: string) => void;
   accounts: Accounts;
   keyringNotice: string | null;
@@ -382,6 +418,11 @@ function Servers({
   // Settings saved a server's name or color: its link asks again (`again`).
   const [infoAsks, setInfoAsks] = useState<Readonly<Record<string, number>>>({});
   const several = ordered.length > 1;
+  // Servers that need a newer app (#793), in your order, named as they said
+  // this launch, or by address when they haven't (as a server not reached
+  // yet is). With any, the list has sections: the dimmed one is a server too.
+  const blockedHere = useMemo(() => inOrder(blocked, prefs.order), [blocked, prefs.order]);
+  const sectioned = several || blockedHere.length > 0;
 
   const changePrefs = useCallback((next: ServerPrefs) => {
     setPrefs(next);
@@ -1249,12 +1290,17 @@ function Servers({
   );
 
   // One server: your status and away from the top card, as before.
-  const only = ordered.length === 1 ? ordered[0] : undefined;
+  const only = !sectioned && ordered.length === 1 ? ordered[0] : undefined;
   const onlyMe = only ? (states[only.baseUrl]?.me ?? null) : null;
   const you = useMemo(() => (only && onlyMe !== null ? youOn(only, onlyMe) : undefined), [only, onlyMe]);
 
   // Several servers: away on the ones you tick, each answering for itself.
-  const everywhere = useMemo(() => (several ? awayEverywhere(signedIn) : undefined), [several, signedIn]);
+  const everywhere = useMemo(() => (sectioned && signedIn.length > 0 ? awayEverywhere(signedIn) : undefined), [sectioned, signedIn]);
+  // Servers that need a newer app (#793): a dimmed section each.
+  const blockedRows = useMemo(
+    () => blockedHere.map(({ baseUrl }): BlockedListing => ({ id: baseUrl, name: infos[baseUrl]?.name ?? hostOf(baseUrl), accent: infos[baseUrl]?.accent_key ?? null })),
+    [blockedHere, infos],
+  );
 
   // Back at the computer while still away (#392): the top card says so once,
   // with I'm back right there. Away is something you choose (SPEC §4.6), so
@@ -1283,7 +1329,15 @@ function Servers({
       troubleSince: trouble.current.get(session.baseUrl) ?? null,
     })),
     keyringNotice,
-    updateNotes({ check: update, updated, putOff: (version) => putOffNow(localStore(), version, drawnAt), problem: updateProblem }),
+    updateNotes({
+      check: update,
+      updated,
+      putOff: (version) => putOffNow(localStore(), version, drawnAt),
+      problem: updateProblem,
+      tooOld: blockedHere.map(({ baseUrl, oldest }) => ({ server: baseUrl, name: infos[baseUrl]?.name ?? hostOf(baseUrl), oldest })),
+      others: ordered.length + waiting.length > 0,
+      phone: onPhone() ? (onIPhone() ? "iphone" : "android") : null,
+    }),
     drawnAt,
     waiting.map((one) => ({ server: one.baseUrl, name: hostOf(one.baseUrl), why: one.why })),
     thisDevice(onPhone()),
@@ -1409,7 +1463,14 @@ function Servers({
       {signedIn.map((session) => (
         // A while in the background, the phone's connections close, but not
         // the one carrying a call: the call bar holds the app up (#429).
-        <ServerLink key={session.baseUrl} session={session} onInfo={onInfo} again={infoAsks[session.baseUrl] ?? 0} paused={(backgrounded && session.baseUrl !== voiceServer) || offline} />
+        <ServerLink
+          key={session.baseUrl}
+          session={session}
+          onInfo={onInfo}
+          onBlocked={onBlocked}
+          again={infoAsks[session.baseUrl] ?? 0}
+          paused={(backgrounded && session.baseUrl !== voiceServer) || offline}
+        />
       ))}
       <div
         ref={app}
@@ -1434,6 +1495,7 @@ function Servers({
           ) : (
             <ListView
               servers={listings}
+              blocked={blockedRows}
               voice={voice}
               you={you}
               onEditProfile={editProfile}
@@ -1685,6 +1747,7 @@ function addingWith(accounts: Accounts, setAdding: (adding: boolean) => void, al
       await accounts.reauthenticate(baseUrl, auth);
       setAdding(false);
     },
+    thisVersion,
   );
   return {
     ...actions,

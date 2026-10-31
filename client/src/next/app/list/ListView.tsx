@@ -5,13 +5,13 @@ import { Button, IconButton, TitleBar } from "../../kit";
 import { LogoMark } from "../LogoMark";
 import "./ListView.css";
 import { ServerBody, type ServerBodyActions } from "./ServerBody";
-import { type ServerListing, ServerSection } from "./ServerSection";
+import { type BlockedListing, BlockedSection, type ServerListing, ServerSection } from "./ServerSection";
 import type { AwayNudge } from "./AwayNudge";
 import { type YouActions, YouCard } from "./YouCard";
 import { type AwayEverywhere, YouEverywhere } from "./YouEverywhere";
 import { VoiceDock, type VoiceDockProps } from "./VoiceDock";
 
-export type { ServerListing } from "./ServerSection";
+export type { BlockedListing, ServerListing } from "./ServerSection";
 export type { AwayEverywhere } from "./YouEverywhere";
 
 /**
@@ -91,6 +91,12 @@ interface ListShared {
   onProfileOn?: (server: string) => void;
   /** Several servers: which start folded. Every server, if left out (#712). */
   folded?: readonly string[];
+  /**
+   * Servers that need a newer app than this one (#793), in your order: each
+   * a dimmed section after the ones that work. With any, the list has
+   * sections, even beside one working server or none.
+   */
+  blocked?: readonly BlockedListing[];
 }
 
 /** The logo at the head of the list: one element, drawn once. */
@@ -123,6 +129,7 @@ const Foot = memo(function Foot({ onMedia, onSearch }: { onMedia?: () => void; o
  */
 export function ListView(props: ListViewProps) {
   const { onClose, onSettings, notices, notes, voice, you, nudge, onEditProfile, everywhere, onQuiet, onMove, onProfileOn, folded, onMedia, onSearch, rock, onUnfold } = props;
+  const blocked = props.blocked ?? [];
   // Two names for one rock, taken in turn, so a knock during a rock starts it over.
   const rocking = rock ? (rock % 2 === 1 ? "a" : "b") : undefined;
   // Made again only when what's in them changes, so an event on a server
@@ -158,7 +165,7 @@ export function ListView(props: ListViewProps) {
   const isFolded = (id: string) => chosen.get(id) ?? startsFolded(id);
   const toggle = useCallback((id: string) => setChosen((held) => new Map(held).set(id, !(held.get(id) ?? startsFolded(id)))), [startsFolded]);
 
-  if (servers === undefined || servers.length <= 1) {
+  if (servers === undefined || (servers.length <= 1 && blocked.length === 0)) {
     const only: (OneServer | ServerListing) | undefined = servers === undefined ? props : servers[0];
     const name = only === undefined ? "Linger" : "serverName" in only ? only.serverName : only.name;
     return (
@@ -221,6 +228,9 @@ export function ListView(props: ListViewProps) {
             onProfile={onProfileOn}
             topName={me?.display_name ?? null}
           />
+        ))}
+        {blocked.map((listing) => (
+          <BlockedSection key={listing.id} listing={listing} />
         ))}
       </div>
 

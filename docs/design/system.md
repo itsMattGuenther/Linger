@@ -836,6 +836,27 @@ away. The words start on the lines' edge.
 - **Just installed**: lit, with the check mark: "You're on Linger 0.5.4", the
   one line, "What's new", and × ("Close"). Once, on the first start of a new
   version.
+- **A server that needs a newer Linger** (#793, PROTOCOL §9): lit, with the
+  download mark, before the other blocks. "Casa da Ribeira needs a newer
+  Linger", then "It works with Linger 0.5.4 or newer. Your other servers still
+  work.", the last sentence only when there are others. A `primary` "Update now"
+  on a copy that installs itself, `unavailable` in voice or while sharing; it
+  doesn't wait out the day an update otherwise waits. No button anywhere else:
+  an Arch copy gets "It comes with your next system update (sudo pacman -Syu)."
+  in `--text-muted`, a phone "Update Linger from Google Play." or "Update Linger
+  from TestFlight.", and a copy that can't update itself where to get a new one.
+  No ×: the server can't be used until Linger's updated, so there's nothing to
+  put off. Several such servers share one block, named together ("Casa da
+  Ribeira and Pinecone need a newer Linger"). While it shows, the ready and out
+  blocks don't: they'd say the same thing again, less urgently.
+
+The server itself stays in the list, after the ones that work, as a section
+of its own with the list's sections around it, even beside one other server or
+none: its header dimmed, the name in `--text-muted`, its color mark at half
+strength, no caret, no dots (Linger isn't connected, so nobody's known to be
+on), nothing to press, and "needs a newer Linger" where a folded server's line
+goes. It's named by its address when it hasn't said its name since Linger
+started, as a server not reached yet is.
 
 With nothing to say, nothing is drawn: no bar, no hairline. Protocol words
 ("tls ok…", "ready (28ms)") are never shown. The storage figure lives in the

@@ -22,17 +22,21 @@ export interface UpdateActions {
   busy: boolean;
 }
 
-type Line = Exclude<ListNote, { kind: "update" } | { kind: "release" } | { kind: "updated" }>;
+type Line = Exclude<ListNote, { kind: "update" } | { kind: "release" } | { kind: "updated" } | { kind: "tooold" }>;
 type Block = Extract<ListNote, { kind: "update" } | { kind: "release" } | { kind: "updated" }>;
+type TooOld = Extract<ListNote, { kind: "tooold" }>;
+
+const isBlock = (note: ListNote): note is Block => note.kind === "update" || note.kind === "release" || note.kind === "updated";
+const isTooOld = (note: ListNote): note is TooOld => note.kind === "tooold";
 
 /**
  * The foot's standing lines (decision 1, `core/notes.ts`): a server that
  * can't be reached (with Try now, for one not reached since launch), a
  * computer that can't keep sign-ins, a server you host needing you (with
- * Server settings, #582) or behind (with How to update, #772), and updates
- * (#772): ready, calmly; out, in the lamp, for a copy somebody has to update;
- * and just installed, once. Only while there is something to say; otherwise
- * nothing is drawn at all.
+ * Server settings, #582) or behind (with How to update, #772), servers that
+ * need a newer app (#793), and updates (#772): ready, calmly; out, in the
+ * lamp, for a copy somebody has to update; and just installed, once. Only
+ * while there is something to say; otherwise nothing is drawn at all.
  */
 export const ListNotes = memo(function ListNotes({
   notes,
@@ -49,8 +53,9 @@ export const ListNotes = memo(function ListNotes({
   onHostGuide?: () => void;
 }) {
   if (notes.length === 0) return null;
-  const lines = notes.filter((note): note is Line => note.kind !== "update" && note.kind !== "release" && note.kind !== "updated");
-  const blocks = notes.filter((note): note is Block => note.kind === "update" || note.kind === "release" || note.kind === "updated");
+  const lines = notes.filter((note): note is Line => !isBlock(note) && !isTooOld(note));
+  const blocks = notes.filter(isBlock);
+  const tooOld = notes.filter(isTooOld);
   return (
     <div className="nx-foot-notes" aria-live="polite" data-screen="list-notes">
       {lines.length > 0 ? (
@@ -80,6 +85,9 @@ export const ListNotes = memo(function ListNotes({
           ))}
         </div>
       ) : null}
+      {tooOld.map((note) => (
+        <TooOldBlock key={`${note.kind} ${note.servers.join(" ")}`} note={note} actions={updates} />
+      ))}
       {blocks.map((note) => (
         <UpdateBlock key={`${note.kind} ${note.version}`} note={note} actions={updates} />
       ))}
@@ -129,6 +137,40 @@ function UpdateBlock({ note, actions }: { note: Block; actions: UpdateActions })
       </div>
       {note.kind === "release" ? <IconButton icon="close" label="Not now" size="sm" onClick={() => actions.putOff(note.version)} /> : null}
       {note.kind === "updated" ? <IconButton icon="close" label="Close" size="sm" onClick={actions.closeUpdated} /> : null}
+    </div>
+  );
+}
+
+/**
+ * Servers that need a newer app (#793): lit like an update that's out, since
+ * it needs doing, with Update now on a copy that installs itself, or how the
+ * new one comes. No ×: those servers can't be used until it's updated, so
+ * there's nothing to put off. Update now doesn't wait out the day an update
+ * otherwise waits, and still never restarts anybody in voice or sharing.
+ */
+function TooOldBlock({ note, actions }: { note: TooOld; actions: UpdateActions }) {
+  return (
+    <div className="nx-update" data-note={note.kind} data-lit="yes">
+      <span className="nx-note-mark nx-update-mark">
+        <Icon name="download" size="sm" />
+      </span>
+      <div className="nx-update-body">
+        <p className="nx-update-title">{note.words}</p>
+        <p className="nx-update-line">{note.line}</p>
+        {note.detail ? <p className="nx-update-line nx-update-muted">{note.detail}</p> : null}
+        {note.problem ? (
+          <p className="nx-update-line nx-update-problem" role="alert">
+            {`Couldn't update: ${note.problem}`}
+          </p>
+        ) : null}
+        <div className="nx-update-actions">
+          {note.button ? (
+            <Button size="sm" variant="primary" busy={actions.busy} unavailable={actions.notNow ?? undefined} onClick={actions.update}>
+              Update now
+            </Button>
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }

@@ -2,7 +2,19 @@ import { describe, expect, it } from "vitest";
 import type { ServerHealth } from "../../generated/ServerHealth";
 import type { GatewayStatus } from "../../lib/gateway";
 import type { UpdateCheck } from "../../lib/updates";
-import { type Connection, connectionNote, hostNotes, listNotes, TROUBLE_GRACE_MS, troubleSince, type UpdateState, updateNotes, waitingNote } from "./notes";
+import {
+  type Connection,
+  connectionNote,
+  hostNotes,
+  listNotes,
+  type TooOld,
+  tooOldNote,
+  TROUBLE_GRACE_MS,
+  troubleSince,
+  type UpdateState,
+  updateNotes,
+  waitingNote,
+} from "./notes";
 
 const at = 1_000_000;
 const pine = (status: GatewayStatus, since: number | null = at): Connection => ({ server: "https://pine", name: "Pinecone", status, troubleSince: since });
@@ -107,6 +119,83 @@ describe("the foot's update lines (#772)", () => {
 
   it("carry why the last Update didn't happen", () => {
     expect(updateNotes(state(ready, { problem: "offline" }))[0]).toMatchObject({ kind: "update", problem: "offline" });
+  });
+});
+
+describe("a server that needs a newer app (#793)", () => {
+  const casa: TooOld = { server: "https://casa.example", name: "Casa da Ribeira", oldest: "0.5.4" };
+  const lanterns: TooOld = { server: "https://lanterns.example", name: "Ashen Lanterns", oldest: "0.5.10" };
+  const current: UpdateCheck = { kind: "current", silent: true };
+
+  it("names it, says which app it works with and that the rest still work, with Update now on a copy that installs itself", () => {
+    expect(updateNotes(state(current, { tooOld: [casa], others: true }))).toEqual([
+      {
+        kind: "tooold",
+        servers: ["https://casa.example"],
+        words: "Casa da Ribeira needs a newer Linger",
+        line: "It works with Linger 0.5.4 or newer. Your other servers still work.",
+        detail: null,
+        button: true,
+        problem: null,
+      },
+    ]);
+    // A copy that needs a password installs with the same button, and one
+    // whose last look failed tries again with it.
+    for (const check of [ready, { ...ready, silent: false }, { kind: "failed", reason: "offline" }] as const) {
+      expect(updateNotes(state(check, { tooOld: [casa] }))[0]).toMatchObject({ kind: "tooold", button: true });
+    }
+  });
+
+  it("doesn't say the others still work when there are none", () => {
+    expect(tooOldNote([casa], false, current, null, null)).toMatchObject({ line: "It works with Linger 0.5.4 or newer." });
+  });
+
+  it("says several in one block, with the newest release any of them asks for", () => {
+    expect(tooOldNote([casa, lanterns], true, current, null, null)).toMatchObject({
+      servers: ["https://casa.example", "https://lanterns.example"],
+      words: "Casa da Ribeira and Ashen Lanterns need a newer Linger",
+      line: "They work with Linger 0.5.10 or newer. Your other servers still work.",
+    });
+  });
+
+  it("gives an Arch copy the words and how the new one comes, with no button", () => {
+    const note = tooOldNote([casa], true, { kind: "managed", by: "pacman", newer: null }, null, "offline");
+    expect(note).toMatchObject({ button: false, detail: "It comes with your next system update (sudo pacman -Syu).", problem: null });
+  });
+
+  it("points a phone at where it got Linger, with no button", () => {
+    expect(tooOldNote([casa], true, null, "android", null)).toMatchObject({ button: false, detail: "Update Linger from Google Play." });
+    expect(tooOldNote([casa], true, null, "iphone", null)).toMatchObject({ button: false, detail: "Update Linger from TestFlight." });
+  });
+
+  it("tells a copy that can't update itself where a new one is, and says nothing of how before the shell has said", () => {
+    expect(tooOldNote([casa], true, { kind: "unconfigured" }, null, null)).toMatchObject({
+      button: false,
+      detail: "This copy was not built to update itself. Install a new one from the release page.",
+    });
+    expect(tooOldNote([casa], true, null, null, null)).toMatchObject({ button: false, detail: null });
+  });
+
+  it("says nothing with no such server", () => {
+    expect(tooOldNote([], true, current, null, null)).toBeNull();
+    expect(updateNotes(state(current, { tooOld: [] }))).toEqual([]);
+  });
+
+  it("comes before the update lines, which say the same thing less urgently, and stay away while it shows", () => {
+    expect(updateNotes(state(ready, { tooOld: [casa] })).map((note) => note.kind)).toEqual(["tooold"]);
+    expect(updateNotes(state({ ...ready, silent: false }, { tooOld: [casa] })).map((note) => note.kind)).toEqual(["tooold"]);
+    expect(updateNotes(state({ kind: "managed", by: "pacman", newer: { version: "0.5.4", line: null } }, { tooOld: [casa] })).map((note) => note.kind)).toEqual(["tooold"]);
+    const after = updateNotes(state(ready, { tooOld: [casa], updated: { version: "0.5.3", line: null } }));
+    expect(after.map((note) => note.kind)).toEqual(["tooold", "updated"]);
+  });
+
+  it("carries why the last Update now didn't happen", () => {
+    expect(updateNotes(state(current, { tooOld: [casa], problem: "The network is down." }))[0]).toMatchObject({ kind: "tooold", problem: "The network is down." });
+  });
+
+  it("goes in the foot after the lines, with the updates", () => {
+    const notes = listNotes([], "no keyring", updateNotes(state(current, { tooOld: [casa] })), 0);
+    expect(notes.map((note) => note.kind)).toEqual(["keyring", "tooold"]);
   });
 });
 

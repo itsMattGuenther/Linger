@@ -28,6 +28,18 @@ export interface ServerListing extends ServerBodyActions {
   saveLine?: (line: string) => Promise<string | null>;
 }
 
+/**
+ * A server that needs a newer app than this one (#793): Linger isn't
+ * connected to it, so there's nothing in it to show, only that it's there.
+ */
+export interface BlockedListing {
+  /** The server's address. */
+  id: string;
+  /** Its name, or its address when it hasn't said it this launch. */
+  name: string;
+  accent: string | null;
+}
+
 /** A palette key becomes a color only through the generated palette. */
 export function serverColor(accent: string | null): CSSProperties {
   const key = accent && /^[a-z]{2,16}$/.test(accent) ? accent : "slate";
@@ -234,6 +246,36 @@ export const ServerSection = memo(function ServerSection({
         </div>
       )}
 
+    </section>
+  );
+});
+
+/**
+ * A server that needs a newer app (#793), in the list with the rest: its
+ * header, dimmed, with no dots (nobody's known to be on, since Linger isn't
+ * connected) and "needs a newer Linger" where the folded line goes. Nothing
+ * opens: the foot says what to do.
+ */
+export const BlockedSection = memo(function BlockedSection({ listing }: { listing: BlockedListing }) {
+  return (
+    <section className="nx-srv" aria-label={listing.name} data-folded="yes" data-blocked="yes" style={serverColor(listing.accent)}>
+      <div className="nx-srv-top">
+        <div className="nx-srv-head">
+          <div className="nx-srv-toggle">
+            <span className="nx-srv-caret" aria-hidden="true" />
+            <span className="nx-srv-slot" aria-hidden="true">
+              <span className="nx-srv-mark" />
+            </span>
+            <span className="nx-srv-title">
+              <span className="nx-srv-name">{listing.name}</span>
+            </span>
+          </div>
+        </div>
+        <p className="nx-srv-line" data-kind="blocked">
+          <span className="nx-srv-line-icon" aria-hidden="true" />
+          <span className="nx-srv-line-text">needs a newer Linger</span>
+        </p>
+      </div>
     </section>
   );
 });

@@ -278,6 +278,21 @@
   padding-bottom: var(--space-2);
 }
 
+/* A server that needs a newer app (#793): its header dimmed, the name in
+   the muted ink and its color faded, and nothing to press: the foot says
+   what to do. */
+.nx-srv[data-blocked="yes"] .nx-srv-toggle:hover {
+  background: none;
+}
+
+.nx-srv[data-blocked="yes"] .nx-srv-name {
+  color: var(--text-muted);
+}
+
+.nx-srv[data-blocked="yes"] .nx-srv-mark {
+  opacity: 0.5;
+}
+
 /* Words somebody wrote keep their direction to themselves (#488): one that
    turns text around can't reach past them. */
 .nx-srv-name {

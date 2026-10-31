@@ -2,13 +2,15 @@
  * The standing lines at the foot of the list (decision 1): the jobs today's
  * status bar did, said only while they're true. A connection in trouble, a
  * computer that can't keep a sign-in, the host's server needing them (#582)
- * or behind (#772), and a new version: ready to install, out for a copy that
- * doesn't install it itself, or just installed (#772). When all is well there
- * are none, and the list has no bar at all.
+ * or behind (#772), a server that needs a newer app (#793), and a new
+ * version: ready to install, out for a copy that doesn't install it itself,
+ * or just installed (#772). When all is well there are none, and the list
+ * has no bar at all.
  */
 import type { ServerHealth } from "../../generated/ServerHealth";
 import type { GatewayStatus } from "../../lib/gateway";
-import { isOlderVersion, type UpdateCheck } from "../../lib/updates";
+import { isOlderVersion, newestOf, systemUpdate, type UpdateCheck } from "../../lib/updates";
+import { serverNames } from "./servers";
 
 /**
  * How long a server may be connecting before the list says so. Every launch
@@ -53,7 +55,14 @@ export type ListNote =
    */
   | { kind: "release"; version: string; words: string; line: string | null; detail: string | null; password: boolean; problem: string | null }
   /** The version just installed, once, on its first start (#772), with what's in it. */
-  | { kind: "updated"; version: string; words: string; line: string | null };
+  | { kind: "updated"; version: string; words: string; line: string | null }
+  /**
+   * Servers that need a newer app than this one (#793), in the lamp: they
+   * can't be used until it's updated, so there's no ×. `button` is Update
+   * now, on a copy that installs itself; otherwise `detail` says how the new
+   * one comes, when that's known.
+   */
+  | { kind: "tooold"; servers: string[]; words: string; line: string; detail: string | null; button: boolean; problem: string | null };
 
 export interface Connection {
   server: string;
@@ -216,6 +225,70 @@ export interface UpdateState {
   putOff: (version: string) => boolean;
   /** Why the last Update or Restart now didn't happen. */
   problem: string | null;
+  /** Servers that need a newer app than this one (#793), in your order. */
+  tooOld?: readonly TooOld[];
+  /** Whether you have servers besides those, still working. */
+  others?: boolean;
+  /** The phone app, and where it came from: its store updates it, not Linger. */
+  phone?: Phone | null;
+}
+
+/** A server that needs a newer app than this one (#793), as the foot names it. */
+export interface TooOld {
+  server: string;
+  /** Its name, or its address when it hasn't said it this launch. */
+  name: string;
+  /** The oldest app release it works with. */
+  oldest: string;
+}
+
+/** Which phone the app is on: where it got Linger, and gets the new one. */
+export type Phone = "android" | "iphone";
+
+/**
+ * How this copy gets a newer app, for the too-old block (#793): Update now
+ * on a copy that installs itself (`update_now`, which doesn't wait out the
+ * day), words otherwise. A phone's comes from where the phone got Linger.
+ * Before the shell has said what kind of copy this is, neither.
+ */
+function newerAppHow(check: UpdateCheck | null, phone: Phone | null): { button: boolean; detail: string | null } {
+  if (phone === "iphone") return { button: false, detail: "Update Linger from TestFlight." };
+  if (phone === "android") return { button: false, detail: "Update Linger from Google Play." };
+  switch (check?.kind) {
+    case "newer":
+    case "current":
+    case "failed":
+      return { button: true, detail: null };
+    case "managed":
+      return { button: false, detail: systemUpdate(check.by) };
+    case "unconfigured":
+      return { button: false, detail: "This copy was not built to update itself. Install a new one from the release page." };
+    case undefined:
+      return { button: false, detail: null };
+  }
+}
+
+/**
+ * The foot's block for servers that need a newer app (#793): one for them
+ * all, naming each, with the newest release any of them asks for, since
+ * that one works with every one. "Your other servers still work." only when
+ * there are others. Null when there are none.
+ */
+export function tooOldNote(servers: readonly TooOld[], others: boolean, check: UpdateCheck | null, phone: Phone | null, problem: string | null): ListNote | null {
+  const first = servers[0];
+  if (first === undefined) return null;
+  const one = servers.length === 1;
+  const oldest = newestOf(servers.map((server) => server.oldest)) ?? first.oldest;
+  const how = newerAppHow(check, phone);
+  return {
+    kind: "tooold",
+    servers: servers.map((server) => server.server),
+    words: `${serverNames(servers.map((server) => server.name))} ${one ? "needs" : "need"} a newer Linger`,
+    line: `${one ? "It works" : "They work"} with Linger ${oldest} or newer.${others ? " Your other servers still work." : ""}`,
+    detail: how.detail,
+    button: how.button,
+    problem: how.button ? problem : null,
+  };
 }
 
 /**
@@ -225,10 +298,17 @@ export interface UpdateState {
  * A copy that needs a password: the lamp's "is out" once it's downloaded, with
  * Update. A copy the system updates: the lamp's "is out", with how to get it.
  * The two "is out" lines can be put off until tomorrow.
+ *
+ * A server that needs a newer app (#793) comes first, and while it shows,
+ * the ready and "is out" lines don't: they'd say the same thing, less
+ * urgently, with a second button for it.
  */
-export function updateNotes({ check, updated, putOff, problem }: UpdateState): ListNote[] {
+export function updateNotes({ check, updated, putOff, problem, tooOld = [], others = false, phone = null }: UpdateState): ListNote[] {
   const notes: ListNote[] = [];
+  const blocked = tooOldNote(tooOld, others, check, phone, problem);
+  if (blocked) notes.push(blocked);
   if (updated) notes.push({ kind: "updated", version: updated.version, words: `You're on Linger ${updated.version}`, line: updated.line });
+  if (blocked) return notes;
   if (check?.kind === "newer" && check.downloaded) {
     if (check.silent) {
       notes.push({
