@@ -85,6 +85,8 @@ This is not an attempt to build a better platform. It's an attempt to not need o
 - **Files and media.** 500 MB uploads, with where a photo or video was taken
   always stripped. Media, a tab
   beside your list, keeps everything ever shared; star things to keep them forever.
+  On a phone, Linger is in the share sheet: share a photo or file from another
+  app, pick a conversation, and it waits in that message box for you to send.
 - **Voice rooms** with mute, deafen, push-to-talk and per-person volume. The
   talk key works with a game in front on Windows and Linux, and Linger listens
   for that one key and nothing else. Voice goes through the host's server,

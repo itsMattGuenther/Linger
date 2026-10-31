@@ -6,7 +6,9 @@
 /// in `src/lib.rs`, the desktop's or the phone's, must be listed here;
 /// `src/acl.rs` tests that. `phone_sound_mode`, `phone_buzz` and
 /// `phone_call_bar` are the phone's alone (`capabilities/phone.json`), and so is
-/// `phone_save`, which only an iPhone uses (#703).
+/// `phone_save`, which only an iPhone uses (#703), and the three `shared_`
+/// commands that read files shared to Linger from the phone's share sheet
+/// (#785, `shared.rs`).
 const COMMANDS: &[&str] = &[
     "sessions_load",
     "session_save",

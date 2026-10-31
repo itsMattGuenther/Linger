@@ -839,12 +839,15 @@ macOS runners, or a friend's Mac.
 - 🟡 **T-1607 · Share to Linger from the phone's share sheet** — effort: **high** (#785)
   *Proposed, waiting on Matt (`docs/decisions.md`, "Sharing to Linger from the
   phone's share sheet"); SPEC §4.15.* Pictures, videos and files shared from
-  another app land in a conversation's message box, unsent. **Order:** the
-  shell's holding area and the page's picker first (`shared.rs`,
-  `lib/sharedFiles.ts`), then Android's `ACTION_SEND` intent filter, then the
-  iPhone's share extension and App Group. **Still to do:** everything past the
-  first step; the extension can only be built on GitHub's macOS runners
-  (`ios.yml`) and tried on a TestFlight iPhone.
+  another app land in a conversation's message box, unsent. **Built on
+  `feat/t-1607-share-to-linger`:** the shell's inbox (`shared.rs`, and
+  `linger://shared` in `deep_link.rs`), the page's sheet asking which
+  conversation (`core/shareInbox.ts`, `app/list/ShareSheet.tsx`) and the box
+  taking the files (`useFileDrafts`); Android's intent filter and
+  `SharedInbox.kt`; the iPhone's share extension and App Group. **Still to
+  do:** an Android build on a phone; an `ios.yml` build, which is the first
+  time the extension and the App Group are signed; then the iPhone itself,
+  on TestFlight.
   *Accept:* on a real phone, share a screenshot from the photo library to Linger,
   pick a room, see it in that room's message box, send it, and see it arrive
   on a computer.

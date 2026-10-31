@@ -1106,15 +1106,17 @@ in the phone's own share sheet for pictures, videos and files. Choosing it opens
 Linger on a list of your conversations: rooms, group DMs and DMs, across the
 servers you're signed in to. Tapping one puts the shared files in that
 conversation's message box as attachments, the way the + button does, and
-nothing is sent until you send it. Where a photo was taken is stripped as for
-any upload (§4.10), and a file over the size limit is refused as it is in the
-message box. Linger is told nothing about the app that shared the file, and
-shares nothing back to it. Text and links shared to Linger are not part of this:
-only files. Android comes first: an Android share arrives through the app's own
-intent filter. The iPhone follows, through a share extension that hands the
-files to the app (it is a second signed target, `docs/releasing.md`, "The
-iPhone"). A shared file the app never picked up is deleted from the phone after
-a minute, and the app keeps nothing of it once it is sent or dropped.
+nothing is sent until you send it. Closing the list without picking turns the
+share down. Where a photo was taken is stripped as for any upload (§4.10), and a
+file over the size limit is said up front and refused as it is in the message
+box. Linger is told nothing about the app that shared the file, and shares
+nothing back to it. Text and links shared to Linger are not part of this: only
+files, so on Android Linger isn't offered for a link or words shared from a
+browser. Android comes first: a share arrives through the app's own intent
+filter. The iPhone follows, through a share extension that hands the files to
+the app (a second signed program, `docs/releasing.md`, "The iPhone"). A share
+the app never picked up is deleted from the phone after ten minutes, and the
+app keeps nothing of it once it is in a message box or turned down.
 
 **Phone backups leave Linger out.** A phone backs its apps up to Apple's or Google's
 cloud by default. The phone app opts out, so what it keeps (your list of servers and

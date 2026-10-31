@@ -62,6 +62,13 @@
  * (`phone_save`) as `phone_save <url> <name>`, and answered at once, or with
  * `?savehold` only at `window.core.saved()`; `?savefail` has it refused.
  *
+ * Share to Linger (#785): `?shared` has the shell's inbox holding one picture,
+ * `porch.png`, as if shared from another app's share sheet; `?sharedbig`
+ * adds `film.mov`, too big to send. Asking for the list, a file and saying
+ * it's done are written down as `shared_files`, `shared_file <index>` and
+ * `shared_done`, which empties the inbox. `window.core.share(names)` is a
+ * share arriving while the app runs, with the shell's word that it did.
+ *
  * "Open in Linger" (#607): `?opened=<link>` is the link Linger was started
  * with, handed over the first time the window asks (`link_offered`), and
  * `window.core.link(link)` is one handed over while it runs. Each ask is
@@ -226,6 +233,19 @@ function logical(value: unknown): { width: number; height: number; x: number; y:
 }
 
 const listeners = new Map<string, number[]>();
+
+/** A file waiting in the shell's share inbox (#785, `src-tauri/src/shared.rs`). */
+interface SharedFile {
+  name: string;
+  size: number;
+  problem: "too_big" | null;
+}
+/** One file shared to Linger, as the shell lists it. */
+const sharedPicture = (name: string): SharedFile => ({ name, size: 4, problem: null });
+let inbox: SharedFile[] = [
+  ...(query.has("shared") ? [sharedPicture("porch.png")] : []),
+  ...(query.has("sharedbig") ? [{ name: "film.mov", size: 600_000_000, problem: "too_big" as const }] : []),
+];
 interface Internals {
   runCallback: (id: number, data: unknown) => void;
 }
@@ -319,6 +339,20 @@ mockIPC((cmd, args) => {
     // A link or a download handed to the browser.
     case "plugin:opener|open_url":
       note(`open ${String(a.url)}`);
+      return null;
+    // Files shared to Linger from another app's share sheet (#785).
+    case "shared_files":
+      note("shared_files");
+      return inbox;
+    case "shared_file": {
+      note(`shared_file ${String(a.index)}`);
+      const one = inbox[Number(a.index)];
+      if (!one || one.problem !== null) throw "that can't be sent";
+      return [0x89, 0x50, 0x4e, 0x47];
+    }
+    case "shared_done":
+      note("shared_done");
+      inbox = [];
       return null;
     // A file fetched for an iPhone's share sheet (#703).
     case "phone_save":
@@ -427,6 +461,8 @@ declare global {
       release: () => void;
       /** With `?savehold`, the iPhone's shell has the file, and the share sheet shows. */
       saved: () => void;
+      /** Files shared to Linger while the app runs, and the shell's word that they're in its inbox (#785). */
+      share: (names: string[]) => void;
       /** With `?down`, the server that was down answers from now on. */
       up: () => void;
       /** With `?stall`, Ashen Lanterns' first refresh is answered now. */
@@ -478,6 +514,10 @@ window.core = {
   },
   release: () => release(),
   saved: () => showSheet(),
+  share: (names) => {
+    inbox = names.map(sharedPicture);
+    deliver("next:shared", null);
+  },
   up: () => {
     down = null;
   },

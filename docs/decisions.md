@@ -1591,14 +1591,35 @@ agrees; this is why.
   share extension and an App Group, and nobody on the project has a Mac or an
   iPhone to try it on. Android first tests the shared half where it can be
   tested.
-- **Nothing sits on the phone after the share.** The extension copies files
-  into the App Group's folder because it cannot reach the app's own storage.
-  The app deletes them once they're attached to a draft, and a sweep deletes
-  any left for more than a minute. This follows `dropped.rs`: the page can only
-  ask for files that were just handed over, and never names a path.
-- **A new `linger://` shape for the handoff.** `deep_link.rs` reads exactly one
-  shape on purpose. The share gets its own, read as strictly, carrying no file
-  names or paths.
+- **One inbox folder, written by the phone, read by the shell.** Android's
+  `SharedInbox.kt` copies into the app's own `files/shared`; the iPhone's
+  share extension, a separate program that can't reach the app's storage,
+  copies into `shared` in the App Group's folder. Each file goes in a numbered
+  folder of its own, so names are kept and order is the share's, and a new
+  share replaces the last whole (written beside it and swapped in with one
+  rename, so the page never reads half a file). Neither phone calls into Rust:
+  the shell only lists the folder (`shared.rs`), and the page asks it, as for
+  files dropped on Linux (`dropped.rs`), never naming a path.
+- **Ten minutes, then deleted.** Android brings Linger forward with the share.
+  An iPhone may not let a share extension open the app, and then the person
+  opens it themselves, so a share waits ten minutes, not one. Once it's in a
+  message box or turned down it's deleted at once, and one nobody took is
+  deleted when the app next starts.
+- **Only the bytes of what was chosen, only after choosing.** The sheet is
+  drawn from names and sizes; the files are read once a conversation is
+  picked, so a long video doesn't sit in memory while the person decides.
+- **Never a way back into Linger's own files.** On Android a share is any app's
+  `content://` address, and a crafted one could point at Linger's own storage
+  and put its private files in a message box. So `file://` addresses and
+  Linger's own providers are refused.
+- **No text on Android.** The intent filter takes `image/*`, `video/*`,
+  `audio/*` and `application/*`, not `text/*`, so Linger isn't offered for a
+  link shared from a browser. A `.txt` file shared from a files app is left
+  out with it; a `.txt` is still attached with + as before.
+- **`linger://shared`, carrying nothing.** The iPhone's extension opens it to
+  bring Linger forward. `deep_link.rs` reads it as strictly as the invite
+  links: exactly that, no path, no query. It only tells the list to look in
+  the inbox; no link ever names a file.
 - **Costs.** A second bundle ID and an App Group registered with the Apple
   account. Automatic signing may cover both, to be confirmed on a first CI
   build. The extension runs in a small process and can't hold a large video in

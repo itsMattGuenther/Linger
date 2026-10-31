@@ -1494,3 +1494,55 @@ test.describe("a shared file (#703)", () => {
     });
   });
 });
+
+// Share to Linger (#785, SPEC §4.15). A picture shared from another app's
+// share sheet waits in the shell's inbox (src-tauri/src/shared.rs); the list
+// asks which conversation it's for, and the one picked opens with it in its
+// message box, unsent. Turning the share down has the shell delete it.
+test.describe("sharing to Linger (#785)", () => {
+  const sheet = (page: Page) => page.getByRole("menu", { name: "Share to a conversation" });
+  const lines = async (page: Page, start: string) => (await did(page)).filter((line) => line.startsWith(start));
+
+  test("a shared picture asks which conversation, and the room picked opens with it in the box, unsent", async ({ page }) => {
+    await open(page, "?one&shell=phone&shared");
+    await settled(page);
+    await expect(sheet(page).locator(".k-menu-head")).toHaveText("Share porch.png to…");
+    // Rooms first, as the list has them; nothing read but the list yet.
+    await expect(sheet(page).locator("[data-kit='MenuItem']").first()).toHaveText("general");
+    expect(await lines(page, "shared_file ")).toEqual([]);
+    expect(await sticksOut(page), "the share sheet").toEqual([]);
+
+    await sheet(page).getByRole("menuitem", { name: "general" }).click();
+    await expect(sheet(page)).toHaveCount(0);
+    await expect(title(page)).toContainText("general");
+    await expect(screen(page).getByRole("list", { name: "Files for this message" }).getByRole("listitem")).toContainText("porch.png");
+    expect(await lines(page, "shared_file ")).toEqual(["shared_file 0"]);
+    expect(await lines(page, "shared_done")).toEqual(["shared_done"]);
+    // In the box, not sent.
+    expect((await did(page)).filter((line) => line.startsWith("sent:"))).toEqual([]);
+  });
+
+  test("tapping the dimmed page turns the share down, and the shell deletes it", async ({ page }) => {
+    await open(page, "?one&shell=phone&shared");
+    await settled(page);
+    await expect(sheet(page)).toBeVisible();
+    await page.locator(".k-sheet-scrim").click({ position: { x: 200, y: 100 } });
+    await expect(sheet(page)).toHaveCount(0);
+    await expect(screen(page)).toHaveCount(0);
+    expect(await lines(page, "shared_done")).toEqual(["shared_done"]);
+    expect(await lines(page, "shared_file ")).toEqual([]);
+  });
+
+  test("a share arriving while Linger runs rises too, saying how many files", async ({ page }) => {
+    await phone(page);
+    await expect(sheet(page)).toHaveCount(0);
+    await page.evaluate(() => window.core?.share(["a.png", "b.png"]));
+    await expect(sheet(page).locator(".k-menu-head")).toHaveText("Share 2 files to…");
+  });
+
+  test("a file too big to send is said before anybody picks", async ({ page }) => {
+    await open(page, "?one&shell=phone&shared&sharedbig");
+    await settled(page);
+    await expect(sheet(page).getByRole("status")).toHaveText("film.mov is too big to send. A file can be 500 MB at most.");
+  });
+});
