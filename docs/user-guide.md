@@ -24,7 +24,7 @@ current installers are for 64-bit Intel/AMD computers (`x64`, `x86_64` and
 | Fedora or openSUSE | File ending in `x86_64.rpm` → [Linux packages](#linux-packages) |
 | Omarchy or Arch | Nothing to download → [Arch and Omarchy](#arch-and-omarchy) |
 | Any other Linux | File ending in `amd64.AppImage` → [AppImage](#linux-appimage) |
-| An Android phone | File ending in `android-arm64.apk`, on the phone → [Android](#android) |
+| An Android phone | Nothing to download here: [Google Play](https://play.google.com/store/apps/details?id=io.github.itsmattguenther.linger) → [Android](#android) |
 
 You do **not** need `.sig`, `latest.json`, or the source-code ZIP/tar files.
 The `.msi` is an alternative Windows installer, not an extra required download.
@@ -126,8 +126,7 @@ reopen it. Then go to [Getting in](#getting-in).
 
 ### Android
 
-The phone app is on the release page from 0.4.8, until it's in the Play
-Store. It's for seeing who's around and answering them: rooms, DMs, your
+The phone app is on [Google Play](https://play.google.com/store/apps/details?id=io.github.itsmattguenther.linger). It's for seeing who's around and answering them: rooms, DMs, your
 status, media, search, pictures and voice messages. From 0.5.1 it joins voice
 rooms too, with the phone's own microphone or a headset's. The first time you
 press **Join**, Android asks whether Linger may use the microphone, unless
@@ -147,31 +146,21 @@ under Display), which Linger follows, or choose a bigger **Text size** in
 Linger's **Settings → Appearance**, which goes on top of it. Together they
 go up to twice the usual size.
 
-1. On the phone, open the
-   [latest release](https://github.com/itsMattGuenther/Linger/releases/latest)
-   in Chrome, scroll to **Assets** (tap it if it's folded up), and tap the file
-   ending in `android-arm64.apk`.
-2. Chrome may say the file **might be harmful**: tap **Download anyway**. It
-   says that about any app that isn't from the Play Store.
-3. Tap **Open** when it's downloaded (or find it in the **Files** app, under
-   **Downloads**). Android says it isn't allowed to install unknown apps from
-   this source: tap **Settings**, turn on **Allow from this source**, and tap
-   back.
-4. Tap **Install**. If **Google Play Protect** asks, it's because it hasn't
-   seen this app before: tap **More details**, then **Install anyway** (or
-   **Install without scanning**).
-5. Open **Linger**, then continue to [Getting in](#getting-in): paste the
+1. On the phone, open Linger on [Google Play](https://play.google.com/store/apps/details?id=io.github.itsmattguenther.linger) and tap **Install**.
+2. Open **Linger**, then continue to [Getting in](#getting-in): paste the
    invite link from your host, or your server's address if you already have
    an account.
 
-**It doesn't update itself.** For a new version, download the new `.apk` from
-its release page and install it over the old one. You stay signed in.
-**Settings → Account & App → This Phone** says which version you have. Every
-release is signed with the same key, which is what lets it install over the
-last one. If Android says **App not installed** when you try (older Android
-says the app "conflicts with an existing package"), the Linger on your phone
-didn't come from this project's release page: a test build, usually. Uninstall
-it and install the new one. That signs you out once.
+**Play keeps it up to date.** **Settings → Account & App → This Phone** says
+which version you have.
+
+**Installed it from a GitHub release before?** Install it from Google Play
+the same way: Play's copy is signed with the same key, so it installs over
+yours and you stay signed in, and from then on Play updates it. If Android
+says **App not installed** (older Android says the app "conflicts with an
+existing package"), the Linger on your phone didn't come from this project's
+releases: a test build, usually. Uninstall it and install it from Play. That
+signs you out once.
 
 ## Getting in
 
@@ -1363,9 +1352,7 @@ and use the installation steps above. Close the old app first. For an
 AppImage, make the new file executable and launch that file, not the old one.
 Do not delete your account or application data to update.
 
-**The Android app** doesn't update itself: install the newer `.apk` from
-[Releases](https://github.com/itsMattGuenther/Linger/releases/latest) over
-the old one, as in [Android](#android).
+**The Android app** is updated by Google Play.
 
 A code push to GitHub is **not a release**. New downloads appear when a
 desktop release is published. Updating your app also does not update the

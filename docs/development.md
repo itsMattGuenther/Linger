@@ -456,8 +456,10 @@ drawing on the CPU ("Your GPU drivers may have a bug"). It works, but the
 phone's graphics driver crashed the app once when it was reinstalled while
 running; opening it again was fine.
 
-**The release key (T-1604).** A release's `.apk` is signed with one key, kept
-off the repo, so each release installs over the last on people's phones. A
+**The release key (T-1604).** The Android app is signed with one key, kept
+off the repo, so each release installs over the last on people's phones. It
+signed the `.apk` GitHub releases carried until Linger was on Google Play
+(#773), and it signs Play's bundle now. A
 debug build is signed with Android's debug key instead, so it won't install
 over a release (or the other way round): uninstall first, which signs you out.
 
@@ -468,20 +470,15 @@ over a release (or the other way round): uninstall first, which signs you out.
   backups to make and the two secrets to set in the `release` environment
   (`ANDROID_RELEASE_KEYSTORE`, `ANDROID_RELEASE_KEYSTORE_PASSWORD`). It never
   replaces a key, or a committed fingerprint for a different one.
-- The release workflow's `android` job runs `scripts/android-signing.sh`:
-  `check` (also in preflight), then `setup`, which writes
-  `gen/android/keystore.properties` for `build.gradle.kts` (git ignores it),
-  then `verify` on the built `.apk` before adding it to the draft as
-  `Linger_<version>_android-arm64.apk`. `scripts/android-signing-test.sh`
-  (CI's rules job) feeds `verify` what real apksigners print.
+- `scripts/android-signing.sh` has `check` (the release workflow's
+  preflight), `setup`, which writes `gen/android/keystore.properties` for
+  `build.gradle.kts` (git ignores it), and `verify` and `verify-bundle` for a
+  built `.apk` or `.aab`. `scripts/android-signing-test.sh` (CI's rules job)
+  feeds `verify` what real apksigners print.
 - Google Play's bundle (`.aab`) is signed with the same key, by
   `.github/workflows/play.yml`, and checked with
   `scripts/android-signing.sh verify-bundle`. Play signs what it ships with
   this key too (docs/releasing.md, "Google Play").
-- If that job fails once the desktop draft is up, build the `.apk` from the
-  tagged commit with the key (below), check it with
-  `scripts/android-signing.sh verify`, and add it to the draft with
-  `gh release upload v<version> Linger_<version>_android-arm64.apk`.
 - To sign a release build on your own machine, with the key: export the two
   secrets' values and run `scripts/android-signing.sh setup`, then
   `pnpm tauri android build --target aarch64 --apk`. Without a

@@ -1803,3 +1803,21 @@ Linger's words bigger without changing every app on their phone.
   anywhere.
 - **Still no Interface size on the phone.** It zooms the window, and a phone's window
   doesn't zoom (#689).
+
+---
+
+## Decided — no `.apk` on GitHub releases once Linger is public on Google Play (#773)
+
+**Matt, 2026-10-30 and 2026-10-31.** Android testers get Linger from Google Play's
+testing track, and Play updates it for them, so GitHub releases stop carrying the
+`.apk` (the quick path of 2026-10-03, above). Not before Linger is public on Play,
+though: the testing track is invite-only, and linger.im's Android button links to the
+release's `.apk`, so dropping it earlier would leave anybody who isn't a tester with no
+way to get the Android app. So the change waits, and lands on the day the Play listing
+goes public, with the site's button switched to the listing at the same time.
+
+- Play's copy is signed with the same key as every `.apk` (Play App Signing, given our
+  key), so it installs over one and keeps people signed in. The last release with an
+  `.apk` tells people to get it from Play to keep getting updates.
+- The key check in the release's preflight stays: Play's bundle is signed with that key.
+- Every release now needs `play.yml` run, or Android phones stay on the last one.

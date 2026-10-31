@@ -1112,12 +1112,11 @@ your settings) doesn't reach either company. There's no setting to put it back i
 they're encrypted to a key that never leaves the old one, and messages and pictures
 live on the server. A new phone signs in again.
 
-**Getting it, before the stores** (Matt, 2026-10-03). Android friends install the
-signed `.apk` from each GitHub release; Android asks them once to allow installs
-from their browser. It doesn't update itself: a newer release installs over the old
-one and keeps them signed in, because every release is signed with the same key.
-Settings says which version it is (Account & App, under This Phone), since that is
-where updating by hand starts. The iPhone came after Android: its builds go to Apple's
+**Getting it** (Matt, 2026-10-03; #773). Android phones get it from Google Play,
+which keeps it up to date. Until Linger was public there, each GitHub release
+carried a signed `.apk` instead; Play's copy is signed with the same key, so it
+installs over one of those and keeps people signed in. Settings says which version
+it is (Account & App, under This Phone). The iPhone came after Android: its builds go to Apple's
 TestFlight for invited testers until it's in the App Store (`docs/releasing.md`, "The
 iPhone"). It needs iOS 15 or later, the oldest App Store Connect takes from April
 2027 (#743).
