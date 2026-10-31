@@ -63,11 +63,11 @@ pub struct DroppedFile {
     size: u64,
     /// Why it can't be sent, when it can't: `folder`, `too_big` or
     /// `unreadable`. The page says so in words.
-    problem: Option<&'static str>,
+    pub(crate) problem: Option<&'static str>,
 }
 
 /// What a path is, as a dropped file: its name and size, or why not.
-fn describe(path: &std::path::Path) -> DroppedFile {
+pub(crate) fn describe(path: &std::path::Path) -> DroppedFile {
     let name = path.file_name().map_or_else(
         || path.display().to_string(),
         |name| name.to_string_lossy().into_owned(),

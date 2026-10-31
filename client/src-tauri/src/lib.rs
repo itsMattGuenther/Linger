@@ -38,6 +38,9 @@ mod phone_save;
 mod phone_sound;
 #[cfg(any(mobile, test))]
 mod phone_text;
+// Files shared to Linger from the phone's share sheet (#785).
+#[cfg(any(mobile, test))]
+mod shared;
 #[cfg(desktop)]
 mod screen_shell;
 #[cfg(desktop)]
@@ -449,6 +452,7 @@ fn phone_app() -> tauri::Builder<tauri::Wry> {
         .plugin(tauri_plugin_deep_link::init())
         .manage(Connections::default())
         .manage(deep_link::Offered::default())
+        .manage(shared::Shared::default())
         .setup(|app| {
             deep_link::install(app);
             // Downloads a closed app left for its share sheet (#703).
@@ -473,6 +477,9 @@ fn phone_app() -> tauri::Builder<tauri::Wry> {
             phone_sound::phone_sound_mode,
             phone_sound::phone_buzz,
             phone_sound::sound_play,
-            phone_text::phone_text_scale
+            phone_text::phone_text_scale,
+            shared::shared_files,
+            shared::shared_file,
+            shared::shared_done
         ])
 }
