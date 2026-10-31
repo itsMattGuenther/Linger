@@ -23,16 +23,25 @@ export function loadNormalize(): boolean {
   }
 }
 
-/** Apply it to the document and remember it for next launch. */
+/**
+ * Remember it for next launch, and for every window, which apply what's
+ * saved. Says whether storage took it: a full one, or one switched off,
+ * doesn't, and then nothing changes (#782).
+ */
+export function saveNormalize(on: boolean): boolean {
+  try {
+    window.localStorage.setItem(KEY, String(on));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Apply it to the document. */
 export function applyNormalize(on: boolean): void {
   if (on) {
     document.documentElement.dataset.normalize = "true";
   } else {
     delete document.documentElement.dataset.normalize;
-  }
-  try {
-    window.localStorage.setItem(KEY, String(on));
-  } catch {
-    // A browser with storage switched off still gets the setting this session.
   }
 }
