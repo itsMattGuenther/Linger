@@ -218,6 +218,12 @@ rules that came out of them.
   `/usr/lib` (Arch), `/usr/lib64` (Fedora), `/usr/lib/x86_64-linux-gnu`
   (Debian, Ubuntu). And never bind-mount a path that might be missing: Docker
   makes an empty directory in its place (#757).
+- **A fallback covers only the case it's for.** `a | b || echo none` also
+  hides `a` failing. Run what has to work on its own line, and treat only
+  the exit status that means "nothing found" (`grep`'s 1) as none. Then run
+  the step once with each part failing, with stand-ins on `PATH`. The iPhone
+  build's report of Apple's listed calls read a failed `nm` as none of
+  them (#781).
 
 ## A test that fails at random
 

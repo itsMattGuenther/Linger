@@ -288,6 +288,18 @@ submit for review.
 - **The encryption question** is answered in `client/src-tauri/Info.ios.plist`
   (`ITSAppUsesNonExemptEncryption`: only standard, exempt encryption), so it
   isn't asked on each upload.
+- **It builds with Xcode 26** on GitHub's macOS 26 Mac, chosen in `ios.yml`
+  rather than the Mac's default, and the run fails if the built app's SDK
+  isn't iOS 26's (#779). App Store Connect takes uploads built with Xcode 26
+  or later, but an app built with Xcode 27's iOS 27 SDK doesn't open unless
+  it uses UIKit's scene life cycle, which Tauri 2.11 doesn't have. Apple
+  requires the iOS 27 SDK from April 2027, so move to Xcode 27 together with
+  Tauri 2.12 or later, before then.
+- **The privacy manifest**, `gen/apple/linger-client_iOS/PrivacyInfo.xcprivacy`,
+  tells Apple that Linger tracks nobody and why it makes the system calls
+  Apple asks a reason for (#779). Each run prints which of those calls the
+  built app makes ("the calls the privacy manifest answers for"), so one in a
+  new category is seen there and declared in the manifest.
 
 ## Worth knowing
 

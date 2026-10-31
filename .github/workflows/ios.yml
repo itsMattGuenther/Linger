@@ -34,7 +34,9 @@ jobs:
     name: the iPhone app
     if: github.ref == 'refs/heads/main'
     environment: release
-    runs-on: macos-latest
+    # Named rather than macos-latest, whose image and default Xcode move on
+    # by themselves: the Xcode this builds with is chosen below (#779).
+    runs-on: macos-26
     timeout-minutes: 60
     steps:
       - name: what to build
@@ -60,6 +62,14 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: client/src-tauri
+      # Xcode 26, not whatever this Mac has as its default (#779). App Store
+      # Connect takes uploads built with Xcode 26 or later (since 2026-04-28),
+      # but an app built with Xcode 27's iOS 27 SDK won't open unless it uses
+      # UIKit's scene life cycle, which Tauri 2.11 doesn't have. Move to
+      # Xcode 27 with Tauri 2.12 or later, before Apple requires the iOS 27
+      # SDK in April 2027, and change the check of the built app below too.
+      - name: Xcode 26
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app
       - name: what this Mac builds with
         run: |
           xcodebuild -version
@@ -107,6 +117,37 @@ jobs:
           printf 'MinimumOSVersion: %s\n' "$got"
           [ "$got" = "$want" ] ||
             { echo "::error::the app needs iOS $got, but tauri.ios.conf.json says $want"; exit 1; }
+          # Built with the iOS 26 SDK, the one Xcode 26 above brings (#779):
+          # an older one isn't taken, and a newer one makes an app that
+          # doesn't open while Tauri has no scene life cycle.
+          sdk="$(plutil -extract DTSDKName raw "$RUNNER_TEMP/Info.plist")"
+          printf 'DTSDKName: %s\nDTXcode: %s\n' "$sdk" "$(plutil -extract DTXcode raw "$RUNNER_TEMP/Info.plist")"
+          case "$sdk" in
+            iphoneos26.*) ;;
+            *) echo "::error::built with $sdk, not the iOS 26 SDK (#779)"; exit 1 ;;
+          esac
+      # The privacy manifest (PrivacyInfo.xcprivacy, #779) has to be in the
+      # app. Then which of the calls Apple asks a reason for the app's own
+      # code makes: one in a category the manifest doesn't declare is one to
+      # add there. Those are printed, not checked: Apple's scan is what counts.
+      - name: the calls the privacy manifest answers for
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/payload"
+          rm -rf "$dir"
+          unzip -q "$IPA" 'Payload/*' -d "$dir"
+          app="$(find "$dir/Payload" -maxdepth 1 -name '*.app' -type d)"
+          plutil -lint "$app/PrivacyInfo.xcprivacy"
+          bin="$app/$(plutil -extract CFBundleExecutable raw "$app/Info.plist")"
+          [ -f "$bin" ] || { echo "::error::no app binary at $bin"; exit 1; }
+          # nm on its own, so an app it can't read fails the step, and only
+          # grep's "nothing matched" (status 1) reads as none of them (#781).
+          imports="$(nm -u "$bin")"
+          listed="$(printf '%s\n' "$imports" |
+            grep -E '^_(f?stat|lstat|fstatat|f?getattrlist|getattrlistat|getattrlistbulk|f?statv?fs|mach_absolute_time)$|NSUserDefaults|NSFile(Creation|Modification)Date|NSFileSystemFree|NSURL(Creation|ContentModification|ContentAccess|AttributeModification)DateKey|NSURLVolume.*Capacity')" ||
+            status=$?
+          [ "${status:-0}" -le 1 ] || { echo "::error::couldn't search the app's imports"; exit 1; }
+          printf '%s\n' "${listed:-none of them}"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: iphone-app

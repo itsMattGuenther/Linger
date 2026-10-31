@@ -13,6 +13,14 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Linger uses the camera only when you take a photo or video to share.</string>
 	<!--
+	  An iPhone asks before an app reaches a device on the same network
+	  (Apple's TN3179, #779), and a server run at home is one. Linger's own
+	  connections count: the gateway's, and a download for the share sheet
+	  (phone_save.rs). The web view's don't.
+	-->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Linger uses your local network only to reach a Linger server you've added on it, such as one at home.</string>
+	<!--
 	  Only standard, exempt encryption: HTTPS to the server, and the voice
 	  encryption WebRTC has built in. Saying so here means App Store Connect
 	  doesn't ask about export compliance on every upload.
