@@ -312,14 +312,34 @@ export function searchQuery(query: SearchRequest): string {
 }
 
 /**
+ * `/health`'s `oldest_app` (#793), read from an answer as it came: a string
+ * when it's there, null for anything else. Read field by field rather than
+ * trusted, since a missing or odd answer must only ever mean "nothing said".
+ */
+export function oldestAppIn(said: unknown): string | null {
+  if (typeof said !== "object" || said === null || !("oldest_app" in said)) return null;
+  const oldest: unknown = said.oldest_app;
+  return typeof oldest === "string" ? oldest : null;
+}
+
+/**
  * Calls that need no account: everything on the way *in* to a server.
  */
 export class PublicApi {
   constructor(readonly baseUrl: string) {}
 
-  /** Cheap "is there a Linger server at this address" probe. */
-  async health(signal?: AbortSignal): Promise<void> {
-    await requestVoid(this.baseUrl, "GET", "/health", { signal });
+  /**
+   * Cheap "is there a Linger server at this address" probe, and what it says
+   * about apps (#793): the oldest app release it works with. Any 2xx is a
+   * server there, as it always was; an answer without the field (a server
+   * from before it), or one that can't be read, says nothing about apps.
+   */
+  async health(signal?: AbortSignal): Promise<{ oldestApp: string | null }> {
+    const said = await withDeadline({ signal }, async (bounded) => {
+      const response = await send(this.baseUrl, "GET", "/health", bounded);
+      return response.status === 204 ? null : await response.json().catch(() => null);
+    });
+    return { oldestApp: oldestAppIn(said) };
   }
 
   /**

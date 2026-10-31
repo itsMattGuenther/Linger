@@ -12,6 +12,7 @@ import type { SetupRequest } from "../../generated/SetupRequest";
 import type { UseSignInLinkRequest } from "../../generated/UseSignInLinkRequest";
 import { displayNameProblem, lookAlikeIn, MIN_PASSWORD_CHARS, type NameSaid } from "../../lib/account";
 import { type PastedLink, parsePastedLink } from "../../lib/link";
+import { needsNewerApp } from "../../lib/updates";
 
 /** Where the flow is. */
 export type SignInStep =
@@ -71,20 +72,50 @@ export interface Door {
   setupPreview(token: string): Promise<{ valid: boolean }>;
   invitePreview(code: string): Promise<{ valid: boolean; server_name: string | null }>;
   signInLinkPreview(code: string): Promise<{ valid: boolean; server_name: string | null; username: string | null; made_by: string | null }>;
-  health(): Promise<void>;
+  /** Whether anything answers, and the oldest app release it works with (#793). */
+  health(): Promise<{ oldestApp: string | null }>;
+}
+
+/**
+ * What the paste box says when the server needs a newer app than this one
+ * (#793), before any form asks for a password: no form here could work.
+ * Words true for any copy, however it's updated.
+ */
+export function newerAppWords(oldest: string): string {
+  return `This server needs a newer Linger. It works with Linger ${oldest} or newer. Update Linger, then try again.`;
 }
 
 /**
  * Which form a paste leads to, asking the server at that address: a setup
  * link that still works leads to setting the server up, a live invite to
  * joining, and a bare address to signing in once something answers there.
+ * First of all, a server that needs a newer app than `version` says so
+ * (#793), whatever was pasted, so nobody types a password into a form that
+ * can't work. A link asks `/health` only when this copy knows its version;
+ * a bare address asks it anyway, to know something answers.
  */
-export async function stepFor(pasted: string, doorAt: (baseUrl: string) => Door): Promise<{ step: SignInStep } | { problem: string }> {
+export async function stepFor(
+  pasted: string,
+  doorAt: (baseUrl: string) => Door,
+  version: string | null = null,
+): Promise<{ step: SignInStep } | { problem: string }> {
   const read = readPasted(pasted);
   if ("problem" in read) return read;
   const { link } = read;
   const door = doorAt(link.baseUrl);
   try {
+    if (link.kind === "server") {
+      const { oldestApp } = await door.health();
+      if (needsNewerApp(version, oldestApp) && oldestApp !== null) return { problem: newerAppWords(oldestApp) };
+      return { step: { kind: "login", baseUrl: link.baseUrl, serverName: null } };
+    }
+    // A link: no answer here says nothing; its own preview says whether
+    // anybody's there.
+    if (version !== null) {
+      const said = await door.health().catch(() => null);
+      const oldestApp = said?.oldestApp ?? null;
+      if (needsNewerApp(version, oldestApp) && oldestApp !== null) return { problem: newerAppWords(oldestApp) };
+    }
     if (link.kind === "setup") {
       const preview = await door.setupPreview(link.token);
       return preview.valid
@@ -97,23 +128,19 @@ export async function stepFor(pasted: string, doorAt: (baseUrl: string) => Door)
         ? { step: { kind: "register", baseUrl: link.baseUrl, code: link.code, serverName: preview.server_name } }
         : { problem: "That invite isn't good anymore. Ask for a new one." };
     }
-    if (link.kind === "signin") {
-      const preview = await door.signInLinkPreview(link.code);
-      return preview.valid && preview.username !== null
-        ? {
-            step: {
-              kind: "newPassword",
-              baseUrl: link.baseUrl,
-              code: link.code,
-              serverName: preview.server_name,
-              username: preview.username,
-              madeBy: preview.made_by,
-            },
-          }
-        : { problem: "That sign-in link doesn't work any more. It works once, for a day. Ask the host for a new one." };
-    }
-    await door.health();
-    return { step: { kind: "login", baseUrl: link.baseUrl, serverName: null } };
+    const preview = await door.signInLinkPreview(link.code);
+    return preview.valid && preview.username !== null
+      ? {
+          step: {
+            kind: "newPassword",
+            baseUrl: link.baseUrl,
+            code: link.code,
+            serverName: preview.server_name,
+            username: preview.username,
+            madeBy: preview.made_by,
+          },
+        }
+      : { problem: "That sign-in link doesn't work any more. It works once, for a day. Ask the host for a new one." };
   } catch (caught) {
     return { problem: problemIn(caught) };
   }
@@ -150,9 +177,15 @@ export interface SignInActions {
 /**
  * The sign-in screen's actions, against the server at each address. A
  * sign-in that works is handed to `signedIn`, which keeps it (the owner's
- * sessions); anything that fails comes back as a sentence.
+ * sessions); anything that fails comes back as a sentence. `version` is this
+ * copy's (`thisVersion` in lib/updates.ts), for a server that needs a newer
+ * one (#793); null where it can't be read, which never blocks.
  */
-export function signInActions(entranceAt: (baseUrl: string) => Entrance, signedIn: (baseUrl: string, auth: AuthResponse) => Promise<void>): SignInActions {
+export function signInActions(
+  entranceAt: (baseUrl: string) => Entrance,
+  signedIn: (baseUrl: string, auth: AuthResponse) => Promise<void>,
+  version: () => Promise<string | null> = () => Promise.resolve(null),
+): SignInActions {
   const enter = async <Said>(baseUrl: string, attempt: (entrance: Entrance) => Promise<AuthResponse>, said: (caught: unknown) => Said): Promise<Said | null> => {
     try {
       await signedIn(baseUrl, await attempt(entranceAt(baseUrl)));
@@ -166,7 +199,7 @@ export function signInActions(entranceAt: (baseUrl: string) => Entrance, signedI
     return onName === null ? problemIn(caught) : { onName };
   };
   return {
-    check: (pasted) => stepFor(pasted, entranceAt),
+    check: async (pasted) => stepFor(pasted, entranceAt, await version()),
     login: (baseUrl, username, password) => enter(baseUrl, (entrance) => entrance.login({ username: usernameOf(username), password }), problemIn),
     register: (baseUrl, code, username, displayName, password) =>
       enter(

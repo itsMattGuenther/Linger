@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { isOlderVersion, releaseNotesUrl, serverVersionLine, type UpdateCheck, updateLead, updateLine, WAIT_MS } from "./updates";
+import { oldestAppIn } from "./api";
+import { isOlderVersion, needsNewerApp, newestOf, releaseNotesUrl, serverVersionLine, type UpdateCheck, updateLead, updateLine, WAIT_MS } from "./updates";
 
 describe("updateLine", () => {
   const published = 1_800_000_000_000;
@@ -129,6 +130,55 @@ describe("isOlderVersion (#314)", () => {
     expect(isOlderVersion("0.4", "0.4.4")).toBe(false);
     expect(isOlderVersion("0.4.3-dev", "0.4.4")).toBe(false);
     expect(isOlderVersion("0.4.3", "latest")).toBe(false);
+  });
+});
+
+describe("needsNewerApp (#793)", () => {
+  it("is true only when the server's oldest app is a newer release than this one", () => {
+    expect(needsNewerApp("0.5.3", "0.5.4")).toBe(true);
+    expect(needsNewerApp("0.5.9", "0.5.10")).toBe(true);
+    expect(needsNewerApp("0.9.0", "0.10.0")).toBe(true);
+    expect(needsNewerApp("0.5.4", "0.5.4")).toBe(false);
+    expect(needsNewerApp("0.5.10", "0.5.9")).toBe(false);
+    expect(needsNewerApp("1.0.0", "0.9.9")).toBe(false);
+    expect(needsNewerApp("v0.5.3", "0.5.4")).toBe(true);
+    expect(needsNewerApp(" 0.5.3 ", "0.5.4")).toBe(true);
+  });
+
+  it("never blocks on a version that isn't a plain release number, on either side", () => {
+    for (const app of ["", "0.5", "0.5.3-dev", "0.5.3+abc", "0.5.3.1", "dev", "0.5.x", "-0.5.3"]) {
+      expect(needsNewerApp(app, "0.5.4")).toBe(false);
+    }
+    for (const oldest of ["", "0.6", "0.6.0-rc.1", "latest", "99", "0.6.0 or newer"]) {
+      expect(needsNewerApp("0.5.3", oldest)).toBe(false);
+    }
+  });
+
+  it("never blocks when either side says nothing", () => {
+    expect(needsNewerApp(null, "0.5.4")).toBe(false);
+    expect(needsNewerApp("0.5.3", null)).toBe(false);
+    expect(needsNewerApp(null, null)).toBe(false);
+  });
+});
+
+describe("newestOf (#793)", () => {
+  it("is the newest readable release, compared as numbers", () => {
+    expect(newestOf(["0.5.4", "0.5.10", "0.5.9"])).toBe("0.5.10");
+    expect(newestOf(["0.5.4", "soon"])).toBe("0.5.4");
+    expect(newestOf(["soon"])).toBeNull();
+    expect(newestOf([])).toBeNull();
+  });
+});
+
+describe("oldestAppIn (#793)", () => {
+  it("reads the field from /health's answer as it came, and nothing else", () => {
+    expect(oldestAppIn({ ok: true, version: "0.5.4", oldest_app: "0.4.1" })).toBe("0.4.1");
+    // A server from before the field, an empty answer (204), or something that isn't Linger's.
+    expect(oldestAppIn({ ok: true, version: "0.5.3" })).toBeNull();
+    expect(oldestAppIn(null)).toBeNull();
+    expect(oldestAppIn("<html>")).toBeNull();
+    expect(oldestAppIn({ oldest_app: 4 })).toBeNull();
+    expect(oldestAppIn({ oldest_app: null })).toBeNull();
   });
 });
 
