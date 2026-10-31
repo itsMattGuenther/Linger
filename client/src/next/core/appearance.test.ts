@@ -1,7 +1,5 @@
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Bus } from "./bus";
-import { memoryHub } from "./bus.memory";
 
 // The desktop shell: a window that remembers its zoom, size and smallest size, on a 1920 by 1080 screen with a 40 px panel.
 const shell = vi.hoisted(() => ({
@@ -10,10 +8,6 @@ const shell = vi.hoisted(() => ({
   least: null as { width: number; height: number } | null,
   label: "main",
   broadcast: [] as unknown[],
-  /** Each window's bus, by its label, all on one hub: set up afresh for every test. */
-  bus: (label: string): Bus => {
-    throw new Error(`no bus for ${label}`);
-  },
 }));
 vi.mock("@tauri-apps/api/core", () => ({ isTauri: () => true, invoke: async () => undefined }));
 vi.mock("@tauri-apps/api/webview", () => ({
@@ -42,10 +36,10 @@ vi.mock("@tauri-apps/api/window", () => ({
     },
   }),
 }));
-vi.mock("@tauri-apps/api/event", () => ({ emit: async () => undefined, emitTo: async () => undefined }));
-vi.mock("@tauri-apps/api/webviewWindow", () => ({ getCurrentWebviewWindow: () => ({ label: "main", listen: async () => () => undefined }) }));
-// The windows' bus (core/bus.ts): the window's own, by the label it runs as.
-vi.mock("./bus", async (importActual) => ({ ...(await importActual<typeof import("./bus")>()), tauriBus: () => shell.bus(shell.label) }));
+vi.mock("./bus", () => ({
+  PROTOCOL: 1,
+  tauriBus: () => ({ broadcast: async (event: string, payload: unknown) => void shell.broadcast.push([event, payload]), listen: async () => () => undefined }),
+}));
 
 const storage = new Map<string, string>();
 beforeEach(() => {
@@ -55,22 +49,6 @@ beforeEach(() => {
   shell.least = null;
   shell.label = "main";
   shell.broadcast = [];
-  const hub = memoryHub();
-  const buses = new Map<string, Bus>();
-  shell.bus = (label) => {
-    const held = buses.get(label);
-    if (held) return held;
-    const bus = hub.bus(label);
-    const recorded: Bus = {
-      ...bus,
-      broadcast: async (event, payload) => {
-        shell.broadcast.push([event, payload]);
-        await bus.broadcast(event, payload);
-      },
-    };
-    buses.set(label, recorded);
-    return recorded;
-  };
   vi.stubGlobal("window", {
     location: { search: "" },
     screen: { availWidth: 1920, availHeight: 1040 },
@@ -79,21 +57,6 @@ beforeEach(() => {
   vi.stubGlobal("document", { documentElement: { dataset: {} as Record<string, string> } });
 });
 afterEach(() => vi.unstubAllGlobals());
-
-/** Storage that's full: what was saved before reads back, and nothing new is written. */
-function storageFull(): void {
-  const local = window.localStorage as { setItem: (key: string, value: string) => void };
-  local.setItem = () => {
-    throw new Error("QuotaExceededError");
-  };
-}
-
-/** A window of its own: the module as that window runs it, keeping what it holds apart from the others'. */
-async function openWindow(label: string) {
-  vi.resetModules();
-  shell.label = label;
-  return import("./appearance");
-}
 
 describe("how the new client looks, in every window", () => {
   it("grows a window with its interface size, so its layout keeps its width", async () => {
@@ -116,7 +79,7 @@ describe("how the new client looks, in every window", () => {
     announceAppearance();
     await vi.waitFor(() => expect(shell.size).toEqual({ width: 340, height: 820 }));
     expect(shell.zoom).toBe(1);
-    expect(shell.broadcast).toContainEqual(["next:appearance", { v: 1, chosen: { scale: 100 } }]);
+    expect(shell.broadcast).toContainEqual(["next:appearance", { v: 1 }]);
   });
 
   it("a window remembered at a size opens at it, and doesn't grow again on every run", async () => {
@@ -213,12 +176,43 @@ describe("how the new client looks, in every window", () => {
 
   it("applies plain names from what's saved", async () => {
     vi.resetModules();
-    const { applyAppearance, saveNormalize } = await import("./appearance");
+    const { applyAppearance } = await import("./appearance");
+    const { saveNormalize } = await import("../../lib/normalize");
     saveNormalize(true);
     const root = document.documentElement as unknown as { dataset: Record<string, string> };
-    delete root.dataset.normalize;
     await applyAppearance();
     expect(root.dataset.normalize).toBe("true");
+  });
+
+  it("changes nothing when storage refuses a choice, and says so, for Settings to tell (#782)", async () => {
+    vi.resetModules();
+    const { applyAppearance, loadHideReactions, loadOneLine, loadScale, saveHideReactions, saveOneLine, saveScale } = await import("./appearance");
+    const { loadNormalize, saveNormalize } = await import("../../lib/normalize");
+    // Chosen while storage worked.
+    expect(saveScale(125)).toBe(125);
+    expect(saveOneLine(true)).toBe(true);
+    expect(saveHideReactions(true)).toBe(true);
+    expect(saveNormalize(true)).toBe(true);
+    // Full: each new choice is refused, and says it was.
+    const local = window.localStorage as { setItem: (key: string, value: string) => void };
+    local.setItem = () => {
+      throw new Error("QuotaExceededError");
+    };
+    expect(saveScale(150)).toBeNull();
+    expect(saveOneLine(false)).toBe(false);
+    expect(saveHideReactions(false)).toBe(false);
+    expect(saveNormalize(false)).toBe(false);
+    // Every window applies what was chosen before.
+    expect([loadScale(), loadOneLine(), loadHideReactions(), loadNormalize()]).toEqual([125, true, true, true]);
+    await applyAppearance();
+    expect(shell.zoom).toBe(1.25);
+    expect((document.documentElement as unknown as { dataset: Record<string, string> }).dataset.normalize).toBe("true");
+    // Gone altogether: refused the same way.
+    vi.stubGlobal("window", {});
+    expect(saveScale(150)).toBeNull();
+    expect(saveOneLine(false)).toBe(false);
+    expect(saveHideReactions(false)).toBe(false);
+    expect(saveNormalize(false)).toBe(false);
   });
 
   it("keeps the phone's Text size until the app closes when storage refuses it (#780)", async () => {

@@ -5,11 +5,9 @@
  * announces it; every window applies it at once, and each applies what's
  * saved when it opens.
  *
- * A choice storage refuses (full, or switched off) still holds until Linger
- * closes (#782). Each window keeps the choices made or announced in it and
- * reads them before storage, the announcement carries them, and a window
- * opened later asks the list for the ones it has heard, as the list is open
- * from start to quit.
+ * A change storage refuses (full, or switched off) isn't made: Settings says
+ * it couldn't save it, and the setting stays as it was (#782). Only the
+ * phone's Text size is kept in memory as well, as the phone has one window.
  *
  * Interface size zooms the whole page, like a browser's zoom, because the new
  * client's sizes are fixed pixels (docs/design/system.md) and a larger base
@@ -28,35 +26,17 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { validScale, validTextSize } from "../../lib/interface";
 import { applyNormalize, loadNormalize } from "../../lib/normalize";
-import { answer, ask, isOwner, OWNER, PROTOCOL, tauriBus } from "./bus";
+import { PROTOCOL, tauriBus } from "./bus";
 import { onPhone } from "./phone";
 import { pageScreen } from "./screen";
 
-/** Settings changed how things look; every window keeps the choices it carries, and applies them. */
+/** Settings changed how things look; every window applies it. */
 export const APPEARANCE = "next:appearance";
-/** A window opened after a change asks the list for the choices it has heard. */
-export const APPEARANCE_CHOSEN = "next:appearancechosen";
-
-/** The choices Settings makes, as its announcement carries them. */
-interface Choices {
-  scale: number;
-  oneLine: boolean;
-  hideReactions: boolean;
-  plainNames: boolean;
-}
-
-/**
- * The choices made or announced in this window, read before storage
- * (#782). Settings shows the choice it made, but every window applies what
- * it reads back, so a choice storage refused showed and applied nowhere.
- */
-const chosen: Partial<Choices> = {};
 
 /** The same key the previous client used, so an update keeps the size. */
 const SCALE_KEY = "linger.interface.scale";
 
 export function loadScale(): number {
-  if (chosen.scale !== undefined) return chosen.scale;
   try {
     return validScale(Number(window.localStorage.getItem(SCALE_KEY)));
   } catch {
@@ -64,14 +44,17 @@ export function loadScale(): number {
   }
 }
 
-/** Save an interface size; anything not on the list is 100. Returns what was saved. */
-export function saveScale(value: number): number {
+/**
+ * Save an interface size; anything not on the list is 100. Returns what was
+ * saved, or null if storage refused it.
+ */
+export function saveScale(value: number): number | null {
   const scale = validScale(value);
-  chosen.scale = scale;
   try {
     window.localStorage.setItem(SCALE_KEY, String(scale));
   } catch {
-    // Storage refused: `chosen` holds it until Linger closes.
+    // Storage refused: nothing changes, and Settings says so (#782).
+    return null;
   }
   return scale;
 }
@@ -112,7 +95,6 @@ export function saveTextSize(value: number): number {
 const ONE_LINE_KEY = "linger.next.peopleOneLine";
 
 export function loadOneLine(): boolean {
-  if (chosen.oneLine !== undefined) return chosen.oneLine;
   try {
     return window.localStorage.getItem(ONE_LINE_KEY) === "true";
   } catch {
@@ -120,13 +102,14 @@ export function loadOneLine(): boolean {
   }
 }
 
-/** Save one line per person; announce it with `announceAppearance`. */
-export function saveOneLine(on: boolean): void {
-  chosen.oneLine = on;
+/** Save one line per person; announce it with `announceAppearance`. Says whether storage took it. */
+export function saveOneLine(on: boolean): boolean {
   try {
     window.localStorage.setItem(ONE_LINE_KEY, String(on));
+    return true;
   } catch {
-    // Storage refused: `chosen` holds it until Linger closes.
+    // Storage refused: nothing changes, and Settings says so (#782).
+    return false;
   }
 }
 
@@ -134,7 +117,6 @@ export function saveOneLine(on: boolean): void {
 const HIDE_REACTIONS_KEY = "linger.next.hideReactions";
 
 export function loadHideReactions(): boolean {
-  if (chosen.hideReactions !== undefined) return chosen.hideReactions;
   try {
     return window.localStorage.getItem(HIDE_REACTIONS_KEY) === "true";
   } catch {
@@ -142,42 +124,15 @@ export function loadHideReactions(): boolean {
   }
 }
 
-/** Save hiding reactions; announce it with `announceAppearance`. */
-export function saveHideReactions(hidden: boolean): void {
-  chosen.hideReactions = hidden;
+/** Save hiding reactions; announce it with `announceAppearance`. Says whether storage took it. */
+export function saveHideReactions(hidden: boolean): boolean {
   try {
     window.localStorage.setItem(HIDE_REACTIONS_KEY, String(hidden));
+    return true;
   } catch {
-    // Storage refused: `chosen` holds it until Linger closes.
+    // Storage refused: nothing changes, and Settings says so (#782).
+    return false;
   }
-}
-
-/** Plain names, as chosen or announced here, else as saved (`lib/normalize.ts`). */
-export function loadPlainNames(): boolean {
-  return chosen.plainNames ?? loadNormalize();
-}
-
-/** Plain names: applied to this window, and saved for the others. */
-export function saveNormalize(on: boolean): void {
-  chosen.plainNames = on;
-  applyNormalize(on);
-}
-
-/**
- * Keep the choices another window sent, as if made here: Settings'
- * announcement, or the list's answer to a window opened since. Says whether
- * there was any.
- */
-function keep(sent: unknown): boolean {
-  if (typeof sent !== "object" || sent === null) return false;
-  const { scale, oneLine, hideReactions, plainNames } = sent as Record<string, unknown>;
-  const taken: Partial<Choices> = {};
-  if (typeof scale === "number") taken.scale = validScale(scale);
-  if (typeof oneLine === "boolean") taken.oneLine = oneLine;
-  if (typeof hideReactions === "boolean") taken.hideReactions = hideReactions;
-  if (typeof plainNames === "boolean") taken.plainNames = plainNames;
-  Object.assign(chosen, taken);
-  return Object.keys(taken).length > 0;
 }
 
 /** A window's size after a change of interface size: grown or shrunk by the same ratio. */
@@ -237,13 +192,6 @@ function sizedForKey(label: string): string {
 }
 
 /**
- * The same, as made in this run, read before storage: a window grown for a
- * choice storage refused would otherwise read the old size back and be grown
- * again the next time it's applied (#782).
- */
-const sizedHere = new Map<string, number>();
-
-/**
  * Apply what's saved to this window, one run at a time. Two at once (Settings
  * applies a change and also hears its own announcement) would each read the
  * window's size before the other had grown it, and grow it twice. A call made
@@ -283,7 +231,7 @@ export function applyAppearance(): Promise<void> {
 }
 
 async function applyOnce(): Promise<void> {
-  applyNormalize(loadPlainNames());
+  applyNormalize(loadNormalize());
   for (const listener of listeners) listener();
   const scale = loadScale();
   if (!isTauri()) return;
@@ -297,7 +245,7 @@ async function applyOnce(): Promise<void> {
     await keepMinimum(current.label, scale);
     let sizedFor = 100;
     try {
-      sizedFor = sizedHere.get(current.label) ?? validScale(Number(window.localStorage.getItem(sizedForKey(current.label)) ?? "100"));
+      sizedFor = validScale(Number(window.localStorage.getItem(sizedForKey(current.label)) ?? "100"));
     } catch {
       // Storage refused: treat the window as its designed size.
     }
@@ -306,12 +254,10 @@ async function applyOnce(): Promise<void> {
     const inner = (await current.innerSize()).toLogical(factor);
     const next = resizedFor(inner, sizedFor, scale);
     await current.setSize(new LogicalSize(next.width, next.height));
-    sizedHere.set(current.label, scale);
     try {
       window.localStorage.setItem(sizedForKey(current.label), String(scale));
     } catch {
-      // Storage refused: `sizedHere` holds it for this run, and the next
-      // sizes it from its designed size again.
+      // Storage refused: the next run sizes it from its designed size again.
     }
   } catch {
     // A desktop that won't resize (a tiling one) still gets the zoom.
@@ -340,36 +286,17 @@ async function keepMinimum(label: string, scale: number): Promise<void> {
   }
 }
 
-/** Tell every window, this one included, to apply what's now saved and the choices made here. */
+/** Tell every window, this one included, to apply what's now saved. */
 export function announceAppearance(): void {
   void applyAppearance();
-  if (isTauri()) void tauriBus().broadcast(APPEARANCE, { v: PROTOCOL, chosen: { ...chosen } });
+  if (isTauri()) void tauriBus().broadcast(APPEARANCE, { v: PROTOCOL });
 }
 
-/**
- * Apply what's saved now, and again whenever Settings announces a change,
- * keeping the choices it carries. The list answers a window opened later
- * with the ones it has heard, which that window keeps unless an
- * announcement reached it first, as that's newer.
- */
+/** Apply what's saved now, and again whenever Settings announces a change. */
 export function followAppearance(): void {
   void applyAppearance();
   if (!isTauri()) return;
-  const bus = tauriBus();
-  let heard = false;
-  void bus.listen<{ v: number; chosen?: unknown }>(APPEARANCE, (message) => {
-    if (message.v !== PROTOCOL) return;
-    heard = true;
-    keep(message.chosen);
-    void applyAppearance();
+  void tauriBus().listen<{ v: number }>(APPEARANCE, (message) => {
+    if (message.v === PROTOCOL) void applyAppearance();
   });
-  if (isOwner(bus)) {
-    void answer<object, Partial<Choices>>(bus, APPEARANCE_CHOSEN, async () => ({ ...chosen }));
-    return;
-  }
-  void ask<unknown>(bus, OWNER, APPEARANCE_CHOSEN, {})
-    .then((held) => {
-      if (!heard && keep(held)) void applyAppearance();
-    })
-    .catch(() => undefined);
 }
