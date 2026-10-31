@@ -196,7 +196,7 @@ describe("uploadFile", () => {
     }
   });
 
-  it("stops waiting for the server when the file is taken out", async () => {
+  it("doesn't start waiting for a file taken out as the server said it's busy", async () => {
     vi.useFakeTimers();
     try {
       const fake = server(() => Promise.reject(busy()));
@@ -208,6 +208,33 @@ describe("uploadFile", () => {
       await vi.advanceTimersByTimeAsync(60_000);
       expect(fake.completeUpload).toHaveBeenCalledTimes(1);
       expect(fake.cancelUpload).toHaveBeenCalledWith("u-1");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Greptile's catch on #802: the case above stops the file before the wait
+  // has a timer to clear or a listener to hear it. This one stops it partway
+  // through a wait that's running.
+  it("stops waiting for the server when the file is taken out during the wait", async () => {
+    vi.useFakeTimers();
+    try {
+      const fake = server(() => Promise.reject(busy()));
+      vi.stubGlobal("fetch", vi.fn<typeof fetch>(() => Promise.resolve(new Response(null, { status: 200 }))));
+      const stop = new AbortController();
+      let waits = 0;
+
+      const going = uploadFile(fake as unknown as AuthedApi, clip(), { signal: stop.signal, onWaiting: () => (waits += 1) });
+      const refused = expect(going).rejects.toThrow();
+      await flush();
+      expect(waits, "the wait has started").toBe(1);
+      await vi.advanceTimersByTimeAsync(2_000);
+      stop.abort();
+      await refused;
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(fake.completeUpload, "not asked again").toHaveBeenCalledTimes(1);
+      expect(fake.cancelUpload).toHaveBeenCalledWith("u-1");
+      expect(vi.getTimerCount(), "the wait's timer is cleared").toBe(0);
     } finally {
       vi.useRealTimers();
     }

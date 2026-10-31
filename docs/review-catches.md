@@ -182,6 +182,16 @@ on a world that has changed.
 
 ## Tests written from the case in mind, not from the ways things fail
 
+- **#802: a test of stopping a wait stopped it before the wait began.** The
+  upload test aborted inside `onWaiting`, which runs before `pause` has a
+  timer or a listener, so only the "already stopped" check ran, and it would
+  have passed with stopping a running wait broken. *Missed because* the
+  quickest place to stop the file was the callback that announces the wait.
+  *Changed:* a second test stops it two seconds into a running wait and
+  checks it isn't asked again, the slot is given back and the timer is
+  cleared; it fails with the wait's listener removed. The rule from #792 now
+  says partway means while the wait is running.
+
 - **#792: a share turned down while its files were read was sent anyway.**
   The pick went on to the conversation once the read finished. *Missed
   because* every test went straight through. *Changed:* the list keeps the
