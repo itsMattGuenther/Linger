@@ -106,30 +106,31 @@ function bytesOf(answer: unknown): Uint8Array | null {
   return null;
 }
 
-/** The shell commands and words for one kind of handoff: dropped files, or shared ones (`sharedFiles.ts`). */
+/** One handoff of files from the shell: dropped ones, or shared ones (`core/shareInbox.ts`). */
 export interface Handoff {
-  list: string;
-  one: string;
+  /** The files, as the shell listed them. */
+  held: readonly DroppedFile[];
+  /** Ask the shell for the bytes of the file at `index` in that list. */
+  one: (index: number) => Promise<unknown>;
   problem: (file: DroppedFile) => string | null;
 }
 
 /**
- * The files the shell is holding for this window, from the list command and
- * then each by its place in it: the ones it could read, and the first reason
- * something couldn't be sent.
+ * The files the shell is holding for this window, each by its place in the
+ * list: the ones it could read, and the first reason something couldn't be
+ * sent.
  */
-export async function readHandoff(ask: Ask, handoff: Handoff): Promise<{ files: File[]; problem: string | null }> {
-  const listed = await ask(handoff.list);
-  const held = Array.isArray(listed) ? (listed as DroppedFile[]) : [];
+export async function readHandoff(handoff: Handoff): Promise<{ files: File[]; problem: string | null }> {
   const files: File[] = [];
   let problem: string | null = null;
-  for (const [index, file] of held.entries()) {
+  for (const [index, file] of handoff.held.entries()) {
     const why = handoff.problem(file);
     if (why !== null) {
       problem ??= why;
       continue;
     }
-    const bytes = await ask(handoff.one, { index })
+    const bytes = await handoff
+      .one(index)
       .then(bytesOf)
       .catch(() => null);
     if (bytes === null) {
@@ -146,8 +147,10 @@ export async function readHandoff(ask: Ask, handoff: Handoff): Promise<{ files: 
  * What was just dropped on this window, from the shell: the files it could
  * read, and the first reason something couldn't be sent.
  */
-export function readDropped(ask: Ask): Promise<{ files: File[]; problem: string | null }> {
-  return readHandoff(ask, { list: "dropped_files", one: "dropped_file", problem: droppedProblem });
+export async function readDropped(ask: Ask): Promise<{ files: File[]; problem: string | null }> {
+  const listed = await ask("dropped_files");
+  const held = Array.isArray(listed) ? (listed as DroppedFile[]) : [];
+  return readHandoff({ held, one: (index) => ask("dropped_file", { index }), problem: droppedProblem });
 }
 
 /** Where a drop landed, in the page's own pixels. */

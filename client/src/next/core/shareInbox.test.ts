@@ -13,6 +13,7 @@ import {
   sharedProblem,
   shareTargets,
   takeHeld,
+  takeHeldProblem,
   watchShares,
 } from "./shareInbox";
 
@@ -78,36 +79,47 @@ function fakeWatch() {
   };
 }
 
+/** A share as the shell answers `shared_files`. */
+function taken(id: string, ...names: string[]) {
+  return { id, files: names.map((name) => ({ name, size: 1, problem: null })) };
+}
+
 describe("what's waiting in the inbox", () => {
-  it("lists names without reading any bytes", async () => {
+  it("lists the share's id and names without reading any bytes", async () => {
     const asked: string[] = [];
     const waiting = await listShared((command) => {
       asked.push(command);
-      return Promise.resolve([{ name: "Screenshot.png", size: 3, problem: null }]);
+      return Promise.resolve({ id: "17", files: [{ name: "Screenshot.png", size: 3, problem: null }] });
     });
-    expect(waiting).toEqual([{ name: "Screenshot.png", size: 3, problem: null }]);
+    expect(waiting).toEqual({ id: "17", files: [{ name: "Screenshot.png", size: 3, problem: null }] });
     expect(asked).toEqual(["shared_files"]);
-    expect(await listShared(() => Promise.resolve(null))).toEqual([]);
   });
 
-  it("reads every file it can once a conversation is picked, and says the first reason one couldn't be", async () => {
+  it("nothing waiting, or an answer that isn't a share, is no share", async () => {
+    for (const answer of [null, [], { id: "17", files: [] }, { id: 17, files: [{ name: "a.png", size: 1, problem: null }] }, { files: [] }]) {
+      expect(await listShared(() => Promise.resolve(answer)), JSON.stringify(answer)).toBeNull();
+    }
+  });
+
+  it("reads every file it can by the share's id once a conversation is picked, and says the first reason one couldn't be", async () => {
     const asked: string[] = [];
     const ask = (command: string, args?: Record<string, unknown>) => {
-      asked.push(args ? `${command}:${String(args.index)}` : command);
-      if (command === "shared_files") {
-        return Promise.resolve([
-          { name: "Screenshot.PNG", size: 3, problem: null },
-          { name: "film.mov", size: 600_000_000, problem: "too_big" },
-          { name: "gone.txt", size: 2, problem: null },
-        ]);
-      }
+      asked.push(`${command} ${String(args?.share)} ${String(args?.index)}`);
       if (args?.index === 0) return Promise.resolve(new Uint8Array([1, 2, 3]).buffer);
       return Promise.reject(new Error("that can't be sent"));
     };
-    const { files, problem } = await readShared(ask);
+    const share = {
+      id: "17",
+      files: [
+        { name: "Screenshot.PNG", size: 3, problem: null },
+        { name: "film.mov", size: 600_000_000, problem: "too_big" as const },
+        { name: "gone.txt", size: 2, problem: null },
+      ],
+    };
+    const { files, problem } = await readShared(ask, share);
     expect(files.map((file) => [file.name, file.type, file.size])).toEqual([["Screenshot.PNG", "image/png", 3]]);
     expect(problem).toBe("film.mov is too big to send. A file can be 500 MB at most.");
-    expect(asked).toEqual(["shared_files", "shared_file:0", "shared_file:2"]);
+    expect(asked, "the list isn't asked for again: the share's own is read").toEqual(["shared_file 17 0", "shared_file 17 2"]);
   });
 
   it("says each reason in words", () => {
@@ -116,13 +128,13 @@ describe("what's waiting in the inbox", () => {
     expect(sharedProblem({ name: "ok.png", size: 1, problem: null })).toBeNull();
   });
 
-  it("tells the shell it's done, and doesn't mind if it can't", async () => {
+  it("tells the shell which share it's done with, and doesn't mind if it can't", async () => {
     const asked: string[] = [];
-    await sharedDone((command) => {
-      asked.push(command);
+    await sharedDone((command, args) => {
+      asked.push(`${command} ${String(args?.share)}`);
       return Promise.reject(new Error("gone"));
-    });
-    expect(asked).toEqual(["shared_done"]);
+    }, "17");
+    expect(asked).toEqual(["shared_done 17"]);
   });
 });
 
@@ -135,9 +147,9 @@ describe("looking for a share", () => {
       fake.watch,
       () => {
         looks += 1;
-        return Promise.resolve([]);
+        return Promise.resolve(null);
       },
-      (waiting) => seen.push(waiting.length),
+      (waiting) => seen.push(waiting?.files.length ?? 0),
     );
     await settle();
     expect(looks).toBe(1);
@@ -168,15 +180,15 @@ describe("looking for a share", () => {
     watchShares(
       fake.watch,
       () => new Promise((resolve) => answers.push(resolve)),
-      (waiting) => seen.push(waiting.map((file) => file.name)),
+      (waiting) => seen.push(waiting?.files.map((file) => file.name) ?? []),
     );
     fake.fire(SHARED);
     fake.fire(ANDROID_SHARED);
     expect(answers).toHaveLength(1);
-    answers[0]?.([{ name: "a.png", size: 1, problem: null }]);
+    answers[0]?.(taken("1", "a.png"));
     await settle();
     expect(answers).toHaveLength(2);
-    answers[1]?.([]);
+    answers[1]?.(null);
     await settle();
     expect(answers).toHaveLength(2);
     expect(seen).toEqual([["a.png"], []]);
@@ -185,7 +197,7 @@ describe("looking for a share", () => {
   it("a shell that can't answer is an empty inbox", async () => {
     const fake = fakeWatch();
     const seen: number[] = [];
-    watchShares(fake.watch, () => Promise.reject(new Error("no shell")), (waiting) => seen.push(waiting.length));
+    watchShares(fake.watch, () => Promise.reject(new Error("no shell")), (waiting) => seen.push(waiting?.files.length ?? 0));
     await settle();
     expect(seen).toEqual([0]);
   });
@@ -252,5 +264,15 @@ describe("files held for a conversation", () => {
     holdForConversation("https://porch.example r-general", [photo]);
     expect(heard).toBe(1);
     takeHeld("https://porch.example r-general");
+  });
+
+  // Greptile's catch on #792: a file left out of a share was dropped without a word.
+  it("carry why some of the share was left out, said once by that conversation's box", () => {
+    const photo = new File([new Uint8Array([1])], "photo.png", { type: "image/png" });
+    holdForConversation("https://porch.example r-general", [photo], "Linger couldn't open gone.png.");
+    expect(takeHeldProblem("https://porch.example d-eli")).toBeNull();
+    expect(takeHeldProblem("https://porch.example r-general")).toBe("Linger couldn't open gone.png.");
+    expect(takeHeldProblem("https://porch.example r-general")).toBeNull();
+    expect(takeHeld("https://porch.example r-general")).toEqual([photo]);
   });
 });

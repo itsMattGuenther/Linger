@@ -12,7 +12,9 @@
  *
  * Only the list of names is read to ask; the bytes are read once a
  * conversation is picked, so a share of a long video doesn't sit in memory
- * while the person decides.
+ * while the person decides. Asking takes the share: the shell sets it aside
+ * under an id, and reading and deleting name that id, so a share arriving
+ * meanwhile can't mix with it or be deleted with it (#792).
  */
 import type { RoomId } from "../../generated/RoomId";
 import { type Ask, type DroppedFile, readHandoff } from "../../lib/shellDrops";
@@ -34,20 +36,28 @@ export function sharedProblem(file: DroppedFile): string | null {
   return null;
 }
 
-/** What's waiting in the inbox, by name and size, without reading any of it. */
-export async function listShared(ask: Ask): Promise<DroppedFile[]> {
+/** A share the shell has taken (`shared.rs`, `Share`): the id that names it, and its files. */
+export interface Share {
+  id: string;
+  files: DroppedFile[];
+}
+
+/** What's waiting, taken by the shell, by name and size without reading any of it; null when nothing is. */
+export async function listShared(ask: Ask): Promise<Share | null> {
   const listed = await ask("shared_files");
-  return Array.isArray(listed) ? (listed as DroppedFile[]) : [];
+  if (typeof listed !== "object" || listed === null || !("id" in listed) || !("files" in listed)) return null;
+  const { id, files } = listed;
+  return typeof id === "string" && Array.isArray(files) && files.length > 0 ? { id, files: files as DroppedFile[] } : null;
 }
 
-/** The shared files' bytes, for a message box: the ones the shell could read, and the first reason one couldn't be. */
-export function readShared(ask: Ask): Promise<{ files: File[]; problem: string | null }> {
-  return readHandoff(ask, { list: "shared_files", one: "shared_file", problem: sharedProblem });
+/** The share's bytes, for a message box: the files the shell could read, and the first reason one couldn't be. */
+export function readShared(ask: Ask, share: Share): Promise<{ files: File[]; problem: string | null }> {
+  return readHandoff({ held: share.files, one: (index) => ask("shared_file", { share: share.id, index }), problem: sharedProblem });
 }
 
-/** The share is in a message box, or turned down: the shell deletes it from the phone. */
-export function sharedDone(ask: Ask): Promise<void> {
-  return ask("shared_done").then(
+/** The share is in a message box, or turned down: the shell deletes it from the phone, and nothing newer. */
+export function sharedDone(ask: Ask, id: string): Promise<void> {
+  return ask("shared_done", { share: id }).then(
     () => undefined,
     () => undefined,
   );
@@ -67,10 +77,10 @@ export interface ShareWatch {
  * Look in the inbox now, and again whenever a share may have arrived: the
  * shell's word, Android's, or the app coming forward (an iPhone may not let
  * its share extension bring Linger forward, so the person does it). Each look
- * answers with what's waiting, which is empty once it's gone. Looks never
+ * answers with what's waiting, which is null once it's gone. Looks never
  * overlap: one asked for during another runs after it.
  */
-export function watchShares(watch: ShareWatch, ask: Ask, onLook: (waiting: DroppedFile[]) => void): () => void {
+export function watchShares(watch: ShareWatch, ask: Ask, onLook: (waiting: Share | null) => void): () => void {
   let gone = false;
   let looking = false;
   let again = false;
@@ -83,7 +93,7 @@ export function watchShares(watch: ShareWatch, ask: Ask, onLook: (waiting: Dropp
     }
     looking = true;
     void listShared(ask)
-      .catch((): DroppedFile[] => [])
+      .catch(() => null)
       .then((waiting) => {
         looking = false;
         if (gone) return;
@@ -158,17 +168,27 @@ export function shareHead(waiting: readonly DroppedFile[]): string {
  * Files on their way to a conversation's message box, by its tab key
  * (`core/tabs.ts`, `keyOf`). The list window holds them here and opens the
  * conversation; that conversation's box takes them as soon as it's showing
- * (`useFileDrafts`). Held in the module, as `shellDrops.ts` holds its drop
- * zones, because the box and the list window are far apart in the tree.
+ * (`useFileDrafts`), and its box says why any were left out (`Composer`).
+ * Held in the module, as `shellDrops.ts` holds its drop zones, because the
+ * box and the list window are far apart in the tree.
  */
 const held = new Map<string, File[]>();
+const heldProblems = new Map<string, string>();
 const heldListeners = new Set<() => void>();
 
-/** Hold `files` for the conversation with tab key `key`. */
-export function holdForConversation(key: string, files: File[]): void {
+/** Hold `files` for the conversation with tab key `key`, and why any of the share didn't come with them. */
+export function holdForConversation(key: string, files: File[], problem: string | null = null): void {
   if (files.length === 0) return;
   held.set(key, [...(held.get(key) ?? []), ...files]);
+  if (problem !== null) heldProblems.set(key, problem);
   for (const listener of [...heldListeners]) listener();
+}
+
+/** Why some of what was shared to `key` was left out, once: taking it clears it. */
+export function takeHeldProblem(key: string): string | null {
+  const problem = heldProblems.get(key) ?? null;
+  heldProblems.delete(key);
+  return problem;
 }
 
 /** The files held for `key`, once: taking them clears them. */

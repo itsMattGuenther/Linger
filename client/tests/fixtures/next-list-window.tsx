@@ -63,11 +63,14 @@
  * `?savehold` only at `window.core.saved()`; `?savefail` has it refused.
  *
  * Share to Linger (#785): `?shared` has the shell's inbox holding one picture,
- * `porch.png`, as if shared from another app's share sheet; `?sharedbig`
- * adds `film.mov`, too big to send. Asking for the list, a file and saying
- * it's done are written down as `shared_files`, `shared_file <index>` and
- * `shared_done`, which empties the inbox. `window.core.share(names)` is a
- * share arriving while the app runs, with the shell's word that it did.
+ * `porch.png`, as if shared from another app's share sheet, taken as share
+ * `1`; `?sharedbig` adds `film.mov`, too big to send, and `?sharedgone` adds
+ * `gone.png`, which can't be read once it's asked for. Asking for the list, a
+ * file and saying it's done are written down as `shared_files`,
+ * `shared_file <share> <index>` and `shared_done <share>`, which deletes that
+ * share. With `?sharedslow` each file's bytes wait for
+ * `window.core.shareRead()`. `window.core.share(names)` is a new share
+ * arriving while the app runs, with the shell's word that it did.
  *
  * "Open in Linger" (#607): `?opened=<link>` is the link Linger was started
  * with, handed over the first time the window asks (`link_offered`), and
@@ -244,9 +247,12 @@ interface SharedFile {
 }
 /** One file shared to Linger, as the shell lists it. */
 const sharedPicture = (name: string): SharedFile => ({ name, size: 4, problem: null });
+/** The share the shell has taken, by its id (`shared.rs`, `take`). */
+let shareId = 1;
 let inbox: SharedFile[] = [
   ...(query.has("shared") ? [sharedPicture("porch.png")] : []),
   ...(query.has("sharedbig") ? [{ name: "film.mov", size: 600_000_000, problem: "too_big" as const }] : []),
+  ...(query.has("sharedgone") ? [sharedPicture("gone.png")] : []),
 ];
 interface Internals {
   runCallback: (id: number, data: unknown) => void;
@@ -345,16 +351,18 @@ mockIPC((cmd, args) => {
     // Files shared to Linger from another app's share sheet (#785).
     case "shared_files":
       note("shared_files");
-      return inbox;
+      return inbox.length > 0 ? { id: String(shareId), files: inbox } : null;
     case "shared_file": {
-      note(`shared_file ${String(a.index)}`);
-      const one = inbox[Number(a.index)];
-      if (!one || one.problem !== null) throw "that can't be sent";
-      return [0x89, 0x50, 0x4e, 0x47];
+      note(`shared_file ${String(a.share)} ${String(a.index)}`);
+      const one = String(a.share) === String(shareId) ? inbox[Number(a.index)] : undefined;
+      return (query.has("sharedslow") ? shareRead : Promise.resolve()).then(() => {
+        if (!one || one.problem !== null || one.name === "gone.png") throw "that can't be sent";
+        return [0x89, 0x50, 0x4e, 0x47];
+      });
     }
     case "shared_done":
-      note("shared_done");
-      inbox = [];
+      note(`shared_done ${String(a.share)}`);
+      if (String(a.share) === String(shareId)) inbox = [];
       return null;
     // A file fetched for an iPhone's share sheet (#703).
     case "phone_save":
@@ -465,6 +473,8 @@ declare global {
       saved: () => void;
       /** Files shared to Linger while the app runs, and the shell's word that they're in its inbox (#785). */
       share: (names: string[]) => void;
+      /** With `?sharedslow`, the shell has read the shared files' bytes. */
+      shareRead: () => void;
       /** With `?down`, the server that was down answers from now on. */
       up: () => void;
       /** With `?stall`, Ashen Lanterns' first refresh is answered now. */
@@ -517,9 +527,11 @@ window.core = {
   release: () => release(),
   saved: () => showSheet(),
   share: (names) => {
+    shareId += 1;
     inbox = names.map(sharedPicture);
     deliver("next:shared", null);
   },
+  shareRead: () => finishReading(),
   up: () => {
     down = null;
   },
@@ -546,6 +558,11 @@ window.core = {
 // --- the servers -----------------------------------------------------------
 
 let release: () => void = () => undefined;
+/** With `?sharedslow`, a shared file's bytes wait for `window.core.shareRead()`. */
+let finishReading: () => void = () => undefined;
+const shareRead = new Promise<void>((settle) => {
+  finishReading = settle;
+});
 /** With `?savehold`, the iPhone's share sheet waits for `window.core.saved()`. */
 let showSheet: () => void = () => undefined;
 const saving = new Promise<void>((settle) => {

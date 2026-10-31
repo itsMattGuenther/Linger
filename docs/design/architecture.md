@@ -647,13 +647,16 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
 - **Sharing to Linger** (#785, SPEC §4.15). Another app's share sheet hands
   files to the phone, never to the page: Android's `SharedInbox.kt` and the
   iPhone's share extension (`gen/apple/ShareExtension`) copy them into an
-  inbox folder, each in a numbered folder of its own, and the shell lists it
+  inbox folder, each in a numbered folder of its own, and the shell takes it
+  when asked, moving it aside under an id that reading and deleting name
   (`src-tauri/src/shared.rs`). `core/shareInbox.ts` looks when the list
   starts, when the app comes forward, and on the shell's `next:shared` (from
   `linger://shared`) or Android's `linger:shared`; what it finds rises as
   `app/list/ShareSheet.tsx`. Picking a conversation reads the bytes, holds
-  them for that conversation's tab key, and opens it; `useFileDrafts` takes
-  them into the box as if picked with +. Nothing is sent from here.
+  them for that conversation's tab key, and opens it, unless the sheet was
+  closed or a newer share took it meanwhile; `useFileDrafts` takes them into
+  the box as if picked with +, and `Composer` says why any were left out.
+  Nothing is sent from here.
 - **The phone's bars.** The page is drawn under the phone's status bar and
   gesture bar; `styles/phone.css` pads it by the safe areas the phone reports,
   and `--window-height`, the whole window on a computer, is what's left

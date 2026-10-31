@@ -1605,11 +1605,17 @@ phones, as SPEC §4.15 says. Why it works the way it does:
   rename, so the page never reads half a file). Neither phone calls into Rust:
   the shell only lists the folder (`shared.rs`), and the page asks it, as for
   files dropped on Linux (`dropped.rs`), never naming a path.
+- **Asking takes the share.** The shell moves the inbox aside under an id
+  when the page asks what's waiting, and reading and deleting name that id.
+  A share that arrives while the last is still being read lands in an empty
+  inbox, so it can't mix its files in or be deleted with it, and a pick that
+  finishes reading after the sheet was closed, or replaced by a newer share,
+  sends nothing (#792).
 - **Ten minutes, then deleted.** Android brings Linger forward with the share.
   An iPhone may not let a share extension open the app, and then the person
   opens it themselves, so a share waits ten minutes, not one. Once it's in a
   message box or turned down it's deleted at once, and one nobody took is
-  deleted when the app next starts.
+  deleted when the app next starts, as is a copy the phone stopped partway.
 - **Only the bytes of what was chosen, only after choosing.** The sheet is
   drawn from names and sizes; the files are read once a conversation is
   picked, so a long video doesn't sit in memory while the person decides.

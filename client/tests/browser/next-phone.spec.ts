@@ -1576,8 +1576,8 @@ test.describe("sharing to Linger (#785)", () => {
     await expect(sheet(page)).toHaveCount(0);
     await expect(title(page)).toContainText("general");
     await expect(screen(page).getByRole("list", { name: "Files for this message" }).getByRole("listitem")).toContainText("porch.png");
-    expect(await lines(page, "shared_file ")).toEqual(["shared_file 0"]);
-    expect(await lines(page, "shared_done")).toEqual(["shared_done"]);
+    expect(await lines(page, "shared_file ")).toEqual(["shared_file 1 0"]);
+    expect(await lines(page, "shared_done")).toEqual(["shared_done 1"]);
     // In the box, not sent.
     expect((await did(page)).filter((line) => line.startsWith("sent:"))).toEqual([]);
   });
@@ -1589,8 +1589,50 @@ test.describe("sharing to Linger (#785)", () => {
     await page.locator(".k-sheet-scrim").click({ position: { x: 200, y: 100 } });
     await expect(sheet(page)).toHaveCount(0);
     await expect(screen(page)).toHaveCount(0);
-    expect(await lines(page, "shared_done")).toEqual(["shared_done"]);
+    expect(await lines(page, "shared_done")).toEqual(["shared_done 1"]);
     expect(await lines(page, "shared_file ")).toEqual([]);
+  });
+
+  // Greptile's catches on #792: a pick went on after the share was turned
+  // down, or replaced, while its files were read; and a file left out of a
+  // share was dropped without a word.
+  const pickWhileReading = async (page: Page) => {
+    await open(page, "?one&shell=phone&shared&sharedslow");
+    await settled(page);
+    await sheet(page).getByRole("menuitem", { name: "general" }).click();
+    await expect.poll(() => lines(page, "shared_file ")).toEqual(["shared_file 1 0"]);
+  };
+  /** The page's own work after the shell answers has run. */
+  const settle = (page: Page) => page.evaluate(() => new Promise((done) => setTimeout(done, 100)));
+
+  test("turning the share down while its files are read sends them nowhere", async ({ page }) => {
+    await pickWhileReading(page);
+    await page.locator(".k-sheet-scrim").click({ position: { x: 200, y: 100 } });
+    await expect(sheet(page)).toHaveCount(0);
+    await page.evaluate(() => window.core?.shareRead());
+    await settle(page);
+    await expect(screen(page), "the conversation doesn't open").toHaveCount(0);
+    expect(await lines(page, "shared_done")).toEqual(["shared_done 1"]);
+  });
+
+  test("a newer share arriving while the files are read takes the sheet, and the first goes nowhere", async ({ page }) => {
+    await pickWhileReading(page);
+    await page.evaluate(() => window.core?.share(["b.png"]));
+    await expect(sheet(page).locator(".k-menu-head")).toHaveText("Share b.png to…");
+    await page.evaluate(() => window.core?.shareRead());
+    await settle(page);
+    await expect(screen(page), "the conversation doesn't open").toHaveCount(0);
+    await expect(sheet(page).locator(".k-menu-head")).toHaveText("Share b.png to…");
+    expect(await lines(page, "shared_done"), "the newer share isn't deleted").toEqual([]);
+  });
+
+  test("a file that can't be read is said in the box the rest went to", async ({ page }) => {
+    await open(page, "?one&shell=phone&shared&sharedgone");
+    await settled(page);
+    await sheet(page).getByRole("menuitem", { name: "general" }).click();
+    await expect(screen(page).getByRole("list", { name: "Files for this message" }).getByRole("listitem")).toContainText("porch.png");
+    await expect(screen(page).locator(".nx-composer-problem")).toHaveText("Linger couldn't open gone.png.");
+    expect(await lines(page, "shared_done")).toEqual(["shared_done 1"]);
   });
 
   test("a share arriving while Linger runs rises too, saying how many files", async ({ page }) => {
