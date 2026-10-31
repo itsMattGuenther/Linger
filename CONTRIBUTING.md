@@ -19,7 +19,8 @@ applies to you too.
    assign yourself. GitHub only lets people with access to the project assign
    anyone, so if it won't let you, comment "I'm working on this" on the issue
    and Matt will assign you. Either way, everybody can see it's taken before
-   your pull request exists.
+   your pull request exists. An issue labelled `tracking` groups other work:
+   pick one of its sub-issues, not the parent.
 4. Point your agent at it: *"Read AGENTS.md and TASKS.md, then do task T-xxx.
    State the current milestone first."* One task per fresh session.
 5. Run `scripts/check.sh` until it is green, push, and open a PR against `main`.

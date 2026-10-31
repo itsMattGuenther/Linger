@@ -120,6 +120,15 @@ pass.
   only people with access to the repository assign anyone, themselves
   included, so if it refuses, comment on the issue that you're working on it
   and Matt assigns you. A branch on a fork doesn't count: nobody else can see it.
+- **One job per issue**: one piece of work that one pull request, or one
+  decision, finishes. Checkboxes in an issue are its finish line ("Done
+  when"), never a list of separate jobs. Jobs that belong together are a
+  parent issue labelled `tracking`, with each job a sub-issue of it. That
+  way each job is assigned and claimed on its own and closes when its pull
+  request merges, and GitHub shows on the parent how many are done. A
+  `tracking` issue isn't one to pick up: pick one of its sub-issues. A
+  checklist of separate jobs had to be ticked by hand, and the person
+  assigned looked like they owned all of it (#779).
 - Every issue-driven PR must formally link every issue it proposes to resolve.
   Put `Fixes #<number>` or `Closes #<number>` in the PR description for each issue;
   a bare issue mention or a commit-message reference is not sufficient.

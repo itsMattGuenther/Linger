@@ -224,6 +224,10 @@ it themselves after seeing it:
 Use the shape in [`reporting.md`](reporting.md). Keep it plain: say what
 happened, not what you suspect, and label a guess as a guess.
 
+One problem or idea per issue. If the user has several, draft one issue for
+each, so each can be picked up and closed on its own; never one issue with a
+checklist of them.
+
 ## 6. Show it, wait for yes, then file
 
 Show the user the exact title and body, and wait for a clear yes. Change what
