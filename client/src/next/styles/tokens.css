@@ -392,12 +392,14 @@
    can hit. A finger needs about 44px where a pointer needs 32 (Apple's and
    Google's guides both say so).
 
-   And text grows with the phone's Font size, together with everything that
-   holds a line of it: line boxes, rows and controls. `--text-scale` is that
-   setting as a factor, 1 to 2 (`followTextSize` in core/phone.ts). The web
-   view's own text zoom is off (MainActivity.kt): it enlarged fonts and line
-   spacing and nothing around them, and cut the words in half. Icons,
-   markers and gaps stay as they are, as in Android's own apps. */
+   And text grows with the phone's text size (Font size, Text Size on an
+   iPhone) and the Text size chosen in Settings on top (#690), together with
+   everything that holds a line of it: line boxes, rows and controls.
+   `--text-scale` is the two as one factor, 1 to 2 (`followTextSize` in
+   core/phone.ts). Android's web view text zoom is off (MainActivity.kt): it
+   enlarged fonts and line spacing and nothing around them, and cut the
+   words in half. Icons, markers and gaps stay as they are, as in Android's
+   own apps. */
 :root[data-shell="phone"] {
   --text-scale: 1;
   --text-label: calc(11px * var(--text-scale));

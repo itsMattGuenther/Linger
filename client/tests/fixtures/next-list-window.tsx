@@ -94,6 +94,8 @@ import { createRoot } from "react-dom/client";
 import type { ServerFrame } from "../../src/generated/ServerFrame";
 import { apply, type GatewayState, type GatewayStatus, serverState } from "../../src/lib/gateway";
 import { ListWindow } from "../../src/next/app/list/ListWindow";
+import { loadTextSize, onAppearance } from "../../src/next/core/appearance";
+import { followTextSize } from "../../src/next/core/phone";
 import "../../src/next/styles/app.css";
 import { hearSounds } from "./next/audio";
 import { Counted } from "./next/commits";
@@ -980,8 +982,13 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   return json({ error: { code: "NOT_FOUND", message: "Not in this fixture.", retry_after_ms: null } }, 404);
 };
 
-// The phone marks its page the way main.tsx does, so its styles apply here too.
-if (query.get("shell") === "phone") document.documentElement.dataset.shell = "phone";
+// The phone marks its page the way main.tsx does, so its styles apply here
+// too, and sizes its text the same way: the phone's text size (`?phonetext=`,
+// the usual when not given) with the Text size chosen in Settings on top (#690).
+if (query.get("shell") === "phone") {
+  document.documentElement.dataset.shell = "phone";
+  followTextSize(document, () => Promise.resolve(Number(query.get("phonetext") ?? "1")), loadTextSize, onAppearance);
+}
 
 // --- the phone's voice (#429) ----------------------------------------------
 //

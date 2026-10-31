@@ -735,7 +735,11 @@ eGGnogSC's proposal on #253 over his own brainstorm of 2026-09-26, which had a
   Google Play first, with Matt paying the $25, and only once it has worked
   well there does it go to Apple. Until then the iPhone build only keeps
   compiling in CI, and the iPhone-only checks (swiping back, iPhone photos)
-  wait with it. Getting the app to other people (T-1604) waits until report
+  wait with it. *Since then:* Matt's Apple Developer membership came through,
+  and the iPhone app went to friends through TestFlight from 0.5.1
+  (2026-10-20), beside Play's internal test. Friends with iPhones have tested
+  it since, swiping back and photos included (#697, #785). The App Store
+  itself still comes after Play (#779). Getting the app to other people (T-1604) waits until report
   and block are done and Matt says go.
 - **Friends first, from the release page** (Matt, 2026-10-03). Report and
   block were done and every Pixel check had passed, so Matt said go, for the
@@ -1833,3 +1837,25 @@ Watch in a conversation they weren't reading. Matt picked from mockups of five i
 - **No desktop notification.** Banners are for what's addressed to you (SPEC §4.2); the
   sound already reaches somebody looking at another app, and over a game it would be one
   more pop-up.
+
+---
+
+## Decided — the phone's own Text size (#690)
+
+**Matt, 2026-10-21.** The phone app gets a **Text size** of its own, under Settings ›
+Appearance. That reverses SPEC §4.15's call that the phone's own display and text size
+settings were enough: a tester found Linger's text too small, and somebody may want
+Linger's words bigger without changing every app on their phone.
+
+- **On top of the phone's own text size**, which Linger keeps following: Font size on
+  Android and, from #690, Text Size on an iPhone, Accessibility's Larger Text included
+  (`phone_text.rs` reads UIKit's body text style). Together they stop at twice the usual,
+  where the phone's alone always stopped, so the geometry tests' largest case still
+  covers both.
+- **Four steps: 100%, 115%, 130% and 150%**, the ones the issue suggested. They are
+  smaller than Interface size's (100–200%), so a phone's screen still holds a
+  conversation.
+- **Kept on the phone**, as Interface size is kept on a computer, and never sent
+  anywhere.
+- **Still no Interface size on the phone.** It zooms the window, and a phone's window
+  doesn't zoom (#689).

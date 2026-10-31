@@ -183,4 +183,31 @@ describe("how the new client looks, in every window", () => {
     await applyAppearance();
     expect(root.dataset.normalize).toBe("true");
   });
+
+  it("keeps the phone's Text size until the app closes when storage refuses it (#780)", async () => {
+    vi.resetModules();
+    const { loadTextSize, saveTextSize } = await import("./appearance");
+    // Full: what was saved before reads back, and a new choice won't write.
+    storage.set("linger.next.textSize", "115");
+    const local = window.localStorage as { setItem: (key: string, value: string) => void };
+    local.setItem = () => {
+      throw new Error("QuotaExceededError");
+    };
+    expect(saveTextSize(150)).toBe(150);
+    expect(loadTextSize()).toBe(150);
+    // Gone altogether: neither reading nor writing works.
+    vi.stubGlobal("window", {});
+    expect(saveTextSize(130)).toBe(130);
+    expect(loadTextSize()).toBe(130);
+  });
+
+  it("saves only the phone's Text size steps, and 100 for anything else (#690)", async () => {
+    vi.resetModules();
+    const { loadTextSize, saveTextSize } = await import("./appearance");
+    expect(loadTextSize()).toBe(100);
+    expect(saveTextSize(130)).toBe(130);
+    expect(storage.get("linger.next.textSize")).toBe("130");
+    expect(saveTextSize(175)).toBe(100);
+    expect(loadTextSize()).toBe(100);
+  });
 });

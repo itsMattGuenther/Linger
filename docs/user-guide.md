@@ -30,7 +30,9 @@ You do **not** need `.sig`, `latest.json`, or the source-code ZIP/tar files.
 The `.msi` is an alternative Windows installer, not an extra required download.
 There are no macOS or ARM desktop installers yet. The iPhone app is only in
 testing, through Apple's TestFlight for invited testers, and isn't in the
-App Store yet. It needs iOS 15 or later.
+App Store yet. It needs iOS 15 or later. Its words grow with the iPhone's
+**Text Size** (in Settings, under Display & Brightness), and with the **Text
+size** in Linger's **Settings → Appearance** on top of it.
 
 ### Windows
 
@@ -141,7 +143,9 @@ whether it may show; if you say no, the call still works.
 It doesn't zoom with two fingers, as a web page does, but a photo you open
 does: pinch it, drag it about, or double-tap to zoom in and back out. To make
 its words bigger, turn up your phone's **Font size** (in Android's Settings,
-under Display): Linger follows it, up to twice the usual size.
+under Display), which Linger follows, or choose a bigger **Text size** in
+Linger's **Settings → Appearance**, which goes on top of it. Together they
+go up to twice the usual size.
 
 1. On the phone, open the
    [latest release](https://github.com/itsMattGuenther/Linger/releases/latest)
@@ -425,7 +429,8 @@ Settings opens in its own window:
   quiet hours; microphone, speakers, push to talk
 - **Notifications**: desktop banners, and whose messages you want them for
 - **Account & App**: password, export, updates, starting Linger when you sign
-  in to the computer, adding a server, signing out, and deleting your account
+  in to the computer, the privacy page, reporting a problem, adding a server,
+  signing out, and deleting your account
 - **Servers** (with more than one): their order, Quiet, and signing out of one
 
 Everything this guide calls *Settings → something* is one of those.
@@ -1478,6 +1483,13 @@ different promise from Signal, and you should know which one you are getting.
 
 **Nothing is collected about you.** No telemetry, no analytics, no crash
 reports. Not anonymous ones either. There is nothing to opt out of.
+
+**The privacy page** is [linger.im/privacy](https://linger.im/privacy).
+**Settings → Account & App → This Computer → Privacy** opens it (on a phone,
+**This Phone**). **Report a problem**, beside it, opens GitHub's forms for a
+new issue, for something wrong with Linger itself. Issues are public, so leave
+out messages, people's names and server addresses. To report somebody on your
+server, see [Reporting and blocking](#reporting-and-blocking).
 
 **On Linux, a shared video that plays without sound (or doesn't play at all)**
 is missing a decoder. Linux plays video through GStreamer, and the sound in

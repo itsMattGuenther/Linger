@@ -481,6 +481,7 @@ there or where the design puts it.
 | SET-3 | Settings opens from a gear (today: beside your name). Escape closes panels and returns focus. | `App.tsx` | Its own window, from the list's gear. New: Ctrl+, opens it too. | F | ✅ (next-list-window.spec.ts, next-settings-window.spec.ts) |
 | SET-4 | Every section's copy is short and states effects (for example "Use plain names and message fonts"). | `settings/copy.ts` | Same | U | ✅ (settings.test.ts) |
 | SET-5 | Start Linger when you sign in to the computer (#228). Off on a new install; the switch shows what the computer has (Windows' per-user Run key, a Linux autostart entry), says a refusal in words, and says when the desktop won't start it by itself. Not offered on macOS. | new | Settings → Account & App → This Computer (`src-tauri/src/autostart.rs`) | U + F + M | 🟡 built (autostart.rs and desktop_entry.rs tests, core/autostart.test.ts, next-settings-window.spec.ts, next-settings.spec.ts); needs a real sign-in on Windows and on a Linux package and AppImage |
+| SET-6 | The privacy page and where to report a problem (#779), which App Review wants inside the app (Apple's guidelines 5.1.1(i) and 1.2). Each opens in the browser, never in the app's window. | new | Settings → Account & App → This Computer, or This Phone | F | ✅ (next-settings.spec.ts, next-phone.spec.ts) |
 
 ## EXP — take everything with you
 

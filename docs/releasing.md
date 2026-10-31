@@ -67,8 +67,11 @@ produces a green release that no installed copy will accept.
   (`git log v<previous>..HEAD --format='%an <%ae>' | sort -u`), each matched to
   the pull request it came from for their handle. Naming them in a GitHub
   release tells them it shipped. The first time somebody is thanked, add them
-  to the README's Thanks too, after the people already there, with a few words
-  on what they did: never by how much.
+  to the README's Thanks too, after the people already there: their handle,
+  linked to their merged pull requests
+  (`pulls?q=is%3Apr+is%3Amerged+author%3A<handle>`), and nothing more. What
+  they did belongs in each release's notes; listed in the README it would only
+  grow, and the link stays up to date by itself. Never by how much.
 - Say whether anything stops working with an older app or server (PROTOCOL §9,
   "Which apps and servers work together"). Before 1.0, a change works both ways
   wherever it can. From 1.0, a break may only leave behind versions outside the window
@@ -288,6 +291,18 @@ submit for review.
 - **The encryption question** is answered in `client/src-tauri/Info.ios.plist`
   (`ITSAppUsesNonExemptEncryption`: only standard, exempt encryption), so it
   isn't asked on each upload.
+- **It builds with Xcode 26** on GitHub's macOS 26 Mac, chosen in `ios.yml`
+  rather than the Mac's default, and the run fails if the built app's SDK
+  isn't iOS 26's (#779). App Store Connect takes uploads built with Xcode 26
+  or later, but an app built with Xcode 27's iOS 27 SDK doesn't open unless
+  it uses UIKit's scene life cycle, which Tauri 2.11 doesn't have. Apple
+  requires the iOS 27 SDK from April 2027, so move to Xcode 27 together with
+  Tauri 2.12 or later, before then.
+- **The privacy manifest**, `gen/apple/linger-client_iOS/PrivacyInfo.xcprivacy`,
+  tells Apple that Linger tracks nobody and why it makes the system calls
+  Apple asks a reason for (#779). Each run prints which of those calls the
+  built app makes ("the calls the privacy manifest answers for"), so one in a
+  new category is seen there and declared in the manifest.
 - **The share extension** (#785) is a second program inside the app, with its
   own identifier, `io.github.itsmattguenther.linger.share`, and both belong to
   the App Group `group.io.github.itsmattguenther.linger`, whose folder is how

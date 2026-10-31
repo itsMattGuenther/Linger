@@ -141,15 +141,16 @@ ndk-context = "0.1"
 keyring = { version = "3", features = ["apple-native"] }
 # A shared file downloaded on an iPhone (#703, `phone_save.rs`): fetched with
 # the phone's own networking (NSURLSession) and offered in its share sheet
-# (UIActivityViewController). All four are already in the iPhone's build,
-# under Tauri's window and web view, so they add nothing to the app's size;
-# named here with only the parts used. `NSFileManager` finds the App Group's
-# folder, where the share extension leaves files shared to Linger (#785,
-# `shared.rs`).
+# (UIActivityViewController). And the iPhone's Text Size (#690,
+# `phone_text.rs`): the body text style's size (UIFont). All four are already
+# in the iPhone's build, under Tauri's window and web view, so they add
+# nothing to the app's size; named here with only the parts used.
+# `NSFileManager` finds the App Group's folder, where the share extension
+# leaves files shared to Linger (#785, `shared.rs`).
 objc2 = "0.6"
 block2 = "0.6"
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-foundation", "NSArray", "NSError", "NSFileManager", "NSGeometry", "NSString", "NSURL", "NSURLResponse", "NSURLSession"] }
-objc2-ui-kit = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-foundation", "UIActivity", "UIActivityViewController", "UIPopoverPresentationController", "UIPopoverSupport", "UIPresentationController", "UIResponder", "UIView", "UIViewController"] }
+objc2-ui-kit = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-foundation", "UIActivity", "UIActivityViewController", "UIFont", "UIFontDescriptor", "UIPopoverPresentationController", "UIPopoverSupport", "UIPresentationController", "UIResponder", "UIView", "UIViewController"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 keyring = { version = "3", features = ["windows-native"] }

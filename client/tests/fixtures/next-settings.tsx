@@ -338,6 +338,8 @@ function Fixture() {
               },
               openGuide: () => note("autostart-guide"),
             },
+        // A web page handed to the browser, written as the list window's page writes it (#779).
+        openPage: (url) => note(`open ${url}`),
         // Deleting your account (#650): the host is told why not, `?member`
         // gets the button, and `?oldserver` is a server from before it.
         deleteAccount: {

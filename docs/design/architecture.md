@@ -606,13 +606,19 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   the moment it's back (`watchNetwork`) rather than when missed heartbeats
   notice; the web view hears about the network only with Android's
   `ACCESS_NETWORK_STATE` permission (`AndroidManifest.xml`).
-- **The phone's text size.** Linger follows the phone's Font size, up to
-  twice the usual (`phone_text_scale` reads it, `followTextSize` sets
-  `--text-scale`, and the phone's tokens multiply text, line boxes, rows and
-  controls by it). The web view's own text zoom is off (`textZoom` 100 in
-  MainActivity.kt): it enlarged fonts and line spacing and no box around them,
-  and cut names in half. Icons and marks keep their size, as in Android's own
-  apps, and `next-phone.spec.ts` checks every screen at twice the size for
+- **The phone's text size.** Linger follows the phone's text size, Font size
+  on Android and Text Size on an iPhone, with the Text size chosen in Settings
+  › Appearance on top (#690), together up to twice the usual
+  (`phone_text_scale` reads the phone's, `loadTextSize` the chosen one,
+  `followTextSize` sets `--text-scale` from both and again when Settings
+  announces a change, and the phone's tokens multiply text, line boxes, rows
+  and controls by it). An iPhone's is the size of UIKit's body text style
+  against its usual 17 points: its web view grows only text set in the
+  system's own text styles, and Linger's sizes are pixels. Android's web view
+  text zoom is off (`textZoom` 100 in MainActivity.kt): it enlarged fonts and
+  line spacing and no box around them, and cut names in half. Icons and marks
+  keep their size, as in Android's own apps, and `next-phone.spec.ts` checks
+  every screen at twice the size, and the largest Text size at 320 wide, for
   words cut off or reaching past the edge.
 - **No zoom** (#689). `next.html`'s viewport has `maximum-scale=1,
   user-scalable=no`, and MainActivity turns the web view's own zoom off

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { followKeyboard, isIPhone, isLinuxApp, isPhone, type Online, type Showing, textScale, thisDevice, type Visible, watchBackground, watchNetwork } from "./phone";
+import { chosenTextScale, followKeyboard, followTextSize, isIPhone, isLinuxApp, isPhone, type Online, type Showing, type TextPage, textScale, thisDevice, type Visible, watchBackground, watchNetwork } from "./phone";
 import { windowRole } from "./role";
 
 describe("the phone app", () => {
@@ -236,5 +236,86 @@ describe("the phone's text size (its Font size setting)", () => {
     expect(textScale(0.85)).toBe(1);
     expect(textScale(Number.NaN)).toBe(1);
     expect(textScale(Number.POSITIVE_INFINITY)).toBe(1);
+  });
+});
+
+describe("Linger's own Text size, on top of the phone's (#690)", () => {
+  /** A page that keeps what was set on it, and the listeners it was given. */
+  function textPage() {
+    const set = new Map<string, string>();
+    const shown = new Set<() => void>();
+    const page: TextPage = {
+      visibilityState: "visible",
+      documentElement: { style: { setProperty: (name, value) => void set.set(name, value) } },
+      addEventListener: (_type, listener) => void shown.add(listener),
+      removeEventListener: (_type, listener) => void shown.delete(listener),
+    };
+    return { page, shown, scale: () => set.get("--text-scale") };
+  }
+
+  /** Settings' announcements, as `onAppearance` gives them. */
+  function announcer() {
+    const listeners = new Set<() => void>();
+    return {
+      listeners,
+      changed: (listener: () => void) => {
+        listeners.add(listener);
+        return () => void listeners.delete(listener);
+      },
+      announce: () => {
+        for (const listener of listeners) listener();
+      },
+    };
+  }
+
+  const answered = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it("grows the phone's text size by the step chosen, never past twice the usual", () => {
+    expect(chosenTextScale(1, 100)).toBe(1);
+    expect(chosenTextScale(1, 150)).toBe(1.5);
+    expect(chosenTextScale(1.3, 130)).toBe(1.69);
+    expect(chosenTextScale(1.8, 150)).toBe(2);
+    // A phone set smaller than the usual, or one that couldn't say, is the usual.
+    expect(chosenTextScale(0.85, 115)).toBe(1.15);
+    expect(chosenTextScale(Number.NaN, 130)).toBe(1.3);
+  });
+
+  it("applies Linger's own size at once, then the phone's under it once it answers", async () => {
+    const { page, scale } = textPage();
+    followTextSize(page, () => Promise.resolve(1.2), () => 130, announcer().changed);
+    expect(scale()).toBe("1.3");
+    await answered();
+    expect(scale()).toBe("1.56");
+  });
+
+  it("follows a new choice in Settings at once, without asking the phone again", async () => {
+    const { page, scale } = textPage();
+    const settings = announcer();
+    let chosen = 100;
+    const ask = vi.fn(() => Promise.resolve(1.2));
+    followTextSize(page, ask, () => chosen, settings.changed);
+    await answered();
+    expect(scale()).toBe("1.2");
+    chosen = 150;
+    settings.announce();
+    expect(scale()).toBe("1.8");
+    expect(ask).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks the phone again when the app comes back, and hears nothing once stopped", async () => {
+    const { page, shown, scale } = textPage();
+    const settings = announcer();
+    let phone = 1;
+    const stop = followTextSize(page, () => Promise.resolve(phone), () => 115, settings.changed);
+    await answered();
+    expect(scale()).toBe("1.15");
+    // Text Size turned up in the phone's Settings, away from Linger.
+    phone = 1.4;
+    for (const listener of shown) listener();
+    await answered();
+    expect(scale()).toBe("1.61");
+    stop();
+    expect(shown.size).toBe(0);
+    expect(settings.listeners.size).toBe(0);
   });
 });

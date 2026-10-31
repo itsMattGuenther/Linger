@@ -403,12 +403,15 @@ of those Macs and is committed. Its `project.yml` is what XcodeGen makes the
 number is in `project.yml`, both of the `.xcodeproj`'s
 `IPHONEOS_DEPLOYMENT_TARGET` lines and the `Podfile`; `ios.yml` fails a build
 whose app says otherwise (#743). The iPhone's Info.plist additions (the
-microphone and camera wording, the encryption answer) are in
+microphone, camera and local network wording, the encryption answer) are in
 `client/src-tauri/Info.ios.plist`, which `tauri ios build` merges in. The
-share extension (#785) is a second target, `LingerShare`, in
-`client/src-tauri/gen/apple/ShareExtension`: Swift, with its own Info.plist
-kept by hand. The App Group it shares with the app is in both entitlements
-files and in `project.yml`, since XcodeGen writes entitlements from there.
+privacy manifest, `linger-client_iOS/PrivacyInfo.xcprivacy`, is in the
+`.xcodeproj`'s resources, and XcodeGen picks it up from `project.yml`'s
+`linger-client_iOS` folder (#779). The share extension (#785) is a second
+target, `LingerShare`, in `client/src-tauri/gen/apple/ShareExtension`: Swift,
+with its own Info.plist kept by hand. The App Group it shares with the app is
+in both entitlements files and in `project.yml`, since XcodeGen writes
+entitlements from there.
 `scripts/app-icons.mjs` writes the iPhone's icons too, from the square version
 of the porch artwork ("Icons and Windows packaging" above).
 

@@ -39,8 +39,18 @@ reaction or an edit on the newest message keeps the conversation at its very
 end, not a few pixels short, and messages arriving in a burst no longer leave
 the newest below the bottom (#760). In a call, a click on somebody on the
 conversation's voice line opens their volume, as in the voice bar; on a phone it
-rises from the bottom, and the people there are easier to tap (#747). **Thanks** (`docs/releasing.md`): @Gleasonmt for the iPhone app's iOS 15
-minimum (#749), and @eGGnogSC for messages that show the moment they're sent
+rises from the bottom, and the people there are easier to tap (#747). The
+phone app's words can be made bigger in Settings → Appearance, with a Text size
+of its own on top of the phone's, and the iPhone app now follows the iPhone's
+Text Size, as the Android app follows its Font size (#690). Settings → Account
+& App has **Privacy**, which opens the privacy page, and **Report a problem**,
+which opens GitHub's forms for a new issue (#779). On an iPhone, Linger says
+why it wants the local network when your server is on your home network
+(#779). **Thanks** (`docs/releasing.md`): @Gleasonmt for the iPhone app's iOS
+15 minimum (#749), bigger text on the phone and the iPhone following its Text
+Size (#690), and the Privacy and Report a problem buttons and getting the
+iPhone app ready for the App Store (#779), and @eGGnogSC for messages that
+show the moment they're sent
 (#133) and the sidebar that no longer scrolls sideways (#84). @eGGnogSC's work
 shipped back in September, before the notes thanked contributors, so it's
 thanked here once; from now on everybody is thanked in the release their work
@@ -125,10 +135,12 @@ works in every tool:
 > first.
 
 1. **Check for existing work, then claim the task**: for a GitHub issue, inspect
-   its linked PRs before starting another fix. Push a branch named
-   `feat/t-xxx-short-slug`, and in
-   your first commit flip the task here from ⬜ to ⏳ with your name and the
-   date. That is how two people avoid building the same thing. If a task has
+   its linked PRs and who is assigned before starting another fix, then assign
+   yourself, or comment that you're working on it so Matt can assign you
+   (`AGENTS.md` §"Pull requests and issues"). For a task in this file, push a
+   branch named `feat/t-xxx-short-slug`, and in your first commit flip it from
+   ⬜ to ⏳ with your name and the date. That is how two people avoid building
+   the same thing. If a task has
    been ⏳ for over a week with no branch activity, ask in the PR or ping Matt
    before taking it over.
    When opening a PR, formally link each issue it proposes to resolve and verify
@@ -608,9 +620,10 @@ macOS runners, or a friend's Mac.
   report and block come before any store listing (T-1605). SPEC §4.15.
 
 - 🟡 **T-1602 · The mobile shell** — effort: **high**
-  *Android: accepted on Matt's Pixel (2026-10-03). The iPhone half waits
-  until Android is out (Matt has no iPhone; docs/decisions.md, "Android
-  first, Apple after").*
+  *Android: accepted on Matt's Pixel (2026-10-03). iPhone: on friends'
+  iPhones through TestFlight since 0.5.1 (2026-10-20, `ios.yml`, #685).
+  Matt has no iPhone, so friends and contributors with iPhones do its
+  checks.*
   *Started 2026-10-02 on `feat/t-1602-mobile-shell`.* **Done:** the crate
   builds for Android with the desktop-only code switched off (`phone_app` in
   `src/lib.rs`, `capabilities/phone.json`, voice moved to
@@ -623,7 +636,8 @@ macOS runners, or a friend's Mac.
   the emulator). Android keeps sign-ins in its Keystore-backed store
   (ARCHITECTURE §7, item 3): signed in, the app force-closed and opened again
   comes back signed in, with its tabs. The iPhone uses the Keychain through
-  the keyring crate, built for iOS in CI but not yet run on an iPhone.
+  the keyring crate; friends have signed in with it on their iPhones since
+  0.5.1, and nobody has been signed out by it.
   **On a real phone** (Matt's Pixel 11 Pro, Android 17, against his own
   server, 2026-10-03): signed in, sent and got messages, and switched networks
   both ways. Wi-Fi off: the connection closed and was back on mobile data
@@ -634,13 +648,17 @@ macOS runners, or a friend's Mac.
   not at the thirty seconds the app allows, and it retries into the block
   until then. Coming back after a short time it was live in two seconds, but
   the retries back off up to thirty, so now the app tries again at once when
-  it comes back to the screen (`gateway_retry`). **Still to do:** iOS, which
-  needs a Mac. The launcher icon is the porch artwork
+  it comes back to the screen (`gateway_retry`). **The iPhone** builds on
+  GitHub's Macs (`ios.yml`) and goes to friends through TestFlight, since
+  0.5.1 (2026-10-20). Their first reports (2026-10-21 to 23: #686–#689,
+  #697, #698, #703, #704) have fixes in TestFlight from 0.5.3, for them to
+  confirm. Not reported on yet: the iPhone switching between Wi-Fi and
+  mobile data. The launcher icon is the porch artwork
   (`scripts/app-icons.mjs`, checked in CI with the desktop icons). Setup is in `docs/development.md`.
   Tauri 2 builds for iOS and Android from the same crate. What does not carry
   over: the OS keyring (phones have their own secure storage), the tray, the
-  in-app updater (a phone app updates through its store), and voice, which
-  stays out of phone builds for now (SPEC §4.15). Expect the gateway to need
+  in-app updater (a phone app updates through its store), and, at first,
+  voice, which came to phones on 2026-10-19 (T-1606, #429). Expect the gateway to need
   reconnect behaviour for a network that changes every time somebody walks out
   of a building, and for a phone that stops the app as soon as it is in the
   background. **The phone identifier is `io.github.itsmattguenther.linger`**
@@ -650,13 +668,15 @@ macOS runners, or a friend's Mac.
   it change after the first upload. **Phone backups leave Linger out**
   (SPEC §4.15; the opt-in was dropped 2026-10-03): Android's
   `allowBackup="false"` does it there, and the iPhone's files still need
-  marking "don't back up" once its Xcode project exists.
+  marking "don't back up" (T-1604, #779).
   *Accept:* the app opens on a real phone, signs in, and stays connected across
   a wifi-to-mobile-data switch.
 
 - 🟡 **T-1603 · The layout at phone width** — effort: **medium**
-  *Android: accepted on Matt's Pixel (2026-10-03). The iPhone checks wait
-  with T-1602's iPhone half.*
+  *Android: accepted on Matt's Pixel (2026-10-03). iPhone: used by friends
+  through TestFlight since 0.5.1 (2026-10-20); what they found at phone
+  width (#686, #688, #689, #697, #698, #704) has fixes in TestFlight from
+  0.5.3, for them to confirm.*
   *Started 2026-10-02 on `feat/t-1602-mobile-shell`.* **Done:** the phone's
   one window (`docs/design/architecture.md`, "The phone's one window"): the
   page keeps clear of the phone's bars, the ✕, pop-out and voice line are
@@ -687,10 +707,10 @@ macOS runners, or a friend's Mac.
   (2026-10-03):** Android asked for the microphone the first time; recorded,
   sent and played back on the phone and on the desktop, cancelled one, and
   recorded with the ringer on silent. All worked.
-  **Waiting for the iPhone** (Android first): an edge swipe
-  for Back, since the iPhone has no Back of its own, and checking that an
-  iPhone camera photo uploads as something the server reads (iPhones save
-  HEIC).
+  **On the iPhone:** a swipe in from the left edge goes back, since the
+  iPhone has no Back of its own (#697, in 0.5.3). Camera photos and
+  screenshots go up through the + button, as a friend does on their iPhone
+  (#785).
   Seen on the first run in the emulator (2026-10-02): the list's title bar
   draws under the phone's clock and icons, its ✕ means nothing on a phone, the
   sign-in note says "this computer", and everything that opens another window
@@ -743,6 +763,10 @@ macOS runners, or a friend's Mac.
   this-device-only setting. Also **voice with the phone locked**: there's no
   background audio mode yet, so locking may end a call. Check it on a real
   iPhone first, with Matt's friend.
+  **A privacy policy link inside the app**, which Apple's guideline 5.1.1(i)
+  wants as well as the one in App Store Connect: built 2026-10-31 (#779),
+  **Privacy** under Settings → Account & App → This Phone (This Computer on
+  a desktop), opening linger.im/privacy.
   Android first, on Google Play, with Matt paying the $25; Apple only after it
   has worked well there. The listing's privacy answers ("Data safety") must
   say the app uses the microphone only to record a voice message the person
@@ -755,11 +779,13 @@ macOS runners, or a friend's Mac.
   App Store, review, and store listings. **Needs T-1605 first:** both stores
   require report and block. Apple's guideline 1.2 also asks for a way to
   filter objectionable material and for published contact details, and both
-  stores want terms of use. **Both require deleting your account in the app,
-  too:** built 2026-10-17 (#650, SPEC §4.19), with a page on the website for
-  Google's form; what those mean for a self-hosted app among
-  friends is settled here, with Matt. Follow current vendor docs, not memory —
-  this changes every year.
+  stores want terms of use. For contact details, **Report a problem** sits
+  beside Privacy and opens GitHub's issue forms, as the website's link does
+  (#779); whether App Review accepts that is Matt's call. **Both require
+  deleting your account in the app, too:** built 2026-10-17 (#650, SPEC
+  §4.19), with a page on the website for Google's form; what those mean for
+  a self-hosted app among friends is settled here, with Matt. Follow current
+  vendor docs, not memory — this changes every year.
   *Accept:* somebody who has never met you installs it from a store.
 
 - ✅ **T-1605 · Report and block** — effort: **medium**

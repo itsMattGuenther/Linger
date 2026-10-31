@@ -556,6 +556,18 @@ test.describe("this app", () => {
     await expect(page.getByRole("button", { name: "Install and restart" })).toHaveCount(0);
   });
 
+  // App Review wants the privacy policy and a way to get in touch inside the app (#779).
+  test("This Computer opens the privacy page and where to report a problem, in the browser (#779)", async ({ page }) => {
+    await open(page, "?section=account");
+    const block = page.getByRole("region", { name: "This Computer" });
+    await block.getByRole("button", { name: "Privacy", exact: true }).click();
+    await block.getByRole("button", { name: "Report a problem", exact: true }).click();
+    expect((await did(page)).filter((line) => line.startsWith("open "))).toEqual([
+      "open https://linger.im/privacy",
+      "open https://github.com/itsMattGuenther/Linger/issues/new/choose",
+    ]);
+  });
+
   test("deleting your account asks first, takes your password, and offers a copy (#650)", async ({ page }) => {
     await open(page, "?section=account&member");
     const block = page.getByRole("region", { name: "Delete Your Account" });

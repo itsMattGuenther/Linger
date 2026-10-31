@@ -57,6 +57,12 @@ export interface AccountProps {
     openGuide: () => void;
   };
   /**
+   * Open one of Linger's own web pages in the browser: the privacy page, and
+   * where to report a problem. Both are under This Phone and This Computer,
+   * because App Review wants them inside the app (#779).
+   */
+  openPage: (url: string) => void;
+  /**
    * Who you've blocked on this server (T-1605), and unblocking one: null when
    * the server took it, or what went wrong in words. Shown only while there's
    * somebody on it.
@@ -86,6 +92,7 @@ export function AccountSection({
   archive,
   updates,
   startAtSignIn,
+  openPage,
   blocked,
   deleteAccount,
   signOut,
@@ -172,6 +179,14 @@ export function AccountSection({
             ) : null}
           </>
         ) : null}
+        <Actions start>
+          <Button variant="quiet" icon="go" onClick={() => openPage(PRIVACY_URL)}>
+            Privacy
+          </Button>
+          <Button variant="quiet" icon="go" onClick={() => openPage(REPORT_URL)}>
+            Report a problem
+          </Button>
+        </Actions>
         <p className="nx-set-lead">
           {severalServers
             ? `Signing out forgets every server on ${device}. It doesn't delete your accounts. Each server signs out on its own, in Servers.`
@@ -303,6 +318,12 @@ function DeleteAccount({
 
 /** The switch's words, as the issue asked for them: plain, for somebody who has never heard of autostart. */
 const START_AT_SIGN_IN = "Start Linger when I sign in to the computer";
+
+/** The website's privacy page. App Review wants it linked inside the app as well as in the store (guideline 5.1.1(i), #779). */
+const PRIVACY_URL = "https://linger.im/privacy";
+
+/** Where the website's own "Report a problem" goes: GitHub's choice of issue forms (#779). */
+const REPORT_URL = "https://github.com/itsMattGuenther/Linger/issues/new/choose";
 
 function Password({ serverName, changePassword, signInLink }: { serverName: string; changePassword: AccountProps["changePassword"]; signInLink: string | null }) {
   const [current, setCurrent] = useState("");

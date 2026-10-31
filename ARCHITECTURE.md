@@ -633,8 +633,9 @@ E2EE launders a false promise, which is worse than an honest limitation.
    store: `keyring-core` with `android-native-keyring-store`, which encrypts each one
    into the app's private SharedPreferences with a key that never leaves the Android
    Keystore (`src-tauri/src/secrets.rs`). The iPhone uses the Keychain through the
-   same `keyring` crate as the desktop; CI builds it for iOS, but it hasn't run on an
-   iPhone yet.
+   same `keyring` crate as the desktop. Friends have signed in with it on their own
+   iPhones since the first TestFlight build (0.5.1, 2026-10-20), and nobody has been
+   signed out by it.
 4. **No open registration.** Invite code required, always. Codes are 12 chars from a
    CSPRNG, single-use by default.
 5. **Rate limits:** login 5/min/IP, sign-up 60/hour/IP by default (all sixty at once,

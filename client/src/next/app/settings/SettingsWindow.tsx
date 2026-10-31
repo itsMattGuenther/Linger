@@ -48,7 +48,7 @@ import { NOTIFY, type NotifyQuestion, type Outcome, PASSWORD, type PasswordQuest
 import { CHIMES, type SettingsKey, settingsKeys } from "../../core/settings";
 import { presenceOf } from "../../core/chat/conversation";
 import { Button, Spinner } from "../../kit";
-import { announceAppearance, loadHideReactions, loadOneLine, loadScale, saveHideReactions, saveNormalize, saveOneLine, saveScale } from "../../core/appearance";
+import { announceAppearance, loadHideReactions, loadOneLine, loadScale, loadTextSize, saveHideReactions, saveNormalize, saveOneLine, saveScale, saveTextSize } from "../../core/appearance";
 import { type Reporter, startReporting, windowTarget } from "../../core/report";
 import { useFollowing } from "../useFollowing";
 import { hostOf, useServerInfos } from "../useServerInfos";
@@ -320,6 +320,7 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
   const [oneLine, setOneLine] = useState<boolean>(loadOneLine);
   const [hideReactions, setHideReactions] = useState<boolean>(loadHideReactions);
   const [scale, setScale] = useState<number>(loadScale);
+  const [textSize, setTextSize] = useState<number>(loadTextSize);
   const [mode, setMode] = useState(() => loadMode(localStore()));
   const [closeList, setCloseList] = useState(() => loadCloseList(localStore()));
   const [arrivalCards, setArrivalCards] = useState(() => loadArrivalCards(localStore()));
@@ -540,7 +541,7 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
         openGuide: host ? () => openExternal(HOST_UPDATE_GUIDE_URL) : undefined,
       }}
       appearance={{
-        // A phone sizes things with its own display and text size (SPEC §4.15).
+        // A phone's window can't zoom, so it has Text size instead (SPEC §4.15).
         scale: phone
           ? undefined
           : {
@@ -550,6 +551,16 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
                 announceAppearance();
               },
             },
+        // On top of the phone's own text size (#690, core/phone.ts).
+        textSize: phone
+          ? {
+              value: textSize,
+              onChange: (value) => {
+                setTextSize(saveTextSize(value));
+                announceAppearance();
+              },
+            }
+          : undefined,
         plainNames: {
           value: plain,
           onChange: (value) => {
@@ -691,6 +702,7 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
               openNotes: (wanted) => openExternal(releaseNotesUrl(wanted)),
             },
         startAtSignIn: startup && !phone ? { ...startup, onChange: changeStartup, openGuide: () => openExternal(START_GUIDE_URL) } : undefined,
+        openPage: (url) => openExternal(url),
         // Deleting your account here (#650). The server ends every sign-in it
         // had, so the app lets go of the server straight after; Settings
         // then shows what's left, or closes.

@@ -1093,9 +1093,13 @@ page does that swipe itself: on Android it would go back twice. A tap opens
 what it's on, the first time. A phone has no hover, so what a computer shows
 on hover is held for instead, and rises from the bottom: a message's actions
 (#686), a person's card and Knock from their row, Leave from a group's, and
-Quiet and the order from a server's name (#704). It has no Interface
-size of its own: the phone's display size and text size settings do that job (on
-Android; an iPhone's Text Size doesn't reach Linger yet, #690). It doesn't zoom with two fingers as a web
+Quiet and the order from a server's name (#704). Its words grow with the
+phone's own text size, Font size on Android and Text Size on an iPhone, and
+Settings › Appearance has a **Text size** of its own on top of that (Matt,
+2026-10-21, #690): 100%, 115%, 130% or 150%, for somebody who wants Linger's
+words bigger without changing every app on the phone. Together they stop at
+twice the usual. It has no Interface size, which zooms a computer's window.
+It doesn't zoom with two fingers as a web
 page does, either (#689): a zoomed screen is only wider than the phone and drags
 sideways, and an iPhone would zoom in by itself on the message box. A photo
 opened from a message zooms on its own instead, as a phone's photo viewer does:

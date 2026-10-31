@@ -1,4 +1,4 @@
-import { SCALE_OPTIONS } from "../../../lib/interface";
+import { SCALE_OPTIONS, TEXT_SIZE_OPTIONS } from "../../../lib/interface";
 import { HEADINGS } from "../../core/settings";
 import { Select, SettingRow, Switch } from "../../kit";
 import { Block, Plain } from "./parts";
@@ -12,10 +12,16 @@ export interface Live<T> {
 export interface AppearanceProps {
   /**
    * Interface size, a percentage from `SCALE_OPTIONS` (LOOK-1). Left out on
-   * the phone, where the phone's own display size and text size do it
-   * (SPEC §4.15), and where the window can't zoom.
+   * the phone, which has Text size instead (SPEC §4.15), and where the
+   * window can't zoom.
    */
   scale?: Live<number>;
+  /**
+   * The phone's Text size (#690), a percentage from `TEXT_SIZE_OPTIONS`, on
+   * top of the phone's own text size. Left out on a computer, which has
+   * Interface size.
+   */
+  textSize?: Live<number>;
   /**
    * Evening warmth (LOOK-2). Left out while the new client's colors have no
    * evening version: a switch that changed nothing would be a broken promise.
@@ -36,8 +42,26 @@ export interface AppearanceProps {
   reactions?: Live<boolean>;
 }
 
-/** Appearance: how Linger looks on this computer or phone (LOOK-1, LOOK-2, NAME-4, #197). */
-export function AppearanceSection({ scale, warmth, plainNames, oneLine, reactions }: AppearanceProps) {
+/** A size's choices, the usual first: "100%, the usual", then each step. */
+function sizeOptions(sizes: readonly number[]) {
+  return sizes.map((size) => ({ value: String(size), label: size === 100 ? "100%, the usual" : `${size}%` }));
+}
+
+/** What a message reads like at the size chosen, beside the choice. */
+function SizePreview() {
+  return (
+    <div className="nx-set-size-preview" aria-hidden="true">
+      <span className="nx-set-size-aa">Aa</span>
+      <span className="nx-set-size-words">
+        <span className="nx-set-size-title">A little room to linger.</span>
+        <span className="nx-set-size-sub">This is how your messages will read.</span>
+      </span>
+    </div>
+  );
+}
+
+/** Appearance: how Linger looks on this computer or phone (LOOK-1, LOOK-2, NAME-4, #197, #690). */
+export function AppearanceSection({ scale, textSize, warmth, plainNames, oneLine, reactions }: AppearanceProps) {
   return (
     <>
       {/* Only when there's something to choose: a heading over nothing would look unfinished. */}
@@ -50,19 +74,27 @@ export function AppearanceSection({ scale, warmth, plainNames, oneLine, reaction
       {scale ? (
         <Block heading={HEADINGS.size} lead="Text, buttons and windows grow together.">
           <div className="nx-set-size">
-            <div className="nx-set-size-preview" aria-hidden="true">
-              <span className="nx-set-size-aa">Aa</span>
-              <span className="nx-set-size-words">
-                <span className="nx-set-size-title">A little room to linger.</span>
-                <span className="nx-set-size-sub">This is how your messages will read.</span>
-              </span>
-            </div>
+            <SizePreview />
             <Select
               label="Interface size"
               hideLabel
               value={String(scale.value)}
               onChange={(value) => scale.onChange(Number(value))}
-              options={SCALE_OPTIONS.map((size) => ({ value: String(size), label: size === 100 ? "100%, the usual" : `${size}%` }))}
+              options={sizeOptions(SCALE_OPTIONS)}
+            />
+          </div>
+        </Block>
+      ) : null}
+      {textSize ? (
+        <Block heading={HEADINGS.textSize} lead="Linger's words, on top of your phone's own text size.">
+          <div className="nx-set-size">
+            <SizePreview />
+            <Select
+              label="Text size"
+              hideLabel
+              value={String(textSize.value)}
+              onChange={(value) => textSize.onChange(Number(value))}
+              options={sizeOptions(TEXT_SIZE_OPTIONS)}
             />
           </div>
         </Block>

@@ -80,6 +80,18 @@ to be right for every shape that window takes.
   the previous client's search folder, and a prototype on a deleted branch,
   named twice. Each is now in `commit:path` form, which says where it is.
 
+## A fallback wider than the case it's for
+
+- **#781: a failed `nm` read as "none of them".** The iPhone build's report
+  of the calls Apple asks a reason for ran `nm -u … | grep … || echo "none
+  of them"`, and the `||` covered the whole line: an app `nm` couldn't read
+  left the step green, saying nothing was found. *Missed because* the step
+  was only checked for its syntax (`bash -n`), and never run with `nm`
+  failing. *Changed:* `nm` runs on its own, so its failure fails the step,
+  and only `grep`'s "nothing matched" (status 1) reads as none; tried with
+  stand-ins for `nm` and `grep` that fail, find nothing and find some. Rule
+  in `docs/testing-strategy.md`.
+
 ## Tests written from the case in mind, not from the ways things fail
 
 - **#758: a download cut off half way.** The retry test dropped a
@@ -144,3 +156,13 @@ to be right for every shape that window takes.
   (#776): every sheet rises in the kit's one `Sheet`, which sets the height
   for all of them, and one kit test opens a menu, a card and a plain sheet on
   a short screen. Rule: a phone screen is tried held sideways.
+- **#780: a Text size chosen while storage refused showed but didn't
+  apply.** `saveTextSize` promised the session would still get the choice,
+  but `followTextSize` reads it back with `loadTextSize`, from storage, which
+  still held the old size or nothing. *Missed because* every test saved with
+  storage working. *Changed:* the phone keeps its choice in memory too, read
+  before storage, with a test where storage is full and one where it's gone
+  (`appearance.test.ts`). Interface size and the other Appearance choices
+  make the same promise on a computer, where the windows that apply them
+  read storage too; keeping it there needs Settings' announcement to carry
+  the choice to them.
