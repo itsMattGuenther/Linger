@@ -30,7 +30,9 @@ You do **not** need `.sig`, `latest.json`, or the source-code ZIP/tar files.
 The `.msi` is an alternative Windows installer, not an extra required download.
 There are no macOS or ARM desktop installers yet. The iPhone app is only in
 testing, through Apple's TestFlight for invited testers, and isn't in the
-App Store yet. It needs iOS 15 or later.
+App Store yet. It needs iOS 15 or later. Its words grow with the iPhone's
+**Text Size** (in Settings, under Display & Brightness), and with the **Text
+size** in Linger's **Settings → Appearance** on top of it.
 
 ### Windows
 
@@ -141,7 +143,9 @@ whether it may show; if you say no, the call still works.
 It doesn't zoom with two fingers, as a web page does, but a photo you open
 does: pinch it, drag it about, or double-tap to zoom in and back out. To make
 its words bigger, turn up your phone's **Font size** (in Android's Settings,
-under Display): Linger follows it, up to twice the usual size.
+under Display), which Linger follows, or choose a bigger **Text size** in
+Linger's **Settings → Appearance**, which goes on top of it. Together they
+go up to twice the usual size.
 
 1. On the phone, open the
    [latest release](https://github.com/itsMattGuenther/Linger/releases/latest)

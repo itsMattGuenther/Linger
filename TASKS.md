@@ -39,7 +39,10 @@ reaction or an edit on the newest message keeps the conversation at its very
 end, not a few pixels short, and messages arriving in a burst no longer leave
 the newest below the bottom (#760). In a call, a click on somebody on the
 conversation's voice line opens their volume, as in the voice bar; on a phone it
-rises from the bottom, and the people there are easier to tap (#747). **Thanks** (`docs/releasing.md`): @Gleasonmt for the iPhone app's iOS 15
+rises from the bottom, and the people there are easier to tap (#747). The
+phone app's words can be made bigger in Settings → Appearance, with a Text size
+of its own on top of the phone's, and the iPhone app now follows the iPhone's
+Text Size, as the Android app follows its Font size (#690). **Thanks** (`docs/releasing.md`): @Gleasonmt for the iPhone app's iOS 15
 minimum (#749), and @eGGnogSC for messages that show the moment they're sent
 (#133) and the sidebar that no longer scrolls sideways (#84). @eGGnogSC's work
 shipped back in September, before the notes thanked contributors, so it's

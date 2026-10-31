@@ -144,3 +144,13 @@ to be right for every shape that window takes.
   (#776): every sheet rises in the kit's one `Sheet`, which sets the height
   for all of them, and one kit test opens a menu, a card and a plain sheet on
   a short screen. Rule: a phone screen is tried held sideways.
+- **#780: a Text size chosen while storage refused showed but didn't
+  apply.** `saveTextSize` promised the session would still get the choice,
+  but `followTextSize` reads it back with `loadTextSize`, from storage, which
+  still held the old size or nothing. *Missed because* every test saved with
+  storage working. *Changed:* the phone keeps its choice in memory too, read
+  before storage, with a test where storage is full and one where it's gone
+  (`appearance.test.ts`). Interface size and the other Appearance choices
+  make the same promise on a computer, where the windows that apply them
+  read storage too; keeping it there needs Settings' announcement to carry
+  the choice to them.

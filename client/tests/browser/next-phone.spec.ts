@@ -144,10 +144,11 @@ test("opens Settings over the list, as its sections and then one section, withou
   await sections.getByText("Appearance").click();
   await expect(sections).toBeHidden();
   await expect(settings.locator(".nx-set-title")).toHaveText("Appearance");
-  // A phone sizes things with its own display and text size: no Interface
-  // size, which couldn't zoom the phone's window anyway.
+  // No Interface size, which couldn't zoom the phone's window anyway: Text
+  // size instead, on top of the phone's own text size (#690).
   await expect(settings.getByText("Use plain names and message fonts", { exact: true })).toBeVisible();
   await expect(settings.getByRole("combobox", { name: "Interface size" })).toHaveCount(0);
+  await expect(settings.getByRole("combobox", { name: "Text size" })).toHaveValue("100");
   await settings.getByRole("button", { name: "Back to Settings" }).click();
   await expect(sections).toBeVisible();
 
@@ -542,6 +543,49 @@ test.describe("on a phone 320 wide, the narrowest (#688)", () => {
       await settings.getByRole("button", { name: "Back to Settings" }).click();
     }
   });
+
+  // Settings' largest Text size, with the phone's own at the usual (#690).
+  // The phone's largest under it is the 2× test above, which is the most
+  // the two make together.
+  test("at the largest Text size, words fit their lines and nothing reaches past the edge (#690)", async ({ page }) => {
+    await phone(page);
+    const scale = () => page.evaluate(() => document.documentElement.style.getPropertyValue("--text-scale"));
+    await list(page).getByRole("button", { name: "Settings", exact: true }).click();
+    const settings = page.locator(".nx-phone-over [data-screen='settings']");
+    await settings.getByRole("navigation", { name: "Settings" }).getByText("Appearance").click();
+    await settings.getByRole("combobox", { name: "Text size" }).selectOption("150");
+    await expect.poll(scale).toBe("1.5");
+    expect(await cutOff(page), "Appearance").toEqual([]);
+    expect(await sticksOut(page), "Appearance").toEqual([]);
+    await settings.getByRole("button", { name: "Back to Settings" }).click();
+    await settings.getByRole("button", { name: "Back", exact: true }).click();
+    expect(await cutOff(page), "the list").toEqual([]);
+    expect(await sticksOut(page), "the list").toEqual([]);
+
+    // Kept on this phone: opened again, it starts at the size chosen.
+    await phone(page);
+    expect(await scale()).toBe("1.5");
+
+    await room(page, "general").click();
+    await expect(page.getByRole("log")).toContainText("Putting it on now.");
+    expect(await cutOff(page), "a room").toEqual([]);
+    expect(await sticksOut(page), "a room").toEqual([]);
+  });
+});
+
+test("the Text size chosen in Settings goes on top of the phone's own (#690)", async ({ page }) => {
+  await open(page, "?one&shell=phone&phonetext=1.3");
+  await settled(page);
+  const scale = () => page.evaluate(() => document.documentElement.style.getPropertyValue("--text-scale"));
+  await expect.poll(scale).toBe("1.3");
+  await list(page).getByRole("button", { name: "Settings", exact: true }).click();
+  const settings = page.locator(".nx-phone-over [data-screen='settings']");
+  await settings.getByRole("navigation", { name: "Settings" }).getByText("Appearance").click();
+  await settings.getByRole("combobox", { name: "Text size" }).selectOption("130");
+  await expect.poll(scale).toBe("1.69");
+  // Back to the usual, Linger is the phone's size again.
+  await settings.getByRole("combobox", { name: "Text size" }).selectOption("100");
+  await expect.poll(scale).toBe("1.3");
 });
 
 // Report and block on the phone (T-1605): there's no hovering for a

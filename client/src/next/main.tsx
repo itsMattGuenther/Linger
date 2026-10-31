@@ -9,7 +9,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles/app.css";
-import { followAppearance } from "./core/appearance";
+import { followAppearance, loadTextSize, onAppearance } from "./core/appearance";
 import { followInputMode } from "./core/inputMode";
 import { followKeyboard, followTextSize, onPhone } from "./core/phone";
 import { refuseStrayDrops } from "../lib/drops";
@@ -32,8 +32,9 @@ if (onPhone()) {
   document.documentElement.dataset.shell = "phone";
   // No notifications on a phone, open or closed (SPEC §4.15).
   setNoNotifications(true);
-  // Text, lines and rows grow with the phone's Font size (styles/tokens.css).
-  followTextSize(document, async () => (isTauri() ? Number(await invoke("phone_text_scale")) : 1));
+  // Text, lines and rows grow with the phone's text size, and with the Text
+  // size chosen in Settings on top of it (#690, styles/tokens.css).
+  followTextSize(document, async () => (isTauri() ? Number(await invoke("phone_text_scale")) : 1), loadTextSize, onAppearance);
   // Chimes follow the phone's ringer: silent is silent, vibrate buzzes, and
   // both go out as notification sounds (src-tauri/src/phone_sound.rs).
   if (isTauri()) {

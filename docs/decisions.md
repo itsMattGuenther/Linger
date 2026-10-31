@@ -1777,3 +1777,25 @@ Watch in a conversation they weren't reading. Matt picked from mockups of five i
 - **No desktop notification.** Banners are for what's addressed to you (SPEC §4.2); the
   sound already reaches somebody looking at another app, and over a game it would be one
   more pop-up.
+
+---
+
+## Decided — the phone's own Text size (#690)
+
+**Matt, 2026-10-21.** The phone app gets a **Text size** of its own, under Settings ›
+Appearance. That reverses SPEC §4.15's call that the phone's own display and text size
+settings were enough: a tester found Linger's text too small, and somebody may want
+Linger's words bigger without changing every app on their phone.
+
+- **On top of the phone's own text size**, which Linger keeps following: Font size on
+  Android and, from #690, Text Size on an iPhone, Accessibility's Larger Text included
+  (`phone_text.rs` reads UIKit's body text style). Together they stop at twice the usual,
+  where the phone's alone always stopped, so the geometry tests' largest case still
+  covers both.
+- **Four steps: 100%, 115%, 130% and 150%**, the ones the issue suggested. They are
+  smaller than Interface size's (100–200%), so a phone's screen still holds a
+  conversation.
+- **Kept on the phone**, as Interface size is kept on a computer, and never sent
+  anywhere.
+- **Still no Interface size on the phone.** It zooms the window, and a phone's window
+  doesn't zoom (#689).

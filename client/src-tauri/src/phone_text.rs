@@ -1,17 +1,23 @@
-//! How big the phone draws text (SPEC §4.15): its Font size setting, as a
-//! factor of the usual. The page applies it to Linger's text, lines, rows and
-//! controls together (`followTextSize` in core/phone.ts, styles/tokens.css).
+//! How big the phone draws text (SPEC §4.15): its text size setting, Font
+//! size on Android and Text Size on an iPhone, as a factor of the usual. The
+//! page applies it to Linger's text, lines, rows and controls together, with
+//! the Text size chosen in Linger's Settings on top (`followTextSize` in
+//! core/phone.ts, styles/tokens.css, #690).
 //!
 //! Android's web view would otherwise enlarge fonts and line spacing by
 //! itself and nothing around them: rows and controls kept the usual size and
 //! cut the words in half (the emulator at its largest Font size,
 //! 2026-10-03). So MainActivity turns that off (`textZoom` 100), and Linger
-//! sizes everything from this one number instead.
+//! sizes everything from this one number instead. An iPhone's web view
+//! enlarges nothing by itself: Text Size reaches only text set in the
+//! system's own text styles, and Linger's sizes are pixels. So the shell
+//! reads the size of the body text style instead.
 
-/// The phone's Font size as a factor of the usual: from 1 up to 2, the
+/// The phone's text size as a factor of the usual: from 1 up to 2, the
 /// largest Android offers. A phone set smaller than the usual shrinks
-/// nothing, and one that can't be asked, or an iPhone, whose web view doesn't
-/// follow its text size by itself either, is the usual.
+/// nothing, and one that can't be asked is the usual. An iPhone's largest
+/// sizes, under Accessibility's Larger Text, go past twice the usual and stop
+/// at it.
 #[cfg(mobile)]
 #[tauri::command]
 pub fn phone_text_scale() -> f32 {
@@ -19,9 +25,9 @@ pub fn phone_text_scale() -> f32 {
     {
         android::font_scale().map_or(1.0, bounded)
     }
-    #[cfg(not(target_os = "android"))]
+    #[cfg(target_os = "ios")]
     {
-        1.0
+        bounded(ios::text_size())
     }
 }
 
@@ -68,6 +74,25 @@ mod android {
                 .f()
                 .ok()
         })
+    }
+}
+
+#[cfg(target_os = "ios")]
+mod ios {
+    use objc2_ui_kit::{UIFont, UIFontTextStyleBody};
+
+    /// The body text style's size at the usual Text Size, in points.
+    const USUAL_POINTS: f64 = 17.0;
+
+    /// The body text style's size against the usual, which follows the
+    /// iPhone's Text Size and Accessibility's Larger Text as they change.
+    pub fn text_size() -> f32 {
+        // SAFETY: UIKit's own constant, alive as long as the app.
+        let body = unsafe { UIFontTextStyleBody };
+        let font = UIFont::preferredFontForTextStyle(body);
+        // SAFETY: only reads the size of the font UIKit just made.
+        let points = unsafe { font.pointSize() };
+        (points / USUAL_POINTS) as f32
     }
 }
 
