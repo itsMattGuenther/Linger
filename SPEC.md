@@ -1105,7 +1105,7 @@ sideways, and an iPhone would zoom in by itself on the message box. A photo
 opened from a message zooms on its own instead, as a phone's photo viewer does:
 pinched, dragged, and double-tapped in and out.
 
-**Share to Linger from the phone's share sheet** (proposed, #785). Linger appears
+**Share to Linger from the phone's share sheet** (#785). Linger appears
 in the phone's own share sheet for pictures, videos and files. Choosing it opens
 Linger on a list of your conversations: rooms, group DMs and DMs, across the
 servers you're signed in to. Tapping one puts the shared files in that

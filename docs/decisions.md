@@ -1576,10 +1576,10 @@ allow, and "if it sounds bad, the people they're talking to will say so". On
   back into the app; this is the opposite, the way out of a call you're in. The iPhone
   needs no bar: it shows its own call indicator.
 
-## Proposed — sharing to Linger from the phone's share sheet
+## Decided — sharing to Linger from the phone's share sheet (#785)
 
-**Proposed (#785).** Not decided by Matt yet. SPEC §4.15 is the rule once he
-agrees; this is why.
+**Matt, 2026-10-31.** Linger is in the phone's own share sheet, on both
+phones, as SPEC §4.15 says. Why it works the way it does:
 
 - **Files only, into the message box, never sent on their own.** The share
   sheet is a place people are in a hurry, and a wrong tap on a conversation
@@ -1589,12 +1589,13 @@ agrees; this is why.
 - **No text or links, for now.** #785 asks about screenshots and photos.
   Taking text and links needs a second look at what a shared page title or
   address leaks, so it waits for someone to ask.
-- **Android first, then the iPhone,** the order already chosen for the phone
-  app ("Android first, Apple after", 2026-10-03). Android needs one intent
-  filter plus the shell and page code both platforms share. The iPhone needs a
-  share extension and an App Group, and nobody on the project has a Mac or an
-  iPhone to try it on. Android first tests the shared half where it can be
-  tested.
+- **Both phones at once.** The phone app went Android first ("Android first,
+  Apple after", 2026-10-03) because nobody on the project had an iPhone. The
+  iPhone app has since been tested on friends' iPhones through TestFlight, so
+  both get this together. Most of it is the shell and page code both share;
+  Android adds one intent filter, and the iPhone a share extension and an App
+  Group. Only a Mac builds the iPhone's half, so `ios.yml` is the first place
+  it's built and signed.
 - **One inbox folder, written by the phone, read by the shell.** Android's
   `SharedInbox.kt` copies into the app's own `files/shared`; the iPhone's
   share extension, a separate program that can't reach the app's storage,
