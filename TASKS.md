@@ -748,6 +748,10 @@ macOS runners, or a friend's Mac.
   this-device-only setting. Also **voice with the phone locked**: there's no
   background audio mode yet, so locking may end a call. Check it on a real
   iPhone first, with Matt's friend.
+  **A privacy policy link inside the app**, which Apple's guideline 5.1.1(i)
+  wants as well as the one in App Store Connect: built 2026-10-31 (#779),
+  **Privacy** under Settings → Account & App → This Phone (This Computer on
+  a desktop), opening linger.im/privacy.
   Android first, on Google Play, with Matt paying the $25; Apple only after it
   has worked well there. The listing's privacy answers ("Data safety") must
   say the app uses the microphone only to record a voice message the person
@@ -760,11 +764,13 @@ macOS runners, or a friend's Mac.
   App Store, review, and store listings. **Needs T-1605 first:** both stores
   require report and block. Apple's guideline 1.2 also asks for a way to
   filter objectionable material and for published contact details, and both
-  stores want terms of use. **Both require deleting your account in the app,
-  too:** built 2026-10-17 (#650, SPEC §4.19), with a page on the website for
-  Google's form; what those mean for a self-hosted app among
-  friends is settled here, with Matt. Follow current vendor docs, not memory —
-  this changes every year.
+  stores want terms of use. For contact details, **Report a problem** sits
+  beside Privacy and opens GitHub's issue forms, as the website's link does
+  (#779); whether App Review accepts that is Matt's call. **Both require
+  deleting your account in the app, too:** built 2026-10-17 (#650, SPEC
+  §4.19), with a page on the website for Google's form; what those mean for
+  a self-hosted app among friends is settled here, with Matt. Follow current
+  vendor docs, not memory — this changes every year.
   *Accept:* somebody who has never met you installs it from a store.
 
 - ✅ **T-1605 · Report and block** — effort: **medium**

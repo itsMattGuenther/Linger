@@ -702,6 +702,7 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
               openNotes: (wanted) => openExternal(releaseNotesUrl(wanted)),
             },
         startAtSignIn: startup && !phone ? { ...startup, onChange: changeStartup, openGuide: () => openExternal(START_GUIDE_URL) } : undefined,
+        openPage: (url) => openExternal(url),
         // Deleting your account here (#650). The server ends every sign-in it
         // had, so the app lets go of the server straight after; Settings
         // then shows what's left, or closes.

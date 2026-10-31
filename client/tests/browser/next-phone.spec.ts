@@ -173,6 +173,22 @@ test("Account & App says which version this is, under This Phone, and never look
   expect(await did(page)).not.toContain("update_check");
 });
 
+test("This Phone opens the privacy page and where to report a problem, in the browser (#779)", async ({ page }) => {
+  // App Review wants both inside the app, not only on the store's page.
+  await phone(page);
+  await list(page).getByRole("button", { name: "Settings", exact: true }).click();
+  const settings = page.locator(".nx-phone-over [data-screen='settings']");
+  await settings.getByRole("navigation", { name: "Settings" }).getByText("Account & App").click();
+  const thisPhone = settings.getByRole("region", { name: "This Phone" });
+  await thisPhone.getByRole("button", { name: "Privacy", exact: true }).click();
+  await thisPhone.getByRole("button", { name: "Report a problem", exact: true }).click();
+  await expect
+    .poll(async () => (await did(page)).filter((line) => line.startsWith("open ")))
+    .toEqual(["open https://linger.im/privacy", "open https://github.com/itsMattGuenther/Linger/issues/new/choose"]);
+  // Settings stays open: the pages went to the browser, not over the app.
+  await expect(settings.locator(".nx-set-title")).toHaveText("Account & App");
+});
+
 /**
  * Words cut off top or bottom: a box that hides what doesn't fit, holding
  * words of its own, with more of them than it shows. That was a name at
