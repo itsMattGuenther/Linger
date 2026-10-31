@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 
 // The Settings window with its wiring (tests/fixtures/next-settings-window.tsx):
 // the real SettingsWindow, the store and the sharing code, with the desktop
@@ -215,27 +215,6 @@ test("interface size and plain names are saved here and take effect at once", as
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.normalize)).toBe("true");
 });
 
-test("with storage full, an Appearance choice still takes effect, and goes to the other windows (#782)", async ({ page }) => {
-  await open(page, "?section=appearance&full");
-  await page.getByRole("combobox", { name: "Interface size" }).selectOption("125");
-  await expect.poll(() => did(page)).toContain("zoom:1.25");
-  await page.getByRole("switch", { name: "Use plain names and message fonts" }).click();
-  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.normalize)).toBe("true");
-  await page.getByRole("switch", { name: "One line per person" }).click();
-  const announced = async () =>
-    (await did(page)).filter((line) => line.startsWith("announced:")).map((line) => JSON.parse(line.slice("announced:".length)) as unknown);
-  await expect.poll(announced).toContainEqual({ scale: 125, plainNames: true, oneLine: true });
-  // Nothing was written.
-  expect(await page.evaluate(() => window.localStorage.getItem("linger.interface.scale"))).toBeNull();
-});
-
-test("opened after a choice storage refused, Settings shows it as the list window has it (#782)", async ({ page }) => {
-  await open(page, "?section=appearance&full&listchose");
-  await expect(page.getByRole("combobox", { name: "Interface size" })).toHaveValue("150");
-  await expect(page.getByRole("switch", { name: "One line per person" })).toHaveAttribute("aria-checked", "true");
-  await expect.poll(() => did(page)).toContain("zoom:1.5");
-});
-
 test("one line per person is off to start, and turning it on saves it for the list (#197)", async ({ page }) => {
   await open(page, "?section=appearance");
   const choice = page.getByRole("switch", { name: "One line per person" });
@@ -243,6 +222,47 @@ test("one line per person is off to start, and turning it on saves it for the li
   await choice.click();
   await expect(choice).toHaveAttribute("aria-checked", "true");
   await expect.poll(() => page.evaluate(() => window.localStorage.getItem("linger.next.peopleOneLine"))).toBe("true");
+});
+
+test("an Appearance choice storage won't save says so under it, and the setting stays as it was (#782)", async ({ page }) => {
+  await open(page, "?section=appearance");
+  // Storage refuses from here on, as a full one does, or a browser's with site storage blocked.
+  await page.evaluate(() => {
+    const setItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = () => {
+      throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
+    };
+    (window as unknown as { storageBack: () => void }).storageBack = () => {
+      Storage.prototype.setItem = setItem;
+    };
+  });
+  const unsaved = page.getByRole("tabpanel").getByRole("status").filter({ hasText: "Couldn't save that here." });
+  const under = (control: Locator) => page.locator(".nx-set-block", { has: control }).getByRole("status");
+
+  const size = page.getByRole("combobox", { name: "Interface size" });
+  await size.selectOption("125");
+  await expect(under(size)).toHaveText("Couldn't save that here.");
+  await expect(size).toHaveValue("100");
+  for (const name of ["Use plain names and message fonts", "Show reactions", "One line per person"]) {
+    const choice = page.getByRole("switch", { name });
+    const was = (await choice.getAttribute("aria-checked")) ?? "";
+    await choice.click();
+    await expect(under(choice)).toHaveText("Couldn't save that here.");
+    await expect(choice).toHaveAttribute("aria-checked", was);
+    // Said once, under the latest.
+    await expect(unsaved).toHaveCount(1);
+  }
+  // Nothing was applied: the page never zoomed, and names are as they were.
+  expect((await did(page)).filter((line) => line.startsWith("zoom:"))).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.dataset.normalize)).toBeUndefined();
+
+  // Storage working again: the next choice is made, and the words go.
+  await page.evaluate(() => (window as unknown as { storageBack: () => void }).storageBack());
+  const plain = page.getByRole("switch", { name: "Use plain names and message fonts" });
+  await plain.click();
+  await expect(plain).toHaveAttribute("aria-checked", "true");
+  await expect(unsaved).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.normalize)).toBe("true");
 });
 
 test("asked for a section while it's open, it shows that section", async ({ page }) => {
