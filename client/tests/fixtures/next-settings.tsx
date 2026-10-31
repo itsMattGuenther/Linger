@@ -162,7 +162,8 @@ function Fixture() {
     { target_user_id: "u-eli", room_id: null },
   ]);
   const [archive, setArchive] = useState<ExportPhase>({ kind: "idle" });
-  const [check, setCheck] = useState<UpdateCheck | null>({ kind: "ready", version: "0.4.0", notes: null });
+  const [check, setCheck] = useState<UpdateCheck | null>(updateOf(query.get("update")));
+  const [asked, setAsked] = useState(false);
   const [looking, setLooking] = useState(false);
   const [rooms, setRooms] = useState<Room[]>(startRooms);
   const [invites, setInvites] = useState<Invite[]>(startInvites);
@@ -312,17 +313,20 @@ function Fixture() {
         updates: {
           check,
           looking,
-          installing: false,
+          asked,
           problem: null,
           checkAgain: () => {
             note("check");
             setLooking(true);
             window.setTimeout(() => {
               setLooking(false);
-              setCheck({ kind: "current" });
+              setCheck({ kind: "current", silent: true });
             }, 150);
           },
-          install: () => note("install"),
+          install: () => {
+            note("install");
+            setAsked(true);
+          },
           openNotes: (version) => note(`notes:${version}`),
         },
         startAtSignIn: query.has("nostart")
@@ -559,3 +563,23 @@ createRoot(root).render(
     <Fixture />
   </StrictMode>,
 );
+
+/**
+ * What the update check found (#772): `?update=` picks it. By default a copy
+ * that installs by itself, with 0.4.0 downloaded and ready; `waiting` has it
+ * on its day's wait; `password` is a copy that needs a password to install;
+ * `arch` one pacman owns, with 0.4.0 out.
+ */
+function updateOf(kind: string | null): UpdateCheck {
+  const line = "Screen sharing, and fixes for voice.";
+  switch (kind) {
+    case "waiting":
+      return { kind: "newer", version: "0.4.0", line, published: Date.now() - 60_000, downloaded: false, silent: true };
+    case "password":
+      return { kind: "newer", version: "0.4.0", line, published: 0, downloaded: true, silent: false };
+    case "arch":
+      return { kind: "managed", by: "pacman", newer: { version: "0.4.0", line } };
+    default:
+      return { kind: "newer", version: "0.4.0", line, published: 0, downloaded: true, silent: true };
+  }
+}

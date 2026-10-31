@@ -359,6 +359,8 @@ jobs:
           dir="$RUNNER_TEMP/updater"
           mkdir -p "$dir"
           gh release download "$GITHUB_REF_NAME" --pattern latest.json --dir "$dir"
-          gh release view "$GITHUB_REF_NAME" --json assets > "$dir/assets.json"
-          node scripts/updater-urls.mjs "$dir/latest.json" "$dir/assets.json" "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME"
+          # Its draft state too: a run after publishing keeps the publishing date (#772).
+          gh release view "$GITHUB_REF_NAME" --json assets,isDraft,publishedAt > "$dir/assets.json"
+          # The one line about what's in it (#772), from the release pull request.
+          node scripts/updater-urls.mjs "$dir/latest.json" "$dir/assets.json" "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" client/src/next/core/release-line.json
           gh release upload "$GITHUB_REF_NAME" "$dir/latest.json" --clobber

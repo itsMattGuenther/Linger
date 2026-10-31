@@ -178,8 +178,9 @@ curl -fsSL https://raw.githubusercontent.com/itsMattGuenther/Linger/main/packagi
 
 **Windows will warn you** ("Windows protected your PC"): choose *More info*,
 then *Run anyway*. The installer isn't code-signed; that's a
-[decision](docs/decisions.md), not a broken download. Updates are signed, and
-the app checks the signature before installing one.
+[decision](docs/decisions.md), not a broken download. After that, Linger
+updates itself, never while you're in voice. Updates are signed, and the app
+checks the signature before installing one.
 
 ## 🚀 Running a server
 

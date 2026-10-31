@@ -1806,6 +1806,54 @@ Linger's words bigger without changing every app on their phone.
 
 ---
 
+## Decided — Linger updates itself (#772)
+
+**Matt, 2026-10-31.** Nobody noticed when a new version was out: the list's grey
+"Linger 0.5.3 is ready." read like a status line, and people found new versions in
+Settings or because Matt told them. They missed fixes, reported bugs that were already
+fixed, and ran apps out of step with their servers. So Linger updates itself instead of
+asking more loudly. That reverses Settings' "Nothing is downloaded until you ask for it",
+which was never a recorded decision, only the first build's default (T-701).
+
+- **No switch to turn it off.** An app that can stay behind brings the whole problem
+  back (Matt: it "breaks the whole concept").
+- **A day's head start.** A copy installs a release by itself only once it's a day old,
+  by the feed's date, which `updater-date.yml` sets when the release is published;
+  until then the feed says it isn't published (a date in 2999), so nothing counts its
+  day from the build. An install nobody pressed reads the date again first. Matt
+  and anybody who presses Restart now go first. Linger has no crash reports (hard rule
+  4), so this is how a bad release is caught before it reaches everybody: it's marked a
+  pre-release, and `releases/latest` stops offering it. Accepted risk: a bad release
+  that gets past the day reaches everybody on their next start.
+- **Installed at a moment that interrupts nobody.** Downloaded in the background,
+  verified against the signing key, kept in the app's cache folder and verified again
+  right before it's installed: at the next start ("Updating to Linger 0.5.4…"), or after
+  30 minutes with nobody using Linger (idle for presence is 10). Never in voice or while
+  sharing a screen; the list window decides, since only it knows, and the shell checks
+  the list's last word on voice again right before installing. Linger comes back as
+  it was: in the tray if the list was there, and without taking the focus after a
+  restart nobody pressed.
+- **The foot of the list says so**, calmly while it's ready ("Linger 0.5.4 is ready",
+  with Restart now), and in the lamp once after ("You're on Linger 0.5.4", with the
+  release's one line). The tray gets Restart to update Linger while one waits.
+- **Copies that need a password ask, with a button** (Matt's choice of three). The .deb
+  and .rpm install through pkexec and the .msi needs Windows' admin prompt, so they
+  download by themselves but install only when somebody presses Update, under a lit
+  "Linger 0.5.4 is out" that Not now puts off until tomorrow. The setup.exe (per user)
+  and the AppImage need no password and update silently.
+- **Arch copies get the notice and only the notice** (2026-10-30): pacman updates them.
+  The words are true on any Arch system ("It comes with your next system update"), never
+  the Omarchy menu, and don't promise the package is in the repository yet.
+- **A host whose server is behind hears it at the foot**, with How to update: apps now
+  run ahead of servers most of the time, and a server only updates when its host runs
+  `./update.sh`. The disk and backup lines' "Hosting…" became "Server settings", since
+  "Hosting…" named a section of Settings rather than what you get.
+- **A server too new for an old app** is a separate job: the app asks you to update
+  before using that server (#793).
+- **Phones** are updated by their stores and aren't part of this.
+
+---
+
 ## Decided — no `.apk` on GitHub releases once Linger is public on Google Play (#773)
 
 **Matt, 2026-10-30 and 2026-10-31.** Android testers get Linger from Google Play's

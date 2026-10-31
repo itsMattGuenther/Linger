@@ -92,6 +92,68 @@ to be right for every shape that window takes.
   stand-ins for `nm` and `grep` that fail, find nothing and find some. Rule
   in `docs/testing-strategy.md`.
 
+## Checked when asked, not when it happens
+
+A check that guards an action passes when the action is asked for, then
+something slow runs (a request, a download, a prompt), and the action happens
+on a world that has changed.
+
+- **#794: an update could restart somebody out of a call.** The list checked
+  voice before asking the shell to install, but the shell then asked the feed
+  and maybe downloaded for a minute, and nothing checked again. *Missed
+  because* the tests pressed Restart now in voice and out of it, never joining
+  voice in between. *Changed:* the shell reads the list's last word on voice
+  right before it installs (`Busy` in `client/src-tauri/src/updates.rs`) and
+  answers busy, and the list installs once you've left; a test joins voice
+  after the press (`next-list-window.spec.ts`). Rule: a guard is checked again
+  right before the action, and tested with the state changing in between
+  (`docs/testing-strategy.md`).
+- **#794: a restart nobody pressed could install a release that hadn't had
+  its day.** The list approved the downloaded version, then the shell
+  installed whatever the feed called newest. *Missed because* the same gap:
+  approved at one moment, acted on at another. *Changed:* an install nobody
+  pressed takes only the kept update, while it's still the newest and a day
+  old by the feed now (`may_install_unattended`, with tests).
+- **#794: publishing a release built days before skipped its day.** The feed
+  carried the build's date until `updater-date.yml` dated it, and a copy that
+  looked in that minute found it a day old. *Missed because* the tests used a
+  date that never changed after a copy had read it. *Changed:* the release
+  build says it isn't published (a date in 2999, `updater-urls.mjs`) until
+  publishing dates it, and installs nobody pressed read the date again.
+- **#794: a "busy" answer that came back after you'd left voice left the
+  update waiting.** The list queued it for when you left, but you already
+  had, and the queue was only looked at when voice ended. *Missed because*
+  the test answered busy while still in voice, never after leaving. Second
+  round of the same gap as the call. *Changed:* the queue is looked at again
+  when an install comes back too, and tests answer in both orders
+  (`next-list-window.spec.ts`). Rule: an answer that can arrive after what
+  it depends on has changed is tested arriving before and after
+  (`docs/testing-strategy.md`).
+- **#794: re-running the release's feed job after publishing undated the
+  release.** The fix for the publishing gap had the job date the feed "not
+  published" every time it ran, and only publishing dated it again. *Missed
+  because* the job was written for its first run, before publishing.
+  *Changed:* it dates the feed by the release's own state, a draft or when it
+  was published, with tests of both (`datedFor` in `updater-urls.mjs`).
+- **#794: Settings couldn't try again after a failed update.** Its Restart now
+  asked the list window, which did the install and kept a failure to itself,
+  so Settings stayed pressed, saying Linger would restart. *Missed because*
+  the test checked the press reached the list, not what came back.
+  *Changed:* the list says how it went (`UPDATE_SAID`), and a test fails it
+  from the list's side (`next-settings-window.spec.ts`). Rule: what another
+  window asks the list to do is tested failing (`docs/testing-strategy.md`).
+
+## A rule nothing checks
+
+- **#794: the update files blocked the async workers.** AGENTS.md says never
+  block the reactor, and `updates.rs` read and wrote tens of megabytes with
+  `std::fs` inside async commands. *Missed because* no check reads that
+  rule, and clippy can't tell which code runs on the reactor; a test of the
+  source is the wrong fix (above). *Changed:* the code is shaped so the
+  mistake is hard to make: every touch of the update folder from a command
+  goes through `Store`, whose methods run off the workers
+  (`spawn_blocking`), and installing does too.
+
 ## Tests written from the case in mind, not from the ways things fail
 
 - **#758: a download cut off half way.** The retry test dropped a

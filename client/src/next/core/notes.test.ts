@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { ServerHealth } from "../../generated/ServerHealth";
 import type { GatewayStatus } from "../../lib/gateway";
-import { type Connection, connectionNote, hostNotes, listNotes, TROUBLE_GRACE_MS, troubleSince, waitingNote } from "./notes";
+import type { UpdateCheck } from "../../lib/updates";
+import { type Connection, connectionNote, hostNotes, listNotes, TROUBLE_GRACE_MS, troubleSince, type UpdateState, updateNotes, waitingNote } from "./notes";
 
 const at = 1_000_000;
 const pine = (status: GatewayStatus, since: number | null = at): Connection => ({ server: "https://pine", name: "Pinecone", status, troubleSince: since });
@@ -40,17 +41,72 @@ describe("when trouble started", () => {
 describe("the foot", () => {
   it("puts connections first, then the keyring, then an update, and says nothing when all's well", () => {
     const later = at + TROUBLE_GRACE_MS;
-    const notes = listNotes([pine({ kind: "connecting" })], "The keyring is locked.", { kind: "ready", version: "0.4.1", notes: null }, later);
+    const notes = listNotes([pine({ kind: "connecting" })], "The keyring is locked.", updateNotes(state(ready)), later);
     expect(notes.map((note) => note.kind)).toEqual(["connection", "keyring", "update"]);
     expect(notes[1]).toEqual({ kind: "keyring", words: "Sign-ins aren't remembered on this computer.", detail: "The keyring is locked." });
-    expect(notes[2]).toEqual({ kind: "update", version: "0.4.1", words: "Linger 0.4.1 is ready." });
-    expect(listNotes([pine({ kind: "ready", latency_ms: 9 }, null)], null, { kind: "current" }, later)).toEqual([]);
+    expect(listNotes([pine({ kind: "ready", latency_ms: 9 }, null)], null, [], later)).toEqual([]);
+  });
+});
+
+/** A newer release, as the shell says it: a copy that installs it by itself, downloaded. */
+const ready: UpdateCheck = { kind: "newer", version: "0.5.4", line: "Screen sharing, and fixes for voice.", published: 0, downloaded: true, silent: true };
+const state = (check: UpdateCheck | null, more: Partial<UpdateState> = {}): UpdateState => ({ check, updated: null, putOff: () => false, problem: null, ...more });
+
+describe("the foot's update lines (#772)", () => {
+  it("say a downloaded update is ready, calmly, and when it installs", () => {
+    expect(updateNotes(state(ready))).toEqual([
+      {
+        kind: "update",
+        version: "0.5.4",
+        words: "Linger 0.5.4 is ready",
+        detail: "It installs the next time Linger starts, or while you're away from your computer.",
+        problem: null,
+      },
+    ]);
   });
 
-  it("only offers an update that's ready: current, managed, unconfigured and failed say nothing here", () => {
-    for (const check of [{ kind: "current" }, { kind: "managed", by: "pacman" }, { kind: "unconfigured" }, { kind: "failed", reason: "offline" }] as const) {
-      expect(listNotes([], null, check, at)).toEqual([]);
+  it("say nothing while it's on its day's wait or still downloading", () => {
+    expect(updateNotes(state({ ...ready, downloaded: false }))).toEqual([]);
+  });
+
+  it("say nothing when there's nothing newer, or nothing to update with", () => {
+    for (const check of [{ kind: "current", silent: true }, { kind: "managed", by: "pacman", newer: null }, { kind: "unconfigured" }, { kind: "failed", reason: "offline" }, null] as const) {
+      expect(updateNotes(state(check))).toEqual([]);
     }
+  });
+
+  it("ask a copy that needs a password, in the lamp, with what's in it", () => {
+    const notes = updateNotes(state({ ...ready, silent: false }));
+    expect(notes).toEqual([
+      { kind: "release", version: "0.5.4", words: "Linger 0.5.4 is out", line: "Screen sharing, and fixes for voice.", detail: null, password: true, problem: null },
+    ]);
+  });
+
+  it("tell an Arch copy it's out, in words that don't name one desktop's menu or promise it's there yet", () => {
+    const notes = updateNotes(state({ kind: "managed", by: "pacman", newer: { version: "0.5.4", line: null } }));
+    expect(notes).toEqual([
+      { kind: "release", version: "0.5.4", words: "Linger 0.5.4 is out", line: null, detail: "It comes with your next system update.", password: false, problem: null },
+    ]);
+    expect(JSON.stringify(notes)).not.toMatch(/Omarchy/);
+  });
+
+  it("can be put off until tomorrow, except the calm line, which needs nothing", () => {
+    const putOff = (version: string) => version === "0.5.4";
+    expect(updateNotes(state({ ...ready, silent: false }, { putOff }))).toEqual([]);
+    expect(updateNotes(state({ kind: "managed", by: "pacman", newer: { version: "0.5.4", line: null } }, { putOff }))).toEqual([]);
+    expect(updateNotes(state(ready, { putOff })).map((note) => note.kind)).toEqual(["update"]);
+    // A newer version than the one put off brings it back at once.
+    expect(updateNotes(state({ ...ready, version: "0.5.5", silent: false }, { putOff })).map((note) => note.kind)).toEqual(["release"]);
+  });
+
+  it("say once what was just installed, before anything else about updates", () => {
+    const notes = updateNotes(state(ready, { updated: { version: "0.5.3", line: "Fixes for voice." } }));
+    expect(notes[0]).toEqual({ kind: "updated", version: "0.5.3", words: "You're on Linger 0.5.3", line: "Fixes for voice." });
+    expect(notes.map((note) => note.kind)).toEqual(["updated", "update"]);
+  });
+
+  it("carry why the last Update didn't happen", () => {
+    expect(updateNotes(state(ready, { problem: "offline" }))[0]).toMatchObject({ kind: "update", problem: "offline" });
   });
 });
 
@@ -73,11 +129,11 @@ describe("a saved server not reached yet (T-907)", () => {
   });
 
   it("says which device doesn't remember sign-ins", () => {
-    expect(listNotes([], "no keyring", null, 0, [], "this phone")[0]?.words).toBe("Sign-ins aren't remembered on this phone.");
+    expect(listNotes([], "no keyring", [], 0, [], "this phone")[0]?.words).toBe("Sign-ins aren't remembered on this phone.");
   });
 
   it("sits with the connections, before the keyring", () => {
-    const notes = listNotes([], "no keyring", null, 0, [{ server: "https://a.example", name: "a.example", why: "down" }]);
+    const notes = listNotes([], "no keyring", [], 0, [{ server: "https://a.example", name: "a.example", why: "down" }]);
     expect(notes.map((note) => note.kind)).toEqual(["waiting", "keyring"]);
   });
 });
@@ -119,7 +175,22 @@ describe("a server you host, when it needs you (#582)", () => {
   });
 
   it("comes after the keyring and before an update, one line for each thing", () => {
-    const notes = listNotes([], "no keyring", { kind: "ready", version: "0.4.1", notes: null }, at, [], "this computer", [pinecone({ disk_nearly_full: true, backup_overdue: true })]);
+    const notes = listNotes([], "no keyring", updateNotes(state(ready)), at, [], "this computer", [pinecone({ disk_nearly_full: true, backup_overdue: true })]);
     expect(notes.map((note) => note.kind)).toEqual(["keyring", "host", "host", "update"]);
+  });
+
+  it("tells the host when their server is behind, with one version in the words (#772)", () => {
+    const notes = hostNotes({ ...pinecone({}), runs: "0.5.3" }, at, "0.5.4");
+    expect(notes).toEqual([
+      { kind: "host", server: "https://pine", what: "behind", words: "Pinecone is behind. 0.5.4 is out.", detail: "It runs 0.5.3. Run ./update.sh in the server's folder to update it." },
+    ]);
+    expect(hostNotes({ ...pinecone({}), runs: "0.5.4" }, at, "0.5.4")).toEqual([]);
+    expect(hostNotes({ ...pinecone({}), runs: "0.5.5" }, at, "0.5.4")).toEqual([]);
+    // Not asked yet, or the feed couldn't be read: nothing, never a guess.
+    expect(hostNotes({ ...pinecone({}), runs: null }, at, "0.5.4")).toEqual([]);
+    expect(hostNotes({ ...pinecone({}), runs: "0.5.3" }, at, null)).toEqual([]);
+    // Behind comes after what's more pressing.
+    const both = hostNotes({ ...pinecone({ disk_nearly_full: true }), runs: "0.5.3" }, at, "0.5.4");
+    expect(both.map((note) => note.kind === "host" && note.what)).toEqual(["disk", "behind"]);
   });
 });
