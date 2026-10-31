@@ -39,6 +39,23 @@ to be right for every shape that window takes.
   `sentAs` while keeping the messages. *Missed because* as above. *Changed:*
   as above.
 
+## A rule the code doesn't check
+
+- **#792: shared files could reach iCloud backups.** SPEC §4.15 keeps the
+  phone app out of them; Android's `allowBackup="false"` covers its files,
+  but an iPhone backs up an App Group's folder unless it's marked. *Missed
+  because* nothing builds the iPhone's half here, and the promise wasn't
+  written where phone code is written. *Changed:* the share extension marks
+  its folder before writing, and `docs/development.md` and
+  `docs/testing-strategy.md` say anything the phone app writes outside its
+  temporary and cache folders is marked. The app's own folders were already
+  #790, fixed by `phone_backup.rs` (#798).
+- **#792: file checks ran on the async runtime**, in `shared_file`, which
+  AGENTS.md says never happens. *Missed because* no check enforces it, and
+  `shared.rs` copied `dropped.rs`, which does the same. *Changed:* the share
+  commands do their file work through `off_thread`. `dropped.rs` is left as
+  it was; it's older than this pull request.
+
 ## A check its surroundings can fool
 
 - **#757: a workaround in the shell could pass for the fix.** The
@@ -80,7 +97,113 @@ to be right for every shape that window takes.
   the previous client's search folder, and a prototype on a deleted branch,
   named twice. Each is now in `commit:path` form, which says where it is.
 
+## A fallback wider than the case it's for
+
+- **#781: a failed `nm` read as "none of them".** The iPhone build's report
+  of the calls Apple asks a reason for ran `nm -u … | grep … || echo "none
+  of them"`, and the `||` covered the whole line: an app `nm` couldn't read
+  left the step green, saying nothing was found. *Missed because* the step
+  was only checked for its syntax (`bash -n`), and never run with `nm`
+  failing. *Changed:* `nm` runs on its own, so its failure fails the step,
+  and only `grep`'s "nothing matched" (status 1) reads as none; tried with
+  stand-ins for `nm` and `grep` that fail, find nothing and find some. Rule
+  in `docs/testing-strategy.md`.
+
+## Checked when asked, not when it happens
+
+A check that guards an action passes when the action is asked for, then
+something slow runs (a request, a download, a prompt), and the action happens
+on a world that has changed.
+
+- **#794: an update could restart somebody out of a call.** The list checked
+  voice before asking the shell to install, but the shell then asked the feed
+  and maybe downloaded for a minute, and nothing checked again. *Missed
+  because* the tests pressed Restart now in voice and out of it, never joining
+  voice in between. *Changed:* the shell reads the list's last word on voice
+  right before it installs (`Busy` in `client/src-tauri/src/updates.rs`) and
+  answers busy, and the list installs once you've left; a test joins voice
+  after the press (`next-list-window.spec.ts`). Rule: a guard is checked again
+  right before the action, and tested with the state changing in between
+  (`docs/testing-strategy.md`).
+- **#794: a restart nobody pressed could install a release that hadn't had
+  its day.** The list approved the downloaded version, then the shell
+  installed whatever the feed called newest. *Missed because* the same gap:
+  approved at one moment, acted on at another. *Changed:* an install nobody
+  pressed takes only the kept update, while it's still the newest and a day
+  old by the feed now (`may_install_unattended`, with tests).
+- **#794: publishing a release built days before skipped its day.** The feed
+  carried the build's date until `updater-date.yml` dated it, and a copy that
+  looked in that minute found it a day old. *Missed because* the tests used a
+  date that never changed after a copy had read it. *Changed:* the release
+  build says it isn't published (a date in 2999, `updater-urls.mjs`) until
+  publishing dates it, and installs nobody pressed read the date again.
+- **#794: a "busy" answer that came back after you'd left voice left the
+  update waiting.** The list queued it for when you left, but you already
+  had, and the queue was only looked at when voice ended. *Missed because*
+  the test answered busy while still in voice, never after leaving. Second
+  round of the same gap as the call. *Changed:* the queue is looked at again
+  when an install comes back too, and tests answer in both orders
+  (`next-list-window.spec.ts`). Rule: an answer that can arrive after what
+  it depends on has changed is tested arriving before and after
+  (`docs/testing-strategy.md`).
+- **#794: re-running the release's feed job after publishing undated the
+  release.** The fix for the publishing gap had the job date the feed "not
+  published" every time it ran, and only publishing dated it again. *Missed
+  because* the job was written for its first run, before publishing.
+  *Changed:* it dates the feed by the release's own state, a draft or when it
+  was published, with tests of both (`datedFor` in `updater-urls.mjs`).
+- **#797: a server updated before it was ever reached said "Can't reach"
+  for good.** The app asked whether a server needs a newer app when its
+  connection came back or a retry failed, but only once it had been up:
+  one updated between signing in and connecting failed every try unasked.
+  *Missed because* the same gap again: the tests raised the server's
+  minimum only after it had connected. Caught by Greptile after #797 was
+  merged, which was mine: the watch I'd set read Greptile's one comment as
+  already seen. *Changed:* only the first time it's up is skipped, with a
+  test whose server never comes up (`next-list-window.spec.ts`).
+- **#794: Settings couldn't try again after a failed update.** Its Restart now
+  asked the list window, which did the install and kept a failure to itself,
+  so Settings stayed pressed, saying Linger would restart. *Missed because*
+  the test checked the press reached the list, not what came back.
+  *Changed:* the list says how it went (`UPDATE_SAID`), and a test fails it
+  from the list's side (`next-settings-window.spec.ts`). Rule: what another
+  window asks the list to do is tested failing (`docs/testing-strategy.md`).
+
+## A rule nothing checks
+
+- **#794: the update files blocked the async workers.** AGENTS.md says never
+  block the reactor, and `updates.rs` read and wrote tens of megabytes with
+  `std::fs` inside async commands. *Missed because* no check reads that
+  rule, and clippy can't tell which code runs on the reactor; a test of the
+  source is the wrong fix (above). *Changed:* the code is shaped so the
+  mistake is hard to make: every touch of the update folder from a command
+  goes through `Store`, whose methods run off the workers
+  (`spawn_blocking`), and installing does too.
+
 ## Tests written from the case in mind, not from the ways things fail
+
+- **#792: a share turned down while its files were read was sent anyway.**
+  The pick went on to the conversation once the read finished. *Missed
+  because* every test went straight through. *Changed:* the list keeps the
+  share its sheet shows, and a pick that finishes reading checks it's still
+  that one; a browser test closes the sheet partway. Rule: anything a person
+  can stop or overtake while it waits is tested interrupted
+  (`docs/testing-strategy.md`).
+- **#792: a second share while the first was read could mix with it.** The
+  shell looked the inbox up afresh for every file, so the second share's
+  bytes could go under the first's names, and "done" deleted the second.
+  *Missed because* as above. *Changed:* asking takes the share, moving it
+  aside under an id that reading and deleting name, with a shell test of a
+  share arriving mid-read and a browser test of the sheet it brings
+  (`shared.rs`).
+- **#792: a copy the phone stopped partway stayed.** Start-up cleaned the
+  inbox but not `shared-incoming`. *Missed because* the sweep test had only
+  an inbox in it. *Changed:* the sweep deletes a stopped copy and old taken
+  shares, tested with all three.
+- **#792: a file left out of a share went without a word.** *Missed
+  because* the tests read all of a share or none of it. *Changed:* why goes
+  with the files and the box says it, with a browser test where one of two
+  can't be read.
 
 - **#758: a download cut off half way.** The retry test dropped a
   connection before any bytes went, never part way through. *Missed because*
@@ -144,3 +267,34 @@ to be right for every shape that window takes.
   (#776): every sheet rises in the kit's one `Sheet`, which sets the height
   for all of them, and one kit test opens a menu, a card and a plain sheet on
   a short screen. Rule: a phone screen is tried held sideways.
+- **#780: a Text size chosen while storage refused showed but didn't
+  apply.** `saveTextSize` promised the session would still get the choice,
+  but `followTextSize` reads it back with `loadTextSize`, from storage, which
+  still held the old size or nothing. *Missed because* every test saved with
+  storage working. *Changed:* the phone keeps its choice in memory too, read
+  before storage, with a test where storage is full and one where it's gone
+  (`appearance.test.ts`). Interface size and the other Appearance choices
+  make the same promise on a computer, where the windows that apply them
+  read storage too; keeping it there needs Settings' announcement to carry
+  the choice to them.
+- **#796: a card opened from a cut topic had five holes.** A topic taller
+  than the window lost its end; the card stayed where it opened when the
+  window narrowed; pressing the words again closed and reopened it; words a
+  late font cut stayed plain, with no button; and words that changed under an
+  open card were taken over by it. *Missed because* the tests used one window
+  size, a topic that fitted in the card, one press, fonts already loaded, and
+  nothing changing while it was open: the case in mind. *Changed:* a test for
+  each, failing before its fix (`next-chat-window.spec.ts`). Rule: a card is
+  tested with words taller than the window, the window resized while it's
+  open, its opener pressed again, and what it shows changing under it
+  (`docs/testing-strategy.md`).
+
+## Comments that were wrong
+
+- **#798: "folder creation breaks the I/O rule".** Greptile read AGENTS.md's
+  "All I/O is async via tokio" as covering `phone_backup`'s
+  `create_dir_all`. It runs once at the top of `run()`, before Tauri starts,
+  so there's no async runtime yet and nothing to block; the rule is there so
+  nothing blocks the reactor. Awaiting `tokio::fs` there would mean starting
+  a runtime only to wait on it on the same thread, and the marking has to be
+  done before the web view writes anything. Kept as it is.

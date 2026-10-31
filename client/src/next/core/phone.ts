@@ -186,9 +186,10 @@ export function followKeyboard(visible: Visible, layoutHeight: () => number, roo
 }
 
 /**
- * The phone's Font size as a factor of the usual (`phone_text_scale`), kept
- * to a hundredth and never below 1: a phone set smaller than the usual
- * shrinks nothing of Linger's, and an answer that isn't a number is the usual.
+ * The phone's text size as a factor of the usual (`phone_text_scale`: Font
+ * size on Android, Text Size on an iPhone), kept to a hundredth and never
+ * below 1: a phone set smaller than the usual shrinks nothing of Linger's,
+ * and an answer that isn't a number is the usual.
  */
 export function textScale(asked: number): number {
   if (!Number.isFinite(asked) || asked <= 1) return 1;
@@ -196,30 +197,62 @@ export function textScale(asked: number): number {
 }
 
 /**
- * Size the page's text, line boxes, rows and controls by the phone's Font
- * size (`--text-scale`, which the phone's tokens multiply by in
- * styles/tokens.css). The web view's own text zoom is off (MainActivity): it
- * enlarged fonts and line spacing and nothing around them, and cut a name at
- * twice the size in half (2026-10-03, the emulator at its largest Font size).
- * Asked again whenever the app comes back, since Font size is changed in the
- * phone's Settings, away from Linger. Answers how to stop.
+ * The phone's text size with Linger's own Text size on top (#690), a
+ * percentage chosen in Settings: together never more than twice the usual,
+ * as the phone's alone never is.
  */
-export function followTextSize(page: Document, ask: () => Promise<number>): () => void {
+export function chosenTextScale(phone: number, chosen: number): number {
+  return textScale(textScale(phone) * (chosen / 100));
+}
+
+/** The part of `Document` that `followTextSize` needs, so tests can hand it a plain one. */
+export interface TextPage extends Showing {
+  documentElement: { style: { setProperty(name: string, value: string): void } };
+}
+
+/**
+ * Size the page's text, line boxes, rows and controls by the phone's text
+ * size and Linger's own Text size on top of it (`--text-scale`, which the
+ * phone's tokens multiply by in styles/tokens.css; #690). The web view's own
+ * text zoom is off (MainActivity): it enlarged fonts and line spacing and
+ * nothing around them, and cut a name at twice the size in half (2026-10-03,
+ * the emulator at its largest Font size). The phone is asked again whenever
+ * the app comes back, since its text size is changed in the phone's
+ * Settings, away from Linger. `chosen` is Linger's own (`loadTextSize`), read
+ * again whenever `changed` hears Settings change it (`onAppearance`). Answers
+ * how to stop.
+ */
+export function followTextSize(
+  page: TextPage,
+  ask: () => Promise<number>,
+  chosen: () => number,
+  changed: (listener: () => void) => () => void,
+): () => void {
   let gone = false;
+  let phone = 1;
+  const apply = () => {
+    page.documentElement.style.setProperty("--text-scale", String(chosenTextScale(phone, chosen())));
+  };
   const measure = () => {
     void ask()
       .catch(() => 1)
       .then((asked) => {
-        if (!gone) page.documentElement.style.setProperty("--text-scale", String(textScale(asked)));
+        if (gone) return;
+        phone = asked;
+        apply();
       });
   };
   const settle = () => {
     if (page.visibilityState === "visible") measure();
   };
+  // Linger's own size at once, before the phone has answered.
+  apply();
   measure();
   page.addEventListener("visibilitychange", settle);
+  const deaf = changed(apply);
   return () => {
     gone = true;
     page.removeEventListener("visibilitychange", settle);
+    deaf();
   };
 }

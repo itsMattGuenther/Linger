@@ -804,11 +804,59 @@ said, but only while it's true (decision 1, `core/notes.ts`,
   trying.", with the reason on hover, and a `Spinner` for its mark;
 - a keyring that can't keep sign-ins, with the key icon;
 - a server you host needing you (#582): its disk nearly full, its file space
-  nearly used up, or three days without a backup, with the house icon and a
-  small quiet "Hosting…" that opens Settings → Hosting → Server. The host's
-  alone: the server tells nobody else;
-- a new version, with the download icon and a small quiet "Update…" that opens
-  Settings → Account & App.
+  nearly used up, or three days without a backup, with the house icon and an
+  outlined `sm` "Server settings" that opens Settings → Hosting → Server. The
+  host's alone: the server tells nobody else. Not "Hosting…": that named a
+  section of Settings rather than what you get, and a quiet button there read
+  as more words (#772);
+- a server you host running an older release than the newest (#772): "The
+  Good Company is behind. 0.5.4 is out.", with the house icon and an outlined
+  `sm` "How to update" that opens the host guide's "Updating the server". One
+  version in the words: "runs 0.5.3. 0.5.4 is out." wrapped into two numbers
+  side by side at the list's width. The version it runs is on hover. The
+  host's alone too.
+
+Under the lines, an update (#772) is a block of its own: the mark, a title in
+`--text-primary` at `--text-control` (500), a line or two of 12.5px, and its
+buttons on a row under them, with an `sm` × at the end when it can be put
+away. The words start on the lines' edge.
+
+- **Ready** (a copy that installs by itself, downloaded): calm, on the foot's
+  own ground, since there's nothing to do. "Linger 0.5.4 is ready", "It
+  installs the next time Linger starts, or while you're away from your
+  computer." in `--text-muted`, and an outlined "Restart now", `unavailable`
+  in voice or while sharing ("Not while you're in voice."). Nothing is said
+  before the update is downloaded: on its day's wait, there's nothing to do.
+- **Out** (a copy somebody has to update: one that needs a password, or one
+  the system updates): lit, like a DM nobody has read, since it's news and
+  needs doing. "Linger 0.5.4 is out", the release's one line, and for a
+  system's copy "It comes with your next system update." in `--text-muted`. A
+  `primary` "Update" for a copy that needs a password, an outlined "What's
+  new", and × ("Not now") puts it off until tomorrow, on this computer.
+- **Just installed**: lit, with the check mark: "You're on Linger 0.5.4", the
+  one line, "What's new", and × ("Close"). Once, on the first start of a new
+  version.
+- **A server that needs a newer Linger** (#793, PROTOCOL §9): lit, with the
+  download mark, before the other blocks. "Casa da Ribeira needs a newer
+  Linger", then "It works with Linger 0.5.4 or newer. Your other servers still
+  work.", the last sentence only when there are others. A `primary` "Update now"
+  on a copy that installs itself, `unavailable` in voice or while sharing; it
+  doesn't wait out the day an update otherwise waits. No button anywhere else:
+  an Arch copy gets "It comes with your next system update (sudo pacman -Syu)."
+  in `--text-muted`, a phone "Update Linger from Google Play." or "Update Linger
+  from TestFlight.", and a copy that can't update itself where to get a new one.
+  No ×: the server can't be used until Linger's updated, so there's nothing to
+  put off. Several such servers share one block, named together ("Casa da
+  Ribeira and Pinecone need a newer Linger"). While it shows, the ready and out
+  blocks don't: they'd say the same thing again, less urgently.
+
+The server itself stays in the list, after the ones that work, as a section
+of its own with the list's sections around it, even beside one other server or
+none: its header dimmed, the name in `--text-muted`, its color mark at half
+strength, no caret, no dots (Linger isn't connected, so nobody's known to be
+on), nothing to press, and "needs a newer Linger" where a folded server's line
+goes. It's named by its address when it hasn't said its name since Linger
+started, as a server not reached yet is.
 
 With nothing to say, nothing is drawn: no bar, no hairline. Protocol words
 ("tls ok…", "ready (28ms)") are never shown. The storage figure lives in the
@@ -969,7 +1017,13 @@ replaces an unread count.
 **Around the conversation:**
 
 - **Pane header**, 40px: a room's `#name`, who's in it (markers) and its
-  topic; a DM's people, a 1:1's status, and Knock.
+  topic; a DM's people, a 1:1's status, and Knock. The topic and the status
+  are one line, cut with "…" when they're longer than the header; cut, they're
+  a button, dotted as the app marks words that open more ("and others"), and
+  a click or a tap opens the whole of it in a `Popover`, a `Sheet` on the
+  phone, where the words take the header's whole height to tap (#778). Not
+  cut, they're only words. A conversation's own window drags by every part of
+  its title bar but buttons, so the cut words don't drag it.
 - **A room's message of the day** (#464, `app/chat/MotdStrip.tsx`): a strip
   under the header, on the window's own ground with a hairline under it (news,
   never a wash or the lamp). The pin (`--icon-muted`), the words whole as a

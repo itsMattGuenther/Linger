@@ -168,7 +168,10 @@ function Install-Package([string]$Kind, [string]$Package, [string]$Log, [switch]
         # Same installation path as the updater, without relaunching the app.
         Invoke-Installer msiexec.exe "/i `"$Package`" /passive /norestart /l*v `"$Log`""
     } elseif ($Update) {
-        Invoke-Installer $Package '/P /UPDATE'
+        # As Linger runs it to update itself (#772, src-tauri/src/updates.rs):
+        # the updater's passive update, its /ARGS (none here), and /S, so the
+        # setup.exe shows no window. Without /R, so the app isn't started.
+        Invoke-Installer $Package '/P /UPDATE /ARGS /S'
     } else {
         Invoke-Installer $Package '/S'
     }

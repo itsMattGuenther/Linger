@@ -205,10 +205,29 @@ rules that came out of them.
   open: the second must be that one's own, with the keyboard and nothing
   left from the first. Every test that opened one card and closed it missed
   that the voice bar's card kept the last one's refusal (#774).
+- **A card or popover is tested at its limits:** words taller than the
+  window, the window resized while it's open, its opener pressed again, and
+  what it shows changing under it. A topic's card failed all four, and a late
+  font cutting words that fitted, the first time it was reviewed (#796).
 - **A value shared between windows is tested changing in another window
   while it's showing**, after a change made here and before the owner's
   answer to it: a card that held its own level until it closed showed none
   of the changes made in the voice bar (#774).
+- **A check that guards an action is made again right before the action**
+  when anything slow sits between them (a network request, a download, a
+  password prompt), and **tested with the state changing in between**: the
+  list checked voice before asking the shell to update, the shell then
+  fetched and downloaded for a minute, and a call joined in that minute was
+  restarted (#794). The same for a date or a version approved earlier: an
+  install with nobody pressing anything reads the feed again. And an answer
+  that can come back after what it depends on has changed is tested arriving
+  before the change and after it (#794).
+- **A release job is safe to run again** after the release is published:
+  re-running one once undated a published release's feed (#794).
+- **What another window asks the list to do is tested failing**, from the
+  list's side, and the asking window shows it: Settings' Restart now stayed
+  pressed, saying Linger would restart, after the list's install failed
+  (#794).
 - **A phone screen is tried held sideways**, short and wide, as well as
   upright. Whatever rises from the bottom does so in the kit's `Sheet`,
   which is never taller than the screen; its own test covers every kind
@@ -218,6 +237,20 @@ rules that came out of them.
   `/usr/lib` (Arch), `/usr/lib64` (Fedora), `/usr/lib/x86_64-linux-gnu`
   (Debian, Ubuntu). And never bind-mount a path that might be missing: Docker
   makes an empty directory in its place (#757).
+- **A fallback covers only the case it's for.** `a | b || echo none` also
+  hides `a` failing. Run what has to work on its own line, and treat only
+  the exit status that means "nothing found" (`grep`'s 1) as none. Then run
+  the step once with each part failing, with stand-ins on `PATH`. The iPhone
+  build's report of Apple's listed calls read a failed `nm` as none of
+  them (#781).
+- **Anything a person can stop or overtake while it waits** (reading files,
+  a pick, an upload) **is tested interrupted:** turned down partway,
+  overtaken by something newer, and partly failed. After each wait the code
+  checks it's still wanted. Sharing to Linger was tested only going through,
+  and a share turned down while it read was sent anyway (#792).
+- **What the phone app writes outside its temporary and cache folders is
+  kept out of backups** (SPEC §4.15): marked on the iPhone, where an App
+  Group's folder is backed up by default (#792).
 
 ## A test that fails at random
 

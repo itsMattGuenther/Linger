@@ -104,7 +104,11 @@ const desktop = fakeDesktop({
     "plugin:window|inner_size": () => ({ width: 720, height: 640 }),
     "plugin:window|set_size": (args) => desktop.note(`size:${JSON.stringify(args.value)}`),
     app_version: () => "0.3.6",
-    update_check: () => ({ kind: "current" }),
+    // `?update`: 0.4.0 downloaded and ready (#772).
+    update_check: () =>
+      query.has("update")
+        ? { kind: "newer", version: "0.4.0", line: null, published: 0, downloaded: true, silent: true }
+        : { kind: "current", silent: true },
     newest_version: () => "0.4.4",
     autostart_state: () => (startup === "none" ? null : { on: startsAtSignIn, ignored_by: startup === "hyprland" ? "Hyprland" : null }),
     autostart_set: (args) => {
@@ -168,6 +172,8 @@ declare global {
       signedOut: (server: string) => void;
       /** The list window says your servers' order or Quiet changed. */
       prefs: (prefs: { order: string[]; quiet: string[] }) => void;
+      /** The list window says how a Restart now went (#794 review). */
+      updateSaid: (said: { problem: string | null; waiting: boolean }) => void;
     };
   }
 }
@@ -175,6 +181,7 @@ window.shell = {
   section: (key, server) => desktop.deliver("next:section", { section: key, server: server ?? null }),
   signedOut: (server) => desktop.deliver("next:signedout", { v: 1, server }),
   prefs: (prefs) => desktop.deliver("next:serverprefs", { v: 1, prefs }),
+  updateSaid: (said) => desktop.deliver("next:update-said", { v: 1, ...said }),
 };
 
 if (query.has("full")) {

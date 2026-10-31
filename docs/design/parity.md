@@ -83,7 +83,9 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
    while it's true: a server not connected after five seconds, sign-ins not
    remembered, a new version (with Update…, which opens Settings). The
    storage figure moved to the Media window, beside how long files are kept.
-   The protocol words ("tls ok…", "ready (28ms)") are gone.
+   The protocol words ("tls ok…", "ready (28ms)") are gone. **2026-10-31
+   (#772):** nobody noticed the version line, so Linger updates itself now,
+   and the foot says so in lines of its own (`docs/design/system.md`).
 2. **Light theme.** The design is dark only; today has dark, light and
    follow-the-system. Keep dark only, or design a light version before the
    switch? *(LOOK-3)*
@@ -336,6 +338,7 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
 | FILE-6 | Downloads go to the system browser and say so. A failed handoff offers a retry and a selectable URL, and never claims the file was saved. | `media/DownloadFile.tsx`, SPEC §4.10 | Same, with a Copy button beside the address, and on an iPhone no browser: the app fetches the file and opens the share sheet with it (#703, `core/download.ts`, `src-tauri/src/phone_save.rs`) | F + D | 🟡 hands off to the browser, says so without claiming it's saved, and a failed handoff offers Try again; the address is there to copy either way, and Copy copies it (next-chat.spec.ts). On an iPhone the card and Media ask the shell instead, busy until the sheet shows, and one it couldn't get offers Try again and the address; Android still goes to the browser (next-phone.spec.ts, core/download.test.ts). Needs a check that the browser really opens in the desktop app, and that the share sheet opens on a real iPhone (TestFlight testers) |
 | FILE-7 | Local media paths resolve against the server that supplied them, never the webview (T-920). | `Attachments.tsx`, `lib/url.ts` | Same | U + D | 🟡 built; needs a desktop check |
 | FILE-8 | Link cards: one line with favicon, title and domain. Favicons arrive as `data:` URIs; the client never contacts a linked site. Fetched in batches per server. A YouTube video's title comes from YouTube's oEmbed answer, because its page is too big to read (#300). | `media/LinkCards.tsx`, `lib/previews.ts`, `POST /links/preview` | Same | C + F | ✅ (next-chat.spec.ts, words.test.ts; YouTube in `links.rs` and `repo/links.rs` unit tests, and a by-hand live check) |
+| FILE-9 | On a phone, files shared from another app's share sheet arrive in a conversation's message box of your choosing, unsent. Only files; nothing about the app that shared them is read or sent (#785, SPEC §4.15). | none | Phone app only | U + F | 🟡 built (core/shareInbox.test.ts, `src-tauri/src/shared.rs` and `deep_link.rs` unit tests); needs a check on a real Android phone and, once `ios.yml` signs the share extension, a TestFlight iPhone |
 
 ## MEDIA — the media collection
 
@@ -480,6 +483,7 @@ there or where the design puts it.
 | SET-3 | Settings opens from a gear (today: beside your name). Escape closes panels and returns focus. | `App.tsx` | Its own window, from the list's gear. New: Ctrl+, opens it too. | F | ✅ (next-list-window.spec.ts, next-settings-window.spec.ts) |
 | SET-4 | Every section's copy is short and states effects (for example "Use plain names and message fonts"). | `settings/copy.ts` | Same | U | ✅ (settings.test.ts) |
 | SET-5 | Start Linger when you sign in to the computer (#228). Off on a new install; the switch shows what the computer has (Windows' per-user Run key, a Linux autostart entry), says a refusal in words, and says when the desktop won't start it by itself. Not offered on macOS. | new | Settings → Account & App → This Computer (`src-tauri/src/autostart.rs`) | U + F + M | 🟡 built (autostart.rs and desktop_entry.rs tests, core/autostart.test.ts, next-settings-window.spec.ts, next-settings.spec.ts); needs a real sign-in on Windows and on a Linux package and AppImage |
+| SET-6 | The privacy page and where to report a problem (#779), which App Review wants inside the app (Apple's guidelines 5.1.1(i) and 1.2). Each opens in the browser, never in the app's window. | new | Settings → Account & App → This Computer, or This Phone | F | ✅ (next-settings.spec.ts, next-phone.spec.ts) |
 
 ## EXP — take everything with you
 
@@ -492,12 +496,12 @@ there or where the design puts it.
 
 | ID | Capability | Today | Buddy list | Proof | Status |
 |---|---|---|---|---|---|
-| UPD-1 | Checks at launch and when Settings opens. Nothing downloads until asked; every update is verified against the signing key. | `lib/updates.ts`, `src-tauri/src/updates.rs` | Same, **owner only**, and again every 12 hours while it runs in the tray | C + F | ✅ (next-list-window.spec.ts "looked for at launch", next-settings.spec.ts) |
+| UPD-1 | Checks at launch and when Settings opens. Nothing downloads until asked; every update is verified against the signing key. | `lib/updates.ts`, `src-tauri/src/updates.rs` | **Changed (#772): Linger updates itself.** Checked at launch and every 12 hours, **owner only**; a release a day old is downloaded in the background, verified, and verified again before it installs at the next start or after half an hour unused. Never in voice or while sharing | C + F | ✅ (next-list-window.spec.ts "#772", next-settings.spec.ts, Rust `updates` tests) |
 | UPD-2 | States: ready (with version), current, unconfigured (a browser or dev build), failed (with reason), and managed (the system updates it). | `updates.ts` | Same | U | ✅ (lib/updates.test.ts, next-settings.spec.ts) |
 | UPD-3 | Managed installs (the Arch package marker) say "updates with your system" and never try to replace themselves. | `src-tauri/src/packaging.rs`, `updates.ts` | Same | C + U | ✅ (lib/updates.test.ts, Rust tests) |
 | UPD-4 | Release notes are a link to the release page, not printed in the app (#174). | Settings → Updates | Same | F | ✅ (next-settings.spec.ts) |
-| UPD-5 | "Update ready" is a quiet hint that opens Settings, with no dialog and no restart. | `App.tsx` status bar | A line at the list's foot with Update…, which opens Settings (decision 1) | F | ✅ (next-list-window.spec.ts "a new version gets one quiet line") |
-| UPD-6 | Installing replaces the app; a failure says why. | `update_install` | Same | D + M | 🟡 built; needs a desktop check |
+| UPD-5 | "Update ready" is a quiet hint that opens Settings, with no dialog and no restart. | `App.tsx` status bar | **Changed (#772):** a calm "is ready" line at the list's foot with Restart now; a lit "is out" for a copy that needs a password (with Update) or the system updates; "You're on …" once after; the tray's Restart to update Linger | F | ✅ (next-list-window.spec.ts "#772") |
+| UPD-6 | Installing replaces the app; a failure says why. | `update_install` | `update_now` and `update_install_pending` (#772); a failure is said on the foot's line | D + M | 🟡 built; needs a desktop check |
 
 ## HOST — running the server
 

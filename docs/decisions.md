@@ -735,7 +735,11 @@ eGGnogSC's proposal on #253 over his own brainstorm of 2026-09-26, which had a
   Google Play first, with Matt paying the $25, and only once it has worked
   well there does it go to Apple. Until then the iPhone build only keeps
   compiling in CI, and the iPhone-only checks (swiping back, iPhone photos)
-  wait with it. Getting the app to other people (T-1604) waits until report
+  wait with it. *Since then:* Matt's Apple Developer membership came through,
+  and the iPhone app went to friends through TestFlight from 0.5.1
+  (2026-10-20), beside Play's internal test. Friends with iPhones have tested
+  it since, swiping back and photos included (#697, #785). The App Store
+  itself still comes after Play (#779). Getting the app to other people (T-1604) waits until report
   and block are done and Matt says go.
 - **Friends first, from the release page** (Matt, 2026-10-03). Report and
   block were done and every Pixel check had passed, so Matt said go, for the
@@ -1572,6 +1576,74 @@ allow, and "if it sounds bad, the people they're talking to will say so". On
   back into the app; this is the opposite, the way out of a call you're in. The iPhone
   needs no bar: it shows its own call indicator.
 
+## Decided — sharing to Linger from the phone's share sheet (#785)
+
+**Matt, 2026-10-31.** Linger is in the phone's own share sheet, on both
+phones, as SPEC §4.15 says. Why it works the way it does:
+
+- **Files only, into the message box, never sent on their own.** The share
+  sheet is a place people are in a hurry, and a wrong tap on a conversation
+  would post a screenshot to the wrong room. So choosing a conversation fills
+  its message box with the files and waits. Same upload path, limits and
+  picture-location stripping as the + button (`useFileDrafts`).
+- **No text or links, for now.** #785 asks about screenshots and photos.
+  Taking text and links needs a second look at what a shared page title or
+  address leaks, so it waits for someone to ask.
+- **Both phones at once.** The phone app went Android first ("Android first,
+  Apple after", 2026-10-03) because nobody on the project had an iPhone. The
+  iPhone app has since been tested on friends' iPhones through TestFlight, so
+  both get this together. Most of it is the shell and page code both share;
+  Android adds one intent filter, and the iPhone a share extension and an App
+  Group. Only a Mac builds the iPhone's half, so `ios.yml` is the first place
+  it's built and signed.
+- **One inbox folder, written by the phone, read by the shell.** Android's
+  `SharedInbox.kt` copies into the app's own `files/shared`; the iPhone's
+  share extension, a separate program that can't reach the app's storage,
+  copies into `shared` in the App Group's folder. Each file goes in a numbered
+  folder of its own, so names are kept and order is the share's, and a new
+  share replaces the last whole (written beside it and swapped in with one
+  rename, so the page never reads half a file). Neither phone calls into Rust:
+  the shell only lists the folder (`shared.rs`), and the page asks it, as for
+  files dropped on Linux (`dropped.rs`), never naming a path.
+- **Asking takes the share.** The shell moves the inbox aside under an id
+  when the page asks what's waiting, and reading and deleting name that id.
+  A share that arrives while the last is still being read lands in an empty
+  inbox, so it can't mix its files in or be deleted with it, and a pick that
+  finishes reading after the sheet was closed, or replaced by a newer share,
+  sends nothing (#792).
+- **Ten minutes, then deleted.** Android brings Linger forward with the share.
+  An iPhone may not let a share extension open the app, and then the person
+  opens it themselves, so a share waits ten minutes, not one. Once it's in a
+  message box or turned down it's deleted at once, and one nobody took is
+  deleted when the app next starts, as is a copy the phone stopped partway.
+- **Out of backups, as the rest of the phone app is.** Android's
+  `allowBackup="false"` already covers its files folder. An App Group's folder
+  is backed up unless marked, so the share extension marks its folder before
+  writing, and the mark moves with it (#792). The iPhone app's own folders are
+  marked at start-up by `phone_backup.rs` (#790).
+- **Only the bytes of what was chosen, only after choosing.** The sheet is
+  drawn from names and sizes; the files are read once a conversation is
+  picked, so a long video doesn't sit in memory while the person decides.
+- **Never a way back into Linger's own files.** On Android a share is any app's
+  `content://` address, and a crafted one could point at Linger's own storage
+  and put its private files in a message box. So `file://` addresses and
+  Linger's own providers are refused.
+- **No text on Android.** The intent filter takes `image/*`, `video/*`,
+  `audio/*` and `application/*`, not `text/*`, so Linger isn't offered for a
+  link shared from a browser. A `.txt` file shared from a files app is left
+  out with it; a `.txt` is still attached with + as before.
+- **`linger://shared`, carrying nothing.** The iPhone's extension opens it to
+  bring Linger forward. `deep_link.rs` reads it as strictly as the invite
+  links: exactly that, no path, no query. It only tells the list to look in
+  the inbox; no link ever names a file.
+- **Costs.** A second bundle ID and an App Group registered with the Apple
+  account. Automatic signing may cover both, to be confirmed on a first CI
+  build. The extension runs in a small process and can't hold a large video in
+  memory, so it copies by file, not by data.
+- **Not decided:** whether a share to a server you aren't signed in to offers
+  to add it (leaning no), and what the picker does for a group DM with muted
+  members.
+
 ## Decided — how far back apps and servers work together
 
 **Matt, 2026-10-19 (#315).** Parked on 2026-09-28 while the design settled. It came back
@@ -1777,3 +1849,104 @@ Watch in a conversation they weren't reading. Matt picked from mockups of five i
 - **No desktop notification.** Banners are for what's addressed to you (SPEC §4.2); the
   sound already reaches somebody looking at another app, and over a game it would be one
   more pop-up.
+
+---
+
+## Decided — the phone's own Text size (#690)
+
+**Matt, 2026-10-21.** The phone app gets a **Text size** of its own, under Settings ›
+Appearance. That reverses SPEC §4.15's call that the phone's own display and text size
+settings were enough: a tester found Linger's text too small, and somebody may want
+Linger's words bigger without changing every app on their phone.
+
+- **On top of the phone's own text size**, which Linger keeps following: Font size on
+  Android and, from #690, Text Size on an iPhone, Accessibility's Larger Text included
+  (`phone_text.rs` reads UIKit's body text style). Together they stop at twice the usual,
+  where the phone's alone always stopped, so the geometry tests' largest case still
+  covers both.
+- **Four steps: 100%, 115%, 130% and 150%**, the ones the issue suggested. They are
+  smaller than Interface size's (100–200%), so a phone's screen still holds a
+  conversation.
+- **Kept on the phone**, as Interface size is kept on a computer, and never sent
+  anywhere.
+- **Still no Interface size on the phone.** It zooms the window, and a phone's window
+  doesn't zoom (#689).
+
+---
+
+## Decided — Linger updates itself (#772)
+
+**Matt, 2026-10-31.** Nobody noticed when a new version was out: the list's grey
+"Linger 0.5.3 is ready." read like a status line, and people found new versions in
+Settings or because Matt told them. They missed fixes, reported bugs that were already
+fixed, and ran apps out of step with their servers. So Linger updates itself instead of
+asking more loudly. That reverses Settings' "Nothing is downloaded until you ask for it",
+which was never a recorded decision, only the first build's default (T-701).
+
+- **No switch to turn it off.** An app that can stay behind brings the whole problem
+  back (Matt: it "breaks the whole concept").
+- **A day's head start.** A copy installs a release by itself only once it's a day old,
+  by the feed's date, which `updater-date.yml` sets when the release is published;
+  until then the feed says it isn't published (a date in 2999), so nothing counts its
+  day from the build. An install nobody pressed reads the date again first. Matt
+  and anybody who presses Restart now go first. Linger has no crash reports (hard rule
+  4), so this is how a bad release is caught before it reaches everybody: it's marked a
+  pre-release, and `releases/latest` stops offering it. Accepted risk: a bad release
+  that gets past the day reaches everybody on their next start.
+- **Installed at a moment that interrupts nobody.** Downloaded in the background,
+  verified against the signing key, kept in the app's cache folder and verified again
+  right before it's installed: at the next start ("Updating to Linger 0.5.4…"), or after
+  30 minutes with nobody using Linger (idle for presence is 10). Never in voice or while
+  sharing a screen; the list window decides, since only it knows, and the shell checks
+  the list's last word on voice again right before installing. Linger comes back as
+  it was: in the tray if the list was there, and without taking the focus after a
+  restart nobody pressed.
+- **The foot of the list says so**, calmly while it's ready ("Linger 0.5.4 is ready",
+  with Restart now), and in the lamp once after ("You're on Linger 0.5.4", with the
+  release's one line). The tray gets Restart to update Linger while one waits.
+- **Copies that need a password ask, with a button** (Matt's choice of three). The .deb
+  and .rpm install through pkexec and the .msi needs Windows' admin prompt, so they
+  download by themselves but install only when somebody presses Update, under a lit
+  "Linger 0.5.4 is out" that Not now puts off until tomorrow. The setup.exe (per user)
+  and the AppImage need no password and update silently.
+- **Arch copies get the notice and only the notice** (2026-10-30): pacman updates them.
+  The words are true on any Arch system ("It comes with your next system update"), never
+  the Omarchy menu, and don't promise the package is in the repository yet.
+- **A host whose server is behind hears it at the foot**, with How to update: apps now
+  run ahead of servers most of the time, and a server only updates when its host runs
+  `./update.sh`. The disk and backup lines' "Hosting…" became "Server settings", since
+  "Hosting…" named a section of Settings rather than what you get.
+- **A server too new for an old app** is a separate job: the app asks you to update
+  before using that server (#793).
+- **Phones** are updated by their stores and aren't part of this.
+
+---
+
+## Decided — a server says the oldest app it works with (#793)
+
+**Matt, 2026-10-31.** Split out of #772. The "this app needs one" half of
+PROTOCOL §9's plain-words promise, built now rather than with the first real
+break, as #315 had it: a block, used only when an old app truly can't work with
+a newer server, as voice before 0.4.1 couldn't (#306). Not something every
+release does.
+
+- **The server says it, the app decides.** `GET /health` sends `oldest_client`,
+  the constant `linger_core::OLDEST_CLIENT`: no sign-in needed, so it still works
+  when the break is in signing in, and hosts can't change it. The app compares
+  it with its own version, so the server never learns who runs what (hard rule
+  4). Anything that isn't a plain release number never blocks.
+- **Only that server stops.** The app doesn't connect to it and keeps its
+  sign-in for the updated app; the others keep working. Its row is dimmed with
+  "needs a newer Linger", and the list's foot says so in the lamp, with Update
+  now (no day's wait, never in voice or while sharing), no ×. Arch copies and
+  phones get the words and where the new one comes from instead of a button.
+  Adding or signing in to such a server says it before asking for a password.
+- **Raised only by the change that breaks older apps**, with a line here, and
+  announced in the notes of the release before (`docs/releasing.md`). It starts
+  at `0.4.1`, the last break there was, which blocks nothing: only apps from the
+  release that ships the field read it. It's never raised past the version the
+  server is built as, or the server would turn away its own app; a test in
+  linger-core checks.
+- **Accepted limit:** apps already out there can't read it, so the first real use
+  is a break after this ships.
+

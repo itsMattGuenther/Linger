@@ -85,6 +85,8 @@ This is not an attempt to build a better platform. It's an attempt to not need o
 - **Files and media.** 500 MB uploads, with where a photo or video was taken
   always stripped. Media, a tab
   beside your list, keeps everything ever shared; star things to keep them forever.
+  On a phone, Linger is in the share sheet: share a photo or file from another
+  app, pick a conversation, and it waits in that message box for you to send.
 - **Voice rooms** with mute, deafen, push-to-talk and per-person volume. The
   talk key works with a game in front on Windows and Linux, and Linger listens
   for that one key and nothing else. Voice goes through the host's server,
@@ -178,8 +180,9 @@ curl -fsSL https://raw.githubusercontent.com/itsMattGuenther/Linger/main/packagi
 
 **Windows will warn you** ("Windows protected your PC"): choose *More info*,
 then *Run anyway*. The installer isn't code-signed; that's a
-[decision](docs/decisions.md), not a broken download. Updates are signed, and
-the app checks the signature before installing one.
+[decision](docs/decisions.md), not a broken download. After that, Linger
+updates itself, never while you're in voice. Updates are signed, and the app
+checks the signature before installing one.
 
 ## 🚀 Running a server
 
@@ -251,15 +254,15 @@ docs ([SPEC](SPEC.md), [ARCHITECTURE](ARCHITECTURE.md),
 
 ## 🙏 Thanks
 
-**To the people who've helped build Linger**, in the order they joined in:
+**To the people who've helped build Linger**, in the order they joined in.
+Each one's link shows everything of theirs that's been merged, and stays up to
+date by itself:
 
-- [@eGGnogSC](https://github.com/eGGnogSC), for messages that show up
-  the moment they're sent ([#133](https://github.com/itsMattGuenther/Linger/pull/133))
-  and a sidebar that no longer scrolls sideways ([#84](https://github.com/itsMattGuenther/Linger/pull/84)).
-- [@Gleasonmt](https://github.com/Gleasonmt), for getting the iPhone app ready
-  for Apple's iOS 15 rule ([#749](https://github.com/itsMattGuenther/Linger/pull/749)).
+- [@eGGnogSC](https://github.com/itsMattGuenther/Linger/pulls?q=is%3Apr+is%3Amerged+author%3AeGGnogSC)
+- [@Gleasonmt](https://github.com/itsMattGuenther/Linger/pulls?q=is%3Apr+is%3Amerged+author%3AGleasonmt)
 
-Everybody whose work ships is added here, and thanked in that release's notes.
+Everybody whose work ships is added here once, and thanked for what they did
+in that release's notes.
 
 **And to everyone who's chipped in on [Ko-fi](https://ko-fi.com/mattguenther).**
 It goes toward what Linger costs to keep going, month after month: the servers

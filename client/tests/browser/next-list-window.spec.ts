@@ -465,12 +465,14 @@ test.describe("adding a server", () => {
 test.describe("adding a server you're already on", () => {
   test("says so, and asks nothing of it", async ({ page }) => {
     await open(page, "?one");
+    // Signing back in at launch asks it which app it works with (#793); the paste asks nothing more.
+    const asked = (await did(page)).filter((line) => line === `GET ${HOME}/health`).length;
     await page.evaluate(() => window.core?.ask("next:intent", { kind: "addserver" }));
     const box = page.getByRole("textbox", { name: "Server or link" });
     await box.fill("good-company.example");
     await box.press("Enter");
     await expect(page.getByText("You're already signed in to The Good Company.")).toBeVisible();
-    expect((await did(page)).filter((line) => line === `GET ${HOME}/health`)).toEqual([]);
+    expect((await did(page)).filter((line) => line === `GET ${HOME}/health`)).toHaveLength(asked);
   });
 
   test("the voice bar stays in reach under the sign-in", async ({ page }) => {
@@ -1272,26 +1274,401 @@ test("a server that can't be reached for a few seconds says so by name, with the
   await expect(notes(page)).toHaveCount(0);
 });
 
-test("a new version gets one quiet line, and Update… opens Settings where it's installed", async ({ page }) => {
+// Linger updates itself (#772): the foot says so, the tray offers it, and
+// nothing restarts in voice or while you share a screen.
+const updates = (page: Page) => page.locator("[data-screen='list-notes'] .nx-update");
+const trayUpdate = async (page: Page) => (await did(page)).filter((line) => line.startsWith("next_tray_voice")).at(-1) ?? "";
+
+test("a downloaded update is a calm line that says when it installs, and Restart now installs it (#772)", async ({ page }) => {
   await open(page, "?one&update");
-  await expect(notes(page)).toHaveText(["Linger 0.4.1 is ready.Update…"]);
-  await notes(page).getByRole("button", { name: "Update…" }).click();
-  expect((await did(page)).filter((line) => line.startsWith("next_open_settings")).at(-1)).toBe(
-    `next_open_settings:${JSON.stringify({ section: "account", server: null })}`,
-  );
+  const ready = updates(page);
+  await expect(ready).toHaveCount(1);
+  await expect(ready).toHaveAttribute("data-note", "update");
+  // Calm: there's nothing anybody has to do, so it isn't in the lamp.
+  await expect(ready).not.toHaveAttribute("data-lit", "yes");
+  await expect(ready).toContainText("Linger 0.4.1 is ready");
+  await expect(ready).toContainText("It installs the next time Linger starts, or while you're away from your computer.");
+  await expect(ready.getByRole("button", { name: "What's new" })).toHaveCount(0);
+  // The tray offers it too, and its tooltip says so.
+  await expect.poll(() => trayUpdate(page)).toContain(JSON.stringify({ update: { text: "Restart to update Linger", tip: "0.4.1 is ready" } }).slice(1, -1));
+  await ready.getByRole("button", { name: "Restart now" }).click();
+  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("update_now"))).toEqual(["update_now shown"]);
 });
 
-test("a server you host says when its disk is nearly full or it hasn't been backed up, and Hosting… opens its Settings (#582)", async ({ page }) => {
+test("the tray's Restart to update Linger installs it too (#772)", async ({ page }) => {
+  await open(page, "?one&update");
+  await expect(updates(page)).toHaveCount(1);
+  await page.evaluate(() => window.core?.tray("update"));
+  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("update_now"))).toEqual(["update_now shown"]);
+});
+
+test("nothing restarts in voice: Restart now waits, and Settings' press is done once you've left (#772)", async ({ page }) => {
+  await open(page, "?one&update");
+  const bar = page.getByRole("region", { name: /In voice/ });
+  await expect
+    .poll(
+      async () => {
+        await page.evaluate(() => window.core?.ask("next:intent", { kind: "voice.join", server: "https://good-company.example", roomId: "r-general" }));
+        await page.waitForTimeout(250);
+        return bar.count();
+      },
+      { timeout: 10_000 },
+    )
+    .toBe(1);
+  const restart = updates(page).getByRole("button", { name: "Restart now" });
+  await expect(restart).toHaveAttribute("aria-disabled", "true");
+  await restart.click({ force: true });
+  await page.evaluate(() => window.core?.tray("update"));
+  // Settings can't see voice: its Restart now waits for you to leave.
+  await page.evaluate(() => window.core?.ask("next:intent", { kind: "update" }));
+  await page.waitForTimeout(300);
+  expect((await did(page)).filter((line) => line.startsWith("update_now"))).toEqual([]);
+  await page.evaluate(() => window.core?.tray("leave"));
+  await expect(bar).toHaveCount(0);
+  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("update_now"))).toEqual(["update_now shown"]);
+});
+
+test("an update on its day's wait says nothing until it's downloaded (#772)", async ({ page }) => {
+  await open(page, "?one&update=waiting");
+  await page.waitForTimeout(300);
+  await expect(page.locator("[data-screen='list-notes']")).toHaveCount(0);
+  expect(await trayUpdate(page)).not.toContain("update");
+  await page.evaluate(() => window.core?.downloaded());
+  await expect(updates(page)).toContainText("Linger 0.4.1 is ready");
+});
+
+test("a copy that needs a password is asked, in the lamp, and can put it off until tomorrow (#772)", async ({ page }) => {
+  await open(page, "?one&update=password");
+  const out = updates(page);
+  await expect(out).toHaveAttribute("data-lit", "yes");
+  await expect(out).toContainText("Linger 0.4.1 is out");
+  await expect(out).toContainText("Screen sharing, and fixes for voice.");
+  await expect(out.getByRole("button", { name: "Restart now" })).toHaveCount(0);
+  await expect.poll(() => trayUpdate(page)).toContain(JSON.stringify({ update: { text: "Update Linger", tip: "0.4.1 is out" } }).slice(1, -1));
+  await out.getByRole("button", { name: "What's new" }).click();
+  expect(await did(page)).toContain("open https://github.com/itsMattGuenther/Linger/releases/tag/v0.4.1");
+  await out.getByRole("button", { name: "Update", exact: true }).click();
+  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("update_now"))).toEqual(["update_now shown"]);
+});
+
+test("Not now puts an \"is out\" line off until tomorrow, on this computer (#772)", async ({ page }) => {
+  await open(page, "?one&update=password");
+  await updates(page).getByRole("button", { name: "Not now" }).click();
+  await expect(page.locator("[data-screen='list-notes']")).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator("[data-screen='list']")).toBeVisible();
+  await page.waitForTimeout(300);
+  await expect(page.locator("[data-screen='list-notes']")).toHaveCount(0);
+});
+
+test("an Arch copy is told it's out, with nothing to install and nothing in the tray (#772)", async ({ page }) => {
+  await open(page, "?one&update=arch");
+  const out = updates(page);
+  await expect(out).toHaveAttribute("data-lit", "yes");
+  await expect(out).toContainText("Linger 0.4.1 is out");
+  await expect(out).toContainText("It comes with your next system update.");
+  await expect(out).not.toContainText("Omarchy");
+  await expect(out.getByRole("button", { name: /^(Update|Restart now)$/ })).toHaveCount(0);
+  await expect(out.getByRole("button", { name: "What's new" })).toBeVisible();
+  expect(await trayUpdate(page)).not.toContain("update");
+});
+
+test("the first start after an update says so once, in the lamp, with what's in it (#772)", async ({ page }) => {
+  await open(page, "?one&updated");
+  const updated = updates(page);
+  await expect(updated).toHaveAttribute("data-note", "updated");
+  await expect(updated).toHaveAttribute("data-lit", "yes");
+  await expect(updated).toContainText(/^You're on Linger \d+\.\d+\.\d+/);
+  await updated.getByRole("button", { name: "Close" }).click();
+  await expect(page.locator("[data-screen='list-notes']")).toHaveCount(0);
+});
+
+test("an update kept for this start goes in before the list, which starts as it is if it can't (#772)", async ({ page }) => {
+  await page.goto("/tests/fixtures/next-list-window.html?one&pending");
+  await expect(page.getByRole("status")).toContainText("Updating to Linger 0.4.1…");
+  await expect(page.getByRole("status")).toContainText("Back in a few seconds.");
+  expect(await did(page)).toContain("update_install_pending");
+  // Nothing connects while it's installing.
+  expect((await did(page)).filter((line) => line.startsWith("connect "))).toEqual([]);
+  await page.evaluate(() => window.core?.installFailed());
+  await expect(page.locator("[data-screen='list']")).toBeVisible();
+});
+
+test("why an update didn't happen is said on its line (#772)", async ({ page }) => {
+  await open(page, "?one&update&updatefail");
+  await updates(page).getByRole("button", { name: "Restart now" }).click();
+  await expect(updates(page).getByRole("alert")).toHaveText("Couldn't update: The network is down.");
+});
+
+test("left for half an hour, Linger restarts by itself to install it, without taking the focus (#772)", async ({ page }) => {
+  await page.clock.install();
+  await open(page, "?one&update");
+  await expect(updates(page)).toHaveCount(1);
+  await page.clock.runFor(29 * 60 * 1000);
+  expect((await did(page)).filter((line) => line.startsWith("update_now"))).toEqual([]);
+  await page.clock.runFor(2 * 60 * 1000);
+  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("update_now"))).toEqual(["update_now behind automatic"]);
+});
+
+/** Into voice in #general, from another window, as the volume tests do. */
+async function joinVoice(page: Page) {
+  const bar = page.getByRole("region", { name: /In voice/ });
+  await expect
+    .poll(
+      async () => {
+        await page.evaluate(() => window.core?.ask("next:intent", { kind: "voice.join", server: "https://good-company.example", roomId: "r-general" }));
+        await page.waitForTimeout(250);
+        return bar.count();
+      },
+      { timeout: 10_000 },
+    )
+    .toBe(1);
+  return bar;
+}
+
+const installs = async (page: Page) => (await did(page)).filter((line) => line.startsWith("update_now"));
+
+test("the shell's last check finds you in voice: it waits, and goes in once you've left (#794 review)", async ({ page }) => {
+  await open(page, "?one&update&updatebusy");
+  // The list thought nobody was in voice, but somebody joined while it fetched.
+  await updates(page).getByRole("button", { name: "Restart now" }).click();
+  await expect.poll(() => installs(page)).toEqual(["update_now shown"]);
+  const bar = await joinVoice(page);
+  await page.evaluate(() => window.core?.answerBusy());
+  await page.waitForTimeout(300);
+  expect(await installs(page)).toEqual(["update_now shown"]);
+  await page.evaluate(() => window.core?.tray("leave"));
+  await expect(bar).toHaveCount(0);
+  await expect.poll(() => installs(page)).toEqual(["update_now shown", "update_now shown"]);
+});
+
+test("a busy answer that arrives after you've left voice still goes in (#794 review)", async ({ page }) => {
+  await open(page, "?one&update&updatebusy");
+  await updates(page).getByRole("button", { name: "Restart now" }).click();
+  await expect.poll(() => installs(page)).toEqual(["update_now shown"]);
+  const bar = await joinVoice(page);
+  await page.evaluate(() => window.core?.tray("leave"));
+  await expect(bar).toHaveCount(0);
+  // Left already when the shell's answer comes back.
+  await page.evaluate(() => window.core?.answerBusy());
+  await expect.poll(() => installs(page)).toEqual(["update_now shown", "update_now shown"]);
+});
+
+// A server that needs a newer app (#793): Linger doesn't connect to it, its
+// row is dimmed, and the foot says so, with Update now on a copy that
+// installs itself. This copy is 0.3.6; `?tooold` has Casa da Ribeira work
+// with 0.5.4 or newer.
+const tooOld = (page: Page) => page.locator("[data-screen='list-notes'] .nx-update[data-note='tooold']");
+const CASA_AT = "casa-da-ribeira.example";
+
+test.describe("a server that needs a newer app (#793)", () => {
+  test("isn't connected to or signed in to, its sign-in kept; its row is dimmed, the foot says so with Update now, and the others work", async ({ page }) => {
+    await open(page, "?tooold");
+    // Named by its address: it hasn't said its name this launch.
+    const casa = section(page, CASA_AT);
+    await expect(casa).toHaveAttribute("data-blocked", "yes");
+    await expect(casa).toContainText("needs a newer Linger");
+    await expect(casa.locator(".nx-srv-dots")).toHaveCount(0);
+    await expect(casa.getByRole("button")).toHaveCount(0);
+    // Its name in the muted ink.
+    const muted = await page.evaluate(() => {
+      const probe = document.createElement("span");
+      probe.style.color = "var(--text-muted)";
+      document.body.append(probe);
+      const color = getComputedStyle(probe).color;
+      probe.remove();
+      return color;
+    });
+    await expect(casa.locator(".nx-srv-name")).toHaveCSS("color", muted);
+    // The others are there and working, before it in your order.
+    await expect(section(page, "The Good Company")).toBeVisible();
+    await expect(section(page, "Ashen Lanterns")).toBeVisible();
+    await expect.poll(async () => page.locator(".nx-srv").evaluateAll((regions) => regions.map((region) => region.getAttribute("aria-label")))).toEqual([
+      "The Good Company",
+      "Ashen Lanterns",
+      CASA_AT,
+    ]);
+    const asked = await did(page);
+    expect(asked).toContain(`GET ${LISBON}/health`);
+    // Asked before anything else, and nothing after: no sign-in, no connection, and its sign-in left as it was.
+    expect(asked.filter((line) => line.includes(LISBON))).toEqual([`GET ${LISBON}/health`]);
+    for (const server of [HOME, GUILD]) expect(asked).toContain(`connect ${server}`);
+
+    const block = tooOld(page);
+    await expect(block).toHaveCount(1);
+    await expect(block).toHaveAttribute("data-lit", "yes");
+    await expect(block.locator(".nx-update-title")).toHaveText(`${CASA_AT} needs a newer Linger`);
+    await expect(block).toContainText("It works with Linger 0.5.4 or newer. Your other servers still work.");
+    // Nothing to put off: it can't be used until Linger's updated.
+    await expect(block.getByRole("button", { name: /Not now|Close/ })).toHaveCount(0);
+    // Update now doesn't wait out the day: the shell is asked now.
+    await block.getByRole("button", { name: "Update now" }).click();
+    await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("update_now"))).toEqual(["update_now shown"]);
+  });
+
+  test("a server updated before it was ever reached says so on the next failed try, not \"Can't reach\" forever (#797 review)", async ({ page }) => {
+    // Not `open`: that waits for every server to be up, and this one never is.
+    await page.goto("/tests/fixtures/next-list-window.html?neverup");
+    await expect(page.locator("[data-screen='list']")).toBeVisible();
+    await expect(section(page, "The Good Company")).toBeVisible();
+    // Signed in fine, but its gateway takes nothing: it was updated in between.
+    await page.evaluate((server) => window.core?.raise(server), LISBON);
+    // The next try, and its failure, as the gateway reports a retry.
+    await page.evaluate((server) => window.core?.status(server, { kind: "connecting" }), LISBON);
+    await page.evaluate((server) => window.core?.status(server, { kind: "waiting", retry_in_ms: 1000, reason: "the server closed the connection" }), LISBON);
+    await expect(tooOld(page).locator(".nx-update-title")).toContainText("needs a newer Linger");
+  });
+
+  test("a server updated while Linger runs is let go of when it comes back, by name, its sign-in kept, the others untouched", async ({ page }) => {
+    await open(page);
+    await expect(section(page, "Casa da Ribeira")).toBeVisible();
+    await expect(tooOld(page)).toHaveCount(0);
+    // Its host updates it: it restarts, and says so once it's back.
+    await page.evaluate((server) => window.core?.raise(server), LISBON);
+    await page.evaluate((server) => window.core?.status(server, { kind: "waiting", retry_in_ms: 1000, reason: "connection refused" }), LISBON);
+    await page.evaluate((server) => window.core?.status(server, { kind: "ready", latency_ms: 20 }), LISBON);
+    const casa = section(page, "Casa da Ribeira");
+    await expect(casa).toHaveAttribute("data-blocked", "yes");
+    await expect(tooOld(page).locator(".nx-update-title")).toHaveText("Casa da Ribeira needs a newer Linger");
+    await expect(tooOld(page)).toContainText("Your other servers still work.");
+    const asked = await did(page);
+    expect(asked.filter((line) => line === `connect ${LISBON}` || line === `disconnect ${LISBON}`).at(-1)).toBe(`disconnect ${LISBON}`);
+    // Every window lets go of it; nothing signs out of it.
+    expect(asked).toContain(`emit next:signedout:${JSON.stringify({ v: 1, server: LISBON })}`);
+    expect(asked).not.toContain(`forget ${LISBON}`);
+    expect(asked.filter((line) => line.startsWith("POST") && line.includes(LISBON) && line.endsWith("/auth/logout"))).toEqual([]);
+    for (const server of [HOME, GUILD]) {
+      expect(asked.filter((line) => line === `connect ${server}` || line === `disconnect ${server}`).at(-1)).toBe(`connect ${server}`);
+    }
+  });
+
+  test("a server that comes back and works with this app stays as it was", async ({ page }) => {
+    await open(page);
+    await page.evaluate((server) => window.core?.status(server, { kind: "waiting", retry_in_ms: 1000, reason: "connection refused" }), LISBON);
+    await page.evaluate((server) => window.core?.status(server, { kind: "ready", latency_ms: 20 }), LISBON);
+    await expect.poll(async () => (await did(page)).filter((line) => line === `GET ${LISBON}/health`).length).toBeGreaterThan(1);
+    await page.waitForTimeout(200);
+    await expect(section(page, "Casa da Ribeira")).not.toHaveAttribute("data-blocked", "yes");
+    await expect(tooOld(page)).toHaveCount(0);
+    const asked = await did(page);
+    expect(asked.filter((line) => line === `connect ${LISBON}` || line === `disconnect ${LISBON}`).at(-1)).toBe(`connect ${LISBON}`);
+  });
+
+  test("the only server: the list, not the sign-in, with no word about other servers", async ({ page }) => {
+    await page.goto("/tests/fixtures/next-list-window.html?one&tooold=all");
+    await expect(page.locator("[data-screen='list']")).toBeVisible();
+    await expect(page.locator("[data-screen='signin']")).toHaveCount(0);
+    await expect(section(page, "good-company.example")).toHaveAttribute("data-blocked", "yes");
+    const block = tooOld(page);
+    await expect(block.locator(".nx-update-title")).toHaveText("good-company.example needs a newer Linger");
+    await expect(block.locator(".nx-update-line").first()).toHaveText("It works with Linger 0.5.4 or newer.");
+    await expect(block.getByRole("button", { name: "Update now" })).toBeVisible();
+    expect((await did(page)).filter((line) => line.startsWith("connect ") || line.includes("/auth/"))).toEqual([]);
+  });
+
+  test("several in one block, naming each", async ({ page }) => {
+    await page.goto("/tests/fixtures/next-list-window.html?tooold=all");
+    await expect(page.locator("[data-screen='list']")).toBeVisible();
+    await expect(tooOld(page)).toHaveCount(1);
+    await expect(tooOld(page).locator(".nx-update-title")).toHaveText(
+      "good-company.example, ashen-lanterns.example and casa-da-ribeira.example need a newer Linger",
+    );
+    await expect(tooOld(page)).toContainText("They work with Linger 0.5.4 or newer.");
+    await expect(tooOld(page)).not.toContainText("Your other servers still work.");
+  });
+
+  test("in voice, Update now can't be pressed and says why, and can be once you've left", async ({ page }) => {
+    await open(page, "?tooold");
+    const bar = page.getByRole("region", { name: /In voice/ });
+    await expect
+      .poll(
+        async () => {
+          await page.evaluate(() => window.core?.ask("next:intent", { kind: "voice.join", server: "https://good-company.example", roomId: "r-general" }));
+          await page.waitForTimeout(250);
+          return bar.count();
+        },
+        { timeout: 10_000 },
+      )
+      .toBe(1);
+    const update = tooOld(page).getByRole("button", { name: "Update now" });
+    await expect(update).toHaveAttribute("aria-disabled", "true");
+    await expect(update).toHaveAccessibleDescription("Not while you're in voice.");
+    await update.click({ force: true });
+    await page.waitForTimeout(300);
+    expect((await did(page)).filter((line) => line.startsWith("update_now"))).toEqual([]);
+    await page.evaluate(() => window.core?.tray("leave"));
+    await expect(bar).toHaveCount(0);
+    await expect(update).not.toHaveAttribute("aria-disabled", "true");
+    await update.click();
+    await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("update_now"))).toEqual(["update_now shown"]);
+  });
+
+  test("an Arch copy gets the words and how the new one comes, with no button and no second notice", async ({ page }) => {
+    await open(page, "?tooold&update=arch");
+    const block = tooOld(page);
+    await expect(block).toContainText("It comes with your next system update (sudo pacman -Syu).");
+    await expect(block.getByRole("button")).toHaveCount(0);
+    // The "is out" line would say the same thing again, less urgently.
+    await expect(page.locator("[data-screen='list-notes'] .nx-update")).toHaveCount(1);
+  });
+
+  test("adding it says so before asking for a password", async ({ page }) => {
+    await open(page, "?one&tooold");
+    await page.evaluate(() => window.core?.ask("next:intent", { kind: "addserver" }));
+    const box = page.getByRole("textbox", { name: "Server or link" });
+    await box.fill(`${LISBON}/invite/RIBEIRA`);
+    await box.press("Enter");
+    await expect(page.getByText("This server needs a newer Linger. It works with Linger 0.5.4 or newer. Update Linger, then try again.")).toBeVisible();
+    await expect(page.getByRole("form", { name: "Join" })).toHaveCount(0);
+    expect((await did(page)).filter((line) => line.includes(LISBON))).toEqual([`GET ${LISBON}/health`]);
+  });
+});
+
+test.describe("a server that needs a newer app, on a phone (#793)", () => {
+  test.use({ viewport: { width: 411, height: 914 } });
+
+  test("points an Android phone at Google Play, with no button", async ({ page }) => {
+    await open(page, "?tooold&shell=phone");
+    await expect(tooOld(page)).toContainText("Update Linger from Google Play.");
+    await expect(tooOld(page).getByRole("button")).toHaveCount(0);
+  });
+
+  test.describe("an iPhone", () => {
+    test.use({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148" });
+
+    test("points it at TestFlight, with no button", async ({ page }) => {
+      await open(page, "?tooold&shell=phone");
+      await expect(tooOld(page)).toContainText("Update Linger from TestFlight.");
+      await expect(tooOld(page).getByRole("button")).toHaveCount(0);
+    });
+  });
+});
+
+test("a host whose server is behind hears it at the foot, with How to update (#772)", async ({ page }) => {
+  await open(page, "?one&behind");
+  await expect(notes(page)).toHaveText(["The Good Company is behind. 0.4.1 is out.How to update"]);
+  await expect(notes(page)).toHaveAttribute("title", "It runs 0.4.0. Run ./update.sh in the server's folder to update it.");
+  await notes(page).getByRole("button", { name: "How to update" }).click();
+  expect(await did(page)).toContain("open https://github.com/itsMattGuenther/Linger/blob/main/docs/host-guide.md#updating-the-server");
+});
+
+test("somebody who doesn't host the server isn't told it's behind (#772)", async ({ page }) => {
+  await open(page, "?one&behind&guest");
+  await page.waitForTimeout(300);
+  await expect(page.locator("[data-screen='list-notes']")).toHaveCount(0);
+});
+
+test("a server you host says when its disk is nearly full or it hasn't been backed up, and Server settings opens its Settings (#582, #772)", async ({ page }) => {
   await open(page, "?one&hostissues");
-  await expect(notes(page)).toHaveText(["The disk The Good Company runs on is nearly full.Hosting…", "The Good Company hasn't been backed up for 4 days.Hosting…"]);
-  await notes(page).first().getByRole("button", { name: "Hosting…" }).click();
+  await expect(notes(page)).toHaveText(["The disk The Good Company runs on is nearly full.Server settings", "The Good Company hasn't been backed up for 4 days.Server settings"]);
+  await notes(page).first().getByRole("button", { name: "Server settings" }).click();
   expect((await did(page)).filter((line) => line.startsWith("next_open_settings")).at(-1)).toBe(`next_open_settings:${JSON.stringify({ section: "server", server: HOME })}`);
 });
 
 test("a server you host says when its backups haven't reached its bucket for days (#614)", async ({ page }) => {
   await open(page, "?one&hostbucket");
-  await expect(notes(page)).toHaveText(["The Good Company's backups haven't reached its bucket for 4 days.Hosting…"]);
-  await notes(page).first().getByRole("button", { name: "Hosting…" }).click();
+  await expect(notes(page)).toHaveText(["The Good Company's backups haven't reached its bucket for 4 days.Server settings"]);
+  await notes(page).first().getByRole("button", { name: "Server settings" }).click();
   expect((await did(page)).filter((line) => line.startsWith("next_open_settings")).at(-1)).toBe(`next_open_settings:${JSON.stringify({ section: "server", server: HOME })}`);
 });
 
@@ -1322,10 +1699,12 @@ test("the foot's lines fit the list: nothing clipped or sideways, the words line
   await page.clock.runFor(1_000);
   await page.evaluate((server) => window.core?.status(server, { kind: "waiting", retry_in_ms: 4000, reason: "refused" }), GUILD);
   await page.clock.runFor(6_000);
-  await expect(notes(page)).toHaveCount(2);
+  await expect(notes(page)).toHaveCount(1);
+  await expect(updates(page)).toHaveCount(1);
+  // A line and an update's block (#772) start their words on one edge.
   const measured = await page.evaluate(() =>
-    [...document.querySelectorAll<HTMLElement>(".nx-note")].map((line) => {
-      const words = line.querySelector<HTMLElement>(".nx-note-words");
+    [...document.querySelectorAll<HTMLElement>(".nx-note, .nx-update")].map((line) => {
+      const words = line.querySelector<HTMLElement>(".nx-note-words, .nx-update-title");
       const box = line.getBoundingClientRect();
       return {
         left: words?.getBoundingClientRect().left ?? -1,
@@ -1334,6 +1713,7 @@ test("the foot's lines fit the list: nothing clipped or sideways, the words line
       };
     }),
   );
+  expect(measured).toHaveLength(2);
   expect(measured.every((line) => line.inside && !line.cut)).toBe(true);
   expect(new Set(measured.map((line) => line.left)).size).toBe(1);
 });

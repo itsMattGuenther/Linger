@@ -67,14 +67,38 @@ produces a green release that no installed copy will accept.
   (`git log v<previous>..HEAD --format='%an <%ae>' | sort -u`), each matched to
   the pull request it came from for their handle. Naming them in a GitHub
   release tells them it shipped. The first time somebody is thanked, add them
-  to the README's Thanks too, after the people already there, with a few words
-  on what they did: never by how much.
+  to the README's Thanks too, after the people already there: their handle,
+  linked to their merged pull requests
+  (`pulls?q=is%3Apr+is%3Amerged+author%3A<handle>`), and nothing more. What
+  they did belongs in each release's notes; listed in the README it would only
+  grow, and the link stays up to date by itself. Never by how much.
 - Say whether anything stops working with an older app or server (PROTOCOL §9,
   "Which apps and servers work together"). Before 1.0, a change works both ways
   wherever it can. From 1.0, a break may only leave behind versions outside the window
   (12 months or the two releases before, whichever reaches further back), and the
   release *before* it says it's coming. At 1.0 itself, the window starts: say so in
   its notes.
+- **Raising `OLDEST_CLIENT`** (`crates/linger-core/src/lib.rs`, #793), the oldest
+  app a server works with, which `GET /health` sends and every app compares with
+  its own version. It's raised only when a change truly can't work with older
+  apps, as voice before 0.4.1 couldn't (#306), never as a habit. **The notes of
+  the release before announce it**: which apps will be left behind, and that
+  they'll be asked to update. The release that raises it says so again, with a
+  line in `docs/decisions.md`. It's never raised past the version the server is
+  built as (`a_server_works_with_its_own_app` in linger-core checks), or the
+  server would turn away its own release's app, and an app built from the same
+  commit couldn't use it either: raise it in this release pull request, or in
+  the breaking pull request only if that one bumps the version too. Only apps
+  from the release that added the field (#793) on can read it; older ones never
+  show the message.
+- Write **the one line about what's in it** in
+  `client/src/next/core/release-line.json`, with this version: `{ "version":
+  "0.5.4", "line": "Screen sharing, and fixes for voice." }`. One short line,
+  140 characters at most, said to people, not a changelog (#772). Installed
+  copies show it beside "Linger 0.5.4 is out" (the release job puts it in
+  `latest.json`'s notes), and the new version shows it once on its first start
+  ("You're on Linger 0.5.4"). A line still naming the previous version is
+  shown nowhere, and the release job warns.
 - Point the README's release-notes line and `docs/testing-strategy.md` at the
   new notes, and record the release in `TASKS.md`.
 - **Run the GPU check** on a Linux computer with a graphics card, with Docker
@@ -140,7 +164,19 @@ re-running one, is lost. Swap their short install section for the fuller
 download table and update steps the previous release used.
 
 **4. Publish it.** Publishing is what makes installed copies see the update, and
-it is a person's click on purpose. It also starts the Arch package job (below),
+it is a person's click on purpose. Linger updates itself (#772): a day after you
+publish, every copy the setup.exe or the AppImage installed installs it on its
+own, at its next start or while nobody's using it. The day counts from
+publishing, not building: until then `latest.json` says it isn't published
+(a date in 2999, `updater-urls.mjs`), and `updater-date.yml` dates it when you
+click. Check that run went green: without it nothing installs by itself,
+though Restart now still works. Re-running `updater-json` after publishing
+is safe: it keeps the publishing date. **Use that day.** Press Restart now in your own Linger (Settings →
+Account & App, or the foot of the list once it's downloaded) and check the
+release in real use. If it's bad, mark it a pre-release before the day is
+out: `releases/latest` then points at the release before, so no copy sees it
+any more (the copies that pressed Restart now keep it until a fixed release).
+Anybody who presses Restart now goes early by choice. It also starts the Arch package job (below),
 and it moves new servers on: `deploy/setup.sh` fetches its files from the
 newest release's tag (#507), and they go with that tag's image. So check the
 tag's `image` run went green first; until it does, `latest` is still the
@@ -288,6 +324,31 @@ submit for review.
 - **The encryption question** is answered in `client/src-tauri/Info.ios.plist`
   (`ITSAppUsesNonExemptEncryption`: only standard, exempt encryption), so it
   isn't asked on each upload.
+- **It builds with Xcode 26** on GitHub's macOS 26 Mac, chosen in `ios.yml`
+  rather than the Mac's default, and the run fails if the built app's SDK
+  isn't iOS 26's (#779). App Store Connect takes uploads built with Xcode 26
+  or later, but an app built with Xcode 27's iOS 27 SDK doesn't open unless
+  it uses UIKit's scene life cycle, which Tauri 2.11 doesn't have. Apple
+  requires the iOS 27 SDK from April 2027, so move to Xcode 27 together with
+  Tauri 2.12 or later, before then.
+- **The privacy manifest**, `gen/apple/linger-client_iOS/PrivacyInfo.xcprivacy`,
+  tells Apple that Linger tracks nobody and why it makes the system calls
+  Apple asks a reason for (#779). Each run prints which of those calls the
+  built app makes ("the calls the privacy manifest answers for"), so one in a
+  new category is seen there and declared in the manifest.
+- **The share extension** (#785) is a second program inside the app, with its
+  own identifier, `io.github.itsmattguenther.linger.share`, and both belong to
+  the App Group `group.io.github.itsmattguenther.linger`, whose folder is how
+  a share reaches the app. Automatic signing should register the identifier
+  and the group the first time `ios.yml` builds with them. If the build says
+  it can't, register both by hand in the Apple account (Certificates,
+  Identifiers & Profiles: the identifier, then the App Group, then tick App
+  Groups on both identifiers and pick the group) and run it again. `ios.yml`
+  fails a build whose app doesn't hold the extension, or whose extension's
+  version isn't the app's. The extension has no privacy manifest of its own,
+  because it makes none of the calls Apple asks a reason for; "the calls the
+  privacy manifest answers for" prints its calls under the app's, so one that
+  turns up there means it needs one.
 
 ## Worth knowing
 

@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		03A1CAE134A60A75EE6B7CEA /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 92A176CB234206EC5E00FB4B /* UIKit.framework */; };
 		4BABDA867D6E5CD4A733406C /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E7DC4F3C746728DFB77F58AB /* Security.framework */; };
+		4FA89DCA84186B8AA5E14FC9 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F0BE2F6E3B8751E90FAD89C2 /* PrivacyInfo.xcprivacy */; };
 		729C2A9DFFFB4295CF78A4E2 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AE705E4EC85B45B9E7500E7E /* LaunchScreen.storyboard */; };
 		8764638F0DA3D485CE2320FC /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9D3EBA43367D79352D60B3FF /* Metal.framework */; };
 		A14031F750EEB638A2CAC97F /* main.mm in Sources */ = {isa = PBXBuildFile; fileRef = 1BC9B8D865020091F3C3B5F0 /* main.mm */; };
@@ -19,7 +20,33 @@
 		CC3BE010D86E8A9A4E1C63DE /* libapp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A609B54A3E5DCC5A6CE9A3EC /* libapp.a */; };
 		CEA001DD9BAE51760E5988DC /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 98A320094E1BE6F4F85E88E6 /* WebKit.framework */; };
 		E18C0CF53EEDAC716D748051 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DEF53FF665AF224362271456 /* CoreGraphics.framework */; };
+		5A4E0C11D2B34F6E8A9B0C02 /* LingerShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5A4E0C11D2B34F6E8A9B0C06 /* LingerShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		5A4E0C11D2B34F6E8A9B0C01 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A4E0C11D2B34F6E8A9B0C03 /* ShareViewController.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		5A4E0C11D2B34F6E8A9B0C08 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C5C747350CD0E43CA41F34E8 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5A4E0C11D2B34F6E8A9B0C0F;
+			remoteInfo = LingerShare;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		5A4E0C11D2B34F6E8A9B0C0A /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				5A4E0C11D2B34F6E8A9B0C02 /* LingerShare.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		001FF2C59C8D082AA4F22F33 /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
@@ -67,9 +94,14 @@
 		E7DC4F3C746728DFB77F58AB /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
 		EB2F3DFB1C31ED6D6F04B144 /* sounds.rs */ = {isa = PBXFileReference; path = sounds.rs; sourceTree = "<group>"; };
 		F00A95ECD5684D01965E44C9 /* phone_call.rs */ = {isa = PBXFileReference; path = phone_call.rs; sourceTree = "<group>"; };
+		F0BE2F6E3B8751E90FAD89C2 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		F24D19F90575091F1F889F18 /* graphics.rs */ = {isa = PBXFileReference; path = graphics.rs; sourceTree = "<group>"; };
 		FDBB3E33452AF49280F9CBDB /* mod.rs */ = {isa = PBXFileReference; path = mod.rs; sourceTree = "<group>"; };
 		FFF7964A17D426FD29114A57 /* linger-client_iOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "linger-client_iOS.entitlements"; sourceTree = "<group>"; };
+		5A4E0C11D2B34F6E8A9B0C06 /* LingerShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = LingerShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		5A4E0C11D2B34F6E8A9B0C05 /* ShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ShareExtension.entitlements; sourceTree = "<group>"; };
+		5A4E0C11D2B34F6E8A9B0C04 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		5A4E0C11D2B34F6E8A9B0C03 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -85,6 +117,13 @@
 				4BABDA867D6E5CD4A733406C /* Security.framework in Frameworks */,
 				03A1CAE134A60A75EE6B7CEA /* UIKit.framework in Frameworks */,
 				CEA001DD9BAE51760E5988DC /* WebKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5A4E0C11D2B34F6E8A9B0C0C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -108,6 +147,7 @@
 			isa = PBXGroup;
 			children = (
 				B2DFD80D4B0B1F1CF1255995 /* linger-client_iOS.app */,
+				5A4E0C11D2B34F6E8A9B0C06 /* LingerShare.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -120,6 +160,7 @@
 				AE705E4EC85B45B9E7500E7E /* LaunchScreen.storyboard */,
 				A3E41D311C6DA399A9AB1FEC /* Externals */,
 				87266F1A384C876BC34CFBC8 /* linger-client_iOS */,
+				5A4E0C11D2B34F6E8A9B0C07 /* ShareExtension */,
 				953C8A53888B0D10B8119936 /* Sources */,
 				A3E1D2044475877D3D1DE7F3 /* src */,
 				74B554A7D403457555764E34 /* Frameworks */,
@@ -156,6 +197,7 @@
 			children = (
 				8E411DBF608BE5A22A2F0A9A /* Info.plist */,
 				FFF7964A17D426FD29114A57 /* linger-client_iOS.entitlements */,
+				F0BE2F6E3B8751E90FAD89C2 /* PrivacyInfo.xcprivacy */,
 			);
 			path = "linger-client_iOS";
 			sourceTree = "<group>";
@@ -226,6 +268,16 @@
 			path = bindings;
 			sourceTree = "<group>";
 		};
+		5A4E0C11D2B34F6E8A9B0C07 /* ShareExtension */ = {
+			isa = PBXGroup;
+			children = (
+				5A4E0C11D2B34F6E8A9B0C04 /* Info.plist */,
+				5A4E0C11D2B34F6E8A9B0C05 /* ShareExtension.entitlements */,
+				5A4E0C11D2B34F6E8A9B0C03 /* ShareViewController.swift */,
+			);
+			path = ShareExtension;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -237,10 +289,12 @@
 				EDADEEBF8AAFC450D22E9946 /* Sources */,
 				18F2BD366C258F6A48E234BC /* Resources */,
 				146172D46C649AE54E09AFD1 /* Frameworks */,
+				5A4E0C11D2B34F6E8A9B0C0A /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				5A4E0C11D2B34F6E8A9B0C09 /* PBXTargetDependency */,
 			);
 			name = "linger-client_iOS";
 			packageProductDependencies = (
@@ -248,6 +302,26 @@
 			productName = "linger-client_iOS";
 			productReference = B2DFD80D4B0B1F1CF1255995 /* linger-client_iOS.app */;
 			productType = "com.apple.product-type.application";
+		};
+		5A4E0C11D2B34F6E8A9B0C0F /* LingerShare */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5A4E0C11D2B34F6E8A9B0C12 /* Build configuration list for PBXNativeTarget "LingerShare" */;
+			buildPhases = (
+				5A4E0C11D2B34F6E8A9B0C0B /* Sources */,
+				5A4E0C11D2B34F6E8A9B0C0D /* Resources */,
+				5A4E0C11D2B34F6E8A9B0C0C /* Frameworks */,
+				5A4E0C11D2B34F6E8A9B0C0E /* Same version as Linger */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = LingerShare;
+			packageProductDependencies = (
+			);
+			productName = LingerShare;
+			productReference = 5A4E0C11D2B34F6E8A9B0C06 /* LingerShare.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -275,6 +349,7 @@
 			projectRoot = "";
 			targets = (
 				887F64E7309D6465DDDC17EA /* linger-client_iOS */,
+				5A4E0C11D2B34F6E8A9B0C0F /* LingerShare */,
 			);
 		};
 /* End PBXProject section */
@@ -286,7 +361,15 @@
 			files = (
 				B8E0F6B0B6EC00F47E7F0486 /* Assets.xcassets in Resources */,
 				729C2A9DFFFB4295CF78A4E2 /* LaunchScreen.storyboard in Resources */,
+				4FA89DCA84186B8AA5E14FC9 /* PrivacyInfo.xcprivacy in Resources */,
 				B2170E33D4D441A9524F0545 /* assets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5A4E0C11D2B34F6E8A9B0C0D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -314,6 +397,26 @@
 			shellPath = /bin/sh;
 			shellScript = "pnpm tauri ios xcode-script -v --platform ${PLATFORM_DISPLAY_NAME:?} --sdk-root ${SDKROOT:?} --framework-search-paths \"${FRAMEWORK_SEARCH_PATHS:?}\" --header-search-paths \"${HEADER_SEARCH_PATHS:?}\" --gcc-preprocessor-definitions \"${GCC_PREPROCESSOR_DEFINITIONS:-}\" --configuration ${CONFIGURATION:?} ${FORCE_COLOR} ${ARCHS:?}";
 		};
+		5A4E0C11D2B34F6E8A9B0C0E /* Same version as Linger */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/linger-client_iOS/Info.plist",
+			);
+			name = "Same version as Linger";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# App Store Connect refuses an extension whose version isn't its app's (#785).\n# tauri ios build writes both numbers into the app's Info.plist; copy them.\napp=\"${SRCROOT}/linger-client_iOS/Info.plist\"\nmine=\"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\nfor key in CFBundleShortVersionString CFBundleVersion; do\n  value=\"$(/usr/libexec/PlistBuddy -c \"Print :$key\" \"$app\")\"\n  /usr/libexec/PlistBuddy -c \"Set :$key $value\" \"$mine\"\ndone\n";
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -325,7 +428,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5A4E0C11D2B34F6E8A9B0C0B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5A4E0C11D2B34F6E8A9B0C01 /* ShareViewController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		5A4E0C11D2B34F6E8A9B0C09 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5A4E0C11D2B34F6E8A9B0C0F /* LingerShare */;
+			targetProxy = 5A4E0C11D2B34F6E8A9B0C08 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		46665A7388128E1748E04CB9 /* debug */ = {
@@ -509,6 +628,62 @@
 			};
 			name = release;
 		};
+		5A4E0C11D2B34F6E8A9B0C10 /* debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = (
+					arm64,
+				);
+				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = SFTT38V54H;
+				ENABLE_BITCODE = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
+				INFOPLIST_FILE = ShareExtension/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.itsmattguenther.linger.share;
+				PRODUCT_NAME = LingerShare;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALID_ARCHS = arm64;
+			};
+			name = debug;
+		};
+		5A4E0C11D2B34F6E8A9B0C11 /* release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = (
+					arm64,
+				);
+				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = SFTT38V54H;
+				ENABLE_BITCODE = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
+				INFOPLIST_FILE = ShareExtension/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.itsmattguenther.linger.share;
+				PRODUCT_NAME = LingerShare;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALID_ARCHS = arm64;
+			};
+			name = release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -526,6 +701,15 @@
 			buildConfigurations = (
 				A761FAD6FEDBD3A533D30503 /* debug */,
 				B95AFAC59C67E420259B492D /* release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = debug;
+		};
+		5A4E0C11D2B34F6E8A9B0C12 /* Build configuration list for PBXNativeTarget "LingerShare" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5A4E0C11D2B34F6E8A9B0C10 /* debug */,
+				5A4E0C11D2B34F6E8A9B0C11 /* release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = debug;

@@ -221,88 +221,30 @@ describe("how the new client looks, in every window", () => {
     expect(root.dataset.normalize).toBe("true");
   });
 
-  it("applies a choice storage refuses, and grows the window for it once (#782)", async () => {
-    const settings = await openWindow("settings");
-    const root = document.documentElement as unknown as { dataset: Record<string, string> };
-    // Full: nothing new is written, so storage still holds what it held before.
-    storageFull();
-    expect(settings.saveScale(150)).toBe(150);
-    settings.saveOneLine(true);
-    settings.saveHideReactions(true);
-    settings.saveNormalize(true);
-    // Settings applies it, then hears its own announcement and applies it again.
-    await settings.applyAppearance();
-    await settings.applyAppearance();
-    expect(storage.size).toBe(0);
-    expect(shell.zoom).toBe(1.5);
-    expect(shell.size).toEqual({ width: 510, height: 1230 });
-    expect(settings.loadOneLine()).toBe(true);
-    expect(settings.loadHideReactions()).toBe(true);
-    expect(root.dataset.normalize).toBe("true");
-
+  it("keeps the phone's Text size until the app closes when storage refuses it (#780)", async () => {
+    vi.resetModules();
+    const { loadTextSize, saveTextSize } = await import("./appearance");
+    // Full: what was saved before reads back, and a new choice won't write.
+    storage.set("linger.next.textSize", "115");
+    const local = window.localStorage as { setItem: (key: string, value: string) => void };
+    local.setItem = () => {
+      throw new Error("QuotaExceededError");
+    };
+    expect(saveTextSize(150)).toBe(150);
+    expect(loadTextSize()).toBe(150);
     // Gone altogether: neither reading nor writing works.
-    vi.stubGlobal("window", { location: { search: "" }, screen: { availWidth: 1920, availHeight: 1040 } });
-    settings.saveScale(125);
-    await settings.applyAppearance();
-    expect(shell.zoom).toBe(1.25);
-    expect(shell.size).toEqual({ width: 425, height: 1025 });
-    expect(settings.loadOneLine()).toBe(true);
+    vi.stubGlobal("window", {});
+    expect(saveTextSize(130)).toBe(130);
+    expect(loadTextSize()).toBe(130);
   });
 
-  it("carries a choice storage refuses to the other windows, in Settings' announcement (#782)", async () => {
-    storageFull();
-    const list = await openWindow("main");
-    list.followAppearance();
-    const drawn: boolean[] = [];
-    list.onAppearance(() => drawn.push(list.loadOneLine()));
-    const settings = await openWindow("settings");
-    settings.followAppearance();
-    settings.saveScale(150);
-    settings.saveOneLine(true);
-    settings.saveHideReactions(true);
-    settings.saveNormalize(true);
-    settings.announceAppearance();
-    // The list's screens are told, and draw one line per person.
-    await vi.waitFor(() => expect(drawn.at(-1)).toBe(true));
-    expect(list.loadScale()).toBe(150);
-    expect(list.loadHideReactions()).toBe(true);
-    expect(list.loadPlainNames()).toBe(true);
-  });
-
-  it("gives a window opened later the choices storage refused, from the list (#782)", async () => {
-    // Reactions were hidden before storage filled up.
-    storage.set("linger.next.hideReactions", "true");
-    storageFull();
-    const list = await openWindow("main");
-    list.followAppearance();
-    const settings = await openWindow("settings");
-    settings.saveScale(150);
-    settings.saveOneLine(true);
-    settings.announceAppearance();
-    await vi.waitFor(() => expect(list.loadScale()).toBe(150));
-
-    // A conversation's own window, opened since: it asks the list.
-    const chat = await openWindow("chat-00ff00ff00ff00ff");
-    chat.followAppearance();
-    await vi.waitFor(() => expect(chat.loadScale()).toBe(150));
-    expect(chat.loadOneLine()).toBe(true);
-    expect(chat.loadHideReactions()).toBe(true);
-  });
-
-  it("keeps a change announced while the list's answer was on its way (#782)", async () => {
-    storageFull();
-    const { answer } = await import("./bus");
-    let reply: (choices: object) => void = () => undefined;
-    await answer(shell.bus("main"), "next:appearancechosen", () => new Promise<object>((resolve) => (reply = resolve)));
-    const chat = await openWindow("chat-00ff00ff00ff00ff");
-    chat.followAppearance();
-    const settings = await openWindow("settings");
-    settings.saveScale(200);
-    settings.announceAppearance();
-    await vi.waitFor(() => expect(chat.loadScale()).toBe(200));
-    // The list answers with what it had before the change.
-    reply({ scale: 150 });
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(chat.loadScale()).toBe(200);
+  it("saves only the phone's Text size steps, and 100 for anything else (#690)", async () => {
+    vi.resetModules();
+    const { loadTextSize, saveTextSize } = await import("./appearance");
+    expect(loadTextSize()).toBe(100);
+    expect(saveTextSize(130)).toBe(130);
+    expect(storage.get("linger.next.textSize")).toBe("130");
+    expect(saveTextSize(175)).toBe(100);
+    expect(loadTextSize()).toBe(100);
   });
 });

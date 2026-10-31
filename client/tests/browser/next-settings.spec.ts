@@ -553,7 +553,62 @@ test.describe("this app", () => {
     await expect(panel(page)).toContainText("This is the newest version.");
     // Nothing waiting: nothing to read about or install.
     await expect(page.getByRole("button", { name: "What's new" })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Install and restart" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Restart now" })).toHaveCount(0);
+  });
+
+  // Linger updates itself (#772): Settings says how this copy updates, and
+  // Restart now asks the list window, which waits while you're in voice.
+  test("updates: a ready update says when it installs, and Restart now hands it to the list (#772)", async ({ page }) => {
+    await open(page, "?section=account");
+    const updates = page.getByRole("region", { name: "Updates" });
+    await expect(updates).toContainText("Linger keeps itself up to date.");
+    await expect(updates).toContainText("never restarts while you're in voice");
+    await expect(updates).not.toContainText("Nothing is downloaded until you ask");
+    await expect(updates).toContainText("Linger 0.4.0 is ready. It installs the next time Linger starts, or while you're away from your computer.");
+    await expect(updates).toContainText("Screen sharing, and fixes for voice.");
+    await updates.getByRole("button", { name: "Restart now" }).click();
+    expect(await did(page)).toContain("install");
+    await expect(updates).toContainText("If you're in voice or sharing your screen, it waits until you've left.");
+    await expect(updates.getByRole("button", { name: "Restart now" })).toBeDisabled();
+  });
+
+  test("updates: a release on its day's wait can still be had now (#772)", async ({ page }) => {
+    await open(page, "?section=account&update=waiting");
+    const updates = page.getByRole("region", { name: "Updates" });
+    await expect(updates).toContainText("Linger 0.4.0 is out. It installs by itself a day after it came out, or now with Restart now.");
+    await expect(updates.getByRole("button", { name: "Restart now" })).toBeVisible();
+  });
+
+  test("updates: a copy that needs a password waits for Update (#772)", async ({ page }) => {
+    await open(page, "?section=account&update=password");
+    const updates = page.getByRole("region", { name: "Updates" });
+    await expect(updates).toContainText("Installing it asks for your computer's password");
+    await expect(updates).toContainText("Linger 0.4.0 is out. Updating asks for your computer's password, so it waits for you to press Update.");
+    await expect(updates.getByRole("button", { name: "Restart now" })).toHaveCount(0);
+    await updates.getByRole("button", { name: "Update", exact: true }).click();
+    expect(await did(page)).toContain("install");
+  });
+
+  test("updates: an Arch copy is told it's out, in words true on any Arch system, with nothing to install (#772)", async ({ page }) => {
+    await open(page, "?section=account&update=arch");
+    const updates = page.getByRole("region", { name: "Updates" });
+    await expect(updates).toContainText("Your system installed this copy of Linger, and updates it along with everything else.");
+    await expect(updates).toContainText("Linger 0.4.0 is out. It comes with your next system update (sudo pacman -Syu).");
+    await expect(updates).not.toContainText("Omarchy");
+    await expect(updates.getByRole("button", { name: "What's new" })).toBeVisible();
+    await expect(updates.getByRole("button", { name: /^(Restart now|Update)$/ })).toHaveCount(0);
+  });
+
+  // App Review wants the privacy policy and a way to get in touch inside the app (#779).
+  test("This Computer opens the privacy page and where to report a problem, in the browser (#779)", async ({ page }) => {
+    await open(page, "?section=account");
+    const block = page.getByRole("region", { name: "This Computer" });
+    await block.getByRole("button", { name: "Privacy", exact: true }).click();
+    await block.getByRole("button", { name: "Report a problem", exact: true }).click();
+    expect((await did(page)).filter((line) => line.startsWith("open "))).toEqual([
+      "open https://linger.im/privacy",
+      "open https://github.com/itsMattGuenther/Linger/issues/new/choose",
+    ]);
   });
 
   test("deleting your account asks first, takes your password, and offers a copy (#650)", async ({ page }) => {

@@ -22,6 +22,11 @@
 //! Android give it to the running app. Either way it arrives through the
 //! deep-link plugin's `on_open_url`, or, when the link started Linger, its
 //! `get_current`.
+//!
+//! One more shape carries nothing at all: `linger://shared`, which the
+//! iPhone's share extension opens to bring Linger forward once it has left a
+//! share in the inbox (#785, `shared.rs`). It only tells the list window to
+//! look there; no part of a link ever names a file.
 
 use std::sync::Mutex;
 
@@ -33,6 +38,11 @@ use tauri_plugin_deep_link::DeepLinkExt;
 /// with `link_offered`, so one that arrives before the page is listening
 /// still waits for it.
 pub const OFFERED: &str = "next:link";
+
+/// The event that tells the list window a share may be waiting in the inbox
+/// (`lib/sharedFiles.ts`). It carries nothing: the window asks the shell
+/// (`shared.rs`), as it does when it starts and whenever it comes forward.
+pub const SHARED: &str = "next:shared";
 
 /// The newest link handed to Linger and not yet taken by the list window.
 /// Only the newest: two clicks in a row mean the second.
@@ -56,6 +66,10 @@ pub fn install(app: &tauri::App) {
 }
 
 fn offer(app: &AppHandle, raw: &str) {
+    if is_share_link(raw) {
+        let _ = app.emit_to("main", SHARED, ());
+        return;
+    }
     let Some(link) = pasted_link(raw) else {
         return;
     };
@@ -126,6 +140,23 @@ pub fn pasted_link(raw: &str) -> Option<String> {
     })
 }
 
+/// Whether `raw` is exactly `linger://shared`: nothing before the name,
+/// nothing after it but one slash.
+#[must_use]
+pub fn is_share_link(raw: &str) -> bool {
+    raw.len() <= MOST
+        && Url::parse(raw).is_ok_and(|url| {
+            url.scheme() == "linger"
+                && url.host_str() == Some("shared")
+                && url.username().is_empty()
+                && url.password().is_none()
+                && url.port().is_none()
+                && url.query().is_none()
+                && url.fragment().is_none()
+                && matches!(url.path(), "" | "/")
+        })
+}
+
 /// `linger.example`, `linger.example:8443`, or a whole `http(s)://` origin
 /// (a server on this computer is reached over plain `http://`), as an origin.
 /// Only a host the paste box would accept (`lib/link.ts`), with nothing after it.
@@ -185,7 +216,7 @@ fn is_token(token: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::pasted_link;
+    use super::{is_share_link, pasted_link};
 
     #[test]
     fn an_invite_becomes_the_link_a_person_would_paste() {
@@ -301,6 +332,29 @@ mod tests {
         ] {
             let raw = format!("linger://invite?server={server}&code=abcd");
             assert_eq!(pasted_link(&raw), None, "{raw}");
+        }
+    }
+
+    #[test]
+    fn a_share_link_is_exactly_linger_shared_and_never_a_paste() {
+        assert!(is_share_link("linger://shared"));
+        assert!(is_share_link("linger://shared/"));
+        assert_eq!(
+            pasted_link("linger://shared"),
+            None,
+            "it fills no paste box"
+        );
+        for raw in [
+            "linger://shared?file=/etc/passwd",
+            "linger://shared/Screenshot.png",
+            "linger://shared#x",
+            "linger://me@shared",
+            "linger://shared:9",
+            "linger://share",
+            "https://shared",
+            "linger://invite?server=linger.example&code=abcd",
+        ] {
+            assert!(!is_share_link(raw), "{raw}");
         }
     }
 

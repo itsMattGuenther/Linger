@@ -26,7 +26,7 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
-import { validScale } from "../../lib/interface";
+import { validScale, validTextSize } from "../../lib/interface";
 import { applyNormalize, loadNormalize } from "../../lib/normalize";
 import { answer, ask, isOwner, OWNER, PROTOCOL, tauriBus } from "./bus";
 import { onPhone } from "./phone";
@@ -74,6 +74,38 @@ export function saveScale(value: number): number {
     // Storage refused: `chosen` holds it until Linger closes.
   }
   return scale;
+}
+
+/** The phone's own Text size (#690), a percentage on top of the phone's text size. */
+const TEXT_SIZE_KEY = "linger.next.textSize";
+
+/**
+ * The Text size chosen here, kept beside storage so a choice storage refuses
+ * still applies until the app closes (#780's review). `followTextSize` reads
+ * it back through `loadTextSize`, and the phone has one window, so nothing
+ * else changes it meanwhile.
+ */
+let chosenTextSize: number | null = null;
+
+export function loadTextSize(): number {
+  if (chosenTextSize !== null) return chosenTextSize;
+  try {
+    return validTextSize(Number(window.localStorage.getItem(TEXT_SIZE_KEY)));
+  } catch {
+    return 100;
+  }
+}
+
+/** Save the phone's Text size; anything not on the list is 100. Returns what was saved. */
+export function saveTextSize(value: number): number {
+  const size = validTextSize(value);
+  chosenTextSize = size;
+  try {
+    window.localStorage.setItem(TEXT_SIZE_KEY, String(size));
+  } catch {
+    // Storage refused: `chosenTextSize` holds it until the app closes.
+  }
+  return size;
 }
 
 /** One line per person in the list (#197): off unless turned on. */

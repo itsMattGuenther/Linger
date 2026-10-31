@@ -20,13 +20,16 @@ pub mod cue;
 pub mod deep_link;
 #[cfg(target_os = "linux")]
 pub mod desktop_entry;
-#[cfg(desktop)]
+// On the phone too: the share inbox (#785) describes files the way a drop does.
 mod dropped;
 pub mod gateway;
 pub mod graphics;
 #[cfg(desktop)]
 mod notifications;
 pub mod packaging;
+// The iPhone's folders marked "don't back up" (#790). Tests read which ones here too.
+#[cfg(any(target_os = "ios", test))]
+mod phone_backup;
 // The phone's sounds: only the phone app registers them. Tests read them here too.
 // The phone's call bar (#429): voice runs in its page, and this holds it up.
 #[cfg(any(mobile, test))]
@@ -43,6 +46,9 @@ mod screen_shell;
 #[cfg(desktop)]
 mod screen_sound;
 mod secrets;
+// Files shared to Linger from the phone's share sheet (#785).
+#[cfg(any(mobile, test))]
+mod shared;
 #[cfg(desktop)]
 pub mod sounds;
 #[cfg(desktop)]
@@ -308,6 +314,10 @@ fn app_version(app: AppHandle) -> String {
 /// starts through `mobile_entry_point` instead of a `main`.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Before there's a window, so the web view's first write on a new
+    // iPhone already lands in a folder marked "don't back up" (#790).
+    #[cfg(target_os = "ios")]
+    phone_backup::keep_out_of_backups();
     #[cfg(desktop)]
     let app = desktop_app();
     #[cfg(mobile)]
@@ -356,6 +366,8 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
         .manage(screen_sound::ScreenSounds::default())
         .manage(talk_key::TalkKeyWatch::default())
         .manage(dropped::Dropped::default())
+        .manage(updates::Downloads::default())
+        .manage(updates::Busy::default())
         // The window is built here, not from the config, so it can leave the
         // title bar off on Hyprland (#130). See `window.rs`.
         .setup(|app| {
@@ -400,7 +412,9 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
             deep_link::link_offered,
             updates::update_check,
             updates::newest_version,
-            updates::update_install,
+            updates::update_now,
+            updates::update_pending,
+            updates::update_install_pending,
             graphics::graphics_started,
             window::next_open_conversation,
             window::next_open_settings,
@@ -454,6 +468,8 @@ fn phone_app() -> tauri::Builder<tauri::Wry> {
             // Downloads a closed app left for its share sheet (#703).
             #[cfg(target_os = "ios")]
             phone_save::clear_leftovers();
+            // A share to Linger nobody took (#785).
+            shared::clear_leftovers();
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -473,6 +489,9 @@ fn phone_app() -> tauri::Builder<tauri::Wry> {
             phone_sound::phone_sound_mode,
             phone_sound::phone_buzz,
             phone_sound::sound_play,
-            phone_text::phone_text_scale
+            phone_text::phone_text_scale,
+            shared::shared_files,
+            shared::shared_file,
+            shared::shared_done
         ])
 }

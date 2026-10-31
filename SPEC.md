@@ -1093,20 +1093,44 @@ page does that swipe itself: on Android it would go back twice. A tap opens
 what it's on, the first time. A phone has no hover, so what a computer shows
 on hover is held for instead, and rises from the bottom: a message's actions
 (#686), a person's card and Knock from their row, Leave from a group's, and
-Quiet and the order from a server's name (#704). It has no Interface
-size of its own: the phone's display size and text size settings do that job (on
-Android; an iPhone's Text Size doesn't reach Linger yet, #690). It doesn't zoom with two fingers as a web
+Quiet and the order from a server's name (#704). Its words grow with the
+phone's own text size, Font size on Android and Text Size on an iPhone, and
+Settings › Appearance has a **Text size** of its own on top of that (Matt,
+2026-10-21, #690): 100%, 115%, 130% or 150%, for somebody who wants Linger's
+words bigger without changing every app on the phone. Together they stop at
+twice the usual. It has no Interface size, which zooms a computer's window.
+It doesn't zoom with two fingers as a web
 page does, either (#689): a zoomed screen is only wider than the phone and drags
 sideways, and an iPhone would zoom in by itself on the message box. A photo
 opened from a message zooms on its own instead, as a phone's photo viewer does:
 pinched, dragged, and double-tapped in and out.
 
+**Share to Linger from the phone's share sheet** (#785). Linger appears
+in the phone's own share sheet for pictures, videos and files. Choosing it opens
+Linger on a list of your conversations: rooms, group DMs and DMs, across the
+servers you're signed in to. Tapping one puts the shared files in that
+conversation's message box as attachments, the way the + button does, and
+nothing is sent until you send it. Closing the list without picking turns the
+share down. Where a photo was taken is stripped as for any upload (§4.10), and a
+file over the size limit is said up front and refused as it is in the message
+box. Linger is told nothing about the app that shared the file, and shares
+nothing back to it. Text and links shared to Linger are not part of this: only
+files, so on Android Linger isn't offered for a link or words shared from a
+browser. Android comes first: a share arrives through the app's own intent
+filter. The iPhone follows, through a share extension that hands the files to
+the app (a second signed program, `docs/releasing.md`, "The iPhone"). A share
+the app never picked up is deleted from the phone after ten minutes, and the
+app keeps nothing of it once it is in a message box or turned down.
+
 **Phone backups leave Linger out.** A phone backs its apps up to Apple's or Google's
 cloud by default. The phone app opts out, so what it keeps (your list of servers and
-your settings) doesn't reach either company. There's no setting to put it back in
-(Matt, 2026-10-03): a backup couldn't bring your sign-ins to a new phone anyway, since
-they're encrypted to a key that never leaves the old one, and messages and pictures
-live on the server. A new phone signs in again.
+your settings) doesn't reach either company. Android has a switch for that; an iPhone
+doesn't, so the app marks the folders it keeps things in "don't back up" each time it
+starts (#790). There's no setting to put it back in (Matt, 2026-10-03): a backup
+couldn't bring your sign-ins to a new phone anyway, since on Android they're encrypted
+to a key that never leaves the old one, and on an iPhone they're in the Keychain marked
+for that phone only (#790), and messages and pictures live on the server. A new phone
+signs in again.
 
 **Getting it, before the stores** (Matt, 2026-10-03). Android friends install the
 signed `.apk` from each GitHub release; Android asks them once to allow installs

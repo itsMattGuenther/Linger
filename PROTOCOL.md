@@ -131,6 +131,7 @@ It carries the server and the code or token, and nothing else:
 linger://invite?server=linger.example&code=CODE
 linger://setup?server=linger.example&token=TOKEN
 linger://sign-in?server=linger.example&code=CODE     (#581, on a sign-in link's page)
+linger://shared                                      (#785, the iPhone's share extension)
 ```
 
 `server` is the host (and port) of an `https://` server, or the whole origin of one
@@ -143,6 +144,12 @@ digits, a hex token, or it's dropped. It turns it into the `https://` link above
 puts that in the **Server or link** box, with the paste box's own rules after that
 (an invite still makes a new account). Nothing is contacted until the person presses
 Continue, so a page can't make the app reach any server by itself.
+
+`linger://shared` comes from no page (#785, SPEC §4.15): the iPhone's share
+extension opens it to bring Linger forward after leaving a share in the app's
+inbox. It carries nothing, and is read just as strictly: exactly that, or
+dropped. It only makes the list look in the inbox; it never names a file or a
+server.
 
 ```
 https://linger.example/setup?token=…   first-run link, printed to the console
@@ -2242,14 +2249,40 @@ told the thing.
 ## 9. Versioning
 
 ```
-GET /health              → { ok, version }              # no sign-in
+GET /health              → { ok, version, oldest_client }  # no sign-in
 ```
 
 `ok` says the server is up and its database answers; `version` is the release
 it runs, like `0.4.4` (`wire::Health`). It needs no account, so the app uses it
 to check a pasted address is a Linger server, and a host's app compares
 `version` with the newest release to say when their server is behind (#314).
-Every server since 0.2 answers with exactly these two fields.
+Every server since 0.2 answers with these two fields.
+
+`oldest_client` (#793) is the oldest app release the server works with, like
+`0.4.1`: `linger_core::OLDEST_CLIENT`, a constant hosts can't change, since it's
+about what the code can do. It's named for the client, not the app, because no
+wire field is named for an app: none could ever carry what apps anybody has
+open (hard rule 2, checked by `client/src/next/privacy.test.ts`). A server from before it leaves it out. The app
+compares it with its own version; the server never learns which version an app
+runs (no telemetry). An app older than it:
+
+- **doesn't connect to that server.** It asks before trading a saved sign-in at
+  launch, so a break in signing in can't end a sign-in the updated app will use;
+  the sign-in is kept, untouched. While running, it asks again whenever the
+  connection comes back or a try to get it back fails, which is what a server
+  restarting after an update looks like, and lets go of the server without
+  signing out. Your other servers keep working.
+- **says so in plain words**: the server's row dimmed with "needs a newer Linger",
+  and at the list's foot "Casa da Ribeira needs a newer Linger" / "It works with
+  Linger 0.5.4 or newer.", with Update now on a copy that updates itself, how the
+  new one comes on an Arch copy, and where on a phone (Google Play, TestFlight).
+- **says it before asking for a password** when adding a server or signing in:
+  the paste box asks `/health` first, whatever was pasted.
+
+A version that isn't a plain release number (`1.2.3`, or `v1.2.3`), on either
+side, never blocks; neither does a `/health` that can't be reached or read.
+Only apps from the release that added the field read it, so the first real use
+is a break after that.
 
 The path carries the major version. Within v1, additive changes only: new optional
 fields, new `op` values, new error codes. Clients must ignore unknown fields and unknown
@@ -2284,7 +2317,8 @@ every update for review.
   only leave behind versions outside the window, and the release before it says so in
   its notes (`docs/releasing.md`). Anybody whose app meets it is told in plain words, the
   server needs an update and to ask the host, or this app needs one, rather than a
-  feature quietly not working.
+  feature quietly not working. An app too old for a server is told by the server's
+  `oldest_client` (above, #793), raised by the change that leaves older apps behind.
 - **One version number for the app and the server.** One release is a new app and a new
   server, from the same tag, and its notes say when something new needs the server
   updated. Releasing them apart would give each its own number, and every rule above

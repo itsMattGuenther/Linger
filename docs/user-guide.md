@@ -30,7 +30,9 @@ You do **not** need `.sig`, `latest.json`, or the source-code ZIP/tar files.
 The `.msi` is an alternative Windows installer, not an extra required download.
 There are no macOS or ARM desktop installers yet. The iPhone app is only in
 testing, through Apple's TestFlight for invited testers, and isn't in the
-App Store yet. It needs iOS 15 or later.
+App Store yet. It needs iOS 15 or later. Its words grow with the iPhone's
+**Text Size** (in Settings, under Display & Brightness), and with the **Text
+size** in Linger's **Settings → Appearance** on top of it.
 
 ### Windows
 
@@ -141,7 +143,9 @@ whether it may show; if you say no, the call still works.
 It doesn't zoom with two fingers, as a web page does, but a photo you open
 does: pinch it, drag it about, or double-tap to zoom in and back out. To make
 its words bigger, turn up your phone's **Font size** (in Android's Settings,
-under Display): Linger follows it, up to twice the usual size.
+under Display), which Linger follows, or choose a bigger **Text size** in
+Linger's **Settings → Appearance**, which goes on top of it. Together they
+go up to twice the usual size.
 
 1. On the phone, open the
    [latest release](https://github.com/itsMattGuenther/Linger/releases/latest)
@@ -402,8 +406,9 @@ there, under its name, only when there's something to say: your status
 there, or a different name from the one at the top of the list.
 
 The list may also show a line at its foot, only while it's true: a server it
-can't reach, a computer that can't remember your sign-in, or a new version of
-Linger with **Update…**.
+can't reach, a computer that can't remember your sign-in, a server you host
+that needs you or is behind the newest release, or a new version of Linger
+(see [Updates](#updates)).
 
 If one of your servers is down when Linger starts, the others open anyway. The
 one that's down stays signed in and shows as "Can't reach … Still trying." at
@@ -425,7 +430,8 @@ Settings opens in its own window:
   quiet hours; microphone, speakers, push to talk
 - **Notifications**: desktop banners, and whose messages you want them for
 - **Account & App**: password, export, updates, starting Linger when you sign
-  in to the computer, adding a server, signing out, and deleting your account
+  in to the computer, the privacy page, reporting a problem, adding a server,
+  signing out, and deleting your account
 - **Servers** (with more than one): their order, Quiet, and signing out of one
 
 Everything this guide calls *Settings → something* is one of those.
@@ -552,6 +558,10 @@ You then see no pills, and no smileys for leaving one, anywhere. It's for you
 only, kept on this computer or phone, and everyone else still sees theirs.
 The host or a co-host can also turn reactions off in a room; a DM always has
 them. On a server that hasn't been updated for reactions, there are none.
+
+**A long topic or status.** A room's topic sits in its header, after its name,
+and a friend's status in a DM's. When it's too long to fit, it ends in "…" with
+a dotted line under it: click or tap it to read the whole of it.
 
 **A room's message of the day.** A room can have a note about what's happening
 now, like *"Raid night Friday at 8"*, apart from its topic, which says what the
@@ -1342,15 +1352,37 @@ you can come back.
 
 ## Updates
 
-1. Open **Settings → Account & App → Updates**.
-2. Linger looks when you open it, and says so at the foot of your list when
-   there's a new version (**Update…** brings you here). **Check again** looks
-   now.
-3. When you're ready, choose **Install and restart**. Nothing downloads or
-   installs until you choose it.
+Linger updates itself. There's nothing to turn on, and nothing to do:
+
+1. It looks for a new version when it starts, and twice a day while it runs.
+2. A day after a new version comes out, it downloads it in the background and
+   checks it against the project's signing key. The foot of your list then
+   says **Linger 0.5.4 is ready**.
+3. It installs it the next time Linger starts ("Updating to Linger 0.5.4…"
+   for a few seconds), or, if you leave Linger running, after half an hour
+   with nobody using it. It never restarts while you're in voice or sharing
+   your screen. It comes back the way it was, in the tray if that's where
+   your list was.
+4. The first time the new version starts, the foot of your list says
+   **You're on Linger 0.5.4**, with what's new.
+
+Don't want to wait? Press **Restart now** at the foot of the list, in the
+tray's menu (**Restart to update Linger**), or in **Settings → Account & App
+→ Updates**, which also has **Check again**. Restart now doesn't wait the
+day.
+
+**The .deb, .rpm and .msi** need your computer's password to install, so they
+download by themselves but wait for you: the foot of your list says **Linger
+0.5.4 is out**, with **Update**, which asks for the password. **Not now** puts
+it off until tomorrow.
 
 **Arch and Omarchy package:** there is nothing to do in the app. New versions
-arrive with your system updates, and the Updates panel says so.
+arrive with your system updates. The foot of your list says when one is out,
+and the Updates panel says so too.
+
+**Hosting a server?** Apps update themselves, but a server only updates when
+you run `./update.sh`. When yours is behind the newest release, the foot of
+your list says so, with **How to update**.
 
 If this copy cannot update itself, or an update fails, download the newer
 installer/AppImage from [Releases](https://github.com/itsMattGuenther/Linger/releases/latest)
@@ -1478,6 +1510,13 @@ different promise from Signal, and you should know which one you are getting.
 
 **Nothing is collected about you.** No telemetry, no analytics, no crash
 reports. Not anonymous ones either. There is nothing to opt out of.
+
+**The privacy page** is [linger.im/privacy](https://linger.im/privacy).
+**Settings → Account & App → This Computer → Privacy** opens it (on a phone,
+**This Phone**). **Report a problem**, beside it, opens GitHub's forms for a
+new issue, for something wrong with Linger itself. Issues are public, so leave
+out messages, people's names and server addresses. To report somebody on your
+server, see [Reporting and blocking](#reporting-and-blocking).
 
 **On Linux, a shared video that plays without sound (or doesn't play at all)**
 is missing a decoder. Linux plays video through GStreamer, and the sound in

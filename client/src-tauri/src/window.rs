@@ -41,14 +41,28 @@ pub fn create(app: &App) -> tauri::Result<()> {
         std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").as_deref(),
         std::env::var_os("XDG_CURRENT_DESKTOP").as_deref(),
     );
+    // Restarted to update (#772): back in the tray if the list was there, or
+    // without taking the focus after a restart nobody pressed.
+    let come_back = crate::updates::take_come_back(app);
+    let in_tray = come_back == crate::updates::ComeBack::Tray;
     for config in &app.config().app.windows {
         // The list holds the message box beside it (#337): on Linux its
         // dropped files come through the shell (`dropped.rs`, #673).
         let mut config = config.clone();
         config.drag_drop_enabled = crate::dropped::THROUGH_THE_SHELL;
+        let hide = in_tray && config.label == OWNER;
+        if hide {
+            config.visible = false;
+        }
+        if come_back == crate::updates::ComeBack::Behind && config.label == OWNER {
+            config.focus = false;
+        }
         WebviewWindowBuilder::from_config(app, &config)?
             .decorations(config.decorations && decorated)
             .build()?;
+        if hide {
+            page_seen(app.handle(), OWNER, false);
+        }
     }
     Ok(())
 }

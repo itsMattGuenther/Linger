@@ -144,10 +144,11 @@ test("opens Settings over the list, as its sections and then one section, withou
   await sections.getByText("Appearance").click();
   await expect(sections).toBeHidden();
   await expect(settings.locator(".nx-set-title")).toHaveText("Appearance");
-  // A phone sizes things with its own display and text size: no Interface
-  // size, which couldn't zoom the phone's window anyway.
+  // No Interface size, which couldn't zoom the phone's window anyway: Text
+  // size instead, on top of the phone's own text size (#690).
   await expect(settings.getByText("Use plain names and message fonts", { exact: true })).toBeVisible();
   await expect(settings.getByRole("combobox", { name: "Interface size" })).toHaveCount(0);
+  await expect(settings.getByRole("combobox", { name: "Text size" })).toHaveValue("100");
   await settings.getByRole("button", { name: "Back to Settings" }).click();
   await expect(sections).toBeVisible();
 
@@ -170,6 +171,22 @@ test("Account & App says which version this is, under This Phone, and never look
   await expect(thisPhone.getByText("You're on version 0.3.6.", { exact: true })).toBeVisible();
   await expect(settings.getByRole("region", { name: "Updates" })).toHaveCount(0);
   expect(await did(page)).not.toContain("update_check");
+});
+
+test("This Phone opens the privacy page and where to report a problem, in the browser (#779)", async ({ page }) => {
+  // App Review wants both inside the app, not only on the store's page.
+  await phone(page);
+  await list(page).getByRole("button", { name: "Settings", exact: true }).click();
+  const settings = page.locator(".nx-phone-over [data-screen='settings']");
+  await settings.getByRole("navigation", { name: "Settings" }).getByText("Account & App").click();
+  const thisPhone = settings.getByRole("region", { name: "This Phone" });
+  await thisPhone.getByRole("button", { name: "Privacy", exact: true }).click();
+  await thisPhone.getByRole("button", { name: "Report a problem", exact: true }).click();
+  await expect
+    .poll(async () => (await did(page)).filter((line) => line.startsWith("open ")))
+    .toEqual(["open https://linger.im/privacy", "open https://github.com/itsMattGuenther/Linger/issues/new/choose"]);
+  // Settings stays open: the pages went to the browser, not over the app.
+  await expect(settings.locator(".nx-set-title")).toHaveText("Account & App");
 });
 
 /**
@@ -542,6 +559,49 @@ test.describe("on a phone 320 wide, the narrowest (#688)", () => {
       await settings.getByRole("button", { name: "Back to Settings" }).click();
     }
   });
+
+  // Settings' largest Text size, with the phone's own at the usual (#690).
+  // The phone's largest under it is the 2× test above, which is the most
+  // the two make together.
+  test("at the largest Text size, words fit their lines and nothing reaches past the edge (#690)", async ({ page }) => {
+    await phone(page);
+    const scale = () => page.evaluate(() => document.documentElement.style.getPropertyValue("--text-scale"));
+    await list(page).getByRole("button", { name: "Settings", exact: true }).click();
+    const settings = page.locator(".nx-phone-over [data-screen='settings']");
+    await settings.getByRole("navigation", { name: "Settings" }).getByText("Appearance").click();
+    await settings.getByRole("combobox", { name: "Text size" }).selectOption("150");
+    await expect.poll(scale).toBe("1.5");
+    expect(await cutOff(page), "Appearance").toEqual([]);
+    expect(await sticksOut(page), "Appearance").toEqual([]);
+    await settings.getByRole("button", { name: "Back to Settings" }).click();
+    await settings.getByRole("button", { name: "Back", exact: true }).click();
+    expect(await cutOff(page), "the list").toEqual([]);
+    expect(await sticksOut(page), "the list").toEqual([]);
+
+    // Kept on this phone: opened again, it starts at the size chosen.
+    await phone(page);
+    expect(await scale()).toBe("1.5");
+
+    await room(page, "general").click();
+    await expect(page.getByRole("log")).toContainText("Putting it on now.");
+    expect(await cutOff(page), "a room").toEqual([]);
+    expect(await sticksOut(page), "a room").toEqual([]);
+  });
+});
+
+test("the Text size chosen in Settings goes on top of the phone's own (#690)", async ({ page }) => {
+  await open(page, "?one&shell=phone&phonetext=1.3");
+  await settled(page);
+  const scale = () => page.evaluate(() => document.documentElement.style.getPropertyValue("--text-scale"));
+  await expect.poll(scale).toBe("1.3");
+  await list(page).getByRole("button", { name: "Settings", exact: true }).click();
+  const settings = page.locator(".nx-phone-over [data-screen='settings']");
+  await settings.getByRole("navigation", { name: "Settings" }).getByText("Appearance").click();
+  await settings.getByRole("combobox", { name: "Text size" }).selectOption("130");
+  await expect.poll(scale).toBe("1.69");
+  // Back to the usual, Linger is the phone's size again.
+  await settings.getByRole("combobox", { name: "Text size" }).selectOption("100");
+  await expect.poll(scale).toBe("1.3");
 });
 
 // Report and block on the phone (T-1605): there's no hovering for a
@@ -1493,4 +1553,114 @@ test.describe("a shared file (#703)", () => {
       expect(await copied(page)).toEqual([ADDRESS]);
     });
   });
+});
+
+// Share to Linger (#785, SPEC §4.15). A picture shared from another app's
+// share sheet waits in the shell's inbox (src-tauri/src/shared.rs); the list
+// asks which conversation it's for, and the one picked opens with it in its
+// message box, unsent. Turning the share down has the shell delete it.
+test.describe("sharing to Linger (#785)", () => {
+  const sheet = (page: Page) => page.getByRole("menu", { name: "Share to a conversation" });
+  const lines = async (page: Page, start: string) => (await did(page)).filter((line) => line.startsWith(start));
+
+  test("a shared picture asks which conversation, and the room picked opens with it in the box, unsent", async ({ page }) => {
+    await open(page, "?one&shell=phone&shared");
+    await settled(page);
+    await expect(sheet(page).locator(".k-menu-head")).toHaveText("Share porch.png to…");
+    // Rooms first, as the list has them; nothing read but the list yet.
+    await expect(sheet(page).locator("[data-kit='MenuItem']").first()).toHaveText("general");
+    expect(await lines(page, "shared_file ")).toEqual([]);
+    expect(await sticksOut(page), "the share sheet").toEqual([]);
+
+    await sheet(page).getByRole("menuitem", { name: "general" }).click();
+    await expect(sheet(page)).toHaveCount(0);
+    await expect(title(page)).toContainText("general");
+    await expect(screen(page).getByRole("list", { name: "Files for this message" }).getByRole("listitem")).toContainText("porch.png");
+    expect(await lines(page, "shared_file ")).toEqual(["shared_file 1 0"]);
+    expect(await lines(page, "shared_done")).toEqual(["shared_done 1"]);
+    // In the box, not sent.
+    expect((await did(page)).filter((line) => line.startsWith("sent:"))).toEqual([]);
+  });
+
+  test("tapping the dimmed page turns the share down, and the shell deletes it", async ({ page }) => {
+    await open(page, "?one&shell=phone&shared");
+    await settled(page);
+    await expect(sheet(page)).toBeVisible();
+    await page.locator(".k-sheet-scrim").click({ position: { x: 200, y: 100 } });
+    await expect(sheet(page)).toHaveCount(0);
+    await expect(screen(page)).toHaveCount(0);
+    expect(await lines(page, "shared_done")).toEqual(["shared_done 1"]);
+    expect(await lines(page, "shared_file ")).toEqual([]);
+  });
+
+  // Greptile's catches on #792: a pick went on after the share was turned
+  // down, or replaced, while its files were read; and a file left out of a
+  // share was dropped without a word.
+  const pickWhileReading = async (page: Page) => {
+    await open(page, "?one&shell=phone&shared&sharedslow");
+    await settled(page);
+    await sheet(page).getByRole("menuitem", { name: "general" }).click();
+    await expect.poll(() => lines(page, "shared_file ")).toEqual(["shared_file 1 0"]);
+  };
+  /** The page's own work after the shell answers has run. */
+  const settle = (page: Page) => page.evaluate(() => new Promise((done) => setTimeout(done, 100)));
+
+  test("turning the share down while its files are read sends them nowhere", async ({ page }) => {
+    await pickWhileReading(page);
+    await page.locator(".k-sheet-scrim").click({ position: { x: 200, y: 100 } });
+    await expect(sheet(page)).toHaveCount(0);
+    await page.evaluate(() => window.core?.shareRead());
+    await settle(page);
+    await expect(screen(page), "the conversation doesn't open").toHaveCount(0);
+    expect(await lines(page, "shared_done")).toEqual(["shared_done 1"]);
+  });
+
+  test("a newer share arriving while the files are read takes the sheet, and the first goes nowhere", async ({ page }) => {
+    await pickWhileReading(page);
+    await page.evaluate(() => window.core?.share(["b.png"]));
+    await expect(sheet(page).locator(".k-menu-head")).toHaveText("Share b.png to…");
+    await page.evaluate(() => window.core?.shareRead());
+    await settle(page);
+    await expect(screen(page), "the conversation doesn't open").toHaveCount(0);
+    await expect(sheet(page).locator(".k-menu-head")).toHaveText("Share b.png to…");
+    expect(await lines(page, "shared_done"), "the newer share isn't deleted").toEqual([]);
+  });
+
+  test("a file that can't be read is said in the box the rest went to", async ({ page }) => {
+    await open(page, "?one&shell=phone&shared&sharedgone");
+    await settled(page);
+    await sheet(page).getByRole("menuitem", { name: "general" }).click();
+    await expect(screen(page).getByRole("list", { name: "Files for this message" }).getByRole("listitem")).toContainText("porch.png");
+    await expect(screen(page).locator(".nx-composer-problem")).toHaveText("Linger couldn't open gone.png.");
+    expect(await lines(page, "shared_done")).toEqual(["shared_done 1"]);
+  });
+
+  test("a share arriving while Linger runs rises too, saying how many files", async ({ page }) => {
+    await phone(page);
+    await expect(sheet(page)).toHaveCount(0);
+    await page.evaluate(() => window.core?.share(["a.png", "b.png"]));
+    await expect(sheet(page).locator(".k-menu-head")).toHaveText("Share 2 files to…");
+  });
+
+  test("a file too big to send is said before anybody picks", async ({ page }) => {
+    await open(page, "?one&shell=phone&shared&sharedbig");
+    await settled(page);
+    await expect(sheet(page).getByRole("status")).toHaveText("film.mov is too big to send. A file can be 500 MB at most.");
+  });
+});
+
+// A topic too long for the phone's header (#778): a tap opens the whole of
+// it, risen from the bottom, and a tap on the dimmed page puts it away.
+test("a tap on a cut topic shows the whole of it in a sheet (#778)", async ({ page }) => {
+  await open(page, "?one&shell=phone&longwords");
+  await settled(page);
+  await room(page, "general").click();
+  await expect(screen(page)).toBeVisible();
+  const whole = screen(page).locator(".nx-pane-sub[data-cut='yes'] .nx-pane-whole");
+  await whole.click();
+  const card = page.getByRole("dialog", { name: "The topic of #general" });
+  await expect(card).toContainText("Media is welcome in other rooms too; this is just its home.");
+  await expect(page.locator("[data-kit='Sheet']")).toBeVisible();
+  await page.locator(".k-sheet-scrim").click({ position: { x: 20, y: 20 } });
+  await expect(card).toHaveCount(0);
 });

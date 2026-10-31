@@ -540,3 +540,23 @@ test.describe("the server's version, for its host (#314)", () => {
     expect((await did(page)).filter((line) => line.startsWith("GET /health"))).toEqual([]);
   });
 });
+
+// Restart now in Settings goes to the list window, which knows about voice and
+// does the install; Settings hears how it went (#772, the #794 review), so a
+// failure is said there and the button comes back.
+test("Restart now goes to the list window, and Settings shows how it went (#772)", async ({ page }) => {
+  await open(page, "?section=account&update");
+  const updates = page.getByRole("region", { name: "Updates" });
+  const restart = updates.getByRole("button", { name: "Restart now" });
+  await restart.click();
+  await expect.poll(async () => intents(await did(page))).toContainEqual({ kind: "update" });
+  await expect(restart).toBeDisabled();
+  // In voice: it waits for you to leave, and says so.
+  await page.evaluate(() => window.shell?.updateSaid({ problem: null, waiting: true }));
+  await expect(updates).toContainText("it waits until you've left");
+  await expect(restart).toBeDisabled();
+  // It didn't happen: why, and the button back to try again.
+  await page.evaluate(() => window.shell?.updateSaid({ problem: "The network is down.", waiting: false }));
+  await expect(updates).toContainText("The network is down.");
+  await expect(restart).toBeEnabled();
+});

@@ -30,8 +30,26 @@
  * `window.core.unstall()`. `window.core.refuseNext()` has the next refresh
  * of any server wait for `unstall()` too, and then be refused, as for an
  * account deleted meanwhile (#650).
- * `?noinfo` has Casa da Ribeira never say its name. `?update` has a new
- * version waiting (0.4.1); otherwise this is the newest.
+ * `?noinfo` has Casa da Ribeira never say its name.
+ *
+ * Updates (#772): `?update` has 0.4.1 downloaded and ready, on a copy that
+ * installs by itself; `?update=waiting` has it on its day's wait until
+ * `window.core.downloaded()`; `?update=password` is a copy that needs a
+ * password to install; `?update=arch` one pacman owns. Otherwise this is the
+ * newest. Installing is written down as `update_now <how it comes back>` and
+ * never answers, as a restart wouldn't (`?updatefail` has it refused, and
+ * `?updatebusy` has the shell find you in voice the first time, answered at
+ * `window.core.answerBusy()`).
+ * `?pending` has 0.4.1 waiting for this start, whose install fails, as
+ * offline, at `window.core.installFailed()`. `?updated` is the first start after an update, to the
+ * version `release-line.json` names. `?behind` has The Good Company, which
+ * you host, run 0.4.0 while 0.4.1 is out.
+ *
+ * A server that needs a newer app (#793): this copy is 0.3.6, and `?tooold`
+ * has Casa da Ribeira say on `/health` that it works with 0.5.4 or newer
+ * (`?tooold=all`: every server says so). `window.core.raise(server)` has a
+ * server say so from now on, as one updated while Linger runs would.
+ * `?neverup` has Casa da Ribeira's gateway refuse every try, never ready.
  *
  * Conversations open beside the list (#337): The Good Company's rooms and
  * DMs answer with the evening's messages, and take new ones. The window's
@@ -62,6 +80,16 @@
  * (`phone_save`) as `phone_save <url> <name>`, and answered at once, or with
  * `?savehold` only at `window.core.saved()`; `?savefail` has it refused.
  *
+ * Share to Linger (#785): `?shared` has the shell's inbox holding one picture,
+ * `porch.png`, as if shared from another app's share sheet, taken as share
+ * `1`; `?sharedbig` adds `film.mov`, too big to send, and `?sharedgone` adds
+ * `gone.png`, which can't be read once it's asked for. Asking for the list, a
+ * file and saying it's done are written down as `shared_files`,
+ * `shared_file <share> <index>` and `shared_done <share>`, which deletes that
+ * share. With `?sharedslow` each file's bytes wait for
+ * `window.core.shareRead()`. `window.core.share(names)` is a new share
+ * arriving while the app runs, with the shell's word that it did.
+ *
  * "Open in Linger" (#607): `?opened=<link>` is the link Linger was started
  * with, handed over the first time the window asks (`link_offered`), and
  * `window.core.link(link)` is one handed over while it runs. Each ask is
@@ -87,6 +115,8 @@ import { createRoot } from "react-dom/client";
 import type { ServerFrame } from "../../src/generated/ServerFrame";
 import { apply, type GatewayState, type GatewayStatus, serverState } from "../../src/lib/gateway";
 import { ListWindow } from "../../src/next/app/list/ListWindow";
+import { loadTextSize, onAppearance } from "../../src/next/core/appearance";
+import { followTextSize } from "../../src/next/core/phone";
 import "../../src/next/styles/app.css";
 import { hearSounds } from "./next/audio";
 import { Counted } from "./next/commits";
@@ -95,15 +125,25 @@ import type { Report } from "../../src/generated/Report";
 import type { User } from "../../src/generated/User";
 import type { VoicePeer } from "../../src/generated/VoicePeer";
 import { json, served } from "./next/desktop";
-import { customEmoji, SERVER, SERVER_NAME, evening, messages, people } from "./next/evening";
+import { customEmoji, SERVER, SERVER_NAME, evening, messages, people, withLongWords } from "./next/evening";
 import { collections, fakeMedia, fakeSearch } from "./next/finds";
 import type { MediaKind } from "../../src/generated/MediaKind";
 import { GUILD, guild, LISBON, lisbon, serverInfo } from "./next/servers";
 import { voiceInThePage } from "../../src/lib/ipc";
 import { browserWorld } from "../../src/lib/pageVoice";
 import { FakeSfu, fakeMicrophone, realAudio, type Received } from "./next/sfu";
+import releaseLine from "../../src/next/core/release-line.json";
 
 const query = new URLSearchParams(location.search);
+// The first start after an update (#772): an older version was seen here.
+if (query.has("updated")) localStorage.setItem("linger.next.update.seen", "0.0.1");
+/** Whether the update `?update=waiting` waits for is downloaded yet (`window.core.downloaded()`). */
+let updateDownloaded = query.get("update") !== "waiting";
+/** Whether `?updatebusy` has been asked yet, and how its busy answer is given. */
+let busyAnswered = false;
+let answerBusy: (() => void) | null = null;
+/** The start-up install `?pending` is waiting on, ended by `window.core.installFailed()`. */
+let installing: (() => void) | null = null;
 const did: string[] = [];
 const note = (what: string) => {
   did.push(what);
@@ -113,7 +153,8 @@ hearSounds(note);
 
 /** Each server as its store state, from the fixtures: every one answers, signed in or not. */
 const states: Record<string, GatewayState> = {
-  [SERVER]: evening(serverState(SERVER)),
+  // `?longwords`: a topic and a status longer than the header (#778).
+  [SERVER]: query.has("longwords") ? withLongWords(evening(serverState(SERVER))) : evening(serverState(SERVER)),
   [GUILD]: guild(serverState(GUILD)),
   [LISBON]: lisbon(serverState(LISBON)),
 };
@@ -226,6 +267,22 @@ function logical(value: unknown): { width: number; height: number; x: number; y:
 }
 
 const listeners = new Map<string, number[]>();
+
+/** A file waiting in the shell's share inbox (#785, `src-tauri/src/shared.rs`). */
+interface SharedFile {
+  name: string;
+  size: number;
+  problem: "too_big" | null;
+}
+/** One file shared to Linger, as the shell lists it. */
+const sharedPicture = (name: string): SharedFile => ({ name, size: 4, problem: null });
+/** The share the shell has taken, by its id (`shared.rs`, `take`). */
+let shareId = 1;
+let inbox: SharedFile[] = [
+  ...(query.has("shared") ? [sharedPicture("porch.png")] : []),
+  ...(query.has("sharedbig") ? [{ name: "film.mov", size: 600_000_000, problem: "too_big" as const }] : []),
+  ...(query.has("sharedgone") ? [sharedPicture("gone.png")] : []),
+];
 interface Internals {
   runCallback: (id: number, data: unknown) => void;
 }
@@ -294,6 +351,11 @@ mockIPC((cmd, args) => {
       note(`connect ${server}`);
       window.setTimeout(() => {
         seq[server] = 1;
+        // `?neverup`: Casa da Ribeira's gateway never takes this app (#797 review).
+        if (query.has("neverup") && server === LISBON) {
+          deliver("gateway:status", { server, status: { kind: "waiting", retry_in_ms: 1000, reason: "the server closed the connection" } });
+          return;
+        }
         deliver("gateway:status", { server, status: { kind: "ready", latency_ms: 20 } });
         deliver("gateway:frame", { server, frame: ready(server) });
         // Written down, so a spec can wait for every connection's `ready`:
@@ -315,10 +377,26 @@ mockIPC((cmd, args) => {
       return link;
     }
     case "app_version":
-      return "0.3.6";
+      return query.has("updated") ? releaseLine.version : "0.3.6";
     // A link or a download handed to the browser.
     case "plugin:opener|open_url":
       note(`open ${String(a.url)}`);
+      return null;
+    // Files shared to Linger from another app's share sheet (#785).
+    case "shared_files":
+      note("shared_files");
+      return inbox.length > 0 ? { id: String(shareId), files: inbox } : null;
+    case "shared_file": {
+      note(`shared_file ${String(a.share)} ${String(a.index)}`);
+      const one = String(a.share) === String(shareId) ? inbox[Number(a.index)] : undefined;
+      return (query.has("sharedslow") ? shareRead : Promise.resolve()).then(() => {
+        if (!one || one.problem !== null || one.name === "gone.png") throw "that can't be sent";
+        return [0x89, 0x50, 0x4e, 0x47];
+      });
+    }
+    case "shared_done":
+      note(`shared_done ${String(a.share)}`);
+      if (String(a.share) === String(shareId)) inbox = [];
       return null;
     // A file fetched for an iPhone's share sheet (#703).
     case "phone_save":
@@ -327,9 +405,38 @@ mockIPC((cmd, args) => {
         if (query.has("savefail")) throw "Couldn't get the file.";
         return null;
       });
-    case "update_check":
+    case "update_check": {
       note("update_check");
-      return query.has("update") ? { kind: "ready", version: "0.4.1", notes: null } : { kind: "current" };
+      const line = "Screen sharing, and fixes for voice.";
+      const kind = query.get("update");
+      if (kind === null) return { kind: "current", silent: true };
+      if (kind === "arch") return { kind: "managed", by: "pacman", newer: { version: "0.4.1", line } };
+      return { kind: "newer", version: "0.4.1", line, published: 0, downloaded: updateDownloaded, silent: kind !== "password" };
+    }
+    case "update_now":
+      note(`update_now ${String(a.comeBack)}${a.automatic === true ? " automatic" : ""}`);
+      // A restart never answers; a refusal does. `?updatebusy`: the shell's
+      // last check finds you in voice, once, answered at
+      // `window.core.answerBusy()` (#794 review).
+      if (query.has("updatebusy") && !busyAnswered) {
+        busyAnswered = true;
+        return new Promise((done) => {
+          answerBusy = () => done({ kind: "busy" });
+        });
+      }
+      return query.has("updatefail") ? { kind: "failed", reason: "The network is down." } : new Promise(() => undefined);
+    case "update_pending":
+      return query.has("pending") ? "0.4.1" : null;
+    case "update_install_pending":
+      note("update_install_pending");
+      return new Promise((done) => {
+        installing = () => done({ kind: "failed", reason: "offline" });
+      });
+    case "newest_version":
+      return query.has("behind") ? "0.4.1" : null;
+    // Whether the list window is on screen (#772: how Linger comes back after an update).
+    case "plugin:window|is_visible":
+      return true;
     case "gateway_disconnect":
       note(`disconnect ${String(a.baseUrl)}`);
       return null;
@@ -413,6 +520,12 @@ declare global {
       ask: (event: string, question: Record<string, unknown>) => void;
       /** The desktop shell passes on a tray menu choice ("mute" or "leave"). */
       tray: (action: string) => void;
+      /** The update `?update=waiting` waits for finished downloading (#772). */
+      downloaded: () => void;
+      /** The start-up install `?pending` waits on fails, as offline (#772). */
+      installFailed: () => void;
+      /** The shell's busy answer `?updatebusy` holds comes back (#794 review). */
+      answerBusy: () => void;
       /** The desktop shell heard the talk key go "down" or "up" with any app in front (#500). */
       talkKey: (edge: string) => void;
       /** The desktop shell passes on a clicked banner's target. */
@@ -425,8 +538,14 @@ declare global {
       link: (link: string) => void;
       /** With `?hold`, the server answers its health check from now on. */
       release: () => void;
+      /** The server says from now on that it works with 0.5.4 or newer (#793), as after its host updated it. */
+      raise: (server: string) => void;
       /** With `?savehold`, the iPhone's shell has the file, and the share sheet shows. */
       saved: () => void;
+      /** Files shared to Linger while the app runs, and the shell's word that they're in its inbox (#785). */
+      share: (names: string[]) => void;
+      /** With `?sharedslow`, the shell has read the shared files' bytes. */
+      shareRead: () => void;
       /** With `?down`, the server that was down answers from now on. */
       up: () => void;
       /** With `?stall`, Ashen Lanterns' first refresh is answered now. */
@@ -462,6 +581,12 @@ window.core = {
   status: (server, status) => deliver("gateway:status", { server, status }),
   ask: (event, question) => deliver(event, { v: 1, id: "q-1", from: "chat", ...question }),
   tray: (action) => deliver("next:tray", action),
+  downloaded: () => {
+    updateDownloaded = true;
+    deliver("next:update", null);
+  },
+  installFailed: () => installing?.(),
+  answerBusy: () => answerBusy?.(),
   talkKey: (edge) => deliver("next:talkkey", edge),
   banner: (target) => deliver("next:banner", target),
   back: () => {
@@ -477,7 +602,16 @@ window.core = {
     deliver("next:link", null);
   },
   release: () => release(),
+  raise: (server) => {
+    tooOld.add(server);
+  },
   saved: () => showSheet(),
+  share: (names) => {
+    shareId += 1;
+    inbox = names.map(sharedPicture);
+    deliver("next:shared", null);
+  },
+  shareRead: () => finishReading(),
   up: () => {
     down = null;
   },
@@ -504,6 +638,13 @@ window.core = {
 // --- the servers -----------------------------------------------------------
 
 let release: () => void = () => undefined;
+/** With `?sharedslow`, a shared file's bytes wait for `window.core.shareRead()`. */
+let finishReading: () => void = () => undefined;
+const shareRead = new Promise<void>((settle) => {
+  finishReading = settle;
+});
+/** The servers that say they work with 0.5.4 or newer (#793): `?tooold` Casa da Ribeira, `?tooold=all` every one. */
+const tooOld = new Set<string>(query.has("tooold") ? (query.get("tooold") === "all" ? Object.keys(states) : [LISBON]) : []);
 /** With `?savehold`, the iPhone's share sheet waits for `window.core.saved()`. */
 let showSheet: () => void = () => undefined;
 const saving = new Promise<void>((settle) => {
@@ -669,6 +810,10 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   if (path === "/health") {
     // `?hold`: the server doesn't answer until the test lets it (`window.core.release()`).
     if (query.has("hold")) await held;
+    // `?behind`: the release it runs, behind the newest (#772).
+    if (query.has("behind")) return json({ ok: true, version: server === SERVER ? "0.4.0" : "0.4.1" });
+    // `?tooold`: the oldest app it works with is newer than this one (#793).
+    if (tooOld.has(server)) return json({ ok: true, version: "0.5.4", oldest_client: "0.5.4" });
     return new Response(null, { status: 204 });
   }
   const invite = /^\/auth\/invite\/(.+)$/.exec(path);
@@ -919,6 +1064,10 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
       ...(query.has("hostissues") && server === SERVER && state.me?.is_host
         ? { health: { backups: true, last_backup_at: Date.now() - 4 * 24 * 60 * 60 * 1000 - 60_000, backup_overdue: true, disk_nearly_full: true, file_space_nearly_full: false } }
         : {}),
+      // `?behind`: a server you host, all well with its machine (#772).
+      ...(query.has("behind") && server === SERVER && state.me?.is_host
+        ? { health: { backups: true, last_backup_at: Date.now() - 6 * 60 * 60 * 1000, backup_overdue: false, disk_nearly_full: false, file_space_nearly_full: false } }
+        : {}),
       // `?hostbucket`: last night's copy is fine, but none has reached the
       // host's bucket for four days (#614).
       ...(query.has("hostbucket") && server === SERVER && state.me?.is_host
@@ -940,8 +1089,13 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   return json({ error: { code: "NOT_FOUND", message: "Not in this fixture.", retry_after_ms: null } }, 404);
 };
 
-// The phone marks its page the way main.tsx does, so its styles apply here too.
-if (query.get("shell") === "phone") document.documentElement.dataset.shell = "phone";
+// The phone marks its page the way main.tsx does, so its styles apply here
+// too, and sizes its text the same way: the phone's text size (`?phonetext=`,
+// the usual when not given) with the Text size chosen in Settings on top (#690).
+if (query.get("shell") === "phone") {
+  document.documentElement.dataset.shell = "phone";
+  followTextSize(document, () => Promise.resolve(Number(query.get("phonetext") ?? "1")), loadTextSize, onAppearance);
+}
 
 // --- the phone's voice (#429) ----------------------------------------------
 //

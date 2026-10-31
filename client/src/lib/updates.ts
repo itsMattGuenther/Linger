@@ -1,38 +1,65 @@
 /**
- * The Tauri side of in-app updates (T-701).
+ * The Tauri side of updates (T-701, #772): Linger updates itself.
  *
  * These types mirror `src-tauri/src/updates.rs` by hand, the same way
  * `ipc.ts` mirrors `secrets.rs`: AGENTS rule 7 covers types crossing the
  * *wire*, and none of these ever leave the machine. A Rust test pins the
- * `kind` spellings so the two halves can't drift silently.
+ * spellings so the two halves can't drift silently.
  *
- * The page never talks to the updater plugin. It calls two of the app's own
- * commands, and the capability file grants the plugin nothing — a WebView that
+ * The page never talks to the updater plugin. It calls the app's own
+ * commands, and the capability files grant the plugin nothing — a WebView that
  * could download and run an installer is not a WebView with a minimum
- * permission set (ARCHITECTURE §7.7).
+ * permission set (ARCHITECTURE §7).
  *
  * `pnpm dev` in a plain browser has no shell to ask, so everything here reports
  * `unconfigured`, which is also what a build with no signing key reports. Both
  * mean the same thing to a reader: this copy cannot update itself.
  */
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { PublicApi } from "./api";
+
+/** A newer release, for a copy a package manager owns. */
+export interface NewerRelease {
+  version: string;
+  /** One short line about what's in it, when the release has one. */
+  line: string | null;
+}
 
 export type UpdateCheck =
-  | { kind: "ready"; version: string; notes: string | null }
-  | { kind: "current" }
+  /**
+   * A newer release this copy installs: by itself (`silent`: the setup.exe
+   * and the AppImage), or only when asked, since installing needs a password
+   * (the .deb, .rpm and .msi). `published` is when it came out (ms), and
+   * `downloaded` whether it's on this computer, ready to install.
+   */
+  | { kind: "newer"; version: string; line: string | null; published: number | null; downloaded: boolean; silent: boolean }
+  | { kind: "current"; silent: boolean }
   | { kind: "unconfigured" }
   | { kind: "failed"; reason: string }
-  // A package manager installed this copy and updates it (#188).
-  | { kind: "managed"; by: string };
+  /** A package manager installed this copy and updates it (#188). */
+  | { kind: "managed"; by: string; newer: NewerRelease | null };
 
 /**
  * Only ever a reason it did not happen. A successful install replaces the
  * running process, so there is nothing left to resolve the promise.
  */
 export type UpdateInstall =
+  | { kind: "nothing" }
+  /** Somebody's in voice or sharing a screen, by the shell's last check: nothing restarts now. */
+  | { kind: "busy" }
   | { kind: "unconfigured" }
   | { kind: "failed"; reason: string }
   | { kind: "managed"; by: string };
+
+/**
+ * How Linger comes back after restarting to update: as usual, without taking
+ * the focus (a restart nobody pressed), or in the tray, where the list was.
+ */
+export type ComeBack = "shown" | "behind" | "tray";
+
+/** How long a release is out before a copy installs it by itself (`WAIT_MS` in updates.rs). */
+export const WAIT_MS = 24 * 60 * 60 * 1000;
 
 /** The version this copy was built as, or `null` outside the shell. */
 export async function appVersion(): Promise<string | null> {
@@ -41,6 +68,10 @@ export async function appVersion(): Promise<string | null> {
   return version;
 }
 
+/**
+ * Look for a newer release. A copy that installs updates starts downloading
+ * one that's a day old; `onUpdateDownloaded` hears when it's in.
+ */
 export async function checkForUpdate(): Promise<UpdateCheck> {
   if (!isTauri()) return { kind: "unconfigured" };
   const result: UpdateCheck = await invoke("update_check");
@@ -48,13 +79,99 @@ export async function checkForUpdate(): Promise<UpdateCheck> {
 }
 
 /**
- * Download, verify, install, restart. On success this never returns — the app
- * is replaced by the new one — so anything it resolves with went wrong.
+ * Install the newest release now and restart into it. Only the list window
+ * asks, and only when nobody's in voice or sharing a screen; the shell checks
+ * again right before installing. `automatic` is a restart nobody pressed:
+ * then only the update already kept goes in, once its day is up. On success
+ * this never returns.
  */
-export async function installUpdate(): Promise<UpdateInstall> {
+export async function updateNow(comeBack: ComeBack = "shown", automatic = false): Promise<UpdateInstall> {
   if (!isTauri()) return { kind: "unconfigured" };
-  const result: UpdateInstall = await invoke("update_install");
+  const result: UpdateInstall = await invoke("update_now", { comeBack, automatic });
   return result;
+}
+
+/** The version downloaded and waiting for this start, if there is one. */
+export async function pendingUpdate(): Promise<string | null> {
+  if (!isTauri()) return null;
+  const version: string | null = await invoke("update_pending");
+  return version;
+}
+
+/** Install the update waiting for this start, before the list is shown. On success this never returns. */
+export async function installPendingUpdate(): Promise<UpdateInstall> {
+  if (!isTauri()) return { kind: "nothing" };
+  const result: UpdateInstall = await invoke("update_install_pending");
+  return result;
+}
+
+/** Hear when a background download is in: ask again, and it's ready. Returns the way to stop. */
+export function onUpdateDownloaded(listener: () => void): () => void {
+  if (!isTauri()) return () => undefined;
+  let stop: (() => void) | null = null;
+  let stopped = false;
+  void listen("next:update", () => listener())
+    .then((unlisten) => {
+      if (stopped) unlisten();
+      else stop = unlisten;
+    })
+    .catch(() => undefined);
+  return () => {
+    stopped = true;
+    stop?.();
+  };
+}
+
+/**
+ * Settings' opening words for Updates: how this copy updates. Pure, so each
+ * kind of copy has words a test can read.
+ */
+export function updateLead(check: UpdateCheck | null): string {
+  if (check?.kind === "managed") return "Your system installed this copy of Linger, and updates it along with everything else.";
+  const silent = check?.kind === "newer" || check?.kind === "current" ? check.silent : true;
+  if (!silent) {
+    return "Linger looks for a new version when it starts and twice a day, and downloads it. Installing it asks for your computer's password, so it waits for you to press Update. Every update is checked against this project's signing key first, and Linger never restarts while you're in voice.";
+  }
+  return "Linger keeps itself up to date. It looks for a new version when it starts and twice a day, downloads it, and installs it the next time it starts. Every update is checked against this project's signing key first, and Linger never restarts while you're in voice.";
+}
+
+/**
+ * The sentence Settings shows about a new version. Pure, so the wording is
+ * testable without a shell: every state a reader can land in has a line, and
+ * none of them is a raw error code. `now` decides whether a release is still
+ * in its day's wait.
+ */
+export function updateLine(check: UpdateCheck | null, busy: boolean, now = Date.now()): string {
+  if (busy) return "Looking…";
+  if (check === null) return "";
+  switch (check.kind) {
+    case "newer": {
+      const out = `Linger ${check.version} is out.`;
+      if (!check.silent) return `${out} Updating asks for your computer's password, so it waits for you to press Update.`;
+      if (check.downloaded) return `Linger ${check.version} is ready. It installs the next time Linger starts, or while you're away from your computer.`;
+      if (check.published !== null && now - check.published < WAIT_MS) {
+        return `${out} It installs by itself a day after it came out, or now with Restart now.`;
+      }
+      return `${out} It's downloading, and installs the next time Linger starts.`;
+    }
+    case "current":
+      return "This is the newest version.";
+    case "unconfigured":
+      return "This copy was not built to update itself. Install a new one from the release page.";
+    case "failed":
+      return `Couldn't check for updates: ${check.reason}`;
+    case "managed":
+      if (check.newer === null) return "This is the newest version.";
+      return `Linger ${check.newer.version} is out. ${systemUpdate(check.by)}`;
+  }
+}
+
+/**
+ * How a copy the system owns gets a new version, in words true on any system
+ * that installs it that way: never a menu only one desktop has (#772).
+ */
+export function systemUpdate(by: string): string {
+  return by === "pacman" ? "It comes with your next system update (sudo pacman -Syu)." : `It comes with your next system update, through ${by}.`;
 }
 
 /**
@@ -70,31 +187,6 @@ const RELEASE_NOTES_BASE = "https://github.com/itsMattGuenther/Linger/releases/t
 export function releaseNotesUrl(version: string): string {
   const tag = version.startsWith("v") ? version : `v${version}`;
   return `${RELEASE_NOTES_BASE}${encodeURIComponent(tag)}`;
-}
-
-/**
- * The sentence the settings panel shows. Pure, so the wording is testable
- * without a shell: every state a reader can land in has a line, and none of
- * them is a raw error code.
- */
-export function updateLine(check: UpdateCheck | null, busy: boolean): string {
-  if (busy) return "Looking…";
-  if (check === null) return "";
-  switch (check.kind) {
-    case "ready":
-      return `Version ${check.version} is ready to install.`;
-    case "current":
-      return "This is the newest version.";
-    case "unconfigured":
-      return "This copy was not built to update itself. Install a new one from the release page.";
-    case "failed":
-      return `Couldn't check for updates: ${check.reason}`;
-    case "managed":
-      // Omarchy's Update runs `pacman -Syu`, which is what brings it.
-      return check.by === "pacman"
-        ? "This copy updates with your system: use Update in the Omarchy menu, or run sudo pacman -Syu."
-        : `This copy updates with your system, through ${check.by}.`;
-  }
 }
 
 /**
@@ -134,6 +226,56 @@ export function isOlderVersion(version: string, than: string): boolean {
   if (aMajor !== bMajor) return aMajor < bMajor;
   if (aMinor !== bMinor) return aMinor < bMinor;
   return aPatch < bPatch;
+}
+
+/**
+ * Whether this app is too old for a server (#793): the server's `oldest_client`
+ * is a newer release than the app's own. Never when either is missing or
+ * isn't a plain release number (`isOlderVersion`): a block has to be sure,
+ * and an odd answer, or a build whose version can't be read, keeps working
+ * as it did.
+ */
+export function needsNewerApp(app: string | null, oldestClient: string | null): boolean {
+  return app !== null && oldestClient !== null && isOlderVersion(app, oldestClient);
+}
+
+/**
+ * The newest of several servers' `oldest_client`, for one sentence about them
+ * all (#793): an app at least that new works with every one. Unreadable ones
+ * count for nothing.
+ */
+export function newestOf(versions: readonly string[]): string | null {
+  let newest: string | null = null;
+  for (const version of versions) {
+    if (versionParts(version) === null) continue;
+    if (newest === null || isOlderVersion(newest, version)) newest = version;
+  }
+  return newest;
+}
+
+/** This copy's version, asked of the shell once per start: it can't change while Linger runs. */
+let running: Promise<string | null> | null = null;
+
+/** The version this copy was built as, asked once and kept; `null` outside the shell, or when it can't be read. */
+export function thisVersion(): Promise<string | null> {
+  running ??= appVersion().catch(() => null);
+  return running;
+}
+
+/**
+ * Whether the server at `baseUrl` needs a newer app than this one (#793):
+ * the release it asks for when it does, otherwise null. It asks `/health`,
+ * which needs no sign-in, so it still answers when the break is in signing
+ * in. No answer, or one without the field, is null: a server that can't be
+ * asked is somebody else's problem to report (the connection's), never a
+ * block. Asks nothing when this copy's version can't be read.
+ */
+export async function newerAppFor(baseUrl: string, signal?: AbortSignal): Promise<string | null> {
+  const app = await thisVersion();
+  if (app === null) return null;
+  const said = await new PublicApi(baseUrl).health(signal).catch(() => null);
+  const oldest = said?.oldestClient ?? null;
+  return needsNewerApp(app, oldest) ? oldest : null;
 }
 
 /** Whether two versions are the same release, both readable. */

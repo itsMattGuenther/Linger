@@ -34,8 +34,8 @@ import { isTalkButton, isTalkKey, talkKeyName } from "../../core/talkKey";
 import { ANYWHERE, type TalkEdge } from "../../core/talkHold";
 import { forgetNotifications, resetNotifications, setDmAlerts, setQuietServers, showNotice } from "../../../lib/notify";
 import { forgetPreviews } from "../../../lib/previews";
-import { type ServerSession, useSessions, type WaitingServer } from "../../../lib/session";
-import { dropPresence, onBack, setAway, setPresenceLive, setPresenceRoom, startPresence } from "../../../lib/watchPresence";
+import { type BlockedServer, type ServerSession, useSessions, type WaitingServer } from "../../../lib/session";
+import { dropPresence, lastInput, onBack, setAway, setPresenceLive, setPresenceRoom, startPresence } from "../../../lib/watchPresence";
 import type { MessageId } from "../../../generated/MessageId";
 import type { RoomId } from "../../../generated/RoomId";
 import { OWNER, PROTOCOL, tauriBus } from "../../core/bus";
@@ -54,6 +54,8 @@ import { leaveDraft } from "../../core/handoff";
 import { beside, folding, LIST_MIN, LIST_WIDTH, listWidth, loadSide, paneWidth, saveSide, type Side, unfolding, widestList } from "../../core/side";
 import { pageScreen, screenAround } from "../../core/screen";
 import { backTab, isTool, keepOnly, keyOf, loadTabs, NO_TABS, openTab, previewTab, pushTab, same, saveTabs, type SideTab, type Tabs } from "../../core/tabs";
+import { holdForConversation, readShared, type Share, sharedDone, type ShareTarget, shareTargets, watchShares } from "../../core/shareInbox";
+import { ShareSheet } from "./ShareSheet";
 import { type SideHandle, type SideOpen, SidePane } from "../chat/SidePane";
 import {
   type Accounts,
@@ -73,13 +75,28 @@ import {
 } from "../../core/share";
 import { desktopOf, firstTimeInTray, loadCloseList, placeWords, trayNotice, type VoicePlace } from "../../core/closing";
 import { cardSafety } from "../../core/safety";
-import { BACKGROUND_GRACE_MS, onPhone, thisDevice, watchBackground, watchNetwork } from "../../core/phone";
+import { BACKGROUND_GRACE_MS, onIPhone, onPhone, thisDevice, watchBackground, watchNetwork } from "../../core/phone";
 import { type SettingsKey, settingsKeys } from "../../core/settings";
 import { Settings, type SettingsAsked, type SettingsHolder } from "../settings/SettingsWindow";
 import { useBackButton } from "../useBackButton";
-import { listNotes, TROUBLE_GRACE_MS, troubleSince, UPDATE_EVERY_MS } from "../../core/notes";
-import { checkForUpdate, type UpdateCheck } from "../../../lib/updates";
-import { ListNotes } from "./ListNotes";
+import { listNotes, TROUBLE_GRACE_MS, troubleSince, UPDATE_EVERY_MS, updateNotes } from "../../core/notes";
+import {
+  appVersion,
+  checkForUpdate,
+  type ComeBack,
+  HOST_UPDATE_GUIDE_URL,
+  newerAppFor,
+  newestVersion,
+  onUpdateDownloaded,
+  releaseNotesUrl,
+  thisVersion,
+  type UpdateCheck,
+  updateNow,
+} from "../../../lib/updates";
+import { openExternal } from "../../../lib/external";
+import { justUpdated, putOff, putOffNow, releaseLine, restartWhileAway, UPDATE_SAID, type UpdateSaid } from "../../core/updates";
+import { ListNotes, type UpdateActions } from "./ListNotes";
+import { UpdateGate } from "./UpdateGate";
 import { knockOn } from "../../core/knock";
 import { readPasted, type SignInActions, signInActions } from "../../core/signin";
 import { numbering, type Offered, watchOfferedLinks } from "../../core/offeredLink";
@@ -89,7 +106,7 @@ import { WindowMessage } from "../WindowMessage";
 import type { AwayNudge } from "./AwayNudge";
 import { ListView } from "./ListView";
 import "./ListWindow.css";
-import type { ServerListing } from "./ServerSection";
+import type { BlockedListing, ServerListing } from "./ServerSection";
 import type { AwayEverywhere } from "./YouEverywhere";
 import { type ArrivalCard, type KnockCard, KnockCards } from "./KnockCards";
 import { loadDmAlerts } from "../../core/dmAlerts";
@@ -116,12 +133,23 @@ const TABS_KEY = "linger.next.tabs";
  * one server's list, or a section per server with several (T-1809).
  */
 export function ListWindow() {
+  // An update kept for this start goes in first (#772): nothing signs in or
+  // connects until it has, or couldn't.
+  return (
+    <UpdateGate>
+      <Owner />
+    </UpdateGate>
+  );
+}
+
+/** The list window itself, once no update is waiting to go in. */
+function Owner() {
   const sessions = useSessions();
   const { addServer } = sessions;
   // Nothing signed in has answered yet, and the person would rather sign in
   // somewhere now than wait (T-907).
   const [signInAnyway, setSignInAnyway] = useState(false);
-  const signIn = useMemo(() => signInActions((baseUrl) => new PublicApi(baseUrl), addServer), [addServer]);
+  const signIn = useMemo(() => signInActions((baseUrl) => new PublicApi(baseUrl), addServer, thisVersion), [addServer]);
 
   // "Open in Linger" on an invite page (#607): the link the shell was handed
   // goes in a paste box, here when nothing is signed in, and in the sign-in
@@ -184,11 +212,15 @@ export function ListWindow() {
     );
   }
 
-  if (sessions.state.servers.length === 0 && sessions.state.waiting.length > 0 && !signInAnyway) {
+  // A server that needs a newer app (#793) shows in the list, dimmed, with
+  // the foot saying how to update, even when it's the only one: signing in
+  // again wouldn't help.
+  const blocked = sessions.state.blocked;
+  if (sessions.state.servers.length === 0 && sessions.state.waiting.length > 0 && blocked.length === 0 && !signInAnyway) {
     return <NotReached waiting={sessions.state.waiting} onRetry={sessions.retry} onSignIn={() => setSignInAnyway(true)} />;
   }
 
-  if (sessions.state.servers.length === 0) {
+  if (sessions.state.servers.length === 0 && blocked.length === 0) {
     // Signing in lives here until decision 16 says otherwise (parity SIGN-1).
     return (
       <SignInView
@@ -210,6 +242,8 @@ export function ListWindow() {
     <Servers
       signedIn={sessions.state.servers}
       waiting={sessions.state.waiting}
+      blocked={blocked}
+      onBlocked={sessions.block}
       onRetry={sessions.retry}
       accounts={accounts}
       keyringNotice={sessions.keyringNotice}
@@ -253,11 +287,14 @@ function NotReached({ waiting, onRetry, onSignIn }: { waiting: readonly WaitingS
 const ServerLink = memo(function ServerLink({
   session,
   onInfo,
+  onBlocked,
   again,
   paused,
 }: {
   session: ServerSession;
   onInfo: (server: string, info: ListedInfo) => void;
+  /** The server needs a newer app than this one (#793), and the release it asks for. */
+  onBlocked: (server: string, oldest: string) => void;
   /** Counts up when Settings has just saved this server's name or color: ask for them now. */
   again: number;
   paused: boolean;
@@ -304,6 +341,28 @@ const ServerLink = memo(function ServerLink({
     setPresenceLive(baseUrl, status === "ready");
   }, [baseUrl, status]);
 
+  // A server updated while Linger runs can need a newer app than this one
+  // (#793): asked each time the connection comes back, which is what a
+  // server restarting after an update looks like, and each time a try to
+  // connect fails, in case the break is in connecting, before it has ever
+  // been up too: a server updated between signing in and connecting fails
+  // every try (#797 review). Not on the first time it's up: signing in, or
+  // back in at launch, has just asked (core/signin.ts, lib/session.ts).
+  // `/health` needs no sign-in.
+  const firstUp = useRef(true);
+  useEffect(() => {
+    if (status !== "ready" && status !== "waiting") return;
+    if (status === "ready" && firstUp.current) {
+      firstUp.current = false;
+      return;
+    }
+    const abort = new AbortController();
+    void newerAppFor(baseUrl, abort.signal).then((oldest) => {
+      if (oldest !== null && !abort.signal.aborted) onBlocked(baseUrl, oldest);
+    });
+    return () => abort.abort();
+  }, [baseUrl, status, onBlocked]);
+
   // Its name and color, which change about once ever: asked when the
   // connection comes up or comes back, then hourly while it stays up, and at
   // once when Settings has just saved them (core/serverInfo.ts, #536). A
@@ -320,6 +379,8 @@ const ServerLink = memo(function ServerLink({
 function Servers({
   signedIn,
   waiting,
+  blocked,
+  onBlocked,
   onRetry,
   accounts,
   keyringNotice,
@@ -328,6 +389,9 @@ function Servers({
 }: {
   signedIn: ServerSession[];
   waiting: readonly WaitingServer[];
+  /** Servers that need a newer app than this one (#793): not connected to. */
+  blocked: readonly BlockedServer[];
+  onBlocked: (server: string, oldest: string) => void;
   onRetry: (server: string) => void;
   accounts: Accounts;
   keyringNotice: string | null;
@@ -358,6 +422,11 @@ function Servers({
   // Settings saved a server's name or color: its link asks again (`again`).
   const [infoAsks, setInfoAsks] = useState<Readonly<Record<string, number>>>({});
   const several = ordered.length > 1;
+  // Servers that need a newer app (#793), in your order, named as they said
+  // this launch, or by address when they haven't (as a server not reached
+  // yet is). With any, the list has sections: the dimmed one is a server too.
+  const blockedHere = useMemo(() => inOrder(blocked, prefs.order), [blocked, prefs.order]);
+  const sectioned = several || blockedHere.length > 0;
 
   const changePrefs = useCallback((next: ServerPrefs) => {
     setPrefs(next);
@@ -400,6 +469,8 @@ function Servers({
     signedIn.some((session) => session.baseUrl === baseUrl) ? `You're already signed in to ${infos[baseUrl]?.name ?? hostOf(baseUrl)}.` : null;
   const addingActions = useMemo(() => addingWith(accounts, setAdding, alreadyOn), [accounts]);
   const listNow = useRef<ListControls>({ addServer: () => undefined, setPrefs: () => undefined });
+  // Restart now or Update from Settings (#772), once the list below has said how.
+  const updateAsked = useRef<() => void>(() => undefined);
   // Conversations beside the list (#337): the tabs, kept here so they
   // outlast folding, and whether the window is unfolded to show them.
   const [tabs, setTabs] = useState<Tabs<SideTab>>(() => loadTabs(stored(TABS_KEY)));
@@ -455,6 +526,7 @@ function Servers({
       }
       setTabs(NO_TABS);
     },
+    updateNow: () => updateAsked.current(),
   };
 
   // A link from an invite page (#607) opens the sign-in for another server,
@@ -531,6 +603,7 @@ function Servers({
       conversations: (mode) => listNow.current.conversations?.(mode),
       closeToTray: (on) => closeToTray(on),
       talkKey: (code) => setTalkKey(code),
+      updateNow: () => listNow.current.updateNow?.(),
     };
     // What closing the list does, as kept on this computer (core/closing.ts).
     closeToTray(loadCloseList(localStore()) === "tray");
@@ -858,6 +931,11 @@ function Servers({
   const traySharing = (voiceState ? (myScreen(voiceState)?.sharing ?? false) : false) || (shareHere !== null && shareHere.server === voiceServer);
   const trayVoice = useRef<(action: string) => void>(() => undefined);
   trayVoice.current = (action) => {
+    // The tray's Restart to update Linger (#772): greyed out in voice.
+    if (action === "update") {
+      updateAsked.current();
+      return;
+    }
     if (voiceServer === null) return;
     if (action === "mute") void setVoiceMuted(voiceServer, !trayMuted).catch(() => undefined);
     if (action === "leave") void leaveVoice(voiceServer).catch(() => undefined);
@@ -944,6 +1022,187 @@ function Servers({
   const myVoice = voiceState?.myVoice ?? null;
   voicePlace.current = voice && myVoice ? { where: voice.where, room: !voiceState?.dms.some((dm) => dm.id === myVoice.roomId) } : null;
 
+  // Linger updates itself (#772). The shell finds, downloads and installs
+  // (src-tauri/src/updates.rs); the list says so at its foot and in the tray,
+  // and decides when: never in voice or while sharing a screen.
+  const [update, setUpdate] = useState<UpdateCheck | null>(null);
+  const lookForUpdate = useCallback(() => {
+    void checkForUpdate()
+      .then(setUpdate)
+      .catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    // A phone app is updated by its store (SPEC §4.15).
+    if (!isTauri() || onPhone()) return;
+    lookForUpdate();
+    const timer = window.setInterval(lookForUpdate, UPDATE_EVERY_MS);
+    // A download finished in the background: asked again, it's ready.
+    const stop = onUpdateDownloaded(lookForUpdate);
+    return () => {
+      window.clearInterval(timer);
+      stop();
+    };
+  }, [lookForUpdate]);
+  // The version just installed, said once at the foot, with what's in it.
+  const [updated, setUpdated] = useState<{ version: string; line: string | null } | null>(null);
+  useEffect(() => {
+    if (!isTauri() || onPhone()) return;
+    void appVersion()
+      .then((running) => {
+        const version = running === null ? null : justUpdated(localStore(), running);
+        if (version !== null) setUpdated({ version, line: releaseLine(version) });
+      })
+      .catch(() => undefined);
+  }, []);
+  // An "is out" line put off until tomorrow: drawn again without it.
+  const [, putOffDrawn] = useState(0);
+  const [updateProblem, setUpdateProblem] = useState<string | null>(null);
+  const [updating, setUpdating] = useState(false);
+  const notNow = voiceServer !== null ? "Not while you're in voice." : traySharing ? "Not while you're sharing your screen." : null;
+  const notNowHeld = useRef(notNow);
+  notNowHeld.current = notNow;
+  const updatingNow = useRef(false);
+  // Asked for in voice (Settings can't see voice, #772): done once you've left.
+  const updateWhenFree = useRef(false);
+  const restartToUpdate = useCallback(
+    (comeBack: ComeBack, automatic = false) => {
+      if (updatingNow.current) return;
+      updatingNow.current = true;
+      setUpdating(true);
+      setUpdateProblem(null);
+      // Settings hears how a press went (#794 review); a restart nobody
+      // pressed says nothing.
+      const say = (problem: string | null, waiting = false) => {
+        if (!automatic) tellUpdate({ v: PROTOCOL, problem, waiting });
+      };
+      // On success this never returns: the new Linger takes over.
+      void updateNow(comeBack, automatic)
+        .then((outcome) => {
+          switch (outcome.kind) {
+            case "failed":
+              setUpdateProblem(outcome.reason);
+              say(outcome.reason);
+              return;
+            case "busy":
+              // The shell's last check found you in voice: once you've left.
+              if (!automatic) updateWhenFree.current = true;
+              say(null, true);
+              return;
+            case "nothing":
+              lookForUpdate();
+              say(null);
+              return;
+            case "unconfigured":
+            case "managed":
+              say("This copy of Linger doesn't update itself.");
+              return;
+          }
+        })
+        .catch((error: unknown) => {
+          const reason = error instanceof Error ? error.message : String(error);
+          setUpdateProblem(reason);
+          say(reason);
+        })
+        .finally(() => {
+          updatingNow.current = false;
+          setUpdating(false);
+        });
+    },
+    [lookForUpdate],
+  );
+  updateAsked.current = () => {
+    if (notNowHeld.current !== null) {
+      updateWhenFree.current = true;
+      tellUpdate({ v: PROTOCOL, problem: null, waiting: true });
+      return;
+    }
+    // From the tray with the list hidden, it comes back hidden.
+    void shownNow().then((shown) => restartToUpdate(shown ? "shown" : "tray"));
+  };
+  // Looked at again when voice ends, and when an install comes back: a
+  // "busy" answer can arrive after you've already left (#794 review).
+  useEffect(() => {
+    if (notNow !== null || updating || !updateWhenFree.current) return;
+    updateWhenFree.current = false;
+    updateAsked.current();
+  }, [notNow, updating]);
+  // Nobody has used Linger for half an hour, and nobody's in voice or
+  // sharing: it restarts by itself to install a waiting update, coming back
+  // as it was without taking the focus (#772). Counted from this start at
+  // the earliest, and tried at most once an hour if it doesn't work.
+  const startedAt = useRef(Date.now());
+  const triedAt = useRef(0);
+  const sharingHeld = useRef(traySharing);
+  sharingHeld.current = traySharing;
+  useEffect(() => {
+    if (update?.kind !== "newer" || !update.silent || !update.downloaded) return;
+    const look = () => {
+      const now = Date.now();
+      if (now - triedAt.current < 60 * 60 * 1000) return;
+      const moment = { check: update, now, lastInputAt: Math.max(lastInput(), startedAt.current), inVoice: notNowHeld.current !== null, sharing: sharingHeld.current };
+      if (!restartWhileAway(moment)) return;
+      triedAt.current = now;
+      void shownNow().then((shown) => restartToUpdate(shown ? "behind" : "tray", true));
+    };
+    const timer = window.setInterval(look, 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [update, restartToUpdate]);
+  const updateActions = useMemo<UpdateActions>(
+    () => ({
+      update: () => updateAsked.current(),
+      whatsNew: (version) => openExternal(releaseNotesUrl(version)),
+      putOff: (version) => {
+        putOff(localStore(), version, Date.now());
+        putOffDrawn((n) => n + 1);
+      },
+      closeUpdated: () => setUpdated(null),
+      notNow,
+      busy: updating,
+    }),
+    [notNow, updating],
+  );
+  // The tray's item while an update waits (#772): Restart to update, or
+  // Update for a copy that needs a password, greyed out in voice by the
+  // shell. None for a copy the system updates: there's nothing to press.
+  const trayUpdateText = update?.kind === "newer" && update.downloaded ? (update.silent ? "Restart to update Linger" : "Update Linger") : null;
+  const trayUpdateTip = update?.kind === "newer" && update.downloaded ? `${update.version} ${update.silent ? "is ready" : "is out"}` : null;
+
+  // Which release each server you host runs, and the newest there is (#772):
+  // apps update themselves now and servers only when their host runs
+  // ./update.sh, so a host whose server is behind hears it at the foot.
+  // /health needs no sign-in; only the host's own servers are asked (their
+  // `health` is the host's alone, #582). Asked again whenever one connects
+  // again, which is what a server restarting after an update looks like.
+  const hostedNow = ordered.filter((session) => infos[session.baseUrl]?.health).map((session) => `${session.baseUrl} ${states[session.baseUrl]?.status.kind === "ready" ? "up" : "down"}`);
+  const hostedKey = hostedNow.join("\n");
+  const [runs, setRuns] = useState<Record<string, string>>({});
+  const [newest, setNewest] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isTauri() || onPhone() || hostedKey === "") return;
+    const servers = hostedKey
+      .split("\n")
+      .filter((line) => line.endsWith(" up"))
+      .map((line) => line.slice(0, -" up".length));
+    const abort = new AbortController();
+    const look = () => {
+      void newestVersion()
+        .then(setNewest)
+        .catch(() => undefined);
+      for (const server of servers) {
+        new PublicApi(server).healthReport(abort.signal).then(
+          (report) => setRuns((held) => (held[server] === report.version ? held : { ...held, [server]: report.version })),
+          () => undefined,
+        );
+      }
+    };
+    look();
+    const timer = window.setInterval(look, UPDATE_EVERY_MS);
+    return () => {
+      abort.abort();
+      window.clearInterval(timer);
+    };
+  }, [hostedKey]);
+
   // The tray says where voice is (decision 5, #601): its Mute and Leave are
   // enabled only in voice, and its icon and tooltip show whether you're in
   // voice and your microphone is live, so a hidden list can't leave it open
@@ -957,8 +1216,9 @@ function Servers({
     const inVoice = voiceServer !== null;
     // `sharing` only while you share: left out, the shell takes it as no share.
     const where = inVoice ? { deafened: trayDeafened, pushToTalk: trayPushToTalk, place: trayPlace, ...(traySharing ? { sharing: true } : {}) } : {};
-    void invoke("next_tray_voice", { inVoice, muted: trayMuted, ...where }).catch(() => undefined);
-  }, [voiceServer, trayMuted, trayDeafened, trayPushToTalk, trayPlace, traySharing]);
+    const update = trayUpdateText !== null && trayUpdateTip !== null ? { update: { text: trayUpdateText, tip: trayUpdateTip } } : {};
+    void invoke("next_tray_voice", { inVoice, muted: trayMuted, ...where, ...update }).catch(() => undefined);
+  }, [voiceServer, trayMuted, trayDeafened, trayPushToTalk, trayPlace, traySharing, trayUpdateText, trayUpdateTip]);
   // The phone's call bar (#429): while in voice, the one notification it
   // shows, which keeps the call going with the phone locked
   // (src-tauri/src/phone_call.rs). Gone when the call is.
@@ -1033,13 +1293,61 @@ function Servers({
     [ordered, states, now, quiet, infos, besideTab?.server, besideTab?.roomId],
   );
 
+  // Files shared to Linger from the phone's share sheet (#785): what's
+  // waiting in the shell's inbox, and the sheet asking which conversation
+  // it's for (core/shareInbox.ts). The chosen one opens with them in its box.
+  // `showing` is the share the sheet asks about, read again once a pick has
+  // the files: closing the sheet, or a newer share, while it read means
+  // nothing goes anywhere (#792). A share finished with is never shown again,
+  // though a look may still find it before the shell has deleted it.
+  const [shared, setShared] = useState<Share | null>(null);
+  const showing = useRef<Share | null>(null);
+  const finished = useRef(new Set<string>());
+  const showShare = useCallback((next: Share | null) => {
+    const live = next !== null && !finished.current.has(next.id) ? next : null;
+    showing.current = live;
+    setShared(live);
+  }, []);
+  const finishShare = useCallback(
+    (id: string) => {
+      finished.current.add(id);
+      showShare(null);
+      void sharedDone(askShell, id);
+    },
+    [showShare],
+  );
+  useEffect(() => (isTauri() && onPhone() ? watchShares({ bus: tauriBus(), window, document }, askShell, showShare) : undefined), [showShare]);
+  const shareSections = useMemo(() => shareTargets(listings), [listings]);
+  const pickShare = useCallback(
+    async (target: ShareTarget) => {
+      const share = showing.current;
+      if (share === null) return null;
+      const { files, problem } = await readShared(askShell, share);
+      if (showing.current?.id !== share.id) return null;
+      if (files.length === 0) return problem ?? "Linger couldn't open what was shared. Try sharing it again.";
+      finishShare(share.id);
+      holdForConversation(keyOf({ server: target.server, roomId: target.roomId }), files, problem);
+      openBeside.current(target.server, target.roomId);
+      return null;
+    },
+    [finishShare],
+  );
+  const dropShare = useCallback(() => {
+    if (showing.current !== null) finishShare(showing.current.id);
+  }, [finishShare]);
+
   // One server: your status and away from the top card, as before.
-  const only = ordered.length === 1 ? ordered[0] : undefined;
+  const only = !sectioned && ordered.length === 1 ? ordered[0] : undefined;
   const onlyMe = only ? (states[only.baseUrl]?.me ?? null) : null;
   const you = useMemo(() => (only && onlyMe !== null ? youOn(only, onlyMe) : undefined), [only, onlyMe]);
 
   // Several servers: away on the ones you tick, each answering for itself.
-  const everywhere = useMemo(() => (several ? awayEverywhere(signedIn) : undefined), [several, signedIn]);
+  const everywhere = useMemo(() => (sectioned && signedIn.length > 0 ? awayEverywhere(signedIn) : undefined), [sectioned, signedIn]);
+  // Servers that need a newer app (#793): a dimmed section each.
+  const blockedRows = useMemo(
+    () => blockedHere.map(({ baseUrl }): BlockedListing => ({ id: baseUrl, name: infos[baseUrl]?.name ?? hostOf(baseUrl), accent: infos[baseUrl]?.accent_key ?? null })),
+    [blockedHere, infos],
+  );
 
   // Back at the computer while still away (#392): the top card says so once,
   // with I'm back right there. Away is something you choose (SPEC §4.6), so
@@ -1053,25 +1361,8 @@ function Servers({
   const nudge = useMemo(() => (backWhileAway && awayAnywhere ? nudgeWith(setBackWhileAway) : undefined), [backWhileAway, awayAnywhere]);
 
   // The foot's standing lines (decision 1): a server that isn't connected
-  // after a few seconds, a keyring that can't keep sign-ins, a new version.
-  const [update, setUpdate] = useState<UpdateCheck | null>(null);
-  useEffect(() => {
-    // A phone app has no update check to ask (SPEC §4.15).
-    if (!isTauri() || onPhone()) return;
-    let live = true;
-    const look = () =>
-      void checkForUpdate()
-        .then((check) => {
-          if (live) setUpdate(check);
-        })
-        .catch(() => undefined);
-    look();
-    const timer = window.setInterval(look, UPDATE_EVERY_MS);
-    return () => {
-      live = false;
-      window.clearInterval(timer);
-    };
-  }, []);
+  // after a few seconds, a keyring that can't keep sign-ins, a server you
+  // host needing you or behind, updates (above).
   // When each server stopped being connected. Worked out afresh on every
   // draw from the last one: a second draw of the same moment changes nothing.
   const trouble = useRef<ReadonlyMap<string, number>>(new Map());
@@ -1085,15 +1376,25 @@ function Servers({
       troubleSince: trouble.current.get(session.baseUrl) ?? null,
     })),
     keyringNotice,
-    update,
+    updateNotes({
+      check: update,
+      updated,
+      putOff: (version) => putOffNow(localStore(), version, drawnAt),
+      problem: updateProblem,
+      tooOld: blockedHere.map(({ baseUrl, oldest }) => ({ server: baseUrl, name: infos[baseUrl]?.name ?? hostOf(baseUrl), oldest })),
+      others: ordered.length + waiting.length > 0,
+      phone: onPhone() ? (onIPhone() ? "iphone" : "android") : null,
+    }),
     drawnAt,
     waiting.map((one) => ({ server: one.baseUrl, name: hostOf(one.baseUrl), why: one.why })),
     thisDevice(onPhone()),
-    // Only the host's own servers say how their machine is (#582).
+    // Only the host's own servers say how their machine is (#582), and
+    // which release they run (#772).
     ordered.flatMap((session) => {
       const info = infos[session.baseUrl];
-      return info?.health ? [{ server: session.baseUrl, name: info.name, health: info.health }] : [];
+      return info?.health ? [{ server: session.baseUrl, name: info.name, health: info.health, runs: runs[session.baseUrl] ?? null }] : [];
     }),
+    newest,
   );
   // The same lines as last time are the same list, so they aren't drawn again for nothing (#533).
   const notesHeld = useRef(notesNow);
@@ -1209,7 +1510,14 @@ function Servers({
       {signedIn.map((session) => (
         // A while in the background, the phone's connections close, but not
         // the one carrying a call: the call bar holds the app up (#429).
-        <ServerLink key={session.baseUrl} session={session} onInfo={onInfo} again={infoAsks[session.baseUrl] ?? 0} paused={(backgrounded && session.baseUrl !== voiceServer) || offline} />
+        <ServerLink
+          key={session.baseUrl}
+          session={session}
+          onInfo={onInfo}
+          onBlocked={onBlocked}
+          again={infoAsks[session.baseUrl] ?? 0}
+          paused={(backgrounded && session.baseUrl !== voiceServer) || offline}
+        />
       ))}
       <div
         ref={app}
@@ -1234,6 +1542,7 @@ function Servers({
           ) : (
             <ListView
               servers={listings}
+              blocked={blockedRows}
               voice={voice}
               you={you}
               onEditProfile={editProfile}
@@ -1247,7 +1556,7 @@ function Servers({
               onSearch={openSearch}
               notices={<KnockCards cards={knocks} onGone={dismissKnock} arrivals={arrivals} onArrivalGone={arrivalGone} />}
               rock={rock}
-              notes={<ListNotes notes={notes} onUpdate={openAccount} onRetry={onRetry} onHost={openServerSettings} />}
+              notes={<ListNotes notes={notes} updates={updateActions} onRetry={onRetry} onHost={openServerSettings} onHostGuide={openHostGuide} />}
               onUnfold={!onPhone() && !unfolded && tabs.open.length > 0 ? unfoldAgain : undefined}
               onClose={unfolded ? undefined : closeList}
             />
@@ -1290,6 +1599,7 @@ function Servers({
           <Settings holder={phoneHolder} />
         </div>
       ) : null}
+      {shared !== null && listings.length > 0 && !adding ? <ShareSheet waiting={shared.files} sections={shareSections} onPick={pickShare} onClose={dropShare} /> : null}
     </>
   );
 }
@@ -1473,6 +1783,11 @@ function listingOf(
 // drawing of the window alive with it (#534).
 
 /** The link the shell is holding for the paste box, once (#607, src-tauri/src/deep_link.rs). */
+/** The shell, asked from the page: `invoke`, in the shape `lib/shellDrops.ts` takes. */
+function askShell(command: string, args?: Record<string, unknown>): Promise<unknown> {
+  return invoke(command, args);
+}
+
 function takeOfferedLink(): Promise<string | null> {
   return invoke<string | null>("link_offered");
 }
@@ -1485,6 +1800,7 @@ function addingWith(accounts: Accounts, setAdding: (adding: boolean) => void, al
       await accounts.reauthenticate(baseUrl, auth);
       setAdding(false);
     },
+    thisVersion,
   );
   return {
     ...actions,
@@ -1558,8 +1874,28 @@ function editProfile(): void {
 function openSettings(): void {
   shell.settings();
 }
-function openAccount(): void {
-  shell.settings("account");
+/** Tell Settings how a Restart now it asked for went (#794 review). */
+function tellUpdate(said: UpdateSaid): void {
+  if (!isTauri()) return;
+  void tauriBus()
+    .broadcast(UPDATE_SAID, said)
+    .catch(() => undefined);
+}
+/** A server you host is behind (#772): the host guide's "Updating the server". */
+function openHostGuide(): void {
+  openExternal(HOST_UPDATE_GUIDE_URL);
+}
+/**
+ * Whether the list window is on screen, so Linger comes back after an update
+ * the way it was: in the tray if the list was there (#772).
+ */
+async function shownNow(): Promise<boolean> {
+  if (!isTauri()) return true;
+  try {
+    return await getCurrentWindow().isVisible();
+  } catch {
+    return true;
+  }
 }
 /** A server you host needs you (#582): Hosting → Server, for that one. */
 function openServerSettings(server: string): void {

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { MIN_PASSWORD_CHARS, passwordReady } from "../../../lib/account";
 import { exportLine, type ExportPhase } from "../../../lib/export";
-import { type UpdateCheck, updateLine } from "../../../lib/updates";
+import { type UpdateCheck, updateLead, updateLine } from "../../../lib/updates";
 import { ignoredLine, type StartAtSignIn } from "../../core/autostart";
 import { thisDevice } from "../../core/phone";
 import { HEADINGS } from "../../core/settings";
@@ -33,15 +33,22 @@ export interface AccountProps {
   signInLink?: string | null;
   /** Taking everything with you (EXP-1, EXP-2): how it stands, and the two things to do. */
   archive: { phase: ExportPhase; start: () => void; download: (url: string) => void };
-  /** Updates (UPD-1 to UPD-4, UPD-6). */
-  /** Leave out on the phone, which its store updates (SPEC §4.15). */
+  /**
+   * Updates (UPD-1 to UPD-4, UPD-6, #772): Linger updates itself. Leave out
+   * on the phone, which its store updates (SPEC §4.15).
+   */
   updates?: {
     check: UpdateCheck | null;
     looking: boolean;
-    installing: boolean;
-    /** Why an install didn't happen, in words. */
+    /** Restart now (or Update) was pressed: the list window installs it. */
+    asked: boolean;
+    /** Why a check didn't work, in words. */
     problem: string | null;
     checkAgain: () => void;
+    /**
+     * Restart now, or Update for a copy that needs a password: the list
+     * window does it, since only it knows whether you're in voice (#772).
+     */
     install: () => void;
     /** Open the release page for a version (#174). */
     openNotes: (version: string) => void;
@@ -56,6 +63,12 @@ export interface AccountProps {
     /** Open the user guide's lines for a desktop that won't start Linger by itself. */
     openGuide: () => void;
   };
+  /**
+   * Open one of Linger's own web pages in the browser: the privacy page, and
+   * where to report a problem. Both are under This Phone and This Computer,
+   * because App Review wants them inside the app (#779).
+   */
+  openPage: (url: string) => void;
   /**
    * Who you've blocked on this server (T-1605), and unblocking one: null when
    * the server took it, or what went wrong in words. Shown only while there's
@@ -86,6 +99,7 @@ export function AccountSection({
   archive,
   updates,
   startAtSignIn,
+  openPage,
   blocked,
   deleteAccount,
   signOut,
@@ -120,36 +134,7 @@ export function AccountSection({
           ) : null}
         </Actions>
       </Block>
-      {updates === undefined ? null : (
-        <Block
-          heading={HEADINGS.updates}
-          lead="Linger checks for a new version when you open this. Nothing is downloaded until you ask for it, and every update is checked against this project's signing key before it's installed."
-        >
-          <Note tone="status">{version === null ? "Running outside the desktop app, so there's no version to update." : `You're on version ${version}.`}</Note>
-          <Note tone={updates.problem ? "problem" : "status"}>{updates.problem ?? (updateLine(updates.check, updates.looking) || "Not checked yet.")}</Note>
-          <Actions start>
-            <Button disabled={updates.looking || updates.installing} busy={updates.looking} onClick={updates.checkAgain}>
-              Check again
-            </Button>
-            {updates.check?.kind === "ready" ? (
-              <>
-                <Button
-                  variant="quiet"
-                  icon="go"
-                  onClick={() => {
-                    if (updates.check?.kind === "ready") updates.openNotes(updates.check.version);
-                  }}
-                >
-                  What's new
-                </Button>
-                <Button variant="primary" busy={updates.installing} onClick={updates.install}>
-                  Install and restart
-                </Button>
-              </>
-            ) : null}
-          </Actions>
-        </Block>
-      )}
+      {updates === undefined ? null : <Updates updates={updates} version={version} />}
       <Block heading={phone ? HEADINGS.phone : HEADINGS.computer}>
         {phone && version !== null ? <Note tone="status">{`You're on version ${version}.`}</Note> : null}
         {startAtSignIn ? (
@@ -172,6 +157,14 @@ export function AccountSection({
             ) : null}
           </>
         ) : null}
+        <Actions start>
+          <Button variant="quiet" icon="go" onClick={() => openPage(PRIVACY_URL)}>
+            Privacy
+          </Button>
+          <Button variant="quiet" icon="go" onClick={() => openPage(REPORT_URL)}>
+            Report a problem
+          </Button>
+        </Actions>
         <p className="nx-set-lead">
           {severalServers
             ? `Signing out forgets every server on ${device}. It doesn't delete your accounts. Each server signs out on its own, in Servers.`
@@ -304,6 +297,12 @@ function DeleteAccount({
 /** The switch's words, as the issue asked for them: plain, for somebody who has never heard of autostart. */
 const START_AT_SIGN_IN = "Start Linger when I sign in to the computer";
 
+/** The website's privacy page. App Review wants it linked inside the app as well as in the store (guideline 5.1.1(i), #779). */
+const PRIVACY_URL = "https://linger.im/privacy";
+
+/** Where the website's own "Report a problem" goes: GitHub's choice of issue forms (#779). */
+const REPORT_URL = "https://github.com/itsMattGuenther/Linger/issues/new/choose";
+
 function Password({ serverName, changePassword, signInLink }: { serverName: string; changePassword: AccountProps["changePassword"]; signInLink: string | null }) {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -377,6 +376,39 @@ function Blocked({ serverName, people, unblock }: { serverName: string } & NonNu
         ))}
       </ul>
       <SaveLine phase={save.phase.kind === "problem" ? save.phase : { kind: "idle" }} />
+    </Block>
+  );
+}
+
+/**
+ * Updates (#772): how this copy updates, the version it's on, and a newer one
+ * if there is: ready, on its day's wait, or out for a copy somebody has to
+ * update. Restart now asks the list window, which waits while you're in voice.
+ */
+function Updates({ updates, version }: { updates: NonNullable<AccountProps["updates"]>; version: string | null }) {
+  const { check } = updates;
+  const newer = check?.kind === "newer" ? { version: check.version, line: check.line } : check?.kind === "managed" ? check.newer : null;
+  return (
+    <Block heading={HEADINGS.updates} lead={updateLead(check)}>
+      <Note tone="status">{version === null ? "Running outside the desktop app, so there's no version to update." : `You're on version ${version}.`}</Note>
+      <Note tone={updates.problem ? "problem" : "status"}>{updates.problem ?? (updateLine(check, updates.looking) || "Not checked yet.")}</Note>
+      {newer?.line ? <Note tone="status">{newer.line}</Note> : null}
+      {updates.asked ? <Note tone="status">Linger restarts to finish. If you're in voice or sharing your screen, it waits until you've left.</Note> : null}
+      <Actions start>
+        <Button disabled={updates.looking} busy={updates.looking} onClick={updates.checkAgain}>
+          Check again
+        </Button>
+        {newer ? (
+          <Button variant="quiet" icon="go" onClick={() => updates.openNotes(newer.version)}>
+            What's new
+          </Button>
+        ) : null}
+        {check?.kind === "newer" ? (
+          <Button variant="primary" disabled={updates.asked} onClick={updates.install}>
+            {check.silent ? "Restart now" : "Update"}
+          </Button>
+        ) : null}
+      </Actions>
     </Block>
   );
 }

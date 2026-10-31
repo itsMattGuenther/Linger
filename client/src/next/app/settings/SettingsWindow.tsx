@@ -25,7 +25,6 @@ import {
   checkForUpdate,
   HOST_BACKUP_GUIDE_URL,
   HOST_UPDATE_GUIDE_URL,
-  installUpdate,
   newestVersion,
   releaseNotesUrl,
   type ServerVersion,
@@ -34,6 +33,7 @@ import {
 } from "../../../lib/updates";
 import { loadVoicePrefs, saveVoicePrefs, type VoicePrefs } from "../../../lib/voice";
 import { ask, OWNER, PROTOCOL, tauriBus } from "../../core/bus";
+import { UPDATE_SAID, type UpdateSaid } from "../../core/updates";
 import { loadArrivalCards, saveArrivalCards } from "../../core/arrivals";
 import { loadDmAlerts, saveDmAlerts } from "../../core/dmAlerts";
 import { refusal, setStartsAtSignIn, START_GUIDE_URL, type StartAtSignIn, startsAtSignIn, unanswered } from "../../core/autostart";
@@ -47,7 +47,7 @@ import { NOTIFY, type NotifyQuestion, type Outcome, PASSWORD, type PasswordQuest
 import { CHIMES, type SettingsKey, settingsKeys } from "../../core/settings";
 import { presenceOf } from "../../core/chat/conversation";
 import { Button, Spinner } from "../../kit";
-import { announceAppearance, loadHideReactions, loadOneLine, loadPlainNames, loadScale, onAppearance, saveHideReactions, saveNormalize, saveOneLine, saveScale } from "../../core/appearance";
+import { announceAppearance, loadHideReactions, loadOneLine, loadScale, loadTextSize, saveHideReactions, saveNormalize, saveOneLine, saveScale, saveTextSize } from "../../core/appearance";
 import { type Reporter, startReporting, windowTarget } from "../../core/report";
 import { useFollowing } from "../useFollowing";
 import { hostOf, useServerInfos } from "../useServerInfos";
@@ -319,6 +319,7 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
   const [oneLine, setOneLine] = useState<boolean>(loadOneLine);
   const [hideReactions, setHideReactions] = useState<boolean>(loadHideReactions);
   const [scale, setScale] = useState<number>(loadScale);
+  const [textSize, setTextSize] = useState<number>(loadTextSize);
   const [mode, setMode] = useState(() => loadMode(localStore()));
   const [closeList, setCloseList] = useState(() => loadCloseList(localStore()));
   const [arrivalCards, setArrivalCards] = useState(() => loadArrivalCards(localStore()));
@@ -383,11 +384,10 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
   const [version, setVersion] = useState<string | null>(null);
   const [check, setCheck] = useState<UpdateCheck | null>(null);
   const [looking, setLooking] = useState(false);
-  const [installing, setInstalling] = useState(false);
+  const [asked, setAsked] = useState(false);
   const [updateProblem, setUpdateProblem] = useState<string | null>(null);
   const checkAgain = useCallback(() => {
     setLooking(true);
-    setUpdateProblem(null);
     void checkForUpdate()
       .then(setCheck)
       .finally(() => setLooking(false));
@@ -397,6 +397,19 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
     // A phone app has no update check to ask (SPEC §4.15).
     if (!phone) checkAgain();
   }, [checkAgain, phone]);
+  // How a Restart now went, from the list window, which did it (#794
+  // review): waiting while you're in voice, or why it didn't happen, and
+  // the button back. Gone well, Linger restarts and there's nothing to say.
+  useEffect(
+    () =>
+      listening<UpdateSaid>(UPDATE_SAID, (said) => {
+        if (said.v !== PROTOCOL || said.waiting) return;
+        setAsked(false);
+        setUpdateProblem(said.problem);
+        if (said.problem === null) checkAgain();
+      }),
+    [checkAgain],
+  );
   // Starting at sign-in: what the computer says, asked when the window opens
   // and answered again after every change (core/autostart.ts).
   const [startup, setStartup] = useState<StartAtSignIn | null>(null);
@@ -552,7 +565,7 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
         openGuide: host ? () => openExternal(HOST_UPDATE_GUIDE_URL) : undefined,
       }}
       appearance={{
-        // A phone sizes things with its own display and text size (SPEC §4.15).
+        // A phone's window can't zoom, so it has Text size instead (SPEC §4.15).
         scale: phone
           ? undefined
           : {
@@ -562,6 +575,16 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
                 announceAppearance();
               },
             },
+        // On top of the phone's own text size (#690, core/phone.ts).
+        textSize: phone
+          ? {
+              value: textSize,
+              onChange: (value) => {
+                setTextSize(saveTextSize(value));
+                announceAppearance();
+              },
+            }
+          : undefined,
         plainNames: {
           value: plain,
           onChange: (value) => {
@@ -688,21 +711,20 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
           : {
               check,
               looking,
-              installing,
+              asked,
               problem: updateProblem,
               checkAgain,
+              // The list installs it (#772): it knows whether you're in voice,
+              // and says how it went (UPDATE_SAID).
               install: () => {
-                setInstalling(true);
+                setAsked(true);
                 setUpdateProblem(null);
-                void installUpdate()
-                  .then((outcome) => {
-                    if (outcome.kind === "failed") setUpdateProblem(outcome.reason);
-                  })
-                  .finally(() => setInstalling(false));
+                void intend({ kind: "update" }).catch(() => setAsked(false));
               },
               openNotes: (wanted) => openExternal(releaseNotesUrl(wanted)),
             },
         startAtSignIn: startup && !phone ? { ...startup, onChange: changeStartup, openGuide: () => openExternal(START_GUIDE_URL) } : undefined,
+        openPage: (url) => openExternal(url),
         // Deleting your account here (#650). The server ends every sign-in it
         // had, so the app lets go of the server straight after; Settings
         // then shows what's left, or closes.

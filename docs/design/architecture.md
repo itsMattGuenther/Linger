@@ -614,13 +614,19 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   the moment it's back (`watchNetwork`) rather than when missed heartbeats
   notice; the web view hears about the network only with Android's
   `ACCESS_NETWORK_STATE` permission (`AndroidManifest.xml`).
-- **The phone's text size.** Linger follows the phone's Font size, up to
-  twice the usual (`phone_text_scale` reads it, `followTextSize` sets
-  `--text-scale`, and the phone's tokens multiply text, line boxes, rows and
-  controls by it). The web view's own text zoom is off (`textZoom` 100 in
-  MainActivity.kt): it enlarged fonts and line spacing and no box around them,
-  and cut names in half. Icons and marks keep their size, as in Android's own
-  apps, and `next-phone.spec.ts` checks every screen at twice the size for
+- **The phone's text size.** Linger follows the phone's text size, Font size
+  on Android and Text Size on an iPhone, with the Text size chosen in Settings
+  › Appearance on top (#690), together up to twice the usual
+  (`phone_text_scale` reads the phone's, `loadTextSize` the chosen one,
+  `followTextSize` sets `--text-scale` from both and again when Settings
+  announces a change, and the phone's tokens multiply text, line boxes, rows
+  and controls by it). An iPhone's is the size of UIKit's body text style
+  against its usual 17 points: its web view grows only text set in the
+  system's own text styles, and Linger's sizes are pixels. Android's web view
+  text zoom is off (`textZoom` 100 in MainActivity.kt): it enlarged fonts and
+  line spacing and no box around them, and cut names in half. Icons and marks
+  keep their size, as in Android's own apps, and `next-phone.spec.ts` checks
+  every screen at twice the size, and the largest Text size at 320 wide, for
   words cut off or reaching past the edge.
 - **No zoom** (#689). `next.html`'s viewport has `maximum-scale=1,
   user-scalable=no`, and MainActivity turns the web view's own zoom off
@@ -646,6 +652,19 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   (`src-tauri/src/phone_save.rs`), so the bytes never reach the page; the
   sheet closing removes the file. The page only hears whether the sheet
   opened, and is busy until then.
+- **Sharing to Linger** (#785, SPEC §4.15). Another app's share sheet hands
+  files to the phone, never to the page: Android's `SharedInbox.kt` and the
+  iPhone's share extension (`gen/apple/ShareExtension`) copy them into an
+  inbox folder, each in a numbered folder of its own, and the shell takes it
+  when asked, moving it aside under an id that reading and deleting name
+  (`src-tauri/src/shared.rs`). `core/shareInbox.ts` looks when the list
+  starts, when the app comes forward, and on the shell's `next:shared` (from
+  `linger://shared`) or Android's `linger:shared`; what it finds rises as
+  `app/list/ShareSheet.tsx`. Picking a conversation reads the bytes, holds
+  them for that conversation's tab key, and opens it, unless the sheet was
+  closed or a newer share took it meanwhile; `useFileDrafts` takes them into
+  the box as if picked with +, and `Composer` says why any were left out.
+  Nothing is sent from here.
 - **The phone's bars.** The page is drawn under the phone's status bar and
   gesture bar; `styles/phone.css` pads it by the safe areas the phone reports,
   and `--window-height`, the whole window on a computer, is what's left

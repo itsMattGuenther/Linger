@@ -107,6 +107,16 @@ export function onBack(listener: () => void): () => void {
   };
 }
 
+/**
+ * When anybody last used one of Linger's windows: input in one, or one taking
+ * the focus. 0 before anybody has. The list restarts to install an update
+ * only after half an hour of this (#772). Only that there was input, never
+ * what it was or where else it went (hard rule 2).
+ */
+export function lastInput(): number {
+  return lastInputAt;
+}
+
 /** Input or focus, now: idling is measured from here, and a long quiet first means somebody's back. */
 function sawPerson(now: number): void {
   const wasGone = now - lastInputAt >= IDLE_AFTER_MS;

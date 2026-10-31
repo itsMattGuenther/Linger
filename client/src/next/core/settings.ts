@@ -141,6 +141,7 @@ export const HEADINGS = {
   look: "Make Yourself at Home",
   theme: "Color Theme",
   size: "Interface Size",
+  textSize: "Text Size",
   names: "Names",
   list: "Your List",
   reactions: "Reactions",
