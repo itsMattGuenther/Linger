@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Attachment } from "../../../generated/Attachment";
-import { added, filesIn, NO_DRAFTS, previewed, previews, progressed, refused, removed, restored, sent, taken, uploaded } from "./drafts";
+import { added, filesIn, NO_DRAFTS, previewed, previews, progressed, refused, removed, restored, retrying, sent, taken, uploaded, waiting } from "./drafts";
 
 function attachment(id: string): Attachment {
   return { id, filename: `${id}.png`, mime: "image/png", size_bytes: 10, width: 1, height: 1, duration_ms: null, url: `/media/${id}`, poster_url: null } as Attachment;
@@ -31,6 +31,20 @@ describe("files on their way into a message", () => {
       [true, null],
       [false, "That kind of file can't go up."],
     ]);
+  });
+
+  // #801: the server asked for a moment, then a file it might take on
+  // another go offers Try again, which starts it over.
+  it("say when they're waiting for the server, and one that could go up on another go starts over from nothing", () => {
+    let drafts = added(NO_DRAFTS, "general", [{ key: "a", name: "porch.png" }]);
+    drafts = progressed(drafts, "a", 1);
+    drafts = waiting(drafts, "a");
+    expect(filesIn(drafts, "general")[0]).toMatchObject({ waiting: true, problem: null });
+    drafts = refused(drafts, "a", "The server is busy with other pictures. Send this one again in a moment.", true);
+    expect(filesIn(drafts, "general")[0]).toMatchObject({ waiting: false, again: true, ready: false });
+    drafts = retrying(drafts, "a");
+    expect(filesIn(drafts, "general")[0]).toMatchObject({ progress: 0, ready: false, problem: null, again: false, waiting: false });
+    expect(filesIn(refused(drafts, "a", "Not that kind of file."), "general")[0]?.again, "a verdict on the file").toBe(false);
   });
 
   it("removing a finished file hands back what the server has, so it can be let go", () => {

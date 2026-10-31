@@ -365,13 +365,13 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
   );
   const onFoldMotd = useMemo(() => motdFolder(paneId, motdSetAt, setFoldings), [paneId, motdSetAt]);
 
-  const { files, onAttach, onRemoveFile, onRestoreFiles, onSend } = useFileDrafts(api, paneId, apis, find);
+  const { files, onAttach, onRemoveFile, onRetryFile, onRestoreFiles, onSend } = useFileDrafts(api, paneId, apis, find);
   const voiceMessage = useVoiceMessages(paneId, apis, find);
   const composer = useMemo(
     // On the phone the cursor goes in the box when it's tapped: putting it there
     // on opening raises the keyboard over half the conversation (SPEC §4.15).
-    () => ({ files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusRequest: onPhone() ? undefined : focusAsk, seed, onDraft, keep, clipboardImage: clipboardImageReader(), voiceMessage, motd: motdBox, poll: pollBox }),
-    [files, onAttach, onRemoveFile, onRestoreFiles, onSend, onTyping, focusAsk, seed, onDraft, keep, voiceMessage, motdBox, pollBox],
+    () => ({ files, onAttach, onRemoveFile, onRetryFile, onRestoreFiles, onSend, onTyping, focusRequest: onPhone() ? undefined : focusAsk, seed, onDraft, keep, clipboardImage: clipboardImageReader(), voiceMessage, motd: motdBox, poll: pollBox }),
+    [files, onAttach, onRemoveFile, onRetryFile, onRestoreFiles, onSend, onTyping, focusAsk, seed, onDraft, keep, voiceMessage, motdBox, pollBox],
   );
 
   const { onJoin, onPickDevice, onMute, onDeafen, onLeave, onVolume } = useMemo(() => voiceCalls(active, intend, voiceControl), [active, intend, voiceControl]);

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, type AuthedApi, UnconfirmedError } from "../../../lib/api";
 import { sendMessage } from "../../../lib/gateway";
-import { uploadFile } from "../../../lib/upload";
+import { uploadFile, worthTryingAgain } from "../../../lib/upload";
 import {
   added,
   type Drafts,
@@ -14,9 +14,11 @@ import {
   refused,
   removed,
   restored,
+  retrying,
   sent,
   taken,
   uploaded,
+  waiting,
 } from "../../core/chat/drafts";
 import type { Submission } from "../../core/chat/sending";
 import { onHeld, takeHeld } from "../../core/shareInbox";
@@ -44,6 +46,9 @@ export function useFileDrafts(
   // it (#503); and every one is stopped when the window goes, since nothing
   // could ever send them then.
   const going = useRef(new Map<string, AbortController>());
+  // Each file not up yet, by key, so Try again can send it from the start
+  // (#801): kept until the server has it or it leaves the box.
+  const chosen = useRef(new Map<string, File>());
   useEffect(() => {
     const uploads = going.current;
     return () => {
@@ -63,11 +68,38 @@ export function useFileDrafts(
     }
   }, []);
 
-  // Files, per conversation, uploading on their own (core/chat/drafts.ts).
+  // One file going up on its own (core/chat/drafts.ts). A refusal that
+  // sending it again could get past keeps the file for Try again (#801).
+  const upload = useCallback((to: AuthedApi, key: string, file: File) => {
+    const stop = new AbortController();
+    going.current.set(key, stop);
+    chosen.current.set(key, file);
+    uploadFile(to, file, {
+      signal: stop.signal,
+      onProgress: (fraction) => setDrafts((held) => progressed(held, key, fraction)),
+      onWaiting: () => setDrafts((held) => waiting(held, key)),
+    }).then(
+      (attachment) => {
+        going.current.delete(key);
+        chosen.current.delete(key);
+        setDrafts((held) => uploaded(held, key, attachment));
+      },
+      (error: unknown) => {
+        going.current.delete(key);
+        // Stopped on purpose: the file is already out of the box.
+        if (stop.signal.aborted) return;
+        const again = worthTryingAgain(error);
+        if (!again) chosen.current.delete(key);
+        setDrafts((held) => refused(held, key, error instanceof ApiError ? error.message : "That file didn't go up.", again));
+      },
+    );
+  }, []);
+
+  // Files, per conversation, uploading on their own.
   const onAttach = useCallback(
-    (chosen: File[]) => {
+    (picked: File[]) => {
       if (!api || paneId === null) return;
-      const files = chosen.map((file) => ({ file, key: `${paneId} ${file.name} ${Date.now()} ${Math.random()}` }));
+      const files = picked.map((file) => ({ file, key: `${paneId} ${file.name} ${Date.now()} ${Math.random()}` }));
       setDrafts((held) => added(held, paneId, files.map(({ key, file }) => ({ key, name: file.name }))));
       for (const { file, key } of files) {
         // A picture shows a small copy of itself in the box (#397).
@@ -81,23 +113,22 @@ export function useFileDrafts(
             return held;
           });
         });
-        const upload = new AbortController();
-        going.current.set(key, upload);
-        uploadFile(api, file, { signal: upload.signal, onProgress: (fraction) => setDrafts((held) => progressed(held, key, fraction)) }).then(
-          (attachment) => {
-            going.current.delete(key);
-            setDrafts((held) => uploaded(held, key, attachment));
-          },
-          (error: unknown) => {
-            going.current.delete(key);
-            // Stopped on purpose: the file is already out of the box.
-            if (upload.signal.aborted) return;
-            setDrafts((held) => refused(held, key, error instanceof ApiError ? error.message : "That file didn't go up."));
-          },
-        );
+        upload(api, key, file);
       }
     },
-    [api, paneId],
+    [api, paneId, upload],
+  );
+
+  // Try again (#801): a file that didn't go up, sent from the start, with
+  // the showing conversation's server, the only one its row is shown in.
+  const onRetryFile = useCallback(
+    (key: string) => {
+      const file = chosen.current.get(key);
+      if (!api || !file || going.current.has(key)) return;
+      setDrafts((held) => retrying(held, key));
+      upload(api, key, file);
+    },
+    [api, upload],
   );
   // Files shared to Linger from the phone's share sheet (#785): the list
   // window holds them for the conversation they were shared to and opens it,
@@ -118,6 +149,7 @@ export function useFileDrafts(
       // (lib/upload.ts), so the space is everybody's again at once (#503).
       going.current.get(key)?.abort();
       going.current.delete(key);
+      chosen.current.delete(key);
       const { drafts: next, abandoned } = removed(draftsNow.current, key);
       letGo(draftsNow.current, [key]);
       setDrafts(next);
@@ -153,5 +185,5 @@ export function useFileDrafts(
     [apis, find, letGo],
   );
 
-  return { files: paneId === null ? NO_FILES : filesIn(drafts, paneId), onAttach, onRemoveFile, onRestoreFiles, onSend };
+  return { files: paneId === null ? NO_FILES : filesIn(drafts, paneId), onAttach, onRemoveFile, onRetryFile, onRestoreFiles, onSend };
 }

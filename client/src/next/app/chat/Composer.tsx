@@ -69,6 +69,8 @@ export interface ComposerProps {
   files: readonly DraftFile[];
   onAttach: (files: File[]) => void;
   onRemoveFile: (key: string) => void;
+  /** Send a file that didn't go up again, from the start (#801). */
+  onRetryFile: (key: string) => void;
   /** A failed send went back in the box: these files are the draft's again. */
   onRestoreFiles: (keys: string[]) => void;
   /**
@@ -164,6 +166,7 @@ export const Composer = memo(function Composer({
   files,
   onAttach,
   onRemoveFile,
+  onRetryFile,
   onRestoreFiles,
   onSend,
   onTyping,
@@ -622,11 +625,18 @@ export const Composer = memo(function Composer({
               <span className="nx-composer-file-name">{file.name}</span>
               {file.problem ? (
                 <span className="nx-composer-file-problem">{file.problem}</span>
+              ) : file.waiting ? (
+                <span className="nx-composer-file-waiting">Waiting for the server…</span>
               ) : file.ready ? null : (
                 <span className="nx-composer-file-bar" role="progressbar" aria-label={`Uploading ${file.name}`} aria-valuenow={Math.round(file.progress * 100)}>
                   <span style={{ width: `${Math.round(file.progress * 100)}%` }} />
                 </span>
               )}
+              {file.problem && file.again ? (
+                <Button size="sm" variant="secondary" onClick={() => onRetryFile(file.key)}>
+                  Try again
+                </Button>
+              ) : null}
               <IconButton icon="close" label={`Don't send ${file.name}`} size="sm" onClick={() => onRemoveFile(file.key)} />
             </li>
           ))}

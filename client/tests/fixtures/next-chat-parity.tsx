@@ -18,6 +18,8 @@
  *   `window.parity.release()`, so it shows as going up; bytes the window
  *   stops sending are written down as `stopped PUT …`.
  * - `?flakystore`: the file store refuses each part the first time it's sent.
+ * - `?uploadbusy=N`: the server is busy with other pictures for the first N
+ *   completes, saying to ask again in 50 ms, or `&busyms=` that many (#801).
  *
  * `window.parity.clipboard(bytes)` puts a picture on the desktop shell's
  * clipboard (`clipboard_image`, which the Linux app's box asks, #276); null
@@ -152,7 +154,7 @@ const desktop = fakeDesktop({
   },
   routes: (method, path, _url, body) => {
     if (path === "/uploads" && method === "POST") {
-      if (query.has("uploadrefuse")) return refuse(413, "PAYLOAD_TOO_LARGE", "That file is bigger than this server takes.");
+      if (query.has("uploadrefuse")) return refuse(413, "FILE_TOO_LARGE", "That file is bigger than this server takes.");
       uploads += 1;
       // One identifier for both (PROTOCOL §6): an upload is an attachment that isn't finished.
       const id = `f-${uploads}`;
@@ -172,6 +174,10 @@ const desktop = fakeDesktop({
       const id = decodeURIComponent(complete[1] ?? "");
       const slot = slots.get(id);
       if (!slot) return refuse(404, "NOT_FOUND", "That upload is gone.");
+      if (busyLeft > 0) {
+        busyLeft -= 1;
+        return refuse(429, "RATE_LIMITED", "The server is busy with other pictures. Send this one again in a moment.", Number(query.get("busyms") ?? "50"));
+      }
       const attachment: Attachment = {
         id,
         filename: slot.filename,
@@ -229,6 +235,8 @@ let reading = 0;
 // which can't wait: they're answered here, before the fake server sees them.
 const fakeFetch = window.fetch;
 const refusedOnce = new Set<string>();
+/** With `?uploadbusy=N`, how many more completes the server is too busy for. */
+let busyLeft = Number(query.get("uploadbusy") ?? "0");
 let answerDropped = false;
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);

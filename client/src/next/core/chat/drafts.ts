@@ -19,6 +19,10 @@ export interface DraftFile {
   ready: boolean;
   /** Why it didn't go up, in words. */
   problem: string | null;
+  /** It didn't go up, but sending it again from the start could work: Try again (#801). */
+  again: boolean;
+  /** Its bytes are there, and the server asked for a moment before it finishes it (#801). */
+  waiting: boolean;
   /**
    * A small copy of a picture, made on this device, to show in the box
    * before it's sent (#397): a blob URL, let go of when the file is. Null for
@@ -41,7 +45,9 @@ export const NO_FILES: readonly DraftFile[] = [];
 
 /** Files picked, dropped or pasted into a conversation's box. */
 export function added(drafts: Drafts, conversation: string, files: readonly { key: string; name: string }[]): Drafts {
-  const fresh = files.map((file): DraftFile => ({ key: file.key, name: file.name, progress: 0, ready: false, problem: null, preview: null }));
+  const fresh = files.map(
+    (file): DraftFile => ({ key: file.key, name: file.name, progress: 0, ready: false, problem: null, again: false, waiting: false, preview: null }),
+  );
   return { ...drafts, draft: { ...drafts.draft, [conversation]: [...(drafts.draft[conversation] ?? []), ...fresh] } };
 }
 
@@ -58,7 +64,7 @@ export function progressed(drafts: Drafts, key: string, fraction: number): Draft
 }
 
 export function uploaded(drafts: Drafts, key: string, attachment: Attachment): Drafts {
-  const next = change(drafts, key, (file) => ({ ...file, progress: 1, ready: true, problem: null }));
+  const next = change(drafts, key, (file) => ({ ...file, progress: 1, ready: true, problem: null, again: false, waiting: false }));
   return { ...next, uploaded: { ...drafts.uploaded, [key]: attachment } };
 }
 
@@ -82,8 +88,19 @@ export function previews(drafts: Drafts): Map<string, string> {
   return out;
 }
 
-export function refused(drafts: Drafts, key: string, problem: string): Drafts {
-  return change(drafts, key, (file) => ({ ...file, problem }));
+/** The server asked for a moment before it finishes the file (#801). */
+export function waiting(drafts: Drafts, key: string): Drafts {
+  return change(drafts, key, (file) => ({ ...file, waiting: true }));
+}
+
+/** It didn't go up, and why; `again` when sending it again from the start could work (#801). */
+export function refused(drafts: Drafts, key: string, problem: string, again = false): Drafts {
+  return change(drafts, key, (file) => ({ ...file, problem, again, waiting: false }));
+}
+
+/** Try again: the file starts over, from nothing sent (#801). */
+export function retrying(drafts: Drafts, key: string): Drafts {
+  return change(drafts, key, (file) => ({ ...file, progress: 0, ready: false, problem: null, again: false, waiting: false }));
 }
 
 /**

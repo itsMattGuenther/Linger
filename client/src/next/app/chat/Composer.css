@@ -239,6 +239,12 @@
   white-space: nowrap;
 }
 
+/* The bytes are there and the server asked for a moment (#801). */
+.nx-composer-file-waiting {
+  flex: none;
+  color: var(--text-muted);
+}
+
 .nx-composer-file-bar {
   flex: none;
   width: var(--space-8);
