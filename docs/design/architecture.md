@@ -343,6 +343,14 @@ page is never narrower than the layout was made for: at 150%, the list's
 smallest window was 200 of the page's pixels, and the message box over it 8.
 It never asks for more than nine tenths of the screen.
 
+A choice storage refuses, because it's full or switched off, still holds
+until Linger closes (#782). Each window keeps the choices made or announced
+in it and reads them before storage, and the announcement carries them. A
+window opened later asks the list for them (`next:appearancechosen`): the
+list is open from start to quit, so it has heard every one. Without this,
+Settings showed a refused choice and no window applied it, Settings' own
+included, since each read storage back.
+
 **Sound preferences need no message.** Mute, quiet hours, the chime switches
 and the sound volume are kept on this computer (`linger.sound.*`, `lib/sound.ts`).
 The list window plays every sound, and its player reads them from storage

@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Bus } from "./bus";
+import { memoryHub } from "./bus.memory";
 
 // The desktop shell: a window that remembers its zoom, size and smallest size, on a 1920 by 1080 screen with a 40 px panel.
 const shell = vi.hoisted(() => ({
@@ -8,6 +10,10 @@ const shell = vi.hoisted(() => ({
   least: null as { width: number; height: number } | null,
   label: "main",
   broadcast: [] as unknown[],
+  /** Each window's bus, by its label, all on one hub: set up afresh for every test. */
+  bus: (label: string): Bus => {
+    throw new Error(`no bus for ${label}`);
+  },
 }));
 vi.mock("@tauri-apps/api/core", () => ({ isTauri: () => true, invoke: async () => undefined }));
 vi.mock("@tauri-apps/api/webview", () => ({
@@ -36,10 +42,10 @@ vi.mock("@tauri-apps/api/window", () => ({
     },
   }),
 }));
-vi.mock("./bus", () => ({
-  PROTOCOL: 1,
-  tauriBus: () => ({ broadcast: async (event: string, payload: unknown) => void shell.broadcast.push([event, payload]), listen: async () => () => undefined }),
-}));
+vi.mock("@tauri-apps/api/event", () => ({ emit: async () => undefined, emitTo: async () => undefined }));
+vi.mock("@tauri-apps/api/webviewWindow", () => ({ getCurrentWebviewWindow: () => ({ label: "main", listen: async () => () => undefined }) }));
+// The windows' bus (core/bus.ts): the window's own, by the label it runs as.
+vi.mock("./bus", async (importActual) => ({ ...(await importActual<typeof import("./bus")>()), tauriBus: () => shell.bus(shell.label) }));
 
 const storage = new Map<string, string>();
 beforeEach(() => {
@@ -49,6 +55,22 @@ beforeEach(() => {
   shell.least = null;
   shell.label = "main";
   shell.broadcast = [];
+  const hub = memoryHub();
+  const buses = new Map<string, Bus>();
+  shell.bus = (label) => {
+    const held = buses.get(label);
+    if (held) return held;
+    const bus = hub.bus(label);
+    const recorded: Bus = {
+      ...bus,
+      broadcast: async (event, payload) => {
+        shell.broadcast.push([event, payload]);
+        await bus.broadcast(event, payload);
+      },
+    };
+    buses.set(label, recorded);
+    return recorded;
+  };
   vi.stubGlobal("window", {
     location: { search: "" },
     screen: { availWidth: 1920, availHeight: 1040 },
@@ -57,6 +79,21 @@ beforeEach(() => {
   vi.stubGlobal("document", { documentElement: { dataset: {} as Record<string, string> } });
 });
 afterEach(() => vi.unstubAllGlobals());
+
+/** Storage that's full: what was saved before reads back, and nothing new is written. */
+function storageFull(): void {
+  const local = window.localStorage as { setItem: (key: string, value: string) => void };
+  local.setItem = () => {
+    throw new Error("QuotaExceededError");
+  };
+}
+
+/** A window of its own: the module as that window runs it, keeping what it holds apart from the others'. */
+async function openWindow(label: string) {
+  vi.resetModules();
+  shell.label = label;
+  return import("./appearance");
+}
 
 describe("how the new client looks, in every window", () => {
   it("grows a window with its interface size, so its layout keeps its width", async () => {
@@ -79,7 +116,7 @@ describe("how the new client looks, in every window", () => {
     announceAppearance();
     await vi.waitFor(() => expect(shell.size).toEqual({ width: 340, height: 820 }));
     expect(shell.zoom).toBe(1);
-    expect(shell.broadcast).toContainEqual(["next:appearance", { v: 1 }]);
+    expect(shell.broadcast).toContainEqual(["next:appearance", { v: 1, chosen: { scale: 100 } }]);
   });
 
   it("a window remembered at a size opens at it, and doesn't grow again on every run", async () => {
@@ -182,5 +219,90 @@ describe("how the new client looks, in every window", () => {
     delete root.dataset.normalize;
     await applyAppearance();
     expect(root.dataset.normalize).toBe("true");
+  });
+
+  it("applies a choice storage refuses, and grows the window for it once (#782)", async () => {
+    const settings = await openWindow("settings");
+    const root = document.documentElement as unknown as { dataset: Record<string, string> };
+    // Full: nothing new is written, so storage still holds what it held before.
+    storageFull();
+    expect(settings.saveScale(150)).toBe(150);
+    settings.saveOneLine(true);
+    settings.saveHideReactions(true);
+    settings.saveNormalize(true);
+    // Settings applies it, then hears its own announcement and applies it again.
+    await settings.applyAppearance();
+    await settings.applyAppearance();
+    expect(storage.size).toBe(0);
+    expect(shell.zoom).toBe(1.5);
+    expect(shell.size).toEqual({ width: 510, height: 1230 });
+    expect(settings.loadOneLine()).toBe(true);
+    expect(settings.loadHideReactions()).toBe(true);
+    expect(root.dataset.normalize).toBe("true");
+
+    // Gone altogether: neither reading nor writing works.
+    vi.stubGlobal("window", { location: { search: "" }, screen: { availWidth: 1920, availHeight: 1040 } });
+    settings.saveScale(125);
+    await settings.applyAppearance();
+    expect(shell.zoom).toBe(1.25);
+    expect(shell.size).toEqual({ width: 425, height: 1025 });
+    expect(settings.loadOneLine()).toBe(true);
+  });
+
+  it("carries a choice storage refuses to the other windows, in Settings' announcement (#782)", async () => {
+    storageFull();
+    const list = await openWindow("main");
+    list.followAppearance();
+    const drawn: boolean[] = [];
+    list.onAppearance(() => drawn.push(list.loadOneLine()));
+    const settings = await openWindow("settings");
+    settings.followAppearance();
+    settings.saveScale(150);
+    settings.saveOneLine(true);
+    settings.saveHideReactions(true);
+    settings.saveNormalize(true);
+    settings.announceAppearance();
+    // The list's screens are told, and draw one line per person.
+    await vi.waitFor(() => expect(drawn.at(-1)).toBe(true));
+    expect(list.loadScale()).toBe(150);
+    expect(list.loadHideReactions()).toBe(true);
+    expect(list.loadPlainNames()).toBe(true);
+  });
+
+  it("gives a window opened later the choices storage refused, from the list (#782)", async () => {
+    // Reactions were hidden before storage filled up.
+    storage.set("linger.next.hideReactions", "true");
+    storageFull();
+    const list = await openWindow("main");
+    list.followAppearance();
+    const settings = await openWindow("settings");
+    settings.saveScale(150);
+    settings.saveOneLine(true);
+    settings.announceAppearance();
+    await vi.waitFor(() => expect(list.loadScale()).toBe(150));
+
+    // A conversation's own window, opened since: it asks the list.
+    const chat = await openWindow("chat-00ff00ff00ff00ff");
+    chat.followAppearance();
+    await vi.waitFor(() => expect(chat.loadScale()).toBe(150));
+    expect(chat.loadOneLine()).toBe(true);
+    expect(chat.loadHideReactions()).toBe(true);
+  });
+
+  it("keeps a change announced while the list's answer was on its way (#782)", async () => {
+    storageFull();
+    const { answer } = await import("./bus");
+    let reply: (choices: object) => void = () => undefined;
+    await answer(shell.bus("main"), "next:appearancechosen", () => new Promise<object>((resolve) => (reply = resolve)));
+    const chat = await openWindow("chat-00ff00ff00ff00ff");
+    chat.followAppearance();
+    const settings = await openWindow("settings");
+    settings.saveScale(200);
+    settings.announceAppearance();
+    await vi.waitFor(() => expect(chat.loadScale()).toBe(200));
+    // The list answers with what it had before the change.
+    reply({ scale: 150 });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(chat.loadScale()).toBe(200);
   });
 });

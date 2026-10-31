@@ -215,6 +215,27 @@ test("interface size and plain names are saved here and take effect at once", as
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.normalize)).toBe("true");
 });
 
+test("with storage full, an Appearance choice still takes effect, and goes to the other windows (#782)", async ({ page }) => {
+  await open(page, "?section=appearance&full");
+  await page.getByRole("combobox", { name: "Interface size" }).selectOption("125");
+  await expect.poll(() => did(page)).toContain("zoom:1.25");
+  await page.getByRole("switch", { name: "Use plain names and message fonts" }).click();
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.normalize)).toBe("true");
+  await page.getByRole("switch", { name: "One line per person" }).click();
+  const announced = async () =>
+    (await did(page)).filter((line) => line.startsWith("announced:")).map((line) => JSON.parse(line.slice("announced:".length)) as unknown);
+  await expect.poll(announced).toContainEqual({ scale: 125, plainNames: true, oneLine: true });
+  // Nothing was written.
+  expect(await page.evaluate(() => window.localStorage.getItem("linger.interface.scale"))).toBeNull();
+});
+
+test("opened after a choice storage refused, Settings shows it as the list window has it (#782)", async ({ page }) => {
+  await open(page, "?section=appearance&full&listchose");
+  await expect(page.getByRole("combobox", { name: "Interface size" })).toHaveValue("150");
+  await expect(page.getByRole("switch", { name: "One line per person" })).toHaveAttribute("aria-checked", "true");
+  await expect.poll(() => did(page)).toContain("zoom:1.5");
+});
+
 test("one line per person is off to start, and turning it on saves it for the list (#197)", async ({ page }) => {
   await open(page, "?section=appearance");
   const choice = page.getByRole("switch", { name: "One line per person" });
