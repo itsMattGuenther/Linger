@@ -19,6 +19,7 @@ import { closeReport, type GatewayState, saveDisplayName, saveStatus, saveStyle,
 import { hostsHere, inviteUrl, moveRoom, signInLinkProblem, signInLinkWords, signInUrl } from "../../../lib/host";
 import { type TalkKeyReach, talkKeyReach, type VoiceDeviceList, voiceDevices } from "../../../lib/ipc";
 import { localTimeProblem } from "../../../lib/localTime";
+import { loadNormalize, saveNormalize } from "../../../lib/normalize";
 import { loadSoundPrefs, playPreview, saveSoundPrefs, type SoundPrefs } from "../../../lib/sound";
 import {
   appVersion,
@@ -47,11 +48,12 @@ import { NOTIFY, type NotifyQuestion, type Outcome, PASSWORD, type PasswordQuest
 import { CHIMES, type SettingsKey, settingsKeys } from "../../core/settings";
 import { presenceOf } from "../../core/chat/conversation";
 import { Button, Spinner } from "../../kit";
-import { announceAppearance, loadHideReactions, loadOneLine, loadScale, loadTextSize, saveHideReactions, saveNormalize, saveOneLine, saveScale, saveTextSize } from "../../core/appearance";
+import { announceAppearance, loadHideReactions, loadOneLine, loadScale, loadTextSize, saveHideReactions, saveOneLine, saveScale, saveTextSize } from "../../core/appearance";
 import { type Reporter, startReporting, windowTarget } from "../../core/report";
 import { useFollowing } from "../useFollowing";
 import { hostOf, useServerInfos } from "../useServerInfos";
 import { WindowMessage } from "../WindowMessage";
+import type { AppearanceChoice } from "./AppearanceSection";
 import type { ServerEntry } from "./ServersSection";
 import { SettingsView } from "./SettingsView";
 
@@ -315,11 +317,19 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
   // This computer's preferences: read once, saved as they change.
   const [sound, setSound] = useState<SoundPrefs>(loadSoundPrefs);
   const [voice, setVoice] = useState<VoicePrefs>(loadVoicePrefs);
-  const [plain, setPlain] = useState<boolean>(loadPlainNames);
+  const [plain, setPlain] = useState<boolean>(loadNormalize);
   const [oneLine, setOneLine] = useState<boolean>(loadOneLine);
   const [hideReactions, setHideReactions] = useState<boolean>(loadHideReactions);
   const [scale, setScale] = useState<number>(loadScale);
   const [textSize, setTextSize] = useState<number>(loadTextSize);
+  // An Appearance choice storage refuses isn't made: the setting stays as it
+  // was, and Settings says so under it (#782). One that saves goes to every window.
+  const [unsaved, setUnsaved] = useState<AppearanceChoice | null>(null);
+  const appearanceSaved = (choice: AppearanceChoice, saved: boolean): boolean => {
+    setUnsaved(saved ? null : choice);
+    if (saved) announceAppearance();
+    return saved;
+  };
   const [mode, setMode] = useState(() => loadMode(localStore()));
   const [closeList, setCloseList] = useState(() => loadCloseList(localStore()));
   const [arrivalCards, setArrivalCards] = useState(() => loadArrivalCards(localStore()));
@@ -333,19 +343,6 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
       .catch(() => alive && setDevices(null));
     return () => {
       alive = false;
-    };
-  }, []);
-  // Opened after a choice storage refused, Settings hears it from the list
-  // window once it's open, so it shows what every window applies (#782).
-  useEffect(() => {
-    const stop = onAppearance(() => {
-      setScale(loadScale());
-      setPlain(loadPlainNames());
-      setOneLine(loadOneLine());
-      setHideReactions(loadHideReactions());
-    });
-    return () => {
-      stop();
     };
   }, []);
 
@@ -571,8 +568,9 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
           : {
               value: scale,
               onChange: (value) => {
-                setScale(saveScale(value));
-                announceAppearance();
+                const saved = saveScale(value);
+                if (saved !== null) setScale(saved);
+                appearanceSaved("scale", saved !== null);
               },
             },
         // On top of the phone's own text size (#690, core/phone.ts).
@@ -588,17 +586,13 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
         plainNames: {
           value: plain,
           onChange: (value) => {
-            setPlain(value);
-            saveNormalize(value);
-            announceAppearance();
+            if (appearanceSaved("plainNames", saveNormalize(value))) setPlain(value);
           },
         },
         reactions: {
           value: !hideReactions,
           onChange: (shown) => {
-            setHideReactions(!shown);
-            saveHideReactions(!shown);
-            announceAppearance();
+            if (appearanceSaved("reactions", saveHideReactions(!shown))) setHideReactions(!shown);
           },
         },
         // The phone's rows are sized for a thumb (SPEC §4.15).
@@ -607,11 +601,10 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
           : {
               value: oneLine,
               onChange: (value) => {
-                setOneLine(value);
-                saveOneLine(value);
-                announceAppearance();
+                if (appearanceSaved("oneLine", saveOneLine(value))) setOneLine(value);
               },
             },
+        unsaved,
       }}
       windows={{
         conversations: {
