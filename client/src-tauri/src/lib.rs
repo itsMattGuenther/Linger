@@ -20,7 +20,7 @@ pub mod cue;
 pub mod deep_link;
 #[cfg(target_os = "linux")]
 pub mod desktop_entry;
-#[cfg(desktop)]
+// On the phone too: the share inbox (#785) describes files the way a drop does.
 mod dropped;
 pub mod gateway;
 pub mod graphics;

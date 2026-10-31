@@ -223,14 +223,8 @@ mod ios {
     /// `FileManager.default.containerURL(forSecurityApplicationGroupIdentifier:)`,
     /// which is `None` when the app wasn't signed into the group.
     pub fn group_dir() -> Option<PathBuf> {
-        let manager = NSFileManager::defaultManager();
-        // Sound: a plain call with a string the method copies; it returns an
-        // owned URL or nil. (Marked unsafe in some objc2-foundation versions.)
-        #[allow(unused_unsafe)]
-        let url = unsafe {
-            manager
-                .containerURLForSecurityApplicationGroupIdentifier(&NSString::from_str(APP_GROUP))
-        }?;
+        let url = NSFileManager::defaultManager()
+            .containerURLForSecurityApplicationGroupIdentifier(&NSString::from_str(APP_GROUP))?;
         url.path().map(|path| PathBuf::from(path.to_string()))
     }
 }

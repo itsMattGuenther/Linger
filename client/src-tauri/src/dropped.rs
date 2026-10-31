@@ -10,6 +10,11 @@
 //! page asks for what was dropped: the paths of the last drop on its own
 //! window, a minute at most, and nothing else. A page can't name a file to
 //! read, so it can only ever have the files the person dropped on it.
+//!
+//! The phone app has no windows to drop on, but its share inbox (#785,
+//! `shared.rs`) describes a file with `describe` and `DroppedFile`, the same
+//! words for the same problems; the rest goes unused there.
+#![cfg_attr(mobile, allow(dead_code))]
 
 use std::collections::HashMap;
 use std::path::PathBuf;
