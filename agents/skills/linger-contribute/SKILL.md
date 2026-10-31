@@ -24,7 +24,8 @@ breaking any of them.
    of truth: if code and docs disagree, the docs win, or the docs change first,
    in the same commit.
 2. Find the issue. If there isn't one, the `linger-report` skill drafts one; a
-   fix without an issue is harder to review.
+   fix without an issue is harder to review. An issue labelled `tracking`
+   groups other work: pick one of its sub-issues, not the parent.
 3. Check the issue's linked pull requests and who is assigned, so an existing
    fix isn't duplicated: `gh issue view <n> --repo itsMattGuenther/Linger`. If
    somebody else is assigned, ask on the issue before starting.
