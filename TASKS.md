@@ -46,7 +46,19 @@ Text Size, as the Android app follows its Font size (#690). Settings → Account
 & App has **Privacy**, which opens the privacy page, and **Report a problem**,
 which opens GitHub's forms for a new issue (#779). On an iPhone, Linger says
 why it wants the local network when your server is on your home network
-(#779). **Thanks** (`docs/releasing.md`): @Gleasonmt for the iPhone app's iOS
+(#779). **Linger updates itself (#772)**, starting from this release: a day
+after a release is published, the setup.exe and the AppImage download it and
+install it at the next start, or after half an hour with nobody using Linger,
+never in voice or while sharing; the .deb, .rpm and .msi download it and ask
+with Update, since they need a password; the foot of the list says "You're on
+…" once after. This release itself is installed the old way (Settings → Account
+& App → Install and restart in 0.5.3), and the notes must say so. A host whose
+server is behind sees it at the foot of the list, with How to update, and the
+disk and backup lines say Server settings instead of Hosting…. On an iPhone, Linger stays out of iCloud backups and its sign-in stays on
+that phone; nobody is signed out by the update, and TestFlight testers
+confirm both (#790). Write the
+release's one line in `client/src/next/core/release-line.json`
+(`docs/releasing.md`). **Thanks** (`docs/releasing.md`): @Gleasonmt for the iPhone app's iOS
 15 minimum (#749), bigger text on the phone and the iPhone following its Text
 Size (#690), and the Privacy and Report a problem buttons and getting the
 iPhone app ready for the App Store (#779), and @eGGnogSC for messages that
@@ -667,8 +679,9 @@ macOS runners, or a friend's Mac.
   from the GitHub address, which nobody else can claim, and neither store lets
   it change after the first upload. **Phone backups leave Linger out**
   (SPEC §4.15; the opt-in was dropped 2026-10-03): Android's
-  `allowBackup="false"` does it there, and the iPhone's files still need
-  marking "don't back up" (T-1604, #779).
+  `allowBackup="false"` does it there, and on the iPhone the app marks its
+  folders "don't back up" and keeps its sign-ins to that phone (#790,
+  T-1604), for TestFlight testers to confirm.
   *Accept:* the app opens on a real phone, signs in, and stays connected across
   a wifi-to-mobile-data switch.
 
@@ -757,10 +770,16 @@ macOS runners, or a friend's Mac.
   the key, and uploads to TestFlight (docs/releasing.md, "The iPhone").
   `Info.ios.plist` has the microphone and camera wording and the encryption
   answer. **Before the App Store, not before a first TestFlight build:**
-  keeping the app out of iCloud backups, as the privacy page says. Files
-  need "don't back up" set on them. The Keychain entry (the `keyring` crate's
-  default) may be restorable to another phone, so it needs a
-  this-device-only setting. Also **voice with the phone locked**: there's no
+  keeping the app out of iCloud backups, as the privacy page says. **Built,
+  for TestFlight testers to confirm (#790):** each start marks the folders
+  the web view, the phone's networking and Tauri keep things in "don't back
+  up" (`src/phone_backup.rs`), and each sign-in is written to the Keychain
+  as `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`, so a backup can't
+  carry it to another phone; an older build's entries move over in place the
+  first time, so nobody is signed out (`src/secrets.rs`). The testers check
+  that they're still signed in after updating, and that Linger shows next to
+  nothing under the iPhone's iCloud backups; then #779's "Backups and the
+  Keychain" is ticked. Also **voice with the phone locked**: there's no
   background audio mode yet, so locking may end a call. Check it on a real
   iPhone first, with Matt's friend.
   **A privacy policy link inside the app**, which Apple's guideline 5.1.1(i)

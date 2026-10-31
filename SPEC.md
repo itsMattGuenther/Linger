@@ -1124,10 +1124,13 @@ app keeps nothing of it once it is in a message box or turned down.
 
 **Phone backups leave Linger out.** A phone backs its apps up to Apple's or Google's
 cloud by default. The phone app opts out, so what it keeps (your list of servers and
-your settings) doesn't reach either company. There's no setting to put it back in
-(Matt, 2026-10-03): a backup couldn't bring your sign-ins to a new phone anyway, since
-they're encrypted to a key that never leaves the old one, and messages and pictures
-live on the server. A new phone signs in again.
+your settings) doesn't reach either company. Android has a switch for that; an iPhone
+doesn't, so the app marks the folders it keeps things in "don't back up" each time it
+starts (#790). There's no setting to put it back in (Matt, 2026-10-03): a backup
+couldn't bring your sign-ins to a new phone anyway, since on Android they're encrypted
+to a key that never leaves the old one, and on an iPhone they're in the Keychain marked
+for that phone only (#790), and messages and pictures live on the server. A new phone
+signs in again.
 
 **Getting it, before the stores** (Matt, 2026-10-03). Android friends install the
 signed `.apk` from each GitHub release; Android asks them once to allow installs

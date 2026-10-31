@@ -83,7 +83,9 @@ Each is referenced by the items it blocks. Matt decides; the answer goes into
    while it's true: a server not connected after five seconds, sign-ins not
    remembered, a new version (with Update…, which opens Settings). The
    storage figure moved to the Media window, beside how long files are kept.
-   The protocol words ("tls ok…", "ready (28ms)") are gone.
+   The protocol words ("tls ok…", "ready (28ms)") are gone. **2026-10-31
+   (#772):** nobody noticed the version line, so Linger updates itself now,
+   and the foot says so in lines of its own (`docs/design/system.md`).
 2. **Light theme.** The design is dark only; today has dark, light and
    follow-the-system. Keep dark only, or design a light version before the
    switch? *(LOOK-3)*
@@ -494,12 +496,12 @@ there or where the design puts it.
 
 | ID | Capability | Today | Buddy list | Proof | Status |
 |---|---|---|---|---|---|
-| UPD-1 | Checks at launch and when Settings opens. Nothing downloads until asked; every update is verified against the signing key. | `lib/updates.ts`, `src-tauri/src/updates.rs` | Same, **owner only**, and again every 12 hours while it runs in the tray | C + F | ✅ (next-list-window.spec.ts "looked for at launch", next-settings.spec.ts) |
+| UPD-1 | Checks at launch and when Settings opens. Nothing downloads until asked; every update is verified against the signing key. | `lib/updates.ts`, `src-tauri/src/updates.rs` | **Changed (#772): Linger updates itself.** Checked at launch and every 12 hours, **owner only**; a release a day old is downloaded in the background, verified, and verified again before it installs at the next start or after half an hour unused. Never in voice or while sharing | C + F | ✅ (next-list-window.spec.ts "#772", next-settings.spec.ts, Rust `updates` tests) |
 | UPD-2 | States: ready (with version), current, unconfigured (a browser or dev build), failed (with reason), and managed (the system updates it). | `updates.ts` | Same | U | ✅ (lib/updates.test.ts, next-settings.spec.ts) |
 | UPD-3 | Managed installs (the Arch package marker) say "updates with your system" and never try to replace themselves. | `src-tauri/src/packaging.rs`, `updates.ts` | Same | C + U | ✅ (lib/updates.test.ts, Rust tests) |
 | UPD-4 | Release notes are a link to the release page, not printed in the app (#174). | Settings → Updates | Same | F | ✅ (next-settings.spec.ts) |
-| UPD-5 | "Update ready" is a quiet hint that opens Settings, with no dialog and no restart. | `App.tsx` status bar | A line at the list's foot with Update…, which opens Settings (decision 1) | F | ✅ (next-list-window.spec.ts "a new version gets one quiet line") |
-| UPD-6 | Installing replaces the app; a failure says why. | `update_install` | Same | D + M | 🟡 built; needs a desktop check |
+| UPD-5 | "Update ready" is a quiet hint that opens Settings, with no dialog and no restart. | `App.tsx` status bar | **Changed (#772):** a calm "is ready" line at the list's foot with Restart now; a lit "is out" for a copy that needs a password (with Update) or the system updates; "You're on …" once after; the tray's Restart to update Linger | F | ✅ (next-list-window.spec.ts "#772") |
+| UPD-6 | Installing replaces the app; a failure says why. | `update_install` | `update_now` and `update_install_pending` (#772); a failure is said on the foot's line | D + M | 🟡 built; needs a desktop check |
 
 ## HOST — running the server
 

@@ -31,11 +31,25 @@ const TRAY_ID: &str = "linger";
 #[derive(Default)]
 pub struct VoiceItems(Mutex<Option<Items>>, Mutex<Option<(Look, String)>>);
 
-/// The menu's three voice items, to grey out and name again as voice changes.
+/// The menu's three voice items, to grey out and name again as voice changes,
+/// and the update item (#772), which is in the menu only while an update
+/// waits: the menu itself to put it in and take it out, and whether it's in.
 pub struct Items {
     mute: MenuItem<Wry>,
     leave: MenuItem<Wry>,
     stop_share: MenuItem<Wry>,
+    menu: Menu<Wry>,
+    update: MenuItem<Wry>,
+    update_shown: bool,
+}
+
+/// The update item, as the list window words it (#772): "Restart to update
+/// Linger" for a copy that installs by itself, "Update Linger" for one that
+/// asks for a password, and for the tooltip "0.5.4 is ready" or "is out".
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct TrayUpdate {
+    text: String,
+    tip: String,
 }
 
 /// What the tray icon shows about voice (#601). A state, never a number of
@@ -79,16 +93,22 @@ const PLACE_MAX: usize = 60;
 
 /// The tooltip, the icon's words for anybody who doesn't know the marks or
 /// can't see them: "Linger · in voice in #general, muted". `place` is where,
-/// as the list words it ("in #general", "with Jules").
+/// as the list words it ("in #general", "with Jules"). Out of voice, an
+/// update waiting says so instead (#772): "Linger · 0.5.4 is ready". In voice,
+/// voice is what matters, and nothing restarts then anyway.
 pub fn tooltip(
     in_voice: bool,
     muted: bool,
     deafened: bool,
     push_to_talk: bool,
     place: Option<&str>,
+    update: Option<&str>,
 ) -> String {
     if !in_voice {
-        return "Linger".into();
+        return match update.map(str::trim).filter(|tip| !tip.is_empty()) {
+            Some(tip) => format!("Linger · {tip}"),
+            None => "Linger".into(),
+        };
     }
     let mut words = String::from("Linger · in voice");
     if let Some(place) = place.map(str::trim).filter(|place| !place.is_empty()) {
@@ -159,6 +179,14 @@ fn build(app: &App) -> tauri::Result<()> {
         None::<&str>,
     )?;
     let quit = MenuItem::with_id(app, "quit", "Quit Linger", true, None::<&str>)?;
+    // Put in under Show Linger only while an update waits (#772).
+    let update = MenuItem::with_id(
+        app,
+        "update",
+        "Restart to update Linger",
+        true,
+        None::<&str>,
+    )?;
     let menu = Menu::with_items(
         app,
         &[
@@ -176,6 +204,9 @@ fn build(app: &App) -> tauri::Result<()> {
             mute,
             leave,
             stop_share,
+            menu: menu.clone(),
+            update,
+            update_shown: false,
         });
     }
     let mut tray = TrayIconBuilder::with_id(TRAY_ID)
@@ -185,8 +216,9 @@ fn build(app: &App) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => show_list(app),
             "quit" => app.exit(0),
-            // Voice is the list window's: it does what the tray asks.
-            "mute" | "leave" => {
+            // Voice is the list window's: it does what the tray asks. So is
+            // updating (#772), since only it knows whether you're in voice.
+            "mute" | "leave" | "update" => {
                 let _ = app.emit_to("main", "next:tray", event.id.as_ref());
             }
             // A share runs in the window Share was pressed in, which may not
@@ -271,19 +303,44 @@ pub fn next_tray_voice(
     push_to_talk: Option<bool>,
     place: Option<String>,
     sharing: Option<bool>,
+    update: Option<TrayUpdate>,
 ) -> Result<(), String> {
     if window.label() != "main" {
         return Err("only the list window says where voice is".into());
     }
+    // Nothing restarts to update in voice or while sharing (#772): this is
+    // what the last check before an install reads.
+    crate::updates::set_busy(window.app_handle(), in_voice || sharing.unwrap_or(false));
     let deafened = deafened.unwrap_or(false);
     {
-        let held = items.0.lock().map_err(|e| e.to_string())?;
+        let mut held = items.0.lock().map_err(|e| e.to_string())?;
         if let Some(Items {
             mute,
             leave,
             stop_share,
-        }) = held.as_ref()
+            menu,
+            update: item,
+            update_shown,
+        }) = held.as_mut()
         {
+            // The update item: in the menu while one waits, under Show
+            // Linger, and greyed out in voice, where nothing restarts.
+            match &update {
+                Some(TrayUpdate { text, .. }) => {
+                    item.set_text(text).map_err(|e| e.to_string())?;
+                    item.set_enabled(!in_voice).map_err(|e| e.to_string())?;
+                    if !*update_shown {
+                        menu.insert(item, 1).map_err(|e| e.to_string())?;
+                        *update_shown = true;
+                    }
+                }
+                None => {
+                    if *update_shown {
+                        menu.remove(item).map_err(|e| e.to_string())?;
+                        *update_shown = false;
+                    }
+                }
+            }
             mute.set_text(if muted { "Unmute" } else { "Mute" })
                 .map_err(|e| e.to_string())?;
             mute.set_enabled(in_voice).map_err(|e| e.to_string())?;
@@ -300,6 +357,7 @@ pub fn next_tray_voice(
         deafened,
         push_to_talk.unwrap_or(false),
         place.as_deref(),
+        update.as_ref().map(|update| update.tip.as_str()),
     );
     let mut showing = items.1.lock().map_err(|e| e.to_string())?;
     let was = showing
@@ -368,43 +426,67 @@ mod tests {
 
     #[test]
     fn the_tooltip_says_it_in_words() {
-        assert_eq!(tooltip(false, false, false, false, None), "Linger");
+        assert_eq!(tooltip(false, false, false, false, None, None), "Linger");
         assert_eq!(
-            tooltip(false, true, true, true, Some("in #general")),
+            tooltip(false, true, true, true, Some("in #general"), None),
             "Linger",
             "out of voice, nothing about voice"
         );
         assert_eq!(
-            tooltip(true, false, false, false, Some("in #general")),
+            tooltip(true, false, false, false, Some("in #general"), None),
             "Linger · in voice in #general"
         );
         assert_eq!(
-            tooltip(true, true, false, false, Some("in #general")),
+            tooltip(true, true, false, false, Some("in #general"), None),
             "Linger · in voice in #general, muted"
         );
         assert_eq!(
-            tooltip(true, true, true, false, Some("with Jules")),
+            tooltip(true, true, true, false, Some("with Jules"), None),
             "Linger · in voice with Jules, deafened"
         );
         assert_eq!(
-            tooltip(true, false, false, true, Some("in #general")),
+            tooltip(true, false, false, true, Some("in #general"), None),
             "Linger · in voice in #general, push-to-talk"
         );
         assert_eq!(
-            tooltip(true, true, false, true, None),
+            tooltip(true, true, false, true, None, None),
             "Linger · in voice, muted",
             "a mute says muted, push-to-talk or not"
         );
         assert_eq!(
-            tooltip(true, false, false, false, Some("  ")),
+            tooltip(true, false, false, false, Some("  "), None),
             "Linger · in voice"
+        );
+    }
+
+    #[test]
+    fn an_update_waiting_is_in_the_tooltip_out_of_voice() {
+        assert_eq!(
+            tooltip(false, false, false, false, None, Some("0.5.4 is ready")),
+            "Linger · 0.5.4 is ready"
+        );
+        assert_eq!(
+            tooltip(false, false, false, false, None, Some("  ")),
+            "Linger"
+        );
+        assert_eq!(
+            tooltip(
+                true,
+                true,
+                false,
+                false,
+                Some("in #general"),
+                Some("0.5.4 is ready")
+            ),
+            "Linger · in voice in #general, muted",
+            "in voice, voice is what the tooltip says"
         );
     }
 
     #[test]
     fn a_long_place_is_cut_to_fit_a_windows_tooltip() {
         let place = format!("with {}", "Jules, Sam, Eli, ".repeat(10));
-        let words = tooltip(true, true, true, false, Some(&place));
+        let words = tooltip(true, true, true, false, Some(&place), None);
         assert!(words.chars().count() < 127, "{words}");
         assert!(
             words.contains('…') && words.ends_with(", deafened"),
@@ -412,7 +494,7 @@ mod tests {
         );
         let wide = "in #".to_owned() + &"﷽".repeat(100);
         assert!(
-            tooltip(true, false, false, false, Some(&wide))
+            tooltip(true, false, false, false, Some(&wide), None)
                 .chars()
                 .count()
                 < 127

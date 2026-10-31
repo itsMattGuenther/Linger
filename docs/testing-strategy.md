@@ -205,10 +205,29 @@ rules that came out of them.
   open: the second must be that one's own, with the keyboard and nothing
   left from the first. Every test that opened one card and closed it missed
   that the voice bar's card kept the last one's refusal (#774).
+- **A card or popover is tested at its limits:** words taller than the
+  window, the window resized while it's open, its opener pressed again, and
+  what it shows changing under it. A topic's card failed all four, and a late
+  font cutting words that fitted, the first time it was reviewed (#796).
 - **A value shared between windows is tested changing in another window
   while it's showing**, after a change made here and before the owner's
   answer to it: a card that held its own level until it closed showed none
   of the changes made in the voice bar (#774).
+- **A check that guards an action is made again right before the action**
+  when anything slow sits between them (a network request, a download, a
+  password prompt), and **tested with the state changing in between**: the
+  list checked voice before asking the shell to update, the shell then
+  fetched and downloaded for a minute, and a call joined in that minute was
+  restarted (#794). The same for a date or a version approved earlier: an
+  install with nobody pressing anything reads the feed again. And an answer
+  that can come back after what it depends on has changed is tested arriving
+  before the change and after it (#794).
+- **A release job is safe to run again** after the release is published:
+  re-running one once undated a published release's feed (#794).
+- **What another window asks the list to do is tested failing**, from the
+  list's side, and the asking window shows it: Settings' Restart now stayed
+  pressed, saying Linger would restart, after the list's install failed
+  (#794).
 - **A phone screen is tried held sideways**, short and wide, as well as
   upright. Whatever rises from the bottom does so in the kit's `Sheet`,
   which is never taller than the screen; its own test covers every kind

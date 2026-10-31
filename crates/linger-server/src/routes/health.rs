@@ -1,7 +1,8 @@
 //! Health endpoint, for reverse proxies, uptime checks, the app's "is there a
-//! Linger server at this address" probe, and the version a host's app compares
-//! with the newest release (PROTOCOL §9, #314). Keep it dependency-free and
-//! instant.
+//! Linger server at this address" probe, the version a host's app compares
+//! with the newest release (PROTOCOL §9, #314), and the oldest app release this
+//! server works with, which every app compares with its own (#793). Keep it
+//! dependency-free and instant.
 
 use axum::extract::State;
 use axum::routing::get;
@@ -23,5 +24,6 @@ async fn health(State(state): State<AppState>) -> Json<Health> {
     Json(Health {
         ok,
         version: env!("CARGO_PKG_VERSION").to_string(),
+        oldest_client: Some(linger_core::OLDEST_CLIENT.to_string()),
     })
 }

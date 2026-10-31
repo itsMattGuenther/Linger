@@ -96,6 +96,39 @@ test("an address typed with http:// reaches the server over https (#208)", async
   expect(asked).toEqual([`GET ${HOME}/health`]);
 });
 
+// A server that needs a newer app than this one (#793; this copy is 0.3.6,
+// and `?tooold` has Casa da Ribeira work with 0.5.4 or newer): said in the
+// paste box, before any form asks for a password, whatever was pasted.
+test.describe("a server that needs a newer app (#793)", () => {
+  const LISBON = "https://casa-da-ribeira.example";
+  const NEWER = "This server needs a newer Linger. It works with Linger 0.5.4 or newer. Update Linger, then try again.";
+
+  for (const [what, pasted] of [
+    ["its address", "casa-da-ribeira.example"],
+    ["an invite to it", `${LISBON}/invite/RIBEIRA`],
+    ["a sign-in link for it", `${LISBON}/sign-in/abcd2345`],
+    ["its setup link", `${LISBON}/setup?token=t0k`],
+  ] as const) {
+    test(`${what} says so, and no form asks for a password`, async ({ page }) => {
+      await open(page, "?one&signedout&tooold");
+      await paste(page, pasted);
+      await expect(page.getByText(NEWER)).toBeVisible();
+      await expect(pasteBox(page)).toHaveAttribute("aria-invalid", "true");
+      await expect(pasteBox(page)).toHaveValue(pasted);
+      await expect(page.getByLabel("Password")).toHaveCount(0);
+      // The one question it asks needs no sign-in, and nothing else is asked.
+      expect((await did(page)).filter((line) => line.includes(LISBON))).toEqual([`GET ${LISBON}/health`]);
+    });
+  }
+
+  test("a server that works with this app goes on to the form as before", async ({ page }) => {
+    await open(page, "?one&signedout&tooold");
+    await paste(page, `${HOME}/invite/ABCD-1234`);
+    await expect(page.getByRole("form", { name: "Join" })).toBeVisible();
+    expect((await did(page)).filter((line) => line.startsWith(`GET ${HOME}`))).toEqual([`GET ${HOME}/health`, `GET ${HOME}/auth/invite/ABCD-1234`]);
+  });
+});
+
 test("an invite leads to joining, named for its server, and Join waits for eight characters", async ({ page }) => {
   await open(page);
   await paste(page, `${HOME}/invite/ABCD-1234`);

@@ -139,17 +139,26 @@ ndk-context = "0.1"
 # The iPhone's Keychain, for the phone app (T-1602, `secrets.rs`).
 [target.'cfg(target_os = "ios")'.dependencies]
 keyring = { version = "3", features = ["apple-native"] }
+# Each sign-in kept to this iPhone, out of backups that could carry it to
+# another phone (#790, `secrets.rs`): the keyring crate can't name a Keychain
+# entry's protection, so the shell writes and moves entries itself. The same
+# releases the keyring crate builds on an iPhone, so nothing new comes in.
+security-framework = "2"
+security-framework-sys = { version = "2", default-features = false }
+core-foundation = "0.9"
 # A shared file downloaded on an iPhone (#703, `phone_save.rs`): fetched with
 # the phone's own networking (NSURLSession) and offered in its share sheet
 # (UIActivityViewController). And the iPhone's Text Size (#690,
-# `phone_text.rs`): the body text style's size (UIFont). All four are already
-# in the iPhone's build, under Tauri's window and web view, so they add
-# nothing to the app's size; named here with only the parts used.
+# `phone_text.rs`): the body text style's size (UIFont). And the app's
+# folders marked "don't back up" (#790, `phone_backup.rs`): the app's own
+# folder (NSHomeDirectory) and a flag on a folder (NSURL, NSNumber). All four
+# are already in the iPhone's build, under Tauri's window and web view, so
+# they add nothing to the app's size; named here with only the parts used.
 # `NSFileManager` finds the App Group's folder, where the share extension
 # leaves files shared to Linger (#785, `shared.rs`).
 objc2 = "0.6"
 block2 = "0.6"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-foundation", "NSArray", "NSError", "NSFileManager", "NSGeometry", "NSString", "NSURL", "NSURLResponse", "NSURLSession"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-foundation", "NSArray", "NSError", "NSFileManager", "NSGeometry", "NSPathUtilities", "NSString", "NSURL", "NSURLResponse", "NSURLSession", "NSValue"] }
 objc2-ui-kit = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-foundation", "UIActivity", "UIActivityViewController", "UIFont", "UIFontDescriptor", "UIPopoverPresentationController", "UIPopoverSupport", "UIPresentationController", "UIResponder", "UIView", "UIViewController"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
@@ -226,3 +235,11 @@ thiserror = "2"
 # named explicitly so a future default flip to native-tls can't quietly put
 # OpenSSL back into everyone's build.
 tauri-plugin-updater = { version = "2.10.1", default-features = false, features = ["rustls-tls", "zip"] }
+# A downloaded update waits on disk until Linger next starts (#772), so it's
+# checked against the signing key again right before it's installed, the same
+# check the updater makes when it downloads. Both are already in the build,
+# through the updater. `semver` says whether the update kept is newer than the
+# running copy.
+minisign-verify = "0.2"
+base64 = "0.22"
+semver = "1"

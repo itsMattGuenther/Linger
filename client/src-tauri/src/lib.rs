@@ -27,6 +27,9 @@ pub mod graphics;
 #[cfg(desktop)]
 mod notifications;
 pub mod packaging;
+// The iPhone's folders marked "don't back up" (#790). Tests read which ones here too.
+#[cfg(any(target_os = "ios", test))]
+mod phone_backup;
 // The phone's sounds: only the phone app registers them. Tests read them here too.
 // The phone's call bar (#429): voice runs in its page, and this holds it up.
 #[cfg(any(mobile, test))]
@@ -311,6 +314,10 @@ fn app_version(app: AppHandle) -> String {
 /// starts through `mobile_entry_point` instead of a `main`.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Before there's a window, so the web view's first write on a new
+    // iPhone already lands in a folder marked "don't back up" (#790).
+    #[cfg(target_os = "ios")]
+    phone_backup::keep_out_of_backups();
     #[cfg(desktop)]
     let app = desktop_app();
     #[cfg(mobile)]
@@ -359,6 +366,8 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
         .manage(screen_sound::ScreenSounds::default())
         .manage(talk_key::TalkKeyWatch::default())
         .manage(dropped::Dropped::default())
+        .manage(updates::Downloads::default())
+        .manage(updates::Busy::default())
         // The window is built here, not from the config, so it can leave the
         // title bar off on Hyprland (#130). See `window.rs`.
         .setup(|app| {
@@ -403,7 +412,9 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
             deep_link::link_offered,
             updates::update_check,
             updates::newest_version,
-            updates::update_install,
+            updates::update_now,
+            updates::update_pending,
+            updates::update_install_pending,
             graphics::graphics_started,
             window::next_open_conversation,
             window::next_open_settings,

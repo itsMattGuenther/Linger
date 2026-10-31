@@ -635,7 +635,10 @@ E2EE launders a false promise, which is worse than an honest limitation.
    Keystore (`src-tauri/src/secrets.rs`). The iPhone uses the Keychain through the
    same `keyring` crate as the desktop. Friends have signed in with it on their own
    iPhones since the first TestFlight build (0.5.1, 2026-10-20), and nobody has been
-   signed out by it.
+   signed out by it. Since #790 the shell writes each iPhone entry itself, as
+   `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`, which the crate can't ask
+   for, so no backup can restore a sign-in onto another phone; an older build's
+   entries are moved over in place the first time they're read.
 4. **No open registration.** Invite code required, always. Codes are 12 chars from a
    CSPRNG, single-use by default.
 5. **Rate limits:** login 5/min/IP, sign-up 60/hour/IP by default (all sixty at once,
@@ -679,8 +682,16 @@ E2EE launders a false promise, which is worse than an honest limitation.
    can ship code to every machine running Linger. Verification is not optional and
    has no bypass: a build with no key configured refuses every update rather than
    installing an unverified one. The WebView is granted none of the updater
-   plugin's permissions — it calls two of the app's own commands
+   plugin's permissions — it calls the app's own commands
    (`client/src-tauri/src/updates.rs`), so a page can never start an installer.
+   **Linger updates itself** (#772, `docs/decisions.md`): a copy the setup.exe
+   or the AppImage installed downloads a release once it's a day old (by the
+   feed's date, set when the release is published), keeps it in the app's cache
+   folder, verifies it again right before installing it, and installs it at the
+   next start or after half an hour with nobody using Linger. The list window
+   decides when, never in voice or while sharing a screen. The .deb, .rpm and
+   .msi need a password to install, so they download but wait for Update; a
+   copy a package manager owns is never touched.
    **The Arch package is signed too, by a separate key.** The package and the
    repository database are signed with the Linger packages OpenPGP key
    (`packaging/arch/linger.asc`, fingerprint

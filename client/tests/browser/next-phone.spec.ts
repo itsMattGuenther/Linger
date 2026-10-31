@@ -1648,3 +1648,19 @@ test.describe("sharing to Linger (#785)", () => {
     await expect(sheet(page).getByRole("status")).toHaveText("film.mov is too big to send. A file can be 500 MB at most.");
   });
 });
+
+// A topic too long for the phone's header (#778): a tap opens the whole of
+// it, risen from the bottom, and a tap on the dimmed page puts it away.
+test("a tap on a cut topic shows the whole of it in a sheet (#778)", async ({ page }) => {
+  await open(page, "?one&shell=phone&longwords");
+  await settled(page);
+  await room(page, "general").click();
+  await expect(screen(page)).toBeVisible();
+  const whole = screen(page).locator(".nx-pane-sub[data-cut='yes'] .nx-pane-whole");
+  await whole.click();
+  const card = page.getByRole("dialog", { name: "The topic of #general" });
+  await expect(card).toContainText("Media is welcome in other rooms too; this is just its home.");
+  await expect(page.locator("[data-kit='Sheet']")).toBeVisible();
+  await page.locator(".k-sheet-scrim").click({ position: { x: 20, y: 20 } });
+  await expect(card).toHaveCount(0);
+});
