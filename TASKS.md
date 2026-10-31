@@ -620,9 +620,10 @@ macOS runners, or a friend's Mac.
   report and block come before any store listing (T-1605). SPEC §4.15.
 
 - 🟡 **T-1602 · The mobile shell** — effort: **high**
-  *Android: accepted on Matt's Pixel (2026-10-03). The iPhone half waits
-  until Android is out (Matt has no iPhone; docs/decisions.md, "Android
-  first, Apple after").*
+  *Android: accepted on Matt's Pixel (2026-10-03). iPhone: on friends'
+  iPhones through TestFlight since 0.5.1 (2026-10-20, `ios.yml`, #685).
+  Matt has no iPhone, so friends and contributors with iPhones do its
+  checks.*
   *Started 2026-10-02 on `feat/t-1602-mobile-shell`.* **Done:** the crate
   builds for Android with the desktop-only code switched off (`phone_app` in
   `src/lib.rs`, `capabilities/phone.json`, voice moved to
@@ -635,7 +636,8 @@ macOS runners, or a friend's Mac.
   the emulator). Android keeps sign-ins in its Keystore-backed store
   (ARCHITECTURE §7, item 3): signed in, the app force-closed and opened again
   comes back signed in, with its tabs. The iPhone uses the Keychain through
-  the keyring crate, built for iOS in CI but not yet run on an iPhone.
+  the keyring crate; friends have signed in with it on their iPhones since
+  0.5.1, and nobody has been signed out by it.
   **On a real phone** (Matt's Pixel 11 Pro, Android 17, against his own
   server, 2026-10-03): signed in, sent and got messages, and switched networks
   both ways. Wi-Fi off: the connection closed and was back on mobile data
@@ -646,13 +648,17 @@ macOS runners, or a friend's Mac.
   not at the thirty seconds the app allows, and it retries into the block
   until then. Coming back after a short time it was live in two seconds, but
   the retries back off up to thirty, so now the app tries again at once when
-  it comes back to the screen (`gateway_retry`). **Still to do:** iOS, which
-  needs a Mac. The launcher icon is the porch artwork
+  it comes back to the screen (`gateway_retry`). **The iPhone** builds on
+  GitHub's Macs (`ios.yml`) and goes to friends through TestFlight, since
+  0.5.1 (2026-10-20). Their first reports (2026-10-21 to 23: #686–#689,
+  #697, #698, #703, #704) have fixes in TestFlight from 0.5.3, for them to
+  confirm. Not reported on yet: the iPhone switching between Wi-Fi and
+  mobile data. The launcher icon is the porch artwork
   (`scripts/app-icons.mjs`, checked in CI with the desktop icons). Setup is in `docs/development.md`.
   Tauri 2 builds for iOS and Android from the same crate. What does not carry
   over: the OS keyring (phones have their own secure storage), the tray, the
-  in-app updater (a phone app updates through its store), and voice, which
-  stays out of phone builds for now (SPEC §4.15). Expect the gateway to need
+  in-app updater (a phone app updates through its store), and, at first,
+  voice, which came to phones on 2026-10-19 (T-1606, #429). Expect the gateway to need
   reconnect behaviour for a network that changes every time somebody walks out
   of a building, and for a phone that stops the app as soon as it is in the
   background. **The phone identifier is `io.github.itsmattguenther.linger`**
@@ -662,13 +668,15 @@ macOS runners, or a friend's Mac.
   it change after the first upload. **Phone backups leave Linger out**
   (SPEC §4.15; the opt-in was dropped 2026-10-03): Android's
   `allowBackup="false"` does it there, and the iPhone's files still need
-  marking "don't back up" once its Xcode project exists.
+  marking "don't back up" (T-1604, #779).
   *Accept:* the app opens on a real phone, signs in, and stays connected across
   a wifi-to-mobile-data switch.
 
 - 🟡 **T-1603 · The layout at phone width** — effort: **medium**
-  *Android: accepted on Matt's Pixel (2026-10-03). The iPhone checks wait
-  with T-1602's iPhone half.*
+  *Android: accepted on Matt's Pixel (2026-10-03). iPhone: used by friends
+  through TestFlight since 0.5.1 (2026-10-20); what they found at phone
+  width (#686, #688, #689, #697, #698, #704) has fixes in TestFlight from
+  0.5.3, for them to confirm.*
   *Started 2026-10-02 on `feat/t-1602-mobile-shell`.* **Done:** the phone's
   one window (`docs/design/architecture.md`, "The phone's one window"): the
   page keeps clear of the phone's bars, the ✕, pop-out and voice line are
@@ -699,10 +707,10 @@ macOS runners, or a friend's Mac.
   (2026-10-03):** Android asked for the microphone the first time; recorded,
   sent and played back on the phone and on the desktop, cancelled one, and
   recorded with the ringer on silent. All worked.
-  **Waiting for the iPhone** (Android first): an edge swipe
-  for Back, since the iPhone has no Back of its own, and checking that an
-  iPhone camera photo uploads as something the server reads (iPhones save
-  HEIC).
+  **On the iPhone:** a swipe in from the left edge goes back, since the
+  iPhone has no Back of its own (#697, in 0.5.3). Camera photos and
+  screenshots go up through the + button, as a friend does on their iPhone
+  (#785).
   Seen on the first run in the emulator (2026-10-02): the list's title bar
   draws under the phone's clock and icons, its ✕ means nothing on a phone, the
   sign-in note says "this computer", and everything that opens another window
