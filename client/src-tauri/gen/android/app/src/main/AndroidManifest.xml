@@ -67,6 +67,21 @@
                 
             </intent-filter>
             <!-- DEEP LINK PLUGIN. AUTO-GENERATED. DO NOT REMOVE. -->
+            <!-- Share to Linger (#785, SPEC §4.15): pictures, videos, sound and
+                 other files from another app's share sheet. MainActivity hands
+                 them to SharedInbox, which copies them where the shell reads
+                 them (src-tauri/src/shared.rs), and the page asks which
+                 conversation they're for. No text/*: a link or words shared
+                 from a browser is text, and Linger takes only files. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="video/*" />
+                <data android:mimeType="audio/*" />
+                <data android:mimeType="application/*" />
+            </intent-filter>
         </activity>
 
         <!-- The call bar (#429): runs only while in voice, and goes when
