@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { expectedFiles, missingFiles, publishedAt, rewrite, withLine } from "./updater-urls.mjs";
+import { expectedFiles, missingFiles, NOT_PUBLISHED, publishedAt, rewrite, undated, withLine } from "./updater-urls.mjs";
 
 const repo = "itsMattGuenther/Linger";
 const tag = "v0.4.11";
@@ -102,4 +102,10 @@ test("the feed is dated when the release went out, not when it was built (#772)"
   const latest = { version: "0.4.11", pub_date: "2026-10-27T21:49:05.872Z", platforms: {} };
   assert.deepEqual(publishedAt(latest, "2026-10-28T09:00:00Z"), { ...latest, pub_date: "2026-10-28T09:00:00Z" });
   assert.throws(() => publishedAt(latest, "soon"), /not a date/);
+});
+
+test("until it's published, the feed says it isn't, so no copy counts its day from the build (#794 review)", () => {
+  const latest = { version: "0.4.11", pub_date: "2026-10-27T21:49:05.872Z", platforms: {} };
+  assert.deepEqual(undated(latest), { ...latest, pub_date: NOT_PUBLISHED });
+  assert.ok(Date.parse(NOT_PUBLISHED) > Date.now() + 100 * 365 * 24 * 60 * 60 * 1000);
 });

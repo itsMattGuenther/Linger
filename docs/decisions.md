@@ -1818,7 +1818,9 @@ which was never a recorded decision, only the first build's default (T-701).
 - **No switch to turn it off.** An app that can stay behind brings the whole problem
   back (Matt: it "breaks the whole concept").
 - **A day's head start.** A copy installs a release by itself only once it's a day old,
-  by the feed's date, which `updater-date.yml` sets when the release is published. Matt
+  by the feed's date, which `updater-date.yml` sets when the release is published;
+  until then the feed says it isn't published (a date in 2999), so nothing counts its
+  day from the build. An install nobody pressed reads the date again first. Matt
   and anybody who presses Restart now go first. Linger has no crash reports (hard rule
   4), so this is how a bad release is caught before it reaches everybody: it's marked a
   pre-release, and `releases/latest` stops offering it. Accepted risk: a bad release
@@ -1827,7 +1829,8 @@ which was never a recorded decision, only the first build's default (T-701).
   verified against the signing key, kept in the app's cache folder and verified again
   right before it's installed: at the next start ("Updating to Linger 0.5.4…"), or after
   30 minutes with nobody using Linger (idle for presence is 10). Never in voice or while
-  sharing a screen; the list window decides, since only it knows. Linger comes back as
+  sharing a screen; the list window decides, since only it knows, and the shell checks
+  the list's last word on voice again right before installing. Linger comes back as
   it was: in the tray if the list was there, and without taking the focus after a
   restart nobody pressed.
 - **The foot of the list says so**, calmly while it's ready ("Linger 0.5.4 is ready",

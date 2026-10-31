@@ -67,6 +67,21 @@ export function withLine(latest, said, tag) {
 }
 
 /**
+ * The date latest.json carries until the release is published: a day nobody
+ * reaches, so no copy counts its day's wait from the build (#794 review).
+ * tauri-action dates it when it's built, which can be days before it's
+ * published; a copy that looked in the minute between publishing and
+ * `updater-date.yml` would have found it a day old already. If that job never
+ * runs, nothing installs by itself, and Restart now still works.
+ */
+export const NOT_PUBLISHED = "2999-01-01T00:00:00Z";
+
+/** latest.json saying it isn't published yet (`NOT_PUBLISHED`). */
+export function undated(latest) {
+  return { ...latest, pub_date: NOT_PUBLISHED };
+}
+
+/**
  * latest.json dated when the release was published (#772), not when it was
  * built: copies install a release by themselves only once it's a day old, and
  * that day is the head start of whoever presses Restart now. tauri-action
@@ -119,7 +134,8 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href && process.arg
     console.error(`${tag} is missing, or names differently: ${missing.join(", ")}`);
     process.exit(1);
   }
-  let out = rewrite(latest, assets, repo, tag);
+  // Not published yet: dated when it is (updater-date.yml).
+  let out = undated(rewrite(latest, assets, repo, tag));
   if (lineFile) {
     out = withLine(out, JSON.parse(readFileSync(lineFile, "utf8")), tag);
     // Said in the job's summary, so a release with no line is noticed.

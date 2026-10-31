@@ -43,7 +43,13 @@ export type UpdateCheck =
  * Only ever a reason it did not happen. A successful install replaces the
  * running process, so there is nothing left to resolve the promise.
  */
-export type UpdateInstall = { kind: "nothing" } | { kind: "unconfigured" } | { kind: "failed"; reason: string } | { kind: "managed"; by: string };
+export type UpdateInstall =
+  | { kind: "nothing" }
+  /** Somebody's in voice or sharing a screen, by the shell's last check: nothing restarts now. */
+  | { kind: "busy" }
+  | { kind: "unconfigured" }
+  | { kind: "failed"; reason: string }
+  | { kind: "managed"; by: string };
 
 /**
  * How Linger comes back after restarting to update: as usual, without taking
@@ -73,12 +79,14 @@ export async function checkForUpdate(): Promise<UpdateCheck> {
 
 /**
  * Install the newest release now and restart into it. Only the list window
- * asks, and only when nobody's in voice or sharing a screen. On success this
- * never returns.
+ * asks, and only when nobody's in voice or sharing a screen; the shell checks
+ * again right before installing. `automatic` is a restart nobody pressed:
+ * then only the update already kept goes in, once its day is up. On success
+ * this never returns.
  */
-export async function updateNow(comeBack: ComeBack = "shown"): Promise<UpdateInstall> {
+export async function updateNow(comeBack: ComeBack = "shown", automatic = false): Promise<UpdateInstall> {
   if (!isTauri()) return { kind: "unconfigured" };
-  const result: UpdateInstall = await invoke("update_now", { comeBack });
+  const result: UpdateInstall = await invoke("update_now", { comeBack, automatic });
   return result;
 }
 

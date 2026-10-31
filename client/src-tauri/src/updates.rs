@@ -129,9 +129,12 @@ pub struct Newer {
 #[derive(Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum UpdateInstall {
-    /// Nothing to install after all: nothing newer, or the update kept for
-    /// the next start was overtaken by a newer release.
+    /// Nothing to install after all: nothing newer, the update kept for the
+    /// next start was overtaken by a newer release, or (with nobody pressing
+    /// anything) the release isn't a day old yet.
     Nothing,
+    /// Somebody's in voice or sharing a screen: nothing restarts now (#772).
+    Busy,
     Unconfigured,
     Failed {
         reason: String,
@@ -158,6 +161,23 @@ pub enum ComeBack {
 #[derive(Default)]
 pub struct Downloads {
     busy: AtomicBool,
+}
+
+/// Whether somebody is in voice or sharing a screen, as the list window last
+/// told the tray (`tray::next_tray_voice`). It's the last thing checked before
+/// an install restarts Linger: the list asks only when nobody is, but the
+/// feed and a download can take a minute, and somebody can join voice in it
+/// (#794 review).
+#[derive(Default)]
+pub struct Busy(AtomicBool);
+
+/// The list window's word on voice and sharing, from the tray's command.
+pub fn set_busy(app: &AppHandle, busy: bool) {
+    app.state::<Busy>().0.store(busy, Ordering::Release);
+}
+
+fn busy(app: &AppHandle) -> bool {
+    app.state::<Busy>().0.load(Ordering::Acquire)
 }
 
 /// What is kept beside the downloaded bytes.
@@ -295,7 +315,7 @@ fn verify(bytes: &[u8], signature: &str, pubkey: &str) -> Result<(), String> {
 }
 
 /// Where a downloaded update is kept, if the app has a cache folder.
-fn store(app: &AppHandle) -> Option<PathBuf> {
+fn store_dir(app: &AppHandle) -> Option<PathBuf> {
     app.path().app_cache_dir().ok().map(|dir| dir.join(FOLDER))
 }
 
@@ -321,11 +341,6 @@ fn kept(dir: &Path) -> Option<Kept> {
     dir.join(KEPT_BYTES).is_file().then_some(kept)
 }
 
-/// Whether the update kept is this version.
-fn kept_for(dir: &Path, version: &str) -> bool {
-    kept(dir).is_some_and(|kept| kept.version == version)
-}
-
 /// Let go of a kept update: installed, overtaken or no good.
 fn forget(dir: &Path) {
     for name in [KEPT_ABOUT, KEPT_BYTES] {
@@ -333,22 +348,110 @@ fn forget(dir: &Path) {
     }
 }
 
+/// Say how the next start shows the list: a marker for the tray or for
+/// coming back behind, none for as usual.
+fn mark(dir: &Path, come_back: ComeBack) {
+    let marker = dir.join(COME_BACK);
+    if come_back == ComeBack::Shown {
+        let _ = std::fs::remove_file(marker);
+        return;
+    }
+    if let Ok(said) = serde_json::to_vec(&come_back) {
+        let _ = std::fs::create_dir_all(dir);
+        let _ = std::fs::write(marker, said);
+    }
+}
+
+/// The update folder. Every touch of it from a command goes through here, off
+/// the async workers (`spawn_blocking`): an installer is tens of megabytes,
+/// and nothing may block the reactor (AGENTS.md, the #794 review). The plain
+/// functions above are what runs there, and what the tests call.
+#[derive(Clone)]
+struct Store(PathBuf);
+
+impl Store {
+    fn of(app: &AppHandle) -> Option<Self> {
+        store_dir(app).map(Self)
+    }
+
+    async fn run<T: Send + 'static>(
+        &self,
+        work: impl FnOnce(&Path) -> T + Send + 'static,
+    ) -> Option<T> {
+        let dir = self.0.clone();
+        tauri::async_runtime::spawn_blocking(move || work(&dir))
+            .await
+            .ok()
+    }
+
+    async fn kept(&self) -> Option<Kept> {
+        self.run(kept).await.flatten()
+    }
+
+    async fn bytes(&self) -> Option<Vec<u8>> {
+        self.run(|dir| std::fs::read(dir.join(KEPT_BYTES)).ok())
+            .await
+            .flatten()
+    }
+
+    async fn keep(&self, about: Kept, bytes: Vec<u8>) -> Result<(), String> {
+        self.run(move |dir| keep(dir, &about, &bytes).map_err(|problem| problem.to_string()))
+            .await
+            .unwrap_or_else(|| Err("the update couldn't be kept".to_owned()))
+    }
+
+    async fn forget(&self) {
+        let _ = self.run(forget).await;
+    }
+
+    async fn come_back(&self, come_back: ComeBack) {
+        let _ = self.run(move |dir| mark(dir, come_back)).await;
+    }
+}
+
+/// When a release was published, in milliseconds, as the feed says now.
+fn published_ms(update: &Update) -> Option<i64> {
+    update.date.map(|date| date.unix_timestamp() * 1000)
+}
+
+/// Whether an update may go in with nobody pressing anything: at start-up, or
+/// with the computer left unused. Only the update kept on this computer, only
+/// while it's still the newest release, and only once that release is a day
+/// old by the feed *now*: a newer release that appeared since hasn't had its
+/// day, and a release is dated again when it's published (`updater-date.yml`),
+/// so the date its download went by may have moved (#794 review).
+fn may_install_unattended(
+    kept: Option<&str>,
+    newest: &str,
+    published: Option<i64>,
+    now: i64,
+) -> bool {
+    kept == Some(newest) && old_enough(published, now)
+}
+
 /// The kept bytes for this update, if they are this version and pass the
 /// release's signature now.
-fn kept_bytes(app: &AppHandle, update: &Update) -> Option<Vec<u8>> {
-    let dir = store(app)?;
-    if !kept_for(&dir, &update.version) {
+async fn kept_bytes(app: &AppHandle, update: &Update) -> Option<Vec<u8>> {
+    let store = Store::of(app)?;
+    if store.kept().await?.version != update.version {
         return None;
     }
-    let bytes = std::fs::read(dir.join(KEPT_BYTES)).ok()?;
+    let bytes = store.bytes().await?;
     let key = pubkey(app)?;
-    match verify(&bytes, &update.signature, &key) {
-        Ok(()) => Some(bytes),
+    let signature = update.signature.clone();
+    // Checking tens of megabytes is work too.
+    let checked = tauri::async_runtime::spawn_blocking(move || {
+        verify(&bytes, &signature, &key).map(|()| bytes)
+    })
+    .await
+    .ok()?;
+    match checked {
+        Ok(bytes) => Some(bytes),
         Err(problem) => {
             eprintln!(
                 "linger: the kept update didn't pass its signature, so it's let go: {problem}"
             );
-            forget(&dir);
+            store.forget().await;
             None
         }
     }
@@ -364,16 +467,18 @@ fn download(app: &AppHandle, update: Update) {
     tauri::async_runtime::spawn(async move {
         // `download` checks the signature before it hands the bytes back.
         let outcome = match update.download(|_, _| {}, || {}).await {
-            Ok(bytes) => match store(&app) {
-                Some(dir) => keep(
-                    &dir,
-                    &Kept {
-                        version: update.version.clone(),
-                        signature: update.signature.clone(),
-                    },
-                    &bytes,
-                )
-                .map_err(|problem| problem.to_string()),
+            Ok(bytes) => match Store::of(&app) {
+                Some(store) => {
+                    store
+                        .keep(
+                            Kept {
+                                version: update.version.clone(),
+                                signature: update.signature.clone(),
+                            },
+                            bytes,
+                        )
+                        .await
+                }
                 None => Err("there's no cache folder to keep it in".to_owned()),
             },
             Err(problem) => Err(problem.to_string()),
@@ -393,31 +498,44 @@ fn download(app: &AppHandle, update: Update) {
 /// Install an update and start the new Linger. On Windows the installer takes
 /// over and this process ends inside `install`; the installer starts the new
 /// one. Everywhere else the new files are in place when it returns, and
-/// Linger restarts. `come_back` says how the new one shows itself.
-fn install(app: &AppHandle, update: &Update, bytes: &[u8], come_back: ComeBack) -> UpdateInstall {
-    let dir = store(app);
-    if come_back != ComeBack::Shown {
-        if let (Some(dir), Ok(said)) = (&dir, serde_json::to_vec(&come_back)) {
-            let _ = std::fs::create_dir_all(dir);
-            let _ = std::fs::write(dir.join(COME_BACK), said);
-        }
+/// Linger restarts. `come_back` says how the new one shows itself. In voice
+/// or sharing a screen, nothing happens: that's checked here, last.
+async fn install(
+    app: &AppHandle,
+    update: Update,
+    bytes: Vec<u8>,
+    come_back: ComeBack,
+) -> UpdateInstall {
+    if busy(app) {
+        return UpdateInstall::Busy;
     }
-    if let Err(problem) = update.install(bytes) {
-        if let Some(dir) = &dir {
-            let _ = std::fs::remove_file(dir.join(COME_BACK));
-        }
-        return UpdateInstall::Failed {
-            reason: problem.to_string(),
-        };
+    let store = Store::of(app);
+    if let Some(store) = &store {
+        store.come_back(come_back).await;
     }
-    if let Some(dir) = &dir {
-        forget(dir);
+    // Writing the new files, and on Linux maybe waiting for a password.
+    let installed = tauri::async_runtime::spawn_blocking(move || {
+        update
+            .install(&bytes)
+            .map_err(|problem| problem.to_string())
+    })
+    .await
+    .unwrap_or_else(|problem| Err(problem.to_string()));
+    if let Err(reason) = installed {
+        if let Some(store) = &store {
+            store.come_back(ComeBack::Shown).await;
+        }
+        return UpdateInstall::Failed { reason };
+    }
+    if let Some(store) = &store {
+        store.forget().await;
     }
     app.restart()
 }
 
 /// How this start shows the list: as usual, unless the last run restarted to
-/// update and said otherwise. Asked once, when the windows are built.
+/// update and said otherwise. Asked once, when the windows are built, before
+/// anything else runs.
 pub fn take_come_back(app: &tauri::App) -> ComeBack {
     let Ok(dir) = app.path().app_cache_dir() else {
         return ComeBack::Shown;
@@ -458,8 +576,14 @@ pub async fn update_check(app: AppHandle) -> UpdateCheck {
             };
             match updater.check().await {
                 Ok(Some(update)) => {
-                    let published = update.date.map(|date| date.unix_timestamp() * 1000);
-                    let downloaded = store(&app).is_some_and(|dir| kept_for(&dir, &update.version));
+                    let published = published_ms(&update);
+                    let downloaded = match Store::of(&app) {
+                        Some(store) => store
+                            .kept()
+                            .await
+                            .is_some_and(|kept| kept.version == update.version),
+                        None => false,
+                    };
                     let line = line_of(update.body.as_deref());
                     let version = update.version.clone();
                     if !downloaded && old_enough(published, now_ms()) {
@@ -474,8 +598,8 @@ pub async fn update_check(app: AppHandle) -> UpdateCheck {
                     }
                 }
                 Ok(None) => {
-                    if let Some(dir) = store(&app) {
-                        forget(&dir);
+                    if let Some(store) = Store::of(&app) {
+                        store.forget().await;
                     }
                     UpdateCheck::Current {
                         silent: how == How::Silent,
@@ -510,19 +634,29 @@ pub async fn newest_version(app: AppHandle) -> Option<String> {
 }
 
 /// Install the newest release now and restart into it: Restart now, the
-/// tray's item, Update on a copy that needs a password, or the computer left
-/// unused (#772). The list window asks only when nobody's in voice or sharing
-/// a screen. A kept download is used when it's this version and still passes
-/// its signature; otherwise it's downloaded now, without the day's wait.
+/// tray's item, Update on a copy that needs a password, or (`automatic`) the
+/// computer left unused (#772). The list window asks only when nobody's in
+/// voice or sharing a screen, and that's checked again right before the
+/// install (`Busy`). Pressed, a kept download is used when it's this version
+/// and still passes its signature, and otherwise it's downloaded now, without
+/// the day's wait. Automatic, only the update kept here goes in, once its day
+/// is up (`may_install_unattended`).
 ///
 /// The check is run here rather than carrying an `Update` across two IPC
 /// calls, so the thing installed is the thing the feed serves now.
 #[tauri::command]
-pub async fn update_now(app: AppHandle, come_back: Option<ComeBack>) -> UpdateInstall {
+pub async fn update_now(
+    app: AppHandle,
+    come_back: Option<ComeBack>,
+    automatic: Option<bool>,
+) -> UpdateInstall {
     match how(&app) {
         How::Managed(by) => return UpdateInstall::Managed { by },
         How::Unconfigured => return UpdateInstall::Unconfigured,
         How::Silent | How::Password => {}
+    }
+    if busy(&app) {
+        return UpdateInstall::Busy;
     }
     let updater = match updater(&app, None) {
         Ok(updater) => updater,
@@ -537,8 +671,23 @@ pub async fn update_now(app: AppHandle, come_back: Option<ComeBack>) -> UpdateIn
             }
         }
     };
-    let bytes = match kept_bytes(&app, &update) {
+    if automatic.unwrap_or(false) {
+        let kept = match Store::of(&app) {
+            Some(store) => store.kept().await.map(|kept| kept.version),
+            None => None,
+        };
+        if !may_install_unattended(
+            kept.as_deref(),
+            &update.version,
+            published_ms(&update),
+            now_ms(),
+        ) {
+            return UpdateInstall::Nothing;
+        }
+    }
+    let bytes = match kept_bytes(&app, &update).await {
         Some(bytes) => bytes,
+        None if automatic.unwrap_or(false) => return UpdateInstall::Nothing,
         None => match update.download(|_, _| {}, || {}).await {
             Ok(bytes) => bytes,
             Err(problem) => {
@@ -548,30 +697,37 @@ pub async fn update_now(app: AppHandle, come_back: Option<ComeBack>) -> UpdateIn
             }
         },
     };
-    install(&app, &update, &bytes, come_back.unwrap_or_default())
+    install(&app, update, bytes, come_back.unwrap_or_default()).await
 }
 
 /// The version kept for the next start, when this copy installs by itself and
 /// it's newer than this one. Anything not newer is let go: it's in.
-#[tauri::command]
-pub fn update_pending(app: AppHandle) -> Option<String> {
-    let dir = store(&app)?;
-    let kept = kept(&dir)?;
+async fn pending(app: &AppHandle) -> Option<String> {
+    let store = Store::of(app)?;
+    let kept = store.kept().await?;
     let running = app.package_info().version.to_string();
     if !is_newer(&kept.version, &running) {
-        forget(&dir);
+        store.forget().await;
         return None;
     }
-    (how(&app) == How::Silent).then_some(kept.version)
+    (how(app) == How::Silent).then_some(kept.version)
+}
+
+/// The version kept for the next start (`pending`), for the list window,
+/// which says it's installing before it does.
+#[tauri::command]
+pub async fn update_pending(app: AppHandle) -> Option<String> {
+    pending(&app).await
 }
 
 /// Install the update kept for this start, before the list is shown (#772).
-/// Only when it's still the newest release and still passes its signature: a
-/// newer release overtaking it is downloaded the usual way instead. Offline,
-/// or anything else wrong, and Linger starts as it is.
+/// Only when it's still the newest release, a day old by the feed now, and
+/// still passes its signature: a newer release overtaking it is downloaded the
+/// usual way instead. Offline, or anything else wrong, and Linger starts as
+/// it is.
 #[tauri::command]
 pub async fn update_install_pending(app: AppHandle) -> UpdateInstall {
-    let Some(version) = update_pending(app.clone()) else {
+    let Some(version) = pending(&app).await else {
         return UpdateInstall::Nothing;
     };
     let updater = match updater(&app, Some(START_TIMEOUT)) {
@@ -581,8 +737,8 @@ pub async fn update_install_pending(app: AppHandle) -> UpdateInstall {
     let update = match updater.check().await {
         Ok(Some(update)) => update,
         Ok(None) => {
-            if let Some(dir) = store(&app) {
-                forget(&dir);
+            if let Some(store) = Store::of(&app) {
+                store.forget().await;
             }
             return UpdateInstall::Nothing;
         }
@@ -593,12 +749,21 @@ pub async fn update_install_pending(app: AppHandle) -> UpdateInstall {
         }
     };
     if update.version != version {
-        if let Some(dir) = store(&app) {
-            forget(&dir);
+        if let Some(store) = Store::of(&app) {
+            store.forget().await;
         }
         return UpdateInstall::Nothing;
     }
-    let Some(bytes) = kept_bytes(&app, &update) else {
+    // Kept, but not a day old by the feed now: it waits.
+    if !may_install_unattended(
+        Some(&version),
+        &update.version,
+        published_ms(&update),
+        now_ms(),
+    ) {
+        return UpdateInstall::Nothing;
+    }
+    let Some(bytes) = kept_bytes(&app, &update).await else {
         return UpdateInstall::Failed {
             reason: "The update kept on this computer didn't pass its signature.".to_owned(),
         };
@@ -612,7 +777,7 @@ pub async fn update_install_pending(app: AppHandle) -> UpdateInstall {
     } else {
         ComeBack::Shown
     };
-    install(&app, &update, &bytes, come_back)
+    install(&app, update, bytes, come_back).await
 }
 
 #[cfg(test)]
@@ -742,8 +907,7 @@ mod tests {
         assert_eq!(kept(&dir), None);
         keep(&dir, &about, TEST_BYTES).expect("keep");
         assert_eq!(kept(&dir), Some(about.clone()));
-        assert!(kept_for(&dir, "0.5.4"));
-        assert!(!kept_for(&dir, "0.5.5"));
+        assert_eq!(kept(&dir).map(|kept| kept.version), Some("0.5.4".into()));
         assert_eq!(
             std::fs::read(dir.join(KEPT_BYTES)).expect("bytes"),
             TEST_BYTES
@@ -760,6 +924,58 @@ mod tests {
         keep(&dir, &about, TEST_BYTES).expect("keep");
         forget(&dir);
         assert_eq!(kept(&dir), None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn nothing_goes_in_unattended_but_the_kept_update_once_its_day_is_up() {
+        let published = 1_800_000_000_000;
+        let later = published + WAIT_MS;
+        assert!(may_install_unattended(
+            Some("0.5.4"),
+            "0.5.4",
+            Some(published),
+            later
+        ));
+        // A newer release since: it hasn't had its day, and isn't what's kept.
+        assert!(!may_install_unattended(
+            Some("0.5.4"),
+            "0.5.5",
+            Some(published),
+            later
+        ));
+        assert!(!may_install_unattended(
+            None,
+            "0.5.4",
+            Some(published),
+            later
+        ));
+        // Dated again when it was published: the kept download waits for the new date.
+        assert!(!may_install_unattended(
+            Some("0.5.4"),
+            "0.5.4",
+            Some(later - 1),
+            later
+        ));
+        // Built but not published yet: dated in the future, never old enough.
+        assert!(!may_install_unattended(
+            Some("0.5.4"),
+            "0.5.4",
+            Some(32_503_680_000_000),
+            later
+        ));
+    }
+
+    #[test]
+    fn how_linger_comes_back_is_said_once_and_as_usual_is_no_marker() {
+        let dir = scratch("come-back");
+        mark(&dir, ComeBack::Tray);
+        let said: ComeBack =
+            serde_json::from_slice(&std::fs::read(dir.join(COME_BACK)).expect("marker"))
+                .expect("read");
+        assert_eq!(said, ComeBack::Tray);
+        mark(&dir, ComeBack::Shown);
+        assert!(!dir.join(COME_BACK).exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -815,6 +1031,8 @@ mod tests {
 
         let nothing = serde_json::to_string(&UpdateInstall::Nothing).expect("serialize");
         assert_eq!(nothing, r#"{"kind":"nothing"}"#);
+        let busy = serde_json::to_string(&UpdateInstall::Busy).expect("serialize");
+        assert_eq!(busy, r#"{"kind":"busy"}"#);
         let install = serde_json::to_string(&UpdateInstall::Unconfigured).expect("serialize");
         assert_eq!(install, r#"{"kind":"unconfigured"}"#);
         let install_failed = serde_json::to_string(&UpdateInstall::Failed {

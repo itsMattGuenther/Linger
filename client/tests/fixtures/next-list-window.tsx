@@ -37,7 +37,8 @@
  * `window.core.downloaded()`; `?update=password` is a copy that needs a
  * password to install; `?update=arch` one pacman owns. Otherwise this is the
  * newest. Installing is written down as `update_now <how it comes back>` and
- * never answers, as a restart wouldn't (`?updatefail` has it refused).
+ * never answers, as a restart wouldn't (`?updatefail` has it refused, and
+ * `?updatebusy` has the shell find you in voice the first time).
  * `?pending` has 0.4.1 waiting for this start, whose install fails, as
  * offline, at `window.core.installFailed()`. `?updated` is the first start after an update, to the
  * version `release-line.json` names. `?behind` has The Good Company, which
@@ -121,6 +122,8 @@ const query = new URLSearchParams(location.search);
 if (query.has("updated")) localStorage.setItem("linger.next.update.seen", "0.0.1");
 /** Whether the update `?update=waiting` waits for is downloaded yet (`window.core.downloaded()`). */
 let updateDownloaded = query.get("update") !== "waiting";
+/** Whether `?updatebusy` has answered busy yet. */
+let busyAnswered = false;
 /** The start-up install `?pending` is waiting on, ended by `window.core.installFailed()`. */
 let installing: (() => void) | null = null;
 const did: string[] = [];
@@ -355,8 +358,13 @@ mockIPC((cmd, args) => {
       return { kind: "newer", version: "0.4.1", line, published: 0, downloaded: updateDownloaded, silent: kind !== "password" };
     }
     case "update_now":
-      note(`update_now ${String(a.comeBack)}`);
-      // A restart never answers; a refusal does.
+      note(`update_now ${String(a.comeBack)}${a.automatic === true ? " automatic" : ""}`);
+      // A restart never answers; a refusal does. `?updatebusy`: the shell's
+      // last check finds you in voice, once (#794 review).
+      if (query.has("updatebusy") && !busyAnswered) {
+        busyAnswered = true;
+        return { kind: "busy" };
+      }
       return query.has("updatefail") ? { kind: "failed", reason: "The network is down." } : new Promise(() => undefined);
     case "update_pending":
       return query.has("pending") ? "0.4.1" : null;

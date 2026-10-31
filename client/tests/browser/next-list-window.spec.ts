@@ -1405,7 +1405,28 @@ test("left for half an hour, Linger restarts by itself to install it, without ta
   await page.clock.runFor(29 * 60 * 1000);
   expect((await did(page)).filter((line) => line.startsWith("update_now"))).toEqual([]);
   await page.clock.runFor(2 * 60 * 1000);
-  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("update_now"))).toEqual(["update_now behind"]);
+  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("update_now"))).toEqual(["update_now behind automatic"]);
+});
+
+test("the shell's last check finds you in voice: it waits, and goes in once you've left (#794 review)", async ({ page }) => {
+  await open(page, "?one&update&updatebusy");
+  // The list thought nobody was in voice, but somebody joined while it fetched.
+  await updates(page).getByRole("button", { name: "Restart now" }).click();
+  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("update_now"))).toEqual(["update_now shown"]);
+  const bar = page.getByRole("region", { name: /In voice/ });
+  await expect
+    .poll(
+      async () => {
+        await page.evaluate(() => window.core?.ask("next:intent", { kind: "voice.join", server: "https://good-company.example", roomId: "r-general" }));
+        await page.waitForTimeout(250);
+        return bar.count();
+      },
+      { timeout: 10_000 },
+    )
+    .toBe(1);
+  await page.evaluate(() => window.core?.tray("leave"));
+  await expect(bar).toHaveCount(0);
+  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("update_now"))).toEqual(["update_now shown", "update_now shown"]);
 });
 
 test("a host whose server is behind hears it at the foot, with How to update (#772)", async ({ page }) => {

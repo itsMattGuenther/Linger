@@ -154,8 +154,10 @@ download table and update steps the previous release used.
 it is a person's click on purpose. Linger updates itself (#772): a day after you
 publish, every copy the setup.exe or the AppImage installed installs it on its
 own, at its next start or while nobody's using it. The day counts from
-publishing, not building: `updater-date.yml` dates `latest.json` when you
-click. **Use that day.** Press Restart now in your own Linger (Settings →
+publishing, not building: until then `latest.json` says it isn't published
+(a date in 2999, `updater-urls.mjs`), and `updater-date.yml` dates it when you
+click. Check that run went green: without it nothing installs by itself,
+though Restart now still works. **Use that day.** Press Restart now in your own Linger (Settings →
 Account & App, or the foot of the list once it's downloaded) and check the
 release in real use. If it's bad, mark it a pre-release before the day is
 out: `releases/latest` then points at the release before, so no copy sees it

@@ -308,6 +308,9 @@ pub fn next_tray_voice(
     if window.label() != "main" {
         return Err("only the list window says where voice is".into());
     }
+    // Nothing restarts to update in voice or while sharing (#772): this is
+    // what the last check before an install reads.
+    crate::updates::set_busy(window.app_handle(), in_voice || sharing.unwrap_or(false));
     let deafened = deafened.unwrap_or(false);
     {
         let mut held = items.0.lock().map_err(|e| e.to_string())?;

@@ -34,6 +34,7 @@ import {
 } from "../../../lib/updates";
 import { loadVoicePrefs, saveVoicePrefs, type VoicePrefs } from "../../../lib/voice";
 import { ask, OWNER, PROTOCOL, tauriBus } from "../../core/bus";
+import { UPDATE_SAID, type UpdateSaid } from "../../core/updates";
 import { loadArrivalCards, saveArrivalCards } from "../../core/arrivals";
 import { loadDmAlerts, saveDmAlerts } from "../../core/dmAlerts";
 import { refusal, setStartsAtSignIn, START_GUIDE_URL, type StartAtSignIn, startsAtSignIn, unanswered } from "../../core/autostart";
@@ -372,6 +373,7 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
   const [check, setCheck] = useState<UpdateCheck | null>(null);
   const [looking, setLooking] = useState(false);
   const [asked, setAsked] = useState(false);
+  const [updateProblem, setUpdateProblem] = useState<string | null>(null);
   const checkAgain = useCallback(() => {
     setLooking(true);
     void checkForUpdate()
@@ -383,6 +385,19 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
     // A phone app has no update check to ask (SPEC §4.15).
     if (!phone) checkAgain();
   }, [checkAgain, phone]);
+  // How a Restart now went, from the list window, which did it (#794
+  // review): waiting while you're in voice, or why it didn't happen, and
+  // the button back. Gone well, Linger restarts and there's nothing to say.
+  useEffect(
+    () =>
+      listening<UpdateSaid>(UPDATE_SAID, (said) => {
+        if (said.v !== PROTOCOL || said.waiting) return;
+        setAsked(false);
+        setUpdateProblem(said.problem);
+        if (said.problem === null) checkAgain();
+      }),
+    [checkAgain],
+  );
   // Starting at sign-in: what the computer says, asked when the window opens
   // and answered again after every change (core/autostart.ts).
   const [startup, setStartup] = useState<StartAtSignIn | null>(null);
@@ -685,11 +700,13 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
               check,
               looking,
               asked,
-              problem: null,
+              problem: updateProblem,
               checkAgain,
-              // The list installs it (#772): it knows whether you're in voice.
+              // The list installs it (#772): it knows whether you're in voice,
+              // and says how it went (UPDATE_SAID).
               install: () => {
                 setAsked(true);
+                setUpdateProblem(null);
                 void intend({ kind: "update" }).catch(() => setAsked(false));
               },
               openNotes: (wanted) => openExternal(releaseNotesUrl(wanted)),

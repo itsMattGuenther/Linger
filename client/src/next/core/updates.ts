@@ -10,6 +10,20 @@
  */
 import release from "./release-line.json";
 import { isOlderVersion, type UpdateCheck, WAIT_MS } from "../../lib/updates";
+
+/**
+ * What the list says about a Restart now another window asked for (#794
+ * review): Settings can't see voice or the install, so the list tells it how
+ * it went. `waiting`: you're in voice, and it happens once you've left.
+ * `problem`: why it didn't happen. Neither: there was nothing to install.
+ */
+export const UPDATE_SAID = "next:update-said";
+
+export interface UpdateSaid {
+  v: number;
+  problem: string | null;
+  waiting: boolean;
+}
 import type { ModeStore } from "./conversations";
 
 /**

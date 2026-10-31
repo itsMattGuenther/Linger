@@ -90,7 +90,7 @@ import {
   updateNow,
 } from "../../../lib/updates";
 import { openExternal } from "../../../lib/external";
-import { justUpdated, putOff, putOffNow, releaseLine, restartWhileAway } from "../../core/updates";
+import { justUpdated, putOff, putOffNow, releaseLine, restartWhileAway, UPDATE_SAID, type UpdateSaid } from "../../core/updates";
 import { ListNotes, type UpdateActions } from "./ListNotes";
 import { UpdateGate } from "./UpdateGate";
 import { knockOn } from "../../core/knock";
@@ -1017,19 +1017,47 @@ function Servers({
   const notNowHeld = useRef(notNow);
   notNowHeld.current = notNow;
   const updatingNow = useRef(false);
+  // Asked for in voice (Settings can't see voice, #772): done once you've left.
+  const updateWhenFree = useRef(false);
   const restartToUpdate = useCallback(
-    (comeBack: ComeBack) => {
+    (comeBack: ComeBack, automatic = false) => {
       if (updatingNow.current) return;
       updatingNow.current = true;
       setUpdating(true);
       setUpdateProblem(null);
+      // Settings hears how a press went (#794 review); a restart nobody
+      // pressed says nothing.
+      const say = (problem: string | null, waiting = false) => {
+        if (!automatic) tellUpdate({ v: PROTOCOL, problem, waiting });
+      };
       // On success this never returns: the new Linger takes over.
-      void updateNow(comeBack)
+      void updateNow(comeBack, automatic)
         .then((outcome) => {
-          if (outcome.kind === "failed") setUpdateProblem(outcome.reason);
-          if (outcome.kind === "nothing") lookForUpdate();
+          switch (outcome.kind) {
+            case "failed":
+              setUpdateProblem(outcome.reason);
+              say(outcome.reason);
+              return;
+            case "busy":
+              // The shell's last check found you in voice: once you've left.
+              if (!automatic) updateWhenFree.current = true;
+              say(null, true);
+              return;
+            case "nothing":
+              lookForUpdate();
+              say(null);
+              return;
+            case "unconfigured":
+            case "managed":
+              say("This copy of Linger doesn't update itself.");
+              return;
+          }
         })
-        .catch((error: unknown) => setUpdateProblem(error instanceof Error ? error.message : String(error)))
+        .catch((error: unknown) => {
+          const reason = error instanceof Error ? error.message : String(error);
+          setUpdateProblem(reason);
+          say(reason);
+        })
         .finally(() => {
           updatingNow.current = false;
           setUpdating(false);
@@ -1037,11 +1065,10 @@ function Servers({
     },
     [lookForUpdate],
   );
-  // Asked for in voice (Settings can't see voice, #772): done once you've left.
-  const updateWhenFree = useRef(false);
   updateAsked.current = () => {
     if (notNowHeld.current !== null) {
       updateWhenFree.current = true;
+      tellUpdate({ v: PROTOCOL, problem: null, waiting: true });
       return;
     }
     // From the tray with the list hidden, it comes back hidden.
@@ -1068,7 +1095,7 @@ function Servers({
       const moment = { check: update, now, lastInputAt: Math.max(lastInput(), startedAt.current), inVoice: notNowHeld.current !== null, sharing: sharingHeld.current };
       if (!restartWhileAway(moment)) return;
       triedAt.current = now;
-      void shownNow().then((shown) => restartToUpdate(shown ? "behind" : "tray"));
+      void shownNow().then((shown) => restartToUpdate(shown ? "behind" : "tray", true));
     };
     const timer = window.setInterval(look, 60 * 1000);
     return () => window.clearInterval(timer);
@@ -1728,6 +1755,13 @@ function editProfile(): void {
 }
 function openSettings(): void {
   shell.settings();
+}
+/** Tell Settings how a Restart now it asked for went (#794 review). */
+function tellUpdate(said: UpdateSaid): void {
+  if (!isTauri()) return;
+  void tauriBus()
+    .broadcast(UPDATE_SAID, said)
+    .catch(() => undefined);
 }
 /** A server you host is behind (#772): the host guide's "Updating the server". */
 function openHostGuide(): void {

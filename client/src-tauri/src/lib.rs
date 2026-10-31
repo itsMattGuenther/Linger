@@ -357,6 +357,7 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
         .manage(talk_key::TalkKeyWatch::default())
         .manage(dropped::Dropped::default())
         .manage(updates::Downloads::default())
+        .manage(updates::Busy::default())
         // The window is built here, not from the config, so it can leave the
         // title bar off on Hyprland (#130). See `window.rs`.
         .setup(|app| {
