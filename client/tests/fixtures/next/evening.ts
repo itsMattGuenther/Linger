@@ -142,6 +142,23 @@ function presence(user_id: string, state: PresenceEntry["state"], room_id: strin
 }
 
 /** The whole evening as one server's store state. */
+/**
+ * Words longer than any header (#778): #general's topic as long as the
+ * issue's #Media one, and Jules's status as long again.
+ */
+export const LONG_TOPIC =
+  "Got something cool to share? Drop it here. Screenshots, videos, music, photos, funny clips, and whatever else you find interesting. Media is welcome in other rooms too; this is just its home.";
+export const LONG_STATUS = "speakers: finally set up, and the whole of side two before anybody talks to me, then probably side one again";
+
+/** The evening, with `LONG_TOPIC` and `LONG_STATUS` in place. */
+export function withLongWords(state: GatewayState): GatewayState {
+  return {
+    ...state,
+    rooms: state.rooms.map((room) => (room.id === "r-general" ? { ...room, topic: LONG_TOPIC } : room)),
+    users: state.users.map((user) => (user.id === "u-jules" && user.status ? { ...user, status: { ...user.status, line: LONG_STATUS } } : user)),
+  };
+}
+
 export function evening(empty: GatewayState): GatewayState {
   return {
     ...empty,

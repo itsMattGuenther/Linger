@@ -114,7 +114,7 @@ import type { Report } from "../../src/generated/Report";
 import type { User } from "../../src/generated/User";
 import type { VoicePeer } from "../../src/generated/VoicePeer";
 import { json, served } from "./next/desktop";
-import { customEmoji, SERVER, SERVER_NAME, evening, messages, people } from "./next/evening";
+import { customEmoji, SERVER, SERVER_NAME, evening, messages, people, withLongWords } from "./next/evening";
 import { collections, fakeMedia, fakeSearch } from "./next/finds";
 import type { MediaKind } from "../../src/generated/MediaKind";
 import { GUILD, guild, LISBON, lisbon, serverInfo } from "./next/servers";
@@ -142,7 +142,8 @@ hearSounds(note);
 
 /** Each server as its store state, from the fixtures: every one answers, signed in or not. */
 const states: Record<string, GatewayState> = {
-  [SERVER]: evening(serverState(SERVER)),
+  // `?longwords`: a topic and a status longer than the header (#778).
+  [SERVER]: query.has("longwords") ? withLongWords(evening(serverState(SERVER))) : evening(serverState(SERVER)),
   [GUILD]: guild(serverState(GUILD)),
   [LISBON]: lisbon(serverState(LISBON)),
 };

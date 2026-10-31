@@ -1017,7 +1017,13 @@ replaces an unread count.
 **Around the conversation:**
 
 - **Pane header**, 40px: a room's `#name`, who's in it (markers) and its
-  topic; a DM's people, a 1:1's status, and Knock.
+  topic; a DM's people, a 1:1's status, and Knock. The topic and the status
+  are one line, cut with "…" when they're longer than the header; cut, they're
+  a button, dotted as the app marks words that open more ("and others"), and
+  a click or a tap opens the whole of it in a `Popover`, a `Sheet` on the
+  phone, where the words take the header's whole height to tap (#778). Not
+  cut, they're only words. A conversation's own window drags by every part of
+  its title bar but buttons, so the cut words don't drag it.
 - **A room's message of the day** (#464, `app/chat/MotdStrip.tsx`): a strip
   under the header, on the window's own ground with a hairline under it (news,
   never a wash or the lamp). The pin (`--icon-muted`), the words whole as a
