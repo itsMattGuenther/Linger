@@ -107,6 +107,18 @@ jobs:
           printf 'MinimumOSVersion: %s\n' "$got"
           [ "$got" = "$want" ] ||
             { echo "::error::the app needs iOS $got, but tauri.ios.conf.json says $want"; exit 1; }
+          # Share to Linger (#785): the share extension is in the app, and has
+          # the app's version, which App Store Connect insists on. Its build
+          # phase copies both numbers from the app's Info.plist.
+          unzip -p "$found" 'Payload/*.app/PlugIns/LingerShare.appex/Info.plist' > "$RUNNER_TEMP/Share.plist" ||
+            { echo "::error::the share extension isn't in the app"; exit 1; }
+          for key in CFBundleIdentifier CFBundleShortVersionString CFBundleVersion; do
+            printf 'share extension %s: %s\n' "$key" "$(plutil -extract "$key" raw "$RUNNER_TEMP/Share.plist")"
+          done
+          for key in CFBundleShortVersionString CFBundleVersion; do
+            [ "$(plutil -extract "$key" raw "$RUNNER_TEMP/Share.plist")" = "$(plutil -extract "$key" raw "$RUNNER_TEMP/Info.plist")" ] ||
+              { echo "::error::the share extension's $key isn't the app's"; exit 1; }
+          done
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: iphone-app

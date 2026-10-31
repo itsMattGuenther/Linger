@@ -288,6 +288,16 @@ submit for review.
 - **The encryption question** is answered in `client/src-tauri/Info.ios.plist`
   (`ITSAppUsesNonExemptEncryption`: only standard, exempt encryption), so it
   isn't asked on each upload.
+- **The share extension** (#785) is a second program inside the app, with its
+  own identifier, `io.github.itsmattguenther.linger.share`, and both belong to
+  the App Group `group.io.github.itsmattguenther.linger`, whose folder is how
+  a share reaches the app. Automatic signing should register the identifier
+  and the group the first time `ios.yml` builds with them. If the build says
+  it can't, register both by hand in the Apple account (Certificates,
+  Identifiers & Profiles: the identifier, then the App Group, then tick App
+  Groups on both identifiers and pick the group) and run it again. `ios.yml`
+  fails a build whose app doesn't hold the extension, or whose extension's
+  version isn't the app's.
 
 ## Worth knowing
 

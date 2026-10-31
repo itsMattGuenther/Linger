@@ -53,8 +53,13 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         CFBundleShortVersionString: 0.5.1
         CFBundleVersion: "0.5.1"
+    # The App Group it shares with LingerShare: files shared to Linger wait
+    # in its folder (#785, src-tauri/src/shared.rs).
     entitlements:
       path: linger-client_iOS/linger-client_iOS.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.io.github.itsmattguenther.linger
     scheme:
       environmentVariables:
         RUST_BACKTRACE: full
@@ -82,6 +87,9 @@ targets:
       - sdk: Security.framework
       - sdk: UIKit.framework
       - sdk: WebKit.framework
+      # Share to Linger (#785): built first, and embedded in the app.
+      - target: LingerShare
+        embed: true
     preBuildScripts:
       - script: pnpm tauri ios xcode-script -v --platform ${PLATFORM_DISPLAY_NAME:?} --sdk-root ${SDKROOT:?} --framework-search-paths "${FRAMEWORK_SEARCH_PATHS:?}" --header-search-paths "${HEADER_SEARCH_PATHS:?}" --gcc-preprocessor-definitions "${GCC_PREPROCESSOR_DEFINITIONS:-}" --configuration ${CONFIGURATION:?} ${FORCE_COLOR} ${ARCHS:?}
         name: Build Rust Code
@@ -89,3 +97,46 @@ targets:
         outputFiles:
           - $(SRCROOT)/Externals/x86_64/${CONFIGURATION}/libapp.a
           - $(SRCROOT)/Externals/arm64/${CONFIGURATION}/libapp.a
+  # Share to Linger (#785, SPEC §4.15): the share extension. It copies what the
+  # share sheet hands it into the App Group's folder and opens linger://shared.
+  # Its Info.plist is kept by hand in ShareExtension/; the version build
+  # phase keeps its two numbers the app's.
+  LingerShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ShareExtension
+    entitlements:
+      path: ShareExtension/ShareExtension.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.io.github.itsmattguenther.linger
+    settings:
+      base:
+        INFOPLIST_FILE: ShareExtension/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.itsmattguenther.linger.share
+        PRODUCT_NAME: LingerShare
+        DEVELOPMENT_TEAM: SFTT38V54H
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: iPhone Developer
+        ENABLE_BITCODE: false
+        ENABLE_USER_SCRIPT_SANDBOXING: false
+        TARGETED_DEVICE_FAMILY: 1
+        ARCHS: [arm64]
+        VALID_ARCHS: arm64
+        EXCLUDED_ARCHS[sdk=iphoneos*]: x86_64
+        SKIP_INSTALL: true
+    postBuildScripts:
+      # App Store Connect refuses an extension whose version isn't its app's.
+      # tauri ios build writes both numbers into the app's Info.plist; copy them.
+      - name: Same version as Linger
+        basedOnDependencyAnalysis: false
+        inputFiles:
+          - $(SRCROOT)/linger-client_iOS/Info.plist
+        script: |
+          app="${SRCROOT}/linger-client_iOS/Info.plist"
+          mine="${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"
+          for key in CFBundleShortVersionString CFBundleVersion; do
+            value="$(/usr/libexec/PlistBuddy -c "Print :$key" "$app")"
+            /usr/libexec/PlistBuddy -c "Set :$key $value" "$mine"
+          done
