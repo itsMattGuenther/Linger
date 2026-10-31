@@ -1,9 +1,11 @@
 import type { CSSProperties, ReactNode } from "react";
-import { Fragment, memo, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { PresenceState } from "../../../generated/PresenceState";
 import type { User } from "../../../generated/User";
 import { sentencesOf } from "../../core/knock";
-import { Button, GroupMarker, HashMark, Marker, MARKER_WORDS, MarkerCluster, markerOf, markerStateOf, Name } from "../../kit";
+import { onPhone } from "../../core/phone";
+import { Button, GroupMarker, HashMark, Marker, MARKER_WORDS, MarkerCluster, markerOf, markerStateOf, Name, Popover } from "../../kit";
 import { LeaveGroup } from "../LeaveGroup";
 import { PersonFields } from "../PersonFields";
 import "./PaneHeader.css";
@@ -92,7 +94,7 @@ export const PaneHeader = memo(function PaneHeader({ place = "row", ...props }: 
         {props.people.length > 0 ? <MarkerCluster people={props.people.map((user) => markerOf(user, "in_room"))} /> : null}
         {tag}
         {props.topic ? (
-          <p className="nx-pane-sub">{props.topic}</p>
+          <WholeLine text={props.topic} label={`The topic of #${props.name}`} />
         ) : (
           <span className="nx-pane-fill" />
         )}
@@ -197,13 +199,124 @@ function DmHeader({ Box, place, tag, ...props }: DmHeaderProps) {
           {sentences}
         </p>
       ) : status ? (
-        <p className="nx-pane-sub">{status}</p>
+        <WholeLine text={status} label={`${props.label}'s status`} />
       ) : (
         <span className="nx-pane-fill" />
       )}
       {knockButton}
       {props.leave ? <LeaveGroup label={props.label} last={props.leave.last} onLeave={props.leave.onLeave} /> : null}
     </Box>
+  );
+}
+
+/**
+ * A room's topic or a friend's status in the header (#778), on one line and
+ * cut with "…" when it's longer than the header. Cut, it's a button, marked
+ * the way the app marks words that open more ("and others", why voice didn't
+ * start): a click or a tap opens the whole of it in a card, a sheet on the
+ * phone. Not cut, it's only words. Screen readers have the whole of it
+ * either way. Measured before it's painted, and again whenever the header's
+ * width changes, so it's never a button with nothing more to show.
+ */
+function WholeLine({ text, label }: { text: string; label: string }) {
+  // Whichever element does the cutting: the line, or its button once cut.
+  const [line, setLine] = useState<HTMLElement | null>(null);
+  const [cut, setCut] = useState(false);
+  const [open, setOpen] = useState<DOMRect | null>(null);
+  const opener = useRef<HTMLButtonElement | null>(null);
+  useLayoutEffect(() => {
+    if (!line) return;
+    const measure = () => setCut(line.scrollWidth > line.clientWidth + 1);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const watch = new ResizeObserver(measure);
+    watch.observe(line);
+    return () => watch.disconnect();
+  }, [line, text]);
+  // No longer cut (the window grew): nothing to keep open.
+  useEffect(() => {
+    if (!cut) setOpen(null);
+  }, [cut]);
+  return (
+    <p ref={cut ? undefined : setLine} className="nx-pane-sub" data-cut={cut ? "yes" : undefined}>
+      {cut ? (
+        <button
+          ref={(node) => {
+            opener.current = node;
+            setLine(node);
+          }}
+          type="button"
+          className="nx-pane-whole"
+          aria-haspopup="dialog"
+          aria-expanded={open !== null}
+          onClick={(event) => {
+            const rect = event.currentTarget.getBoundingClientRect();
+            setOpen((held) => (held ? null : rect));
+          }}
+        >
+          {text}
+        </button>
+      ) : (
+        text
+      )}
+      {open ? (
+        <WholeCard
+          anchor={open}
+          label={label}
+          text={text}
+          onClose={() => {
+            setOpen(null);
+            opener.current?.focus();
+          }}
+        />
+      ) : null}
+    </p>
+  );
+}
+
+/** Space kept between the card and what opened it, and from the window's edges. */
+const GAP = 6;
+const EDGE = 8;
+
+/**
+ * The whole of a cut topic or status (#778): under the words, or over them if
+ * there's no room below, and never off the window; risen from the bottom on
+ * the phone (`Sheet`). Escape, Close, or a press anywhere else closes it.
+ */
+function WholeCard({ anchor, label, text, onClose }: { anchor: DOMRect; label: string; text: string; onClose: () => void }) {
+  const sheet = onPhone();
+  const box = useRef<HTMLDivElement | null>(null);
+  const [at, setAt] = useState({ x: EDGE, y: anchor.bottom + GAP });
+  useLayoutEffect(() => {
+    const card = box.current?.parentElement;
+    if (!card || sheet) return;
+    const { offsetWidth: width, offsetHeight: height } = card;
+    const below = anchor.bottom + GAP;
+    const y = below + height <= window.innerHeight - EDGE ? below : Math.max(EDGE, anchor.top - GAP - height);
+    const x = Math.max(EDGE, Math.min(Math.round(anchor.left), window.innerWidth - width - EDGE));
+    setAt((held) => (held.x === x && held.y === y ? held : { x, y }));
+  }, [anchor.top, anchor.bottom, anchor.left, sheet]);
+  // Close has the focus to start with. On a computer a press anywhere else
+  // closes it; on the phone the sheet's dimmed page does, by its tap (#704).
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
+    box.current?.parentElement?.querySelector<HTMLButtonElement>(".k-popover-close button")?.focus();
+    if (sheet) return;
+    const onPointer = (event: PointerEvent) => {
+      if (event.target instanceof Node && box.current?.parentElement?.contains(event.target)) return;
+      close.current();
+    };
+    document.addEventListener("pointerdown", onPointer, true);
+    return () => document.removeEventListener("pointerdown", onPointer, true);
+  }, [sheet]);
+  return createPortal(
+    <Popover label={label} at={sheet ? undefined : at} sheet={sheet} onClose={onClose}>
+      <div ref={box} className="nx-pane-whole-card">
+        <p className="nx-pane-whole-text">{text}</p>
+      </div>
+    </Popover>,
+    document.body,
   );
 }
 

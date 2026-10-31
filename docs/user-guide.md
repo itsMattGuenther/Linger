@@ -559,6 +559,10 @@ only, kept on this computer or phone, and everyone else still sees theirs.
 The host or a co-host can also turn reactions off in a room; a DM always has
 them. On a server that hasn't been updated for reactions, there are none.
 
+**A long topic or status.** A room's topic sits in its header, after its name,
+and a friend's status in a DM's. When it's too long to fit, it ends in "…" with
+a dotted line under it: click or tap it to read the whole of it.
+
 **A room's message of the day.** A room can have a note about what's happening
 now, like *"Raid night Friday at 8"*, apart from its topic, which says what the
 room is about. It sits whole under the room's header, with who set it and when.

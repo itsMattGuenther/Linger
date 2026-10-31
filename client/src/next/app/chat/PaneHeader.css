@@ -70,6 +70,56 @@
   font-style: italic;
 }
 
+/* A topic or status cut short opens the whole of it (#778): marked as the
+   app marks words that open more, dotted, solid when pointed at. It cuts
+   itself, so the line around it measures nothing. */
+.nx-pane-whole {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: var(--space-0-5);
+}
+
+.nx-pane-whole:hover {
+  color: var(--text-secondary);
+  text-decoration-style: solid;
+}
+
+/* On the phone it's a tap, so the cut words take the header's whole height,
+   as the voice strip's "and others" does (#747), while they look the same. */
+:root[data-shell="phone"] .nx-pane-sub[data-cut="yes"] {
+  align-self: stretch;
+  display: flex;
+}
+
+:root[data-shell="phone"] .nx-pane-sub[data-cut="yes"] .nx-pane-whole {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The whole of it, in its card. Only its first line shares a row with the
+   close button, so it leaves room for it. */
+.nx-pane-whole-text {
+  margin: 0;
+  padding-right: var(--space-6);
+  color: var(--text-secondary);
+  font-size: var(--text-body);
+  line-height: var(--line-body);
+  overflow-wrap: anywhere;
+  white-space: normal;
+  unicode-bidi: isolate;
+}
+
 /* A refused knock's sentence, in place of the status for a few seconds
    (#288). It's words from the app, not their status, so it isn't italic.
    It shows here only when it fits on the line (PaneHeader.tsx). */

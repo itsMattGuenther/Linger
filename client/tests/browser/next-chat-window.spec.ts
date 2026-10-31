@@ -992,3 +992,61 @@ test("a group left from its own window's ⋯ closes the window, calmly (#565)", 
   await expect.poll(() => did(page)).toContain("POST /dms/d-eli-sam/leave as token-1");
   await expect.poll(() => did(page)).toContain("window:close");
 });
+
+// A room's topic or a friend's status longer than the header (#778): cut with
+// "…", and the cut words open the whole of it. Not cut, they're only words.
+const LONG_TOPIC_START = "Got something cool to share? Drop it here.";
+
+test("a topic too long for the header opens the whole of it, and Escape gives the focus back (#778)", async ({ page }) => {
+  await open(page, "room=r-general&longwords");
+  const header = page.locator(".nx-pane-head");
+  const line = header.locator(".nx-pane-sub");
+  await expect(line).toHaveAttribute("data-cut", "yes");
+  const whole = line.getByRole("button", { name: LONG_TOPIC_START });
+  // The words stay one line in the title bar, cut, not wrapped.
+  const box = await whole.boundingBox();
+  expect(box?.height ?? 0).toBeLessThanOrEqual(20);
+  await whole.click();
+  const card = page.getByRole("dialog", { name: "The topic of #general" });
+  await expect(card).toContainText("Media is welcome in other rooms too; this is just its home.");
+  // Inside the window, with nothing cut.
+  const shown = await card.boundingBox();
+  const width = page.viewportSize()?.width ?? 0;
+  expect(shown && shown.x >= 0 && shown.x + shown.width <= width).toBe(true);
+  await expect(card.getByRole("button", { name: "Close" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(card).toHaveCount(0);
+  await expect(whole).toBeFocused();
+});
+
+test("a click anywhere else puts the whole topic away (#778)", async ({ page }) => {
+  await open(page, "room=r-general&longwords");
+  await page.locator(".nx-pane-head .nx-pane-whole").click();
+  const card = page.getByRole("dialog", { name: "The topic of #general" });
+  await expect(card).toBeVisible();
+  await page.getByRole("log").click({ position: { x: 20, y: 20 } });
+  await expect(card).toHaveCount(0);
+});
+
+test("a topic that fits is only words, with nothing to open, and a wider window stops cutting (#778)", async ({ page }) => {
+  await open(page);
+  const line = page.locator(".nx-pane-head .nx-pane-sub");
+  await expect(line).toHaveText("Good company. No hurry.");
+  await expect(line.getByRole("button")).toHaveCount(0);
+  await expect(line).not.toHaveAttribute("data-cut", "yes");
+
+  await open(page, "room=r-general&longwords");
+  await expect(line).toHaveAttribute("data-cut", "yes");
+  await page.setViewportSize({ width: 2400, height: 800 });
+  await expect(line).not.toHaveAttribute("data-cut", "yes");
+  await expect(line.getByRole("button")).toHaveCount(0);
+});
+
+test("a friend's status too long for a DM's header opens the whole of it (#778)", async ({ page }) => {
+  await open(page, "room=d-jules&longwords");
+  const line = page.locator(".nx-pane-head .nx-pane-sub");
+  await expect(line).toHaveAttribute("data-cut", "yes");
+  await line.getByRole("button").click();
+  const card = page.getByRole("dialog", { name: "Jules's status" });
+  await expect(card).toContainText("then probably side one again");
+});
