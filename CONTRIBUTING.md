@@ -84,4 +84,5 @@ The repo is arranged so a session reads little and misses nothing:
   truth, so they change deliberately or not at all.
 - Your name goes in the release notes. Every contribution that ships is thanked
   there, by your GitHub handle, in the release it ships in, however small, and
-  your first one puts you in the README's Thanks (`docs/releasing.md`).
+  your first one puts you in the README's Thanks, linked to everything of
+  yours that's been merged (`docs/releasing.md`).

@@ -42,8 +42,15 @@ conversation's voice line opens their volume, as in the voice bar; on a phone it
 rises from the bottom, and the people there are easier to tap (#747). The
 phone app's words can be made bigger in Settings → Appearance, with a Text size
 of its own on top of the phone's, and the iPhone app now follows the iPhone's
-Text Size, as the Android app follows its Font size (#690). **Thanks** (`docs/releasing.md`): @Gleasonmt for the iPhone app's iOS 15
-minimum (#749), and @eGGnogSC for messages that show the moment they're sent
+Text Size, as the Android app follows its Font size (#690). Settings → Account
+& App has **Privacy**, which opens the privacy page, and **Report a problem**,
+which opens GitHub's forms for a new issue (#779). On an iPhone, Linger says
+why it wants the local network when your server is on your home network
+(#779). **Thanks** (`docs/releasing.md`): @Gleasonmt for the iPhone app's iOS
+15 minimum (#749), bigger text on the phone and the iPhone following its Text
+Size (#690), and the Privacy and Report a problem buttons and getting the
+iPhone app ready for the App Store (#779), and @eGGnogSC for messages that
+show the moment they're sent
 (#133) and the sidebar that no longer scrolls sideways (#84). @eGGnogSC's work
 shipped back in September, before the notes thanked contributors, so it's
 thanked here once; from now on everybody is thanked in the release their work

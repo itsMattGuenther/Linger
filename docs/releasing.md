@@ -67,8 +67,11 @@ produces a green release that no installed copy will accept.
   (`git log v<previous>..HEAD --format='%an <%ae>' | sort -u`), each matched to
   the pull request it came from for their handle. Naming them in a GitHub
   release tells them it shipped. The first time somebody is thanked, add them
-  to the README's Thanks too, after the people already there, with a few words
-  on what they did: never by how much.
+  to the README's Thanks too, after the people already there: their handle,
+  linked to their merged pull requests
+  (`pulls?q=is%3Apr+is%3Amerged+author%3A<handle>`), and nothing more. What
+  they did belongs in each release's notes; listed in the README it would only
+  grow, and the link stays up to date by itself. Never by how much.
 - Say whether anything stops working with an older app or server (PROTOCOL §9,
   "Which apps and servers work together"). Before 1.0, a change works both ways
   wherever it can. From 1.0, a break may only leave behind versions outside the window

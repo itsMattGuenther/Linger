@@ -251,15 +251,15 @@ docs ([SPEC](SPEC.md), [ARCHITECTURE](ARCHITECTURE.md),
 
 ## 🙏 Thanks
 
-**To the people who've helped build Linger**, in the order they joined in:
+**To the people who've helped build Linger**, in the order they joined in.
+Each one's link shows everything of theirs that's been merged, and stays up to
+date by itself:
 
-- [@eGGnogSC](https://github.com/eGGnogSC), for messages that show up
-  the moment they're sent ([#133](https://github.com/itsMattGuenther/Linger/pull/133))
-  and a sidebar that no longer scrolls sideways ([#84](https://github.com/itsMattGuenther/Linger/pull/84)).
-- [@Gleasonmt](https://github.com/Gleasonmt), for getting the iPhone app ready
-  for Apple's iOS 15 rule ([#749](https://github.com/itsMattGuenther/Linger/pull/749)).
+- [@eGGnogSC](https://github.com/itsMattGuenther/Linger/pulls?q=is%3Apr+is%3Amerged+author%3AeGGnogSC)
+- [@Gleasonmt](https://github.com/itsMattGuenther/Linger/pulls?q=is%3Apr+is%3Amerged+author%3AGleasonmt)
 
-Everybody whose work ships is added here, and thanked in that release's notes.
+Everybody whose work ships is added here once, and thanked for what they did
+in that release's notes.
 
 **And to everyone who's chipped in on [Ko-fi](https://ko-fi.com/mattguenther).**
 It goes toward what Linger costs to keep going, month after month: the servers
