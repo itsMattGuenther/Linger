@@ -1,10 +1,11 @@
 name: play
 
-# Google Play's copy of a release (T-1604, #253). Play takes an Android App
-# Bundle (`.aab`), not the `.apk` on the GitHub release: it makes each phone's
-# own `.apk` from the bundle and signs that with the app signing key. That key
-# is ours, the one every `.apk` on GitHub is signed with, or Play's copy won't
-# install over the one people already have. The bundle is signed with it too:
+# Google Play's copy of a release (T-1604, #253), the only way to get the
+# Android app since GitHub releases stopped carrying an `.apk` (#773). Play
+# takes an Android App Bundle (`.aab`): it makes each phone's own `.apk` from
+# the bundle and signs that with the app signing key. That key is ours, the
+# one every `.apk` on GitHub was signed with, or Play's copy wouldn't install
+# over the one people already have. The bundle is signed with it too:
 # with no separate upload key, Play takes only bundles signed with the app
 # signing key.
 #
@@ -99,7 +100,7 @@ jobs:
           ANDROID_RELEASE_KEYSTORE: ${{ secrets.ANDROID_RELEASE_KEYSTORE }}
           ANDROID_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
         run: scripts/android-signing.sh setup
-      # 64-bit phones only, as the `.apk` on GitHub.
+      # 64-bit phones only, as the `.apk` on GitHub was.
       - name: build the bundle
         working-directory: client
         run: pnpm tauri android build --target aarch64 --aab

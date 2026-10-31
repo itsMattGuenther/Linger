@@ -140,8 +140,7 @@ A pre-release tag (`v0.4.11-1`, a practice run of the release build) publishes
 no image, so it can't move `latest` (#597).
 
 **3. Check the draft.** All ten files are there (the `.exe`, `.msi`, AppImage,
-`.deb` and `.rpm`, each with its `.sig`), plus
-`Linger_<version>_android-arm64.apk`, and `latest.json` lists the new version
+`.deb` and `.rpm`, each with its `.sig`), and `latest.json` lists the new version
 with a signature for all seven platform entries, signed by the key in
 `tauri.conf.json`, each linking to `https://github.com/<repo>/releases/download/<tag>/…`
 and none to `api.github.com`. Wait for every job to finish before replacing the
@@ -242,11 +241,14 @@ locally, given a signing key.
 
 ## Google Play
 
-Google Play takes an Android App Bundle (`.aab`), not the release's `.apk`,
-and makes each phone's own copy from it. `.github/workflows/play.yml` builds
-the bundle from a release's tag, signed with the same release key as the
-`.apk`, and checks the signature (`scripts/android-signing.sh verify-bundle`).
-It runs only by hand, from `main`.
+Google Play is where the Android app comes from (#773): releases on GitHub
+stopped carrying an `.apk` once Linger was public there. Play takes an
+Android App Bundle (`.aab`) and makes each phone's own copy from it.
+`.github/workflows/play.yml` builds the bundle from a release's tag, signed
+with the release key every `.apk` was signed with, and checks the signature
+(`scripts/android-signing.sh verify-bundle`). It runs only by hand, from
+`main`, so **every release needs it run**, or Android phones stay on the last
+one.
 
 **Per release**, once it's published:
 
@@ -276,8 +278,8 @@ gh run download <run id> -n play-key             # linger-play-key.zip
 Upload `linger-play-key.zip` where the page asks for it. Google's own tool
 (`pepk`) wraps the key inside the run, encrypted so that only Google can open
 it, so the key never leaves GitHub. There's no separate upload key: the
-GitHub `.apk` needs this key in the `release` environment anyway, so a second
-key there would add a secret to keep without guarding anything. Play then
+`release` environment holds this key anyway, so a second key there would add
+a secret to keep without guarding anything. Play then
 takes only bundles signed with this key. Play Console's App integrity page
 shows the app signing key's SHA-256 fingerprint, and it must match
 `client/src-tauri/android-release-cert.sha256`.
