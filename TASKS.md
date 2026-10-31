@@ -128,10 +128,12 @@ works in every tool:
 > first.
 
 1. **Check for existing work, then claim the task**: for a GitHub issue, inspect
-   its linked PRs before starting another fix. Push a branch named
-   `feat/t-xxx-short-slug`, and in
-   your first commit flip the task here from ⬜ to ⏳ with your name and the
-   date. That is how two people avoid building the same thing. If a task has
+   its linked PRs and who is assigned before starting another fix, then assign
+   yourself, or comment that you're working on it so Matt can assign you
+   (`AGENTS.md` §"Pull requests and issues"). For a task in this file, push a
+   branch named `feat/t-xxx-short-slug`, and in your first commit flip it from
+   ⬜ to ⏳ with your name and the date. That is how two people avoid building
+   the same thing. If a task has
    been ⏳ for over a week with no branch activity, ask in the PR or ping Matt
    before taking it over.
    When opening a PR, formally link each issue it proposes to resolve and verify
