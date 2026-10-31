@@ -30,8 +30,18 @@
  * `window.core.unstall()`. `window.core.refuseNext()` has the next refresh
  * of any server wait for `unstall()` too, and then be refused, as for an
  * account deleted meanwhile (#650).
- * `?noinfo` has Casa da Ribeira never say its name. `?update` has a new
- * version waiting (0.4.1); otherwise this is the newest.
+ * `?noinfo` has Casa da Ribeira never say its name.
+ *
+ * Updates (#772): `?update` has 0.4.1 downloaded and ready, on a copy that
+ * installs by itself; `?update=waiting` has it on its day's wait until
+ * `window.core.downloaded()`; `?update=password` is a copy that needs a
+ * password to install; `?update=arch` one pacman owns. Otherwise this is the
+ * newest. Installing is written down as `update_now <how it comes back>` and
+ * never answers, as a restart wouldn't (`?updatefail` has it refused).
+ * `?pending` has 0.4.1 waiting for this start, whose install fails, as
+ * offline, at `window.core.installFailed()`. `?updated` is the first start after an update, to the
+ * version `release-line.json` names. `?behind` has The Good Company, which
+ * you host, run 0.4.0 while 0.4.1 is out.
  *
  * Conversations open beside the list (#337): The Good Company's rooms and
  * DMs answer with the evening's messages, and take new ones. The window's
@@ -104,8 +114,15 @@ import { GUILD, guild, LISBON, lisbon, serverInfo } from "./next/servers";
 import { voiceInThePage } from "../../src/lib/ipc";
 import { browserWorld } from "../../src/lib/pageVoice";
 import { FakeSfu, fakeMicrophone, realAudio, type Received } from "./next/sfu";
+import releaseLine from "../../src/next/core/release-line.json";
 
 const query = new URLSearchParams(location.search);
+// The first start after an update (#772): an older version was seen here.
+if (query.has("updated")) localStorage.setItem("linger.next.update.seen", "0.0.1");
+/** Whether the update `?update=waiting` waits for is downloaded yet (`window.core.downloaded()`). */
+let updateDownloaded = query.get("update") !== "waiting";
+/** The start-up install `?pending` is waiting on, ended by `window.core.installFailed()`. */
+let installing: (() => void) | null = null;
 const did: string[] = [];
 const note = (what: string) => {
   did.push(what);
@@ -317,7 +334,7 @@ mockIPC((cmd, args) => {
       return link;
     }
     case "app_version":
-      return "0.3.6";
+      return query.has("updated") ? releaseLine.version : "0.3.6";
     // A link or a download handed to the browser.
     case "plugin:opener|open_url":
       note(`open ${String(a.url)}`);
@@ -329,9 +346,30 @@ mockIPC((cmd, args) => {
         if (query.has("savefail")) throw "Couldn't get the file.";
         return null;
       });
-    case "update_check":
+    case "update_check": {
       note("update_check");
-      return query.has("update") ? { kind: "ready", version: "0.4.1", notes: null } : { kind: "current" };
+      const line = "Screen sharing, and fixes for voice.";
+      const kind = query.get("update");
+      if (kind === null) return { kind: "current", silent: true };
+      if (kind === "arch") return { kind: "managed", by: "pacman", newer: { version: "0.4.1", line } };
+      return { kind: "newer", version: "0.4.1", line, published: 0, downloaded: updateDownloaded, silent: kind !== "password" };
+    }
+    case "update_now":
+      note(`update_now ${String(a.comeBack)}`);
+      // A restart never answers; a refusal does.
+      return query.has("updatefail") ? { kind: "failed", reason: "The network is down." } : new Promise(() => undefined);
+    case "update_pending":
+      return query.has("pending") ? "0.4.1" : null;
+    case "update_install_pending":
+      note("update_install_pending");
+      return new Promise((done) => {
+        installing = () => done({ kind: "failed", reason: "offline" });
+      });
+    case "newest_version":
+      return query.has("behind") ? "0.4.1" : null;
+    // Whether the list window is on screen (#772: how Linger comes back after an update).
+    case "plugin:window|is_visible":
+      return true;
     case "gateway_disconnect":
       note(`disconnect ${String(a.baseUrl)}`);
       return null;
@@ -415,6 +453,10 @@ declare global {
       ask: (event: string, question: Record<string, unknown>) => void;
       /** The desktop shell passes on a tray menu choice ("mute" or "leave"). */
       tray: (action: string) => void;
+      /** The update `?update=waiting` waits for finished downloading (#772). */
+      downloaded: () => void;
+      /** The start-up install `?pending` waits on fails, as offline (#772). */
+      installFailed: () => void;
       /** The desktop shell heard the talk key go "down" or "up" with any app in front (#500). */
       talkKey: (edge: string) => void;
       /** The desktop shell passes on a clicked banner's target. */
@@ -464,6 +506,11 @@ window.core = {
   status: (server, status) => deliver("gateway:status", { server, status }),
   ask: (event, question) => deliver(event, { v: 1, id: "q-1", from: "chat", ...question }),
   tray: (action) => deliver("next:tray", action),
+  downloaded: () => {
+    updateDownloaded = true;
+    deliver("next:update", null);
+  },
+  installFailed: () => installing?.(),
   talkKey: (edge) => deliver("next:talkkey", edge),
   banner: (target) => deliver("next:banner", target),
   back: () => {
@@ -671,6 +718,8 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   if (path === "/health") {
     // `?hold`: the server doesn't answer until the test lets it (`window.core.release()`).
     if (query.has("hold")) await held;
+    // `?behind`: the release it runs, behind the newest (#772).
+    if (query.has("behind")) return json({ ok: true, version: server === SERVER ? "0.4.0" : "0.4.1" });
     return new Response(null, { status: 204 });
   }
   const invite = /^\/auth\/invite\/(.+)$/.exec(path);
@@ -920,6 +969,10 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
       // backup for four days (#582). Said to the host alone, as a server does.
       ...(query.has("hostissues") && server === SERVER && state.me?.is_host
         ? { health: { backups: true, last_backup_at: Date.now() - 4 * 24 * 60 * 60 * 1000 - 60_000, backup_overdue: true, disk_nearly_full: true, file_space_nearly_full: false } }
+        : {}),
+      // `?behind`: a server you host, all well with its machine (#772).
+      ...(query.has("behind") && server === SERVER && state.me?.is_host
+        ? { health: { backups: true, last_backup_at: Date.now() - 6 * 60 * 60 * 1000, backup_overdue: false, disk_nearly_full: false, file_space_nearly_full: false } }
         : {}),
       // `?hostbucket`: last night's copy is fine, but none has reached the
       // host's bucket for four days (#614).

@@ -224,3 +224,11 @@ thiserror = "2"
 # named explicitly so a future default flip to native-tls can't quietly put
 # OpenSSL back into everyone's build.
 tauri-plugin-updater = { version = "2.10.1", default-features = false, features = ["rustls-tls", "zip"] }
+# A downloaded update waits on disk until Linger next starts (#772), so it's
+# checked against the signing key again right before it's installed, the same
+# check the updater makes when it downloads. Both are already in the build,
+# through the updater. `semver` says whether the update kept is newer than the
+# running copy.
+minisign-verify = "0.2"
+base64 = "0.22"
+semver = "1"

@@ -224,7 +224,13 @@ export type Intent =
    * Settings saved a server's name or color: the list asks the server for
    * them now, rather than at its next hourly ask (#536).
    */
-  | { kind: "serverinfo"; server: string };
+  | { kind: "serverinfo"; server: string }
+  /**
+   * Restart now (or Update, for a copy that needs a password) in Settings
+   * (#772): the list installs it, since only it knows whether you're in voice
+   * or sharing a screen; pressed then, it waits until you've left.
+   */
+  | { kind: "update" };
 
 /** The list window's own choices another window may ask it to make. */
 export interface ListControls {
@@ -240,6 +246,8 @@ export interface ListControls {
   talkKey?(code: string): void;
   /** Settings changed how conversations open: the tabs beside the list move into windows of their own. */
   conversations?(mode: ConversationsMode): void;
+  /** Restart now or Update in Settings (#772): install the update, once nobody's in voice. */
+  updateNow?(): void;
 }
 
 /**
@@ -504,6 +512,9 @@ export async function shareAsOwner(
         return;
       case "serverinfo":
         if (sessions().has(intent.server)) list?.serverInfo?.(intent.server);
+        return;
+      case "update":
+        list?.updateNow?.();
         return;
       case "conversations": {
         if (!isMode(intent.mode)) return;

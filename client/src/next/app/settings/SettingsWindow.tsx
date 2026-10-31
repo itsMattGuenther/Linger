@@ -26,7 +26,6 @@ import {
   checkForUpdate,
   HOST_BACKUP_GUIDE_URL,
   HOST_UPDATE_GUIDE_URL,
-  installUpdate,
   newestVersion,
   releaseNotesUrl,
   type ServerVersion,
@@ -372,11 +371,9 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
   const [version, setVersion] = useState<string | null>(null);
   const [check, setCheck] = useState<UpdateCheck | null>(null);
   const [looking, setLooking] = useState(false);
-  const [installing, setInstalling] = useState(false);
-  const [updateProblem, setUpdateProblem] = useState<string | null>(null);
+  const [asked, setAsked] = useState(false);
   const checkAgain = useCallback(() => {
     setLooking(true);
-    setUpdateProblem(null);
     void checkForUpdate()
       .then(setCheck)
       .finally(() => setLooking(false));
@@ -687,17 +684,13 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
           : {
               check,
               looking,
-              installing,
-              problem: updateProblem,
+              asked,
+              problem: null,
               checkAgain,
+              // The list installs it (#772): it knows whether you're in voice.
               install: () => {
-                setInstalling(true);
-                setUpdateProblem(null);
-                void installUpdate()
-                  .then((outcome) => {
-                    if (outcome.kind === "failed") setUpdateProblem(outcome.reason);
-                  })
-                  .finally(() => setInstalling(false));
+                setAsked(true);
+                void intend({ kind: "update" }).catch(() => setAsked(false));
               },
               openNotes: (wanted) => openExternal(releaseNotesUrl(wanted)),
             },

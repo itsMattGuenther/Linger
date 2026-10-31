@@ -1,0 +1,39 @@
+name: update feed date
+
+# Linger updates itself (#772): an installed copy installs a release by itself
+# once the release is a day old, by the date in latest.json. That day is the
+# head start of whoever presses Restart now, Matt first, so a bad release can
+# be pulled before it reaches everybody. tauri-action dates latest.json when
+# the release is built, which can be hours before it's published, so this
+# dates it again the moment it is.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  date:
+    name: latest.json dated at publishing
+    # A pre-release is never `latest`, so no copy reads its feed.
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: date latest.json when the release went out
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
+          PUBLISHED: ${{ github.event.release.published_at }}
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/updater"
+          mkdir -p "$dir"
+          gh release download "$TAG" --pattern latest.json --dir "$dir"
+          node scripts/updater-urls.mjs --published "$dir/latest.json" "$PUBLISHED"
+          gh release upload "$TAG" "$dir/latest.json" --clobber

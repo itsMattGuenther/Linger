@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { expectedFiles, missingFiles, rewrite } from "./updater-urls.mjs";
+import { expectedFiles, missingFiles, publishedAt, rewrite, withLine } from "./updater-urls.mjs";
 
 const repo = "itsMattGuenther/Linger";
 const tag = "v0.4.11";
@@ -76,4 +76,30 @@ test("the desktop files keep the names the site, the Arch job and the docs look 
     missingFiles(released.filter((name) => !name.endsWith(".deb")).map((name) => ({ name })), "v0.4.10"),
     ["Linger_0.4.10_amd64.deb"],
   );
+});
+
+test("the notes become this release's one line, and nothing else (#772)", () => {
+  const latest = { version: "0.4.11", notes: "**This is the Linger app**\n\nIt is not the server.", platforms: {} };
+  assert.equal(withLine(latest, { version: "0.4.11", line: " Screen sharing, and fixes for voice. " }, tag).notes, "Screen sharing, and fixes for voice.");
+  // Left over from the release before: says nothing true about this one.
+  assert.equal(withLine(latest, { version: "0.4.10", line: "Fixes for voice." }, tag).notes, "");
+  // None written: no notes, never tauri-action's install section.
+  assert.equal(withLine(latest, { version: "0.4.11", line: "" }, tag).notes, "");
+  assert.equal(withLine(latest, { version: "0.4.11", line: "two\nlines" }, tag).notes, "");
+  assert.equal(withLine(latest, null, tag).notes, "");
+  // Everything else is left as it was.
+  assert.deepEqual(withLine(latest, { version: "0.4.11", line: "x" }, tag), { ...latest, notes: "x" });
+});
+
+test("the line's file is where the job reads it, and well formed (#772)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const said = JSON.parse(readFileSync(new URL("../client/src/next/core/release-line.json", import.meta.url), "utf8"));
+  assert.equal(typeof said.version, "string");
+  assert.equal(typeof said.line, "string");
+});
+
+test("the feed is dated when the release went out, not when it was built (#772)", () => {
+  const latest = { version: "0.4.11", pub_date: "2026-10-27T21:49:05.872Z", platforms: {} };
+  assert.deepEqual(publishedAt(latest, "2026-10-28T09:00:00Z"), { ...latest, pub_date: "2026-10-28T09:00:00Z" });
+  assert.throws(() => publishedAt(latest, "soon"), /not a date/);
 });

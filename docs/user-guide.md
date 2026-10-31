@@ -406,8 +406,9 @@ there, under its name, only when there's something to say: your status
 there, or a different name from the one at the top of the list.
 
 The list may also show a line at its foot, only while it's true: a server it
-can't reach, a computer that can't remember your sign-in, or a new version of
-Linger with **Update…**.
+can't reach, a computer that can't remember your sign-in, a server you host
+that needs you or is behind the newest release, or a new version of Linger
+(see [Updates](#updates)).
 
 If one of your servers is down when Linger starts, the others open anyway. The
 one that's down stays signed in and shows as "Can't reach … Still trying." at
@@ -1347,15 +1348,37 @@ you can come back.
 
 ## Updates
 
-1. Open **Settings → Account & App → Updates**.
-2. Linger looks when you open it, and says so at the foot of your list when
-   there's a new version (**Update…** brings you here). **Check again** looks
-   now.
-3. When you're ready, choose **Install and restart**. Nothing downloads or
-   installs until you choose it.
+Linger updates itself. There's nothing to turn on, and nothing to do:
+
+1. It looks for a new version when it starts, and twice a day while it runs.
+2. A day after a new version comes out, it downloads it in the background and
+   checks it against the project's signing key. The foot of your list then
+   says **Linger 0.5.4 is ready**.
+3. It installs it the next time Linger starts ("Updating to Linger 0.5.4…"
+   for a few seconds), or, if you leave Linger running, after half an hour
+   with nobody using it. It never restarts while you're in voice or sharing
+   your screen. It comes back the way it was, in the tray if that's where
+   your list was.
+4. The first time the new version starts, the foot of your list says
+   **You're on Linger 0.5.4**, with what's new.
+
+Don't want to wait? Press **Restart now** at the foot of the list, in the
+tray's menu (**Restart to update Linger**), or in **Settings → Account & App
+→ Updates**, which also has **Check again**. Restart now doesn't wait the
+day.
+
+**The .deb, .rpm and .msi** need your computer's password to install, so they
+download by themselves but wait for you: the foot of your list says **Linger
+0.5.4 is out**, with **Update**, which asks for the password. **Not now** puts
+it off until tomorrow.
 
 **Arch and Omarchy package:** there is nothing to do in the app. New versions
-arrive with your system updates, and the Updates panel says so.
+arrive with your system updates. The foot of your list says when one is out,
+and the Updates panel says so too.
+
+**Hosting a server?** Apps update themselves, but a server only updates when
+you run `./update.sh`. When yours is behind the newest release, the foot of
+your list says so, with **How to update**.
 
 If this copy cannot update itself, or an update fails, download the newer
 installer/AppImage from [Releases](https://github.com/itsMattGuenther/Linger/releases/latest)

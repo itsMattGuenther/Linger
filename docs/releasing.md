@@ -78,6 +78,14 @@ produces a green release that no installed copy will accept.
   (12 months or the two releases before, whichever reaches further back), and the
   release *before* it says it's coming. At 1.0 itself, the window starts: say so in
   its notes.
+- Write **the one line about what's in it** in
+  `client/src/next/core/release-line.json`, with this version: `{ "version":
+  "0.5.4", "line": "Screen sharing, and fixes for voice." }`. One short line,
+  140 characters at most, said to people, not a changelog (#772). Installed
+  copies show it beside "Linger 0.5.4 is out" (the release job puts it in
+  `latest.json`'s notes), and the new version shows it once on its first start
+  ("You're on Linger 0.5.4"). A line still naming the previous version is
+  shown nowhere, and the release job warns.
 - Point the README's release-notes line and `docs/testing-strategy.md` at the
   new notes, and record the release in `TASKS.md`.
 - **Run the GPU check** on a Linux computer with a graphics card, with Docker
@@ -143,7 +151,16 @@ re-running one, is lost. Swap their short install section for the fuller
 download table and update steps the previous release used.
 
 **4. Publish it.** Publishing is what makes installed copies see the update, and
-it is a person's click on purpose. It also starts the Arch package job (below),
+it is a person's click on purpose. Linger updates itself (#772): a day after you
+publish, every copy the setup.exe or the AppImage installed installs it on its
+own, at its next start or while nobody's using it. The day counts from
+publishing, not building: `updater-date.yml` dates `latest.json` when you
+click. **Use that day.** Press Restart now in your own Linger (Settings →
+Account & App, or the foot of the list once it's downloaded) and check the
+release in real use. If it's bad, mark it a pre-release before the day is
+out: `releases/latest` then points at the release before, so no copy sees it
+any more (the copies that pressed Restart now keep it until a fixed release).
+Anybody who presses Restart now goes early by choice. It also starts the Arch package job (below),
 and it moves new servers on: `deploy/setup.sh` fetches its files from the
 newest release's tag (#507), and they go with that tag's image. So check the
 tag's `image` run went green first; until it does, `latest` is still the

@@ -1272,26 +1272,167 @@ test("a server that can't be reached for a few seconds says so by name, with the
   await expect(notes(page)).toHaveCount(0);
 });
 
-test("a new version gets one quiet line, and Update… opens Settings where it's installed", async ({ page }) => {
+// Linger updates itself (#772): the foot says so, the tray offers it, and
+// nothing restarts in voice or while you share a screen.
+const updates = (page: Page) => page.locator("[data-screen='list-notes'] .nx-update");
+const trayUpdate = async (page: Page) => (await did(page)).filter((line) => line.startsWith("next_tray_voice")).at(-1) ?? "";
+
+test("a downloaded update is a calm line that says when it installs, and Restart now installs it (#772)", async ({ page }) => {
   await open(page, "?one&update");
-  await expect(notes(page)).toHaveText(["Linger 0.4.1 is ready.Update…"]);
-  await notes(page).getByRole("button", { name: "Update…" }).click();
-  expect((await did(page)).filter((line) => line.startsWith("next_open_settings")).at(-1)).toBe(
-    `next_open_settings:${JSON.stringify({ section: "account", server: null })}`,
-  );
+  const ready = updates(page);
+  await expect(ready).toHaveCount(1);
+  await expect(ready).toHaveAttribute("data-note", "update");
+  // Calm: there's nothing anybody has to do, so it isn't in the lamp.
+  await expect(ready).not.toHaveAttribute("data-lit", "yes");
+  await expect(ready).toContainText("Linger 0.4.1 is ready");
+  await expect(ready).toContainText("It installs the next time Linger starts, or while you're away from your computer.");
+  await expect(ready.getByRole("button", { name: "What's new" })).toHaveCount(0);
+  // The tray offers it too, and its tooltip says so.
+  await expect.poll(() => trayUpdate(page)).toContain(JSON.stringify({ update: { text: "Restart to update Linger", tip: "0.4.1 is ready" } }).slice(1, -1));
+  await ready.getByRole("button", { name: "Restart now" }).click();
+  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("update_now"))).toEqual(["update_now shown"]);
 });
 
-test("a server you host says when its disk is nearly full or it hasn't been backed up, and Hosting… opens its Settings (#582)", async ({ page }) => {
+test("the tray's Restart to update Linger installs it too (#772)", async ({ page }) => {
+  await open(page, "?one&update");
+  await expect(updates(page)).toHaveCount(1);
+  await page.evaluate(() => window.core?.tray("update"));
+  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("update_now"))).toEqual(["update_now shown"]);
+});
+
+test("nothing restarts in voice: Restart now waits, and Settings' press is done once you've left (#772)", async ({ page }) => {
+  await open(page, "?one&update");
+  const bar = page.getByRole("region", { name: /In voice/ });
+  await expect
+    .poll(
+      async () => {
+        await page.evaluate(() => window.core?.ask("next:intent", { kind: "voice.join", server: "https://good-company.example", roomId: "r-general" }));
+        await page.waitForTimeout(250);
+        return bar.count();
+      },
+      { timeout: 10_000 },
+    )
+    .toBe(1);
+  const restart = updates(page).getByRole("button", { name: "Restart now" });
+  await expect(restart).toHaveAttribute("aria-disabled", "true");
+  await restart.click({ force: true });
+  await page.evaluate(() => window.core?.tray("update"));
+  // Settings can't see voice: its Restart now waits for you to leave.
+  await page.evaluate(() => window.core?.ask("next:intent", { kind: "update" }));
+  await page.waitForTimeout(300);
+  expect((await did(page)).filter((line) => line.startsWith("update_now"))).toEqual([]);
+  await page.evaluate(() => window.core?.tray("leave"));
+  await expect(bar).toHaveCount(0);
+  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("update_now"))).toEqual(["update_now shown"]);
+});
+
+test("an update on its day's wait says nothing until it's downloaded (#772)", async ({ page }) => {
+  await open(page, "?one&update=waiting");
+  await page.waitForTimeout(300);
+  await expect(page.locator("[data-screen='list-notes']")).toHaveCount(0);
+  expect(await trayUpdate(page)).not.toContain("update");
+  await page.evaluate(() => window.core?.downloaded());
+  await expect(updates(page)).toContainText("Linger 0.4.1 is ready");
+});
+
+test("a copy that needs a password is asked, in the lamp, and can put it off until tomorrow (#772)", async ({ page }) => {
+  await open(page, "?one&update=password");
+  const out = updates(page);
+  await expect(out).toHaveAttribute("data-lit", "yes");
+  await expect(out).toContainText("Linger 0.4.1 is out");
+  await expect(out).toContainText("Screen sharing, and fixes for voice.");
+  await expect(out.getByRole("button", { name: "Restart now" })).toHaveCount(0);
+  await expect.poll(() => trayUpdate(page)).toContain(JSON.stringify({ update: { text: "Update Linger", tip: "0.4.1 is out" } }).slice(1, -1));
+  await out.getByRole("button", { name: "What's new" }).click();
+  expect(await did(page)).toContain("open https://github.com/itsMattGuenther/Linger/releases/tag/v0.4.1");
+  await out.getByRole("button", { name: "Update", exact: true }).click();
+  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("update_now"))).toEqual(["update_now shown"]);
+});
+
+test("Not now puts an \"is out\" line off until tomorrow, on this computer (#772)", async ({ page }) => {
+  await open(page, "?one&update=password");
+  await updates(page).getByRole("button", { name: "Not now" }).click();
+  await expect(page.locator("[data-screen='list-notes']")).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator("[data-screen='list']")).toBeVisible();
+  await page.waitForTimeout(300);
+  await expect(page.locator("[data-screen='list-notes']")).toHaveCount(0);
+});
+
+test("an Arch copy is told it's out, with nothing to install and nothing in the tray (#772)", async ({ page }) => {
+  await open(page, "?one&update=arch");
+  const out = updates(page);
+  await expect(out).toHaveAttribute("data-lit", "yes");
+  await expect(out).toContainText("Linger 0.4.1 is out");
+  await expect(out).toContainText("It comes with your next system update.");
+  await expect(out).not.toContainText("Omarchy");
+  await expect(out.getByRole("button", { name: /^(Update|Restart now)$/ })).toHaveCount(0);
+  await expect(out.getByRole("button", { name: "What's new" })).toBeVisible();
+  expect(await trayUpdate(page)).not.toContain("update");
+});
+
+test("the first start after an update says so once, in the lamp, with what's in it (#772)", async ({ page }) => {
+  await open(page, "?one&updated");
+  const updated = updates(page);
+  await expect(updated).toHaveAttribute("data-note", "updated");
+  await expect(updated).toHaveAttribute("data-lit", "yes");
+  await expect(updated).toContainText(/^You're on Linger \d+\.\d+\.\d+/);
+  await updated.getByRole("button", { name: "Close" }).click();
+  await expect(page.locator("[data-screen='list-notes']")).toHaveCount(0);
+});
+
+test("an update kept for this start goes in before the list, which starts as it is if it can't (#772)", async ({ page }) => {
+  await page.goto("/tests/fixtures/next-list-window.html?one&pending");
+  await expect(page.getByRole("status")).toContainText("Updating to Linger 0.4.1…");
+  await expect(page.getByRole("status")).toContainText("Back in a few seconds.");
+  expect(await did(page)).toContain("update_install_pending");
+  // Nothing connects while it's installing.
+  expect((await did(page)).filter((line) => line.startsWith("connect "))).toEqual([]);
+  await page.evaluate(() => window.core?.installFailed());
+  await expect(page.locator("[data-screen='list']")).toBeVisible();
+});
+
+test("why an update didn't happen is said on its line (#772)", async ({ page }) => {
+  await open(page, "?one&update&updatefail");
+  await updates(page).getByRole("button", { name: "Restart now" }).click();
+  await expect(updates(page).getByRole("alert")).toHaveText("Couldn't update: The network is down.");
+});
+
+test("left for half an hour, Linger restarts by itself to install it, without taking the focus (#772)", async ({ page }) => {
+  await page.clock.install();
+  await open(page, "?one&update");
+  await expect(updates(page)).toHaveCount(1);
+  await page.clock.runFor(29 * 60 * 1000);
+  expect((await did(page)).filter((line) => line.startsWith("update_now"))).toEqual([]);
+  await page.clock.runFor(2 * 60 * 1000);
+  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("update_now"))).toEqual(["update_now behind"]);
+});
+
+test("a host whose server is behind hears it at the foot, with How to update (#772)", async ({ page }) => {
+  await open(page, "?one&behind");
+  await expect(notes(page)).toHaveText(["The Good Company is behind. 0.4.1 is out.How to update"]);
+  await expect(notes(page)).toHaveAttribute("title", "It runs 0.4.0. Run ./update.sh in the server's folder to update it.");
+  await notes(page).getByRole("button", { name: "How to update" }).click();
+  expect(await did(page)).toContain("open https://github.com/itsMattGuenther/Linger/blob/main/docs/host-guide.md#updating-the-server");
+});
+
+test("somebody who doesn't host the server isn't told it's behind (#772)", async ({ page }) => {
+  await open(page, "?one&behind&guest");
+  await page.waitForTimeout(300);
+  await expect(page.locator("[data-screen='list-notes']")).toHaveCount(0);
+});
+
+test("a server you host says when its disk is nearly full or it hasn't been backed up, and Server settings opens its Settings (#582, #772)", async ({ page }) => {
   await open(page, "?one&hostissues");
-  await expect(notes(page)).toHaveText(["The disk The Good Company runs on is nearly full.Hosting…", "The Good Company hasn't been backed up for 4 days.Hosting…"]);
-  await notes(page).first().getByRole("button", { name: "Hosting…" }).click();
+  await expect(notes(page)).toHaveText(["The disk The Good Company runs on is nearly full.Server settings", "The Good Company hasn't been backed up for 4 days.Server settings"]);
+  await notes(page).first().getByRole("button", { name: "Server settings" }).click();
   expect((await did(page)).filter((line) => line.startsWith("next_open_settings")).at(-1)).toBe(`next_open_settings:${JSON.stringify({ section: "server", server: HOME })}`);
 });
 
 test("a server you host says when its backups haven't reached its bucket for days (#614)", async ({ page }) => {
   await open(page, "?one&hostbucket");
-  await expect(notes(page)).toHaveText(["The Good Company's backups haven't reached its bucket for 4 days.Hosting…"]);
-  await notes(page).first().getByRole("button", { name: "Hosting…" }).click();
+  await expect(notes(page)).toHaveText(["The Good Company's backups haven't reached its bucket for 4 days.Server settings"]);
+  await notes(page).first().getByRole("button", { name: "Server settings" }).click();
   expect((await did(page)).filter((line) => line.startsWith("next_open_settings")).at(-1)).toBe(`next_open_settings:${JSON.stringify({ section: "server", server: HOME })}`);
 });
 
@@ -1322,10 +1463,12 @@ test("the foot's lines fit the list: nothing clipped or sideways, the words line
   await page.clock.runFor(1_000);
   await page.evaluate((server) => window.core?.status(server, { kind: "waiting", retry_in_ms: 4000, reason: "refused" }), GUILD);
   await page.clock.runFor(6_000);
-  await expect(notes(page)).toHaveCount(2);
+  await expect(notes(page)).toHaveCount(1);
+  await expect(updates(page)).toHaveCount(1);
+  // A line and an update's block (#772) start their words on one edge.
   const measured = await page.evaluate(() =>
-    [...document.querySelectorAll<HTMLElement>(".nx-note")].map((line) => {
-      const words = line.querySelector<HTMLElement>(".nx-note-words");
+    [...document.querySelectorAll<HTMLElement>(".nx-note, .nx-update")].map((line) => {
+      const words = line.querySelector<HTMLElement>(".nx-note-words, .nx-update-title");
       const box = line.getBoundingClientRect();
       return {
         left: words?.getBoundingClientRect().left ?? -1,
@@ -1334,6 +1477,7 @@ test("the foot's lines fit the list: nothing clipped or sideways, the words line
       };
     }),
   );
+  expect(measured).toHaveLength(2);
   expect(measured.every((line) => line.inside && !line.cut)).toBe(true);
   expect(new Set(measured.map((line) => line.left)).size).toBe(1);
 });
