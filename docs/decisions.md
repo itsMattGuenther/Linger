@@ -1576,6 +1576,74 @@ allow, and "if it sounds bad, the people they're talking to will say so". On
   back into the app; this is the opposite, the way out of a call you're in. The iPhone
   needs no bar: it shows its own call indicator.
 
+## Decided — sharing to Linger from the phone's share sheet (#785)
+
+**Matt, 2026-10-31.** Linger is in the phone's own share sheet, on both
+phones, as SPEC §4.15 says. Why it works the way it does:
+
+- **Files only, into the message box, never sent on their own.** The share
+  sheet is a place people are in a hurry, and a wrong tap on a conversation
+  would post a screenshot to the wrong room. So choosing a conversation fills
+  its message box with the files and waits. Same upload path, limits and
+  picture-location stripping as the + button (`useFileDrafts`).
+- **No text or links, for now.** #785 asks about screenshots and photos.
+  Taking text and links needs a second look at what a shared page title or
+  address leaks, so it waits for someone to ask.
+- **Both phones at once.** The phone app went Android first ("Android first,
+  Apple after", 2026-10-03) because nobody on the project had an iPhone. The
+  iPhone app has since been tested on friends' iPhones through TestFlight, so
+  both get this together. Most of it is the shell and page code both share;
+  Android adds one intent filter, and the iPhone a share extension and an App
+  Group. Only a Mac builds the iPhone's half, so `ios.yml` is the first place
+  it's built and signed.
+- **One inbox folder, written by the phone, read by the shell.** Android's
+  `SharedInbox.kt` copies into the app's own `files/shared`; the iPhone's
+  share extension, a separate program that can't reach the app's storage,
+  copies into `shared` in the App Group's folder. Each file goes in a numbered
+  folder of its own, so names are kept and order is the share's, and a new
+  share replaces the last whole (written beside it and swapped in with one
+  rename, so the page never reads half a file). Neither phone calls into Rust:
+  the shell only lists the folder (`shared.rs`), and the page asks it, as for
+  files dropped on Linux (`dropped.rs`), never naming a path.
+- **Asking takes the share.** The shell moves the inbox aside under an id
+  when the page asks what's waiting, and reading and deleting name that id.
+  A share that arrives while the last is still being read lands in an empty
+  inbox, so it can't mix its files in or be deleted with it, and a pick that
+  finishes reading after the sheet was closed, or replaced by a newer share,
+  sends nothing (#792).
+- **Ten minutes, then deleted.** Android brings Linger forward with the share.
+  An iPhone may not let a share extension open the app, and then the person
+  opens it themselves, so a share waits ten minutes, not one. Once it's in a
+  message box or turned down it's deleted at once, and one nobody took is
+  deleted when the app next starts, as is a copy the phone stopped partway.
+- **Out of backups, as the rest of the phone app is.** Android's
+  `allowBackup="false"` already covers its files folder. An App Group's folder
+  is backed up unless marked, so the share extension marks its folder before
+  writing, and the mark moves with it (#792). The iPhone app's own folders are
+  marked at start-up by `phone_backup.rs` (#790).
+- **Only the bytes of what was chosen, only after choosing.** The sheet is
+  drawn from names and sizes; the files are read once a conversation is
+  picked, so a long video doesn't sit in memory while the person decides.
+- **Never a way back into Linger's own files.** On Android a share is any app's
+  `content://` address, and a crafted one could point at Linger's own storage
+  and put its private files in a message box. So `file://` addresses and
+  Linger's own providers are refused.
+- **No text on Android.** The intent filter takes `image/*`, `video/*`,
+  `audio/*` and `application/*`, not `text/*`, so Linger isn't offered for a
+  link shared from a browser. A `.txt` file shared from a files app is left
+  out with it; a `.txt` is still attached with + as before.
+- **`linger://shared`, carrying nothing.** The iPhone's extension opens it to
+  bring Linger forward. `deep_link.rs` reads it as strictly as the invite
+  links: exactly that, no path, no query. It only tells the list to look in
+  the inbox; no link ever names a file.
+- **Costs.** A second bundle ID and an App Group registered with the Apple
+  account. Automatic signing may cover both, to be confirmed on a first CI
+  build. The extension runs in a small process and can't hold a large video in
+  memory, so it copies by file, not by data.
+- **Not decided:** whether a share to a server you aren't signed in to offers
+  to add it (leaning no), and what the picker does for a group DM with muted
+  members.
+
 ## Decided — how far back apps and servers work together
 
 **Matt, 2026-10-19 (#315).** Parked on 2026-09-28 while the design settled. It came back

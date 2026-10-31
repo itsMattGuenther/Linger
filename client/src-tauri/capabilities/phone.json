@@ -26,6 +26,9 @@
     "allow-phone-call-bar",
     "allow-phone-save",
     "allow-sound-play",
-    "allow-phone-text-scale"
+    "allow-phone-text-scale",
+    "allow-shared-files",
+    "allow-shared-file",
+    "allow-shared-done"
   ]
 }

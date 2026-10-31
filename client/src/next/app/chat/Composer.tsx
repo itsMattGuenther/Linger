@@ -12,6 +12,7 @@ import { rememberEmoji } from "../../../lib/emoji/recent";
 import { dropZone } from "../../../lib/shellDrops";
 import { completeShortcode, convertShortcodes, putShortcode } from "../../../lib/emoji/shortcodes";
 import { type MentionPerson, type MentionTyping, putMention } from "../../core/chat/mentions";
+import { onHeld, takeHeldProblem } from "../../core/shareInbox";
 import { MAX_MOTD_CHARS, motdCommand, typingMotd } from "../../core/chat/motd";
 import { MAX_POLL_QUESTION_CHARS, pollCommand, typingPoll } from "../../core/chat/poll";
 import { afterFailure, canSend, type ComposerNow, dropUnsent, keepUnsent, nonceFor, saysNothing, type Submission } from "../../core/chat/sending";
@@ -475,6 +476,17 @@ export const Composer = memo(function Composer({
   const takeDrop = useRef({ attach, say: (words: string) => say(words) });
   takeDrop.current = { attach, say: (words: string) => say(words) };
   useEffect(() => (form.current ? dropZone(form.current, () => takeDrop.current) : undefined), []);
+  // Files shared to Linger (#785) reach this conversation's box through
+  // useFileDrafts; why any of the share was left out is said here, as a
+  // drop's is.
+  useEffect(() => {
+    const take = () => {
+      const problem = takeHeldProblem(conversation);
+      if (problem !== null) say(problem, conversation);
+    };
+    take();
+    return onHeld(take);
+  }, [conversation]);
 
   // A paste's words, put in where the engine would have put them: at the
   // caret, over any selection, cut to the box's length, and one step for

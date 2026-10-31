@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The share extension's one entitlement (#785): the App Group it shares with
+  the app, whose folder holds the inbox (src-tauri/src/shared.rs). The same
+  group is in linger-client_iOS.entitlements.
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.io.github.itsmattguenther.linger</string>
+	</array>
+</dict>
+</plist>

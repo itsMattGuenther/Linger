@@ -131,6 +131,7 @@ It carries the server and the code or token, and nothing else:
 linger://invite?server=linger.example&code=CODE
 linger://setup?server=linger.example&token=TOKEN
 linger://sign-in?server=linger.example&code=CODE     (#581, on a sign-in link's page)
+linger://shared                                      (#785, the iPhone's share extension)
 ```
 
 `server` is the host (and port) of an `https://` server, or the whole origin of one
@@ -143,6 +144,12 @@ digits, a hex token, or it's dropped. It turns it into the `https://` link above
 puts that in the **Server or link** box, with the paste box's own rules after that
 (an invite still makes a new account). Nothing is contacted until the person presses
 Continue, so a page can't make the app reach any server by itself.
+
+`linger://shared` comes from no page (#785, SPEC §4.15): the iPhone's share
+extension opens it to bring Linger forward after leaving a share in the app's
+inbox. It carries nothing, and is read just as strictly: exactly that, or
+dropped. It only makes the list look in the inbox; it never names a file or a
+server.
 
 ```
 https://linger.example/setup?token=…   first-run link, printed to the console

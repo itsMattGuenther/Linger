@@ -20,7 +20,7 @@ pub mod cue;
 pub mod deep_link;
 #[cfg(target_os = "linux")]
 pub mod desktop_entry;
-#[cfg(desktop)]
+// On the phone too: the share inbox (#785) describes files the way a drop does.
 mod dropped;
 pub mod gateway;
 pub mod graphics;
@@ -46,6 +46,9 @@ mod screen_shell;
 #[cfg(desktop)]
 mod screen_sound;
 mod secrets;
+// Files shared to Linger from the phone's share sheet (#785).
+#[cfg(any(mobile, test))]
+mod shared;
 #[cfg(desktop)]
 pub mod sounds;
 #[cfg(desktop)]
@@ -465,6 +468,8 @@ fn phone_app() -> tauri::Builder<tauri::Wry> {
             // Downloads a closed app left for its share sheet (#703).
             #[cfg(target_os = "ios")]
             phone_save::clear_leftovers();
+            // A share to Linger nobody took (#785).
+            shared::clear_leftovers();
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -484,6 +489,9 @@ fn phone_app() -> tauri::Builder<tauri::Wry> {
             phone_sound::phone_sound_mode,
             phone_sound::phone_buzz,
             phone_sound::sound_play,
-            phone_text::phone_text_scale
+            phone_text::phone_text_scale,
+            shared::shared_files,
+            shared::shared_file,
+            shared::shared_done
         ])
 }

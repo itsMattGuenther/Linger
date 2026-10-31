@@ -154,9 +154,11 @@ core-foundation = "0.9"
 # folder (NSHomeDirectory) and a flag on a folder (NSURL, NSNumber). All four
 # are already in the iPhone's build, under Tauri's window and web view, so
 # they add nothing to the app's size; named here with only the parts used.
+# `NSFileManager` finds the App Group's folder, where the share extension
+# leaves files shared to Linger (#785, `shared.rs`).
 objc2 = "0.6"
 block2 = "0.6"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-foundation", "NSArray", "NSError", "NSGeometry", "NSPathUtilities", "NSString", "NSURL", "NSURLResponse", "NSURLSession", "NSValue"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-foundation", "NSArray", "NSError", "NSFileManager", "NSGeometry", "NSPathUtilities", "NSString", "NSURL", "NSURLResponse", "NSURLSession", "NSValue"] }
 objc2-ui-kit = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-foundation", "UIActivity", "UIActivityViewController", "UIFont", "UIFontDescriptor", "UIPopoverPresentationController", "UIPopoverSupport", "UIPresentationController", "UIResponder", "UIView", "UIViewController"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]

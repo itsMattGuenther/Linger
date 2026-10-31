@@ -106,32 +106,51 @@ function bytesOf(answer: unknown): Uint8Array | null {
   return null;
 }
 
+/** One handoff of files from the shell: dropped ones, or shared ones (`core/shareInbox.ts`). */
+export interface Handoff {
+  /** The files, as the shell listed them. */
+  held: readonly DroppedFile[];
+  /** Ask the shell for the bytes of the file at `index` in that list. */
+  one: (index: number) => Promise<unknown>;
+  problem: (file: DroppedFile) => string | null;
+}
+
 /**
- * What was just dropped on this window, from the shell: the files it could
- * read, and the first reason something couldn't be sent.
+ * The files the shell is holding for this window, each by its place in the
+ * list: the ones it could read, and the first reason something couldn't be
+ * sent.
  */
-export async function readDropped(ask: Ask): Promise<{ files: File[]; problem: string | null }> {
-  const listed = await ask("dropped_files");
-  const dropped = Array.isArray(listed) ? (listed as DroppedFile[]) : [];
+export async function readHandoff(handoff: Handoff): Promise<{ files: File[]; problem: string | null }> {
   const files: File[] = [];
   let problem: string | null = null;
-  for (const [index, file] of dropped.entries()) {
-    const why = droppedProblem(file);
+  for (const [index, file] of handoff.held.entries()) {
+    const why = handoff.problem(file);
     if (why !== null) {
       problem ??= why;
       continue;
     }
-    const bytes = await ask("dropped_file", { index })
+    const bytes = await handoff
+      .one(index)
       .then(bytesOf)
       .catch(() => null);
     if (bytes === null) {
-      problem ??= droppedProblem({ ...file, problem: "unreadable" });
+      problem ??= handoff.problem({ ...file, problem: "unreadable" });
       continue;
     }
     // A copy of its own: the answer's buffer may be shared, and a file keeps its bytes.
     files.push(new File([bytes.slice()], file.name, { type: typeFromName(file.name) }));
   }
   return { files, problem };
+}
+
+/**
+ * What was just dropped on this window, from the shell: the files it could
+ * read, and the first reason something couldn't be sent.
+ */
+export async function readDropped(ask: Ask): Promise<{ files: File[]; problem: string | null }> {
+  const listed = await ask("dropped_files");
+  const held = Array.isArray(listed) ? (listed as DroppedFile[]) : [];
+  return readHandoff({ held, one: (index) => ask("dropped_file", { index }), problem: droppedProblem });
 }
 
 /** Where a drop landed, in the page's own pixels. */

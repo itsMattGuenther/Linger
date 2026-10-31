@@ -336,6 +336,19 @@ submit for review.
   Apple asks a reason for (#779). Each run prints which of those calls the
   built app makes ("the calls the privacy manifest answers for"), so one in a
   new category is seen there and declared in the manifest.
+- **The share extension** (#785) is a second program inside the app, with its
+  own identifier, `io.github.itsmattguenther.linger.share`, and both belong to
+  the App Group `group.io.github.itsmattguenther.linger`, whose folder is how
+  a share reaches the app. Automatic signing should register the identifier
+  and the group the first time `ios.yml` builds with them. If the build says
+  it can't, register both by hand in the Apple account (Certificates,
+  Identifiers & Profiles: the identifier, then the App Group, then tick App
+  Groups on both identifiers and pick the group) and run it again. `ios.yml`
+  fails a build whose app doesn't hold the extension, or whose extension's
+  version isn't the app's. The extension has no privacy manifest of its own,
+  because it makes none of the calls Apple asks a reason for; "the calls the
+  privacy manifest answers for" prints its calls under the app's, so one that
+  turns up there means it needs one.
 
 ## Worth knowing
 

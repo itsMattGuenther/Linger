@@ -41,6 +41,26 @@ class MainActivity : TauriActivity() {
       addAction(VoiceCallService.LEAVE)
     }
     ContextCompat.registerReceiver(this, callBar, actions, ContextCompat.RECEIVER_NOT_EXPORTED)
+    // A share that started Linger (#785). Not again when Android rebuilds the
+    // screen (a turn of the phone), which hands back the same intent.
+    if (savedInstanceState == null) takeShare(intent)
+  }
+
+  // A share to Linger while it's running (#785): the activity is `singleTask`,
+  // so the share comes here instead of starting another copy of the app.
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    takeShare(intent)
+  }
+
+  // Into the inbox (SharedInbox), then the page is told to look
+  // (core/shareInbox.ts, ANDROID_SHARED). A page still loading looks when it
+  // starts, so nothing is lost if this arrives first.
+  private fun takeShare(intent: Intent?) {
+    if (intent == null || !SharedInbox.isShare(intent)) return
+    SharedInbox.take(this, intent) {
+      webView?.evaluateJavascript("window.dispatchEvent(new Event('linger:shared'))", null)
+    }
   }
 
   // Linger sizes its own text, lines and rows by the phone's Font size

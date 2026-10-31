@@ -881,6 +881,23 @@ macOS runners, or a friend's Mac.
   *Accept:* on a real phone, in a room with people on computers, both ways
   sound right, and the call survives the phone locked and a network change.
 
+- 🟡 **T-1607 · Share to Linger from the phone's share sheet** — effort: **high** (#785)
+  *Decided by Matt, 2026-10-31 (`docs/decisions.md`, "Sharing to Linger from
+  the phone's share sheet"); SPEC §4.15.* Pictures, videos and files shared from
+  another app land in a conversation's message box, unsent. **Built on
+  `feat/t-1607-share-to-linger`:** the shell's inbox (`shared.rs`, and
+  `linger://shared` in `deep_link.rs`), the page's sheet asking which
+  conversation (`core/shareInbox.ts`, `app/list/ShareSheet.tsx`) and the box
+  taking the files (`useFileDrafts`); Android's intent filter and
+  `SharedInbox.kt`; the iPhone's share extension and App Group. **Still to
+  do:** review; an Android build on a phone; an `ios.yml` build, which is the
+  first time the extension and the App Group are signed (it builds from
+  `main` with the release key, so how to build this branch is Matt's call);
+  then the iPhone itself, on TestFlight.
+  *Accept:* on a real phone, share a screenshot from the photo library to Linger,
+  pick a room, see it in that room's message box, send it, and see it arrive
+  on a computer.
+
 ---
 
 ## Backburner — later, not the next thing

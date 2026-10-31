@@ -19,6 +19,7 @@ import {
   uploaded,
 } from "../../core/chat/drafts";
 import type { Submission } from "../../core/chat/sending";
+import { onHeld, takeHeld } from "../../core/shareInbox";
 import type { TabKey } from "../../core/tabs";
 import { pictureCopy } from "./pictureCopy";
 
@@ -98,6 +99,19 @@ export function useFileDrafts(
     },
     [api, paneId],
   );
+  // Files shared to Linger from the phone's share sheet (#785): the list
+  // window holds them for the conversation they were shared to and opens it,
+  // and they go in its box here, as if picked with +, the moment it shows.
+  useEffect(() => {
+    if (!api || paneId === null) return;
+    const take = () => {
+      const files = takeHeld(paneId);
+      if (files) onAttach(files);
+    };
+    take();
+    return onHeld(take);
+  }, [api, paneId, onAttach]);
+
   const onRemoveFile = useCallback(
     (key: string) => {
       // Still going up: stop sending, and the upload gives its slot back

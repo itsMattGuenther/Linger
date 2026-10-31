@@ -54,6 +54,8 @@ import { leaveDraft } from "../../core/handoff";
 import { beside, folding, LIST_MIN, LIST_WIDTH, listWidth, loadSide, paneWidth, saveSide, type Side, unfolding, widestList } from "../../core/side";
 import { pageScreen, screenAround } from "../../core/screen";
 import { backTab, isTool, keepOnly, keyOf, loadTabs, NO_TABS, openTab, previewTab, pushTab, same, saveTabs, type SideTab, type Tabs } from "../../core/tabs";
+import { holdForConversation, readShared, type Share, sharedDone, type ShareTarget, shareTargets, watchShares } from "../../core/shareInbox";
+import { ShareSheet } from "./ShareSheet";
 import { type SideHandle, type SideOpen, SidePane } from "../chat/SidePane";
 import {
   type Accounts,
@@ -1291,6 +1293,49 @@ function Servers({
     [ordered, states, now, quiet, infos, besideTab?.server, besideTab?.roomId],
   );
 
+  // Files shared to Linger from the phone's share sheet (#785): what's
+  // waiting in the shell's inbox, and the sheet asking which conversation
+  // it's for (core/shareInbox.ts). The chosen one opens with them in its box.
+  // `showing` is the share the sheet asks about, read again once a pick has
+  // the files: closing the sheet, or a newer share, while it read means
+  // nothing goes anywhere (#792). A share finished with is never shown again,
+  // though a look may still find it before the shell has deleted it.
+  const [shared, setShared] = useState<Share | null>(null);
+  const showing = useRef<Share | null>(null);
+  const finished = useRef(new Set<string>());
+  const showShare = useCallback((next: Share | null) => {
+    const live = next !== null && !finished.current.has(next.id) ? next : null;
+    showing.current = live;
+    setShared(live);
+  }, []);
+  const finishShare = useCallback(
+    (id: string) => {
+      finished.current.add(id);
+      showShare(null);
+      void sharedDone(askShell, id);
+    },
+    [showShare],
+  );
+  useEffect(() => (isTauri() && onPhone() ? watchShares({ bus: tauriBus(), window, document }, askShell, showShare) : undefined), [showShare]);
+  const shareSections = useMemo(() => shareTargets(listings), [listings]);
+  const pickShare = useCallback(
+    async (target: ShareTarget) => {
+      const share = showing.current;
+      if (share === null) return null;
+      const { files, problem } = await readShared(askShell, share);
+      if (showing.current?.id !== share.id) return null;
+      if (files.length === 0) return problem ?? "Linger couldn't open what was shared. Try sharing it again.";
+      finishShare(share.id);
+      holdForConversation(keyOf({ server: target.server, roomId: target.roomId }), files, problem);
+      openBeside.current(target.server, target.roomId);
+      return null;
+    },
+    [finishShare],
+  );
+  const dropShare = useCallback(() => {
+    if (showing.current !== null) finishShare(showing.current.id);
+  }, [finishShare]);
+
   // One server: your status and away from the top card, as before.
   const only = !sectioned && ordered.length === 1 ? ordered[0] : undefined;
   const onlyMe = only ? (states[only.baseUrl]?.me ?? null) : null;
@@ -1554,6 +1599,7 @@ function Servers({
           <Settings holder={phoneHolder} />
         </div>
       ) : null}
+      {shared !== null && listings.length > 0 && !adding ? <ShareSheet waiting={shared.files} sections={shareSections} onPick={pickShare} onClose={dropShare} /> : null}
     </>
   );
 }
@@ -1737,6 +1783,11 @@ function listingOf(
 // drawing of the window alive with it (#534).
 
 /** The link the shell is holding for the paste box, once (#607, src-tauri/src/deep_link.rs). */
+/** The shell, asked from the page: `invoke`, in the shape `lib/shellDrops.ts` takes. */
+function askShell(command: string, args?: Record<string, unknown>): Promise<unknown> {
+  return invoke(command, args);
+}
+
 function takeOfferedLink(): Promise<string | null> {
   return invoke<string | null>("link_offered");
 }

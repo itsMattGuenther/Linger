@@ -243,6 +243,14 @@ rules that came out of them.
   the step once with each part failing, with stand-ins on `PATH`. The iPhone
   build's report of Apple's listed calls read a failed `nm` as none of
   them (#781).
+- **Anything a person can stop or overtake while it waits** (reading files,
+  a pick, an upload) **is tested interrupted:** turned down partway,
+  overtaken by something newer, and partly failed. After each wait the code
+  checks it's still wanted. Sharing to Linger was tested only going through,
+  and a share turned down while it read was sent anyway (#792).
+- **What the phone app writes outside its temporary and cache folders is
+  kept out of backups** (SPEC §4.15): marked on the iPhone, where an App
+  Group's folder is backed up by default (#792).
 
 ## A test that fails at random
 

@@ -39,6 +39,23 @@ to be right for every shape that window takes.
   `sentAs` while keeping the messages. *Missed because* as above. *Changed:*
   as above.
 
+## A rule the code doesn't check
+
+- **#792: shared files could reach iCloud backups.** SPEC §4.15 keeps the
+  phone app out of them; Android's `allowBackup="false"` covers its files,
+  but an iPhone backs up an App Group's folder unless it's marked. *Missed
+  because* nothing builds the iPhone's half here, and the promise wasn't
+  written where phone code is written. *Changed:* the share extension marks
+  its folder before writing, and `docs/development.md` and
+  `docs/testing-strategy.md` say anything the phone app writes outside its
+  temporary and cache folders is marked. The app's own folders were already
+  #790, fixed by `phone_backup.rs` (#798).
+- **#792: file checks ran on the async runtime**, in `shared_file`, which
+  AGENTS.md says never happens. *Missed because* no check enforces it, and
+  `shared.rs` copied `dropped.rs`, which does the same. *Changed:* the share
+  commands do their file work through `off_thread`. `dropped.rs` is left as
+  it was; it's older than this pull request.
+
 ## A check its surroundings can fool
 
 - **#757: a workaround in the shell could pass for the fix.** The
@@ -164,6 +181,29 @@ on a world that has changed.
   (`spawn_blocking`), and installing does too.
 
 ## Tests written from the case in mind, not from the ways things fail
+
+- **#792: a share turned down while its files were read was sent anyway.**
+  The pick went on to the conversation once the read finished. *Missed
+  because* every test went straight through. *Changed:* the list keeps the
+  share its sheet shows, and a pick that finishes reading checks it's still
+  that one; a browser test closes the sheet partway. Rule: anything a person
+  can stop or overtake while it waits is tested interrupted
+  (`docs/testing-strategy.md`).
+- **#792: a second share while the first was read could mix with it.** The
+  shell looked the inbox up afresh for every file, so the second share's
+  bytes could go under the first's names, and "done" deleted the second.
+  *Missed because* as above. *Changed:* asking takes the share, moving it
+  aside under an id that reading and deleting name, with a shell test of a
+  share arriving mid-read and a browser test of the sheet it brings
+  (`shared.rs`).
+- **#792: a copy the phone stopped partway stayed.** Start-up cleaned the
+  inbox but not `shared-incoming`. *Missed because* the sweep test had only
+  an inbox in it. *Changed:* the sweep deletes a stopped copy and old taken
+  shares, tested with all three.
+- **#792: a file left out of a share went without a word.** *Missed
+  because* the tests read all of a share or none of it. *Changed:* why goes
+  with the files and the box says it, with a browser test where one of two
+  can't be read.
 
 - **#758: a download cut off half way.** The retry test dropped a
   connection before any bytes went, never part way through. *Missed because*
