@@ -135,6 +135,15 @@ on a world that has changed.
   because* the job was written for its first run, before publishing.
   *Changed:* it dates the feed by the release's own state, a draft or when it
   was published, with tests of both (`datedFor` in `updater-urls.mjs`).
+- **#797: a server updated before it was ever reached said "Can't reach"
+  for good.** The app asked whether a server needs a newer app when its
+  connection came back or a retry failed, but only once it had been up:
+  one updated between signing in and connecting failed every try unasked.
+  *Missed because* the same gap again: the tests raised the server's
+  minimum only after it had connected. Caught by Greptile after #797 was
+  merged, which was mine: the watch I'd set read Greptile's one comment as
+  already seen. *Changed:* only the first time it's up is skipped, with a
+  test whose server never comes up (`next-list-window.spec.ts`).
 - **#794: Settings couldn't try again after a failed update.** Its Restart now
   asked the list window, which did the install and kept a failure to itself,
   so Settings stayed pressed, saying Linger would restart. *Missed because*

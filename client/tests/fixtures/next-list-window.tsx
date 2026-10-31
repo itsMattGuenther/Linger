@@ -49,6 +49,7 @@
  * has Casa da Ribeira say on `/health` that it works with 0.5.4 or newer
  * (`?tooold=all`: every server says so). `window.core.raise(server)` has a
  * server say so from now on, as one updated while Linger runs would.
+ * `?neverup` has Casa da Ribeira's gateway refuse every try, never ready.
  *
  * Conversations open beside the list (#337): The Good Company's rooms and
  * DMs answer with the evening's messages, and take new ones. The window's
@@ -323,6 +324,11 @@ mockIPC((cmd, args) => {
       note(`connect ${server}`);
       window.setTimeout(() => {
         seq[server] = 1;
+        // `?neverup`: Casa da Ribeira's gateway never takes this app (#797 review).
+        if (query.has("neverup") && server === LISBON) {
+          deliver("gateway:status", { server, status: { kind: "waiting", retry_in_ms: 1000, reason: "the server closed the connection" } });
+          return;
+        }
         deliver("gateway:status", { server, status: { kind: "ready", latency_ms: 20 } });
         deliver("gateway:frame", { server, frame: ready(server) });
         // Written down, so a spec can wait for every connection's `ready`:

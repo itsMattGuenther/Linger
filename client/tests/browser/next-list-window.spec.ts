@@ -1506,6 +1506,19 @@ test.describe("a server that needs a newer app (#793)", () => {
     await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("update_now"))).toEqual(["update_now shown"]);
   });
 
+  test("a server updated before it was ever reached says so on the next failed try, not \"Can't reach\" forever (#797 review)", async ({ page }) => {
+    // Not `open`: that waits for every server to be up, and this one never is.
+    await page.goto("/tests/fixtures/next-list-window.html?neverup");
+    await expect(page.locator("[data-screen='list']")).toBeVisible();
+    await expect(section(page, "The Good Company")).toBeVisible();
+    // Signed in fine, but its gateway takes nothing: it was updated in between.
+    await page.evaluate((server) => window.core?.raise(server), LISBON);
+    // The next try, and its failure, as the gateway reports a retry.
+    await page.evaluate((server) => window.core?.status(server, { kind: "connecting" }), LISBON);
+    await page.evaluate((server) => window.core?.status(server, { kind: "waiting", retry_in_ms: 1000, reason: "the server closed the connection" }), LISBON);
+    await expect(tooOld(page).locator(".nx-update-title")).toContainText("needs a newer Linger");
+  });
+
   test("a server updated while Linger runs is let go of when it comes back, by name, its sign-in kept, the others untouched", async ({ page }) => {
     await open(page);
     await expect(section(page, "Casa da Ribeira")).toBeVisible();
