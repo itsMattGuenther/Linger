@@ -239,3 +239,13 @@ on a world that has changed.
   tested with words taller than the window, the window resized while it's
   open, its opener pressed again, and what it shows changing under it
   (`docs/testing-strategy.md`).
+
+## Comments that were wrong
+
+- **#798: "folder creation breaks the I/O rule".** Greptile read AGENTS.md's
+  "All I/O is async via tokio" as covering `phone_backup`'s
+  `create_dir_all`. It runs once at the top of `run()`, before Tauri starts,
+  so there's no async runtime yet and nothing to block; the rule is there so
+  nothing blocks the reactor. Awaiting `tokio::fs` there would mean starting
+  a runtime only to wait on it on the same thread, and the marking has to be
+  done before the web view writes anything. Kept as it is.
