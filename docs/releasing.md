@@ -78,6 +78,19 @@ produces a green release that no installed copy will accept.
   (12 months or the two releases before, whichever reaches further back), and the
   release *before* it says it's coming. At 1.0 itself, the window starts: say so in
   its notes.
+- **Raising `OLDEST_APP`** (`crates/linger-core/src/lib.rs`, #793), the oldest
+  app a server works with, which `GET /health` sends and every app compares with
+  its own version. It's raised only when a change truly can't work with older
+  apps, as voice before 0.4.1 couldn't (#306), never as a habit. **The notes of
+  the release before announce it**: which apps will be left behind, and that
+  they'll be asked to update. The release that raises it says so again, with a
+  line in `docs/decisions.md`. It's never raised past the version the server is
+  built as (`a_server_works_with_its_own_app` in linger-core checks), or the
+  server would turn away its own release's app, and an app built from the same
+  commit couldn't use it either: raise it in this release pull request, or in
+  the breaking pull request only if that one bumps the version too. Only apps
+  from the release that added the field (#793) on can read it; older ones never
+  show the message.
 - Write **the one line about what's in it** in
   `client/src/next/core/release-line.json`, with this version: `{ "version":
   "0.5.4", "line": "Screen sharing, and fixes for voice." }`. One short line,

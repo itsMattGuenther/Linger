@@ -2,13 +2,23 @@
 
 /**
  * `GET /health` (PROTOCOL §9): whether the server is up with its database
- * answering, and which release it runs. It needs no sign-in, so the app can
- * probe an address before anybody has an account, and it tells a host their
- * server is behind the newest release (#314). Every server since 0.2 answers
- * with exactly these two fields.
+ * answering, which release it runs, and the oldest app release it works
+ * with. It needs no sign-in, so the app can probe an address before anybody
+ * has an account, it tells a host their server is behind the newest release
+ * (#314), and it tells an app too old for this server so before the app
+ * tries anything that would fail (#793). Every server since 0.2 answers with
+ * `ok` and `version`.
  */
 export type Health = { ok: boolean, 
 /**
  * The server's release, like `0.4.4`: the version its image was built as.
  */
-version: string, };
+version: string, 
+/**
+ * The oldest app release this server works with, like `0.4.1`
+ * (`linger_core::OLDEST_APP`). The app compares it with its own version and
+ * doesn't connect when it's older (#793); the server never learns which
+ * version an app runs. Always sent; a server from before this field
+ * leaves it out, which the app reads as "any".
+ */
+oldest_app?: string, };

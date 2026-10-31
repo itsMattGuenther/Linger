@@ -3,7 +3,7 @@
 
 mod common;
 
-use linger_core::wire::{ErrorCode, ErrorEnvelope};
+use linger_core::wire::{ErrorCode, ErrorEnvelope, Health};
 
 #[tokio::test]
 async fn health_reports_ok_with_a_live_database() {
@@ -16,6 +16,31 @@ async fn health_reports_ok_with_a_live_database() {
         .unwrap();
     assert_eq!(body["ok"], true);
     assert!(body["version"].is_string());
+}
+
+/// The oldest app release the server works with (#793), with no sign-in:
+/// an app whose break is in signing in still has to be told before it tries.
+/// Exactly the constant, so a host can't move it and the app reads what the
+/// code says.
+#[tokio::test]
+async fn health_says_the_oldest_app_it_works_with_without_a_sign_in() {
+    let server = common::spawn_server().await;
+    let response = reqwest::get(server.url("/health")).await.unwrap();
+    assert_eq!(response.status(), 200);
+    let body: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(body["oldest_app"], linger_core::OLDEST_APP);
+    // The field the app's generated type reads, under the name it reads it.
+    let health: Health = serde_json::from_value(body).unwrap();
+    assert_eq!(health.oldest_app.as_deref(), Some(linger_core::OLDEST_APP));
+    assert_eq!(health.version, env!("CARGO_PKG_VERSION"));
+}
+
+/// A server from before #793 leaves the field out, and that still reads as a
+/// `Health`: nothing about the app's version is said, so nothing is blocked.
+#[test]
+fn a_health_from_before_the_field_still_reads() {
+    let old: Health = serde_json::from_str(r#"{"ok":true,"version":"0.5.3"}"#).unwrap();
+    assert_eq!(old.oldest_app, None);
 }
 
 #[tokio::test]

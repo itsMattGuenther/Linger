@@ -1851,3 +1851,34 @@ which was never a recorded decision, only the first build's default (T-701).
 - **A server too new for an old app** is a separate job: the app asks you to update
   before using that server (#793).
 - **Phones** are updated by their stores and aren't part of this.
+
+---
+
+## Decided — a server says the oldest app it works with (#793)
+
+**Matt, 2026-10-31.** Split out of #772. The "this app needs one" half of
+PROTOCOL §9's plain-words promise, built now rather than with the first real
+break, as #315 had it: a block, used only when an old app truly can't work with
+a newer server, as voice before 0.4.1 couldn't (#306). Not something every
+release does.
+
+- **The server says it, the app decides.** `GET /health` sends `oldest_app`,
+  the constant `linger_core::OLDEST_APP`: no sign-in needed, so it still works
+  when the break is in signing in, and hosts can't change it. The app compares
+  it with its own version, so the server never learns who runs what (hard rule
+  4). Anything that isn't a plain release number never blocks.
+- **Only that server stops.** The app doesn't connect to it and keeps its
+  sign-in for the updated app; the others keep working. Its row is dimmed with
+  "needs a newer Linger", and the list's foot says so in the lamp, with Update
+  now (no day's wait, never in voice or while sharing), no ×. Arch copies and
+  phones get the words and where the new one comes from instead of a button.
+  Adding or signing in to such a server says it before asking for a password.
+- **Raised only by the change that breaks older apps**, with a line here, and
+  announced in the notes of the release before (`docs/releasing.md`). It starts
+  at `0.4.1`, the last break there was, which blocks nothing: only apps from the
+  release that ships the field read it. It's never raised past the version the
+  server is built as, or the server would turn away its own app; a test in
+  linger-core checks.
+- **Accepted limit:** apps already out there can't read it, so the first real use
+  is a break after this ships.
+

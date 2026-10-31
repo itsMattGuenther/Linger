@@ -86,7 +86,13 @@ describe("privacy, from the source", () => {
     const FOREIGN = /^(.*_)?(window|windows|app|apps|application|applications|activity|activities|foreground|process|processes|program|programs|executable)(_.*)?$/;
     const fields = WIRE.flatMap((file) => [...code(file).matchAll(/\b([a-z_]+)\??:/g)].map((found) => `${rel(file)} ${found[1] ?? ""}`));
     expect(fields.length).toBeGreaterThan(100);
-    expect(fields.filter((field) => FOREIGN.test(field.split(" ")[1] ?? ""))).toEqual([]);
+    // One field names an app and carries nothing about anybody: `/health`'s
+    // `oldest_app` (#793), the oldest Linger a server works with, a constant
+    // the server sends to everybody alike. Exactly that field, in exactly
+    // that type: any other is still caught.
+    const LINGER_ITSELF = new Set(["src/generated/Health.ts oldest_app"]);
+    expect(fields.filter((field) => LINGER_ITSELF.has(field))).toEqual([...LINGER_ITSELF]);
+    expect(fields.filter((field) => FOREIGN.test(field.split(" ")[1] ?? "") && !LINGER_ITSELF.has(field))).toEqual([]);
     // And the shell never asks the system what else is open.
     const ASKING = /GetForegroundWindow|GetWindowText|EnumWindows|_NET_ACTIVE_WINDOW|_NET_WM_NAME|WM_NAME|NSWorkspace|frontmostApplication|active_win|get_active_window|x11rb|xcb::|wmctrl|xdotool|hyprctl|swaymsg|sysinfo|\/proc\//;
     expect(uses(RUST, ASKING)).toEqual([]);
