@@ -227,16 +227,32 @@
   gap: var(--space-0-5);
 }
 
+/* A file that didn't go up keeps its name and X on the first line, and says
+   why on a second, whole, with Try again when it could work (#801). The
+   second line starts under the name. */
 .nx-composer-file[data-problem="yes"] {
+  flex-wrap: wrap;
+  row-gap: var(--space-1);
+  padding-block: var(--space-0-5);
+}
+
+.nx-composer-file-trouble {
+  display: flex;
+  flex: 1 0 100%;
+  align-items: center;
+  gap: var(--space-2);
+  padding-left: calc(var(--icon-sm) + var(--space-2));
   color: var(--text-danger);
 }
 
+.nx-composer-files[data-pictures="yes"] .nx-composer-file-trouble {
+  padding-left: calc(var(--composer-thumb) + var(--space-2));
+}
+
 .nx-composer-file-problem {
-  flex: none;
-  max-width: 50%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* The bytes are there and the server asked for a moment (#801). */

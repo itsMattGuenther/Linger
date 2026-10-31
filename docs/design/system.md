@@ -1134,9 +1134,10 @@ replaces an unread count.
   their way are listed above it, one line each; a picture shows a small
   square copy of itself (`--composer-thumb`) in place of the file icon, made
   on the device (#397). One this engine can't read keeps the icon. One that
-  didn't go up says why in `--text-danger` on its line, with a small
-  secondary **Try again** before its X when sending it again could work: not
-  for a file the server won't take, which would only be refused again. One
+  didn't go up keeps its name and X on its line and says why on a second
+  one under the name, whole and in `--text-danger`, with a small secondary
+  **Try again** at its end when sending it again could work: not for a file
+  the server won't take, which would only be refused again. One
   the server asked to wait for says "Waiting for the server…" in muted text
   in place of its bar (#801). From `/m`
   on, a line over the box with a 2px `--hairline-strong` rule says what
