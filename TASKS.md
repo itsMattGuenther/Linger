@@ -54,7 +54,9 @@ with Update, since they need a password; the foot of the list says "You're on
 …" once after. This release itself is installed the old way (Settings → Account
 & App → Install and restart in 0.5.3), and the notes must say so. A host whose
 server is behind sees it at the foot of the list, with How to update, and the
-disk and backup lines say Server settings instead of Hosting…. Write the
+disk and backup lines say Server settings instead of Hosting…. On an iPhone, Linger stays out of iCloud backups and its sign-in stays on
+that phone; nobody is signed out by the update, and TestFlight testers
+confirm both (#790). Write the
 release's one line in `client/src/next/core/release-line.json`
 (`docs/releasing.md`). **Thanks** (`docs/releasing.md`): @Gleasonmt for the iPhone app's iOS
 15 minimum (#749), bigger text on the phone and the iPhone following its Text
