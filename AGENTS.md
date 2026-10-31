@@ -112,8 +112,14 @@ pass.
   listed with why. Run it after a merge; `--dry-run` shows what would go.
 
 **Pull requests and issues**
-- Before starting an issue, check its linked pull requests so an existing proposed
-  fix is not duplicated.
+- Before starting an issue, check its linked pull requests and who is assigned,
+  so an existing proposed fix is not duplicated. If somebody else is assigned,
+  ask on the issue before starting.
+- Then claim it, so everybody can see it's taken before a pull request exists:
+  assign yourself (`gh issue edit <number> --add-assignee @me`). GitHub lets
+  only people with access to the repository assign anyone, themselves
+  included, so if it refuses, comment on the issue that you're working on it
+  and Matt assigns you. A branch on a fork doesn't count: nobody else can see it.
 - Every issue-driven PR must formally link every issue it proposes to resolve.
   Put `Fixes #<number>` or `Closes #<number>` in the PR description for each issue;
   a bare issue mention or a commit-message reference is not sufficient.

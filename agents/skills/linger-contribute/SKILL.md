@@ -25,9 +25,15 @@ breaking any of them.
    in the same commit.
 2. Find the issue. If there isn't one, the `linger-report` skill drafts one; a
    fix without an issue is harder to review.
-3. Check the issue's linked pull requests, so an existing fix isn't duplicated:
-   `gh issue view <n> --repo itsMattGuenther/Linger`.
-4. If the change needs anything on `SPEC.md` §2's anti-goals list, a V2/V3
+3. Check the issue's linked pull requests and who is assigned, so an existing
+   fix isn't duplicated: `gh issue view <n> --repo itsMattGuenther/Linger`. If
+   somebody else is assigned, ask on the issue before starting.
+4. Claim it, so others can see it's taken before the pull request exists:
+   `gh issue edit <n> --repo itsMattGuenther/Linger --add-assignee @me`. GitHub
+   lets only people with access to the repository assign anyone, themselves
+   included, so if that's refused, comment on the issue that you're working on
+   it, and Matt assigns you.
+5. If the change needs anything on `SPEC.md` §2's anti-goals list, a V2/V3
    feature, a protocol change that breaks an existing client, or storing what
    windows or apps somebody has open: **stop and ask**. Those aren't yours to
    decide.

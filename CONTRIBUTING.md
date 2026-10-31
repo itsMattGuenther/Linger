@@ -15,6 +15,11 @@ applies to you too.
    something worth doing that has no task, open an issue or ask Matt.
 3. **Claim it**: push a branch named `feat/t-xxx-short-slug`, and in your first
    commit flip the task from ⬜ to ⏳ in `TASKS.md` with your name and the date.
+   Working on a GitHub issue instead? Check nobody is assigned to it, then
+   assign yourself. GitHub only lets people with access to the project assign
+   anyone, so if it won't let you, comment "I'm working on this" on the issue
+   and Matt will assign you. Either way, everybody can see it's taken before
+   your pull request exists.
 4. Point your agent at it: *"Read AGENTS.md and TASKS.md, then do task T-xxx.
    State the current milestone first."* One task per fresh session.
 5. Run `scripts/check.sh` until it is green, push, and open a PR against `main`.
