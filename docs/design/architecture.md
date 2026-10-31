@@ -341,15 +341,11 @@ the new client's sizes are fixed pixels and a larger base font would grow
 nothing. A window's smallest size grows by the same ratio (#512), so the
 page is never narrower than the layout was made for: at 150%, the list's
 smallest window was 200 of the page's pixels, and the message box over it 8.
-It never asks for more than nine tenths of the screen.
-
-A choice storage refuses, because it's full or switched off, still holds
-until Linger closes (#782). Each window keeps the choices made or announced
-in it and reads them before storage, and the announcement carries them. A
-window opened later asks the list for them (`next:appearancechosen`): the
-list is open from start to quit, so it has heard every one. Without this,
-Settings showed a refused choice and no window applied it, Settings' own
-included, since each read storage back.
+It never asks for more than nine tenths of the screen. A change storage
+refuses (full, or switched off) isn't made: Settings says "Couldn't save that
+here." under it, and the setting stays as it was (#782), since every window
+applies what it reads from storage. The phone's Text size is kept in memory
+as well, as the phone has one window.
 
 **Sound preferences need no message.** Mute, quiet hours, the chime switches
 and the sound volume are kept on this computer (`linger.sound.*`, `lib/sound.ts`).
