@@ -1101,6 +1101,21 @@ sideways, and an iPhone would zoom in by itself on the message box. A photo
 opened from a message zooms on its own instead, as a phone's photo viewer does:
 pinched, dragged, and double-tapped in and out.
 
+**Share to Linger from the phone's share sheet** (proposed, #785). Linger appears
+in the phone's own share sheet for pictures, videos and files. Choosing it opens
+Linger on a list of your conversations: rooms, group DMs and DMs, across the
+servers you're signed in to. Tapping one puts the shared files in that
+conversation's message box as attachments, the way the + button does, and
+nothing is sent until you send it. Where a photo was taken is stripped as for
+any upload (§4.10), and a file over the size limit is refused as it is in the
+message box. Linger is told nothing about the app that shared the file, and
+shares nothing back to it. Text and links shared to Linger are not part of this:
+only files. Android comes first: an Android share arrives through the app's own
+intent filter. The iPhone follows, through a share extension that hands the
+files to the app (it is a second signed target, `docs/releasing.md`, "The
+iPhone"). A shared file the app never picked up is deleted from the phone after
+a minute, and the app keeps nothing of it once it is sent or dropped.
+
 **Phone backups leave Linger out.** A phone backs its apps up to Apple's or Google's
 cloud by default. The phone app opts out, so what it keeps (your list of servers and
 your settings) doesn't reach either company. There's no setting to put it back in

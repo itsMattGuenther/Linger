@@ -1572,6 +1572,41 @@ allow, and "if it sounds bad, the people they're talking to will say so". On
   back into the app; this is the opposite, the way out of a call you're in. The iPhone
   needs no bar: it shows its own call indicator.
 
+## Proposed — sharing to Linger from the phone's share sheet
+
+**Proposed (#785).** Not decided by Matt yet. SPEC §4.15 is the rule once he
+agrees; this is why.
+
+- **Files only, into the message box, never sent on their own.** The share
+  sheet is a place people are in a hurry, and a wrong tap on a conversation
+  would post a screenshot to the wrong room. So choosing a conversation fills
+  its message box with the files and waits. Same upload path, limits and
+  picture-location stripping as the + button (`useFileDrafts`).
+- **No text or links, for now.** #785 asks about screenshots and photos.
+  Taking text and links needs a second look at what a shared page title or
+  address leaks, so it waits for someone to ask.
+- **Android first, then the iPhone,** the order already chosen for the phone
+  app ("Android first, Apple after", 2026-10-03). Android needs one intent
+  filter plus the shell and page code both platforms share. The iPhone needs a
+  share extension and an App Group, and nobody on the project has a Mac or an
+  iPhone to try it on. Android first tests the shared half where it can be
+  tested.
+- **Nothing sits on the phone after the share.** The extension copies files
+  into the App Group's folder because it cannot reach the app's own storage.
+  The app deletes them once they're attached to a draft, and a sweep deletes
+  any left for more than a minute. This follows `dropped.rs`: the page can only
+  ask for files that were just handed over, and never names a path.
+- **A new `linger://` shape for the handoff.** `deep_link.rs` reads exactly one
+  shape on purpose. The share gets its own, read as strictly, carrying no file
+  names or paths.
+- **Costs.** A second bundle ID and an App Group registered with the Apple
+  account. Automatic signing may cover both, to be confirmed on a first CI
+  build. The extension runs in a small process and can't hold a large video in
+  memory, so it copies by file, not by data.
+- **Not decided:** whether a share to a server you aren't signed in to offers
+  to add it (leaning no), and what the picker does for a group DM with muted
+  members.
+
 ## Decided — how far back apps and servers work together
 
 **Matt, 2026-10-19 (#315).** Parked on 2026-09-28 while the design settled. It came back

@@ -836,6 +836,19 @@ macOS runners, or a friend's Mac.
   *Accept:* on a real phone, in a room with people on computers, both ways
   sound right, and the call survives the phone locked and a network change.
 
+- 🟡 **T-1607 · Share to Linger from the phone's share sheet** — effort: **high** (#785)
+  *Proposed, waiting on Matt (`docs/decisions.md`, "Sharing to Linger from the
+  phone's share sheet"); SPEC §4.15.* Pictures, videos and files shared from
+  another app land in a conversation's message box, unsent. **Order:** the
+  shell's holding area and the page's picker first (`shared.rs`,
+  `lib/sharedFiles.ts`), then Android's `ACTION_SEND` intent filter, then the
+  iPhone's share extension and App Group. **Still to do:** everything past the
+  first step; the extension can only be built on GitHub's macOS runners
+  (`ios.yml`) and tried on a TestFlight iPhone.
+  *Accept:* on a real phone, share a screenshot from the photo library to Linger,
+  pick a room, see it in that room's message box, send it, and see it arrive
+  on a computer.
+
 ---
 
 ## Backburner — later, not the next thing
