@@ -27,14 +27,8 @@
  * what changed, as the real one does.
  * A display name that is somebody else's here in other capitals is refused
  * the way the server refuses a look-alike (#574).
- * Appearance (#782): the window follows it as every window does
- * (`main.tsx`), and what each announcement carries is written down as
- * `announced:`; `?full` is this computer's storage full, so nothing new is
- * written; `?listchose` has the list window answer with 150% and one line
- * per person, chosen while storage refused them.
  * What the window asked for is written to `body[data-did]`, `|`-separated.
  */
-import { listen } from "@tauri-apps/api/event";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import type { Invite } from "../../src/generated/Invite";
@@ -43,7 +37,6 @@ import type { Report } from "../../src/generated/Report";
 import type { ServerInfo } from "../../src/generated/ServerInfo";
 import { serverState } from "../../src/lib/gateway";
 import { SettingsWindow } from "../../src/next/app/settings/SettingsWindow";
-import { followAppearance } from "../../src/next/core/appearance";
 import "../../src/next/styles/app.css";
 import { fakeDesktop, json } from "./next/desktop";
 import { NOW, SERVER, SERVER_NAME, evening, messages, people } from "./next/evening";
@@ -95,8 +88,6 @@ const desktop = fakeDesktop({
       return { problem: null };
     },
     "next:password": (asked) => ({ problem: asked.current === "old-secret" ? null : "That isn't your current password." }),
-    // The Appearance choices the list has heard since Linger started (#782).
-    "next:appearancechosen": () => (query.has("listchose") ? { scale: 150, oneLine: true } : {}),
   },
   commands: {
     "plugin:webview|set_webview_zoom": (args) => desktop.note(`zoom:${String(args.value)}`),
@@ -183,14 +174,6 @@ window.shell = {
   prefs: (prefs) => desktop.deliver("next:serverprefs", { v: 1, prefs }),
   updateSaid: (said) => desktop.deliver("next:update-said", { v: 1, ...said }),
 };
-
-if (query.has("full")) {
-  Storage.prototype.setItem = () => {
-    throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
-  };
-}
-void listen<{ chosen?: unknown }>("next:appearance", (event) => desktop.note(`announced:${JSON.stringify(event.payload.chosen)}`));
-followAppearance();
 
 const root = document.getElementById("root");
 if (!root) throw new Error("missing #root");
