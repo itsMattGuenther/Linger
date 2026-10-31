@@ -222,21 +222,36 @@ function WholeLine({ text, label }: { text: string; label: string }) {
   // Whichever element does the cutting: the line, or its button once cut.
   const [line, setLine] = useState<HTMLElement | null>(null);
   const [cut, setCut] = useState(false);
-  const [open, setOpen] = useState<DOMRect | null>(null);
+  const [open, setOpen] = useState(false);
   const opener = useRef<HTMLButtonElement | null>(null);
   useLayoutEffect(() => {
     if (!line) return;
-    const measure = () => setCut(line.scrollWidth > line.clientWidth + 1);
+    let gone = false;
+    const measure = () => {
+      if (!gone) setCut(line.scrollWidth > line.clientWidth + 1);
+    };
     measure();
-    if (typeof ResizeObserver === "undefined") return;
-    const watch = new ResizeObserver(measure);
-    watch.observe(line);
-    return () => watch.disconnect();
+    // The fonts swap in after the first paint, and a wider face can cut
+    // words that fitted without the line's own width changing (#796 review).
+    const fonts = typeof document === "undefined" ? undefined : document.fonts;
+    void fonts?.ready.then(measure);
+    fonts?.addEventListener("loadingdone", measure);
+    const watch = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    watch?.observe(line);
+    return () => {
+      gone = true;
+      fonts?.removeEventListener("loadingdone", measure);
+      watch?.disconnect();
+    };
   }, [line, text]);
-  // No longer cut (the window grew): nothing to keep open.
+  // No longer cut (the window grew), or another conversation's words in the
+  // same header (a switch by keyboard keeps it): nothing to keep open.
   useEffect(() => {
-    if (!cut) setOpen(null);
+    if (!cut) setOpen(false);
   }, [cut]);
+  useEffect(() => {
+    setOpen(false);
+  }, [text, label]);
   return (
     <p ref={cut ? undefined : setLine} className="nx-pane-sub" data-cut={cut ? "yes" : undefined}>
       {cut ? (
@@ -248,24 +263,21 @@ function WholeLine({ text, label }: { text: string; label: string }) {
           type="button"
           className="nx-pane-whole"
           aria-haspopup="dialog"
-          aria-expanded={open !== null}
-          onClick={(event) => {
-            const rect = event.currentTarget.getBoundingClientRect();
-            setOpen((held) => (held ? null : rect));
-          }}
+          aria-expanded={open}
+          onClick={() => setOpen((held) => !held)}
         >
           {text}
         </button>
       ) : (
         text
       )}
-      {open ? (
+      {open && opener.current ? (
         <WholeCard
-          anchor={open}
+          opener={opener.current}
           label={label}
           text={text}
           onClose={() => {
-            setOpen(null);
+            setOpen(false);
             opener.current?.focus();
           }}
         />
@@ -280,22 +292,36 @@ const EDGE = 8;
 
 /**
  * The whole of a cut topic or status (#778): under the words, or over them if
- * there's no room below, and never off the window; risen from the bottom on
- * the phone (`Sheet`). Escape, Close, or a press anywhere else closes it.
+ * there's no room below, never off the window, and never taller than it (its
+ * words scroll); risen from the bottom on the phone (`Sheet`). Placed again
+ * whenever the window or the card changes size. Escape, Close, or a press
+ * anywhere else closes it; a press on the words themselves closes it too, as
+ * their own click.
  */
-function WholeCard({ anchor, label, text, onClose }: { anchor: DOMRect; label: string; text: string; onClose: () => void }) {
+function WholeCard({ opener, label, text, onClose }: { opener: HTMLElement; label: string; text: string; onClose: () => void }) {
   const sheet = onPhone();
   const box = useRef<HTMLDivElement | null>(null);
-  const [at, setAt] = useState({ x: EDGE, y: anchor.bottom + GAP });
+  const [at, setAt] = useState(() => ({ x: EDGE, y: opener.getBoundingClientRect().bottom + GAP }));
   useLayoutEffect(() => {
     const card = box.current?.parentElement;
     if (!card || sheet) return;
-    const { offsetWidth: width, offsetHeight: height } = card;
-    const below = anchor.bottom + GAP;
-    const y = below + height <= window.innerHeight - EDGE ? below : Math.max(EDGE, anchor.top - GAP - height);
-    const x = Math.max(EDGE, Math.min(Math.round(anchor.left), window.innerWidth - width - EDGE));
-    setAt((held) => (held.x === x && held.y === y ? held : { x, y }));
-  }, [anchor.top, anchor.bottom, anchor.left, sheet]);
+    const place = () => {
+      const anchor = opener.getBoundingClientRect();
+      const { offsetWidth: width, offsetHeight: height } = card;
+      const below = anchor.bottom + GAP;
+      const y = below + height <= window.innerHeight - EDGE ? below : Math.max(EDGE, anchor.top - GAP - height);
+      const x = Math.max(EDGE, Math.min(Math.round(anchor.left), window.innerWidth - width - EDGE));
+      setAt((held) => (held.x === x && held.y === y ? held : { x, y }));
+    };
+    place();
+    window.addEventListener("resize", place);
+    const watch = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(place);
+    watch?.observe(card);
+    return () => {
+      window.removeEventListener("resize", place);
+      watch?.disconnect();
+    };
+  }, [opener, sheet]);
   // Close has the focus to start with. On a computer a press anywhere else
   // closes it; on the phone the sheet's dimmed page does, by its tap (#704).
   const close = useRef(onClose);
@@ -304,12 +330,15 @@ function WholeCard({ anchor, label, text, onClose }: { anchor: DOMRect; label: s
     box.current?.parentElement?.querySelector<HTMLButtonElement>(".k-popover-close button")?.focus();
     if (sheet) return;
     const onPointer = (event: PointerEvent) => {
-      if (event.target instanceof Node && box.current?.parentElement?.contains(event.target)) return;
+      if (!(event.target instanceof Node)) return;
+      if (box.current?.parentElement?.contains(event.target)) return;
+      // The words that opened it close it with their own click.
+      if (opener.contains(event.target)) return;
       close.current();
     };
     document.addEventListener("pointerdown", onPointer, true);
     return () => document.removeEventListener("pointerdown", onPointer, true);
-  }, [sheet]);
+  }, [opener, sheet]);
   return createPortal(
     <Popover label={label} at={sheet ? undefined : at} sheet={sheet} onClose={onClose}>
       <div ref={box} className="nx-pane-whole-card">

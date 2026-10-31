@@ -110,6 +110,10 @@
 /* The whole of it, in its card. Only its first line shares a row with the
    close button, so it leaves room for it. */
 .nx-pane-whole-text {
+  /* Never taller than the window (less the card's own padding and the space
+     kept at its edges): a topic as long as a page scrolls in its card. */
+  max-height: calc(100vh - var(--space-8) * 2);
+  overflow-y: auto;
   margin: 0;
   padding-right: var(--space-6);
   color: var(--text-secondary);

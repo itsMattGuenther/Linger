@@ -1050,3 +1050,79 @@ test("a friend's status too long for a DM's header opens the whole of it (#778)"
   const card = page.getByRole("dialog", { name: "Jules's status" });
   await expect(card).toContainText("then probably side one again");
 });
+
+// What the #796 review caught: each of these failed before its fix.
+test("a topic taller than the window scrolls in its card, which stays inside the window (#796 review)", async ({ page }) => {
+  await page.setViewportSize({ width: 560, height: 170 });
+  await open(page, "room=r-general&longwords");
+  await page.locator(".nx-pane-head .nx-pane-whole").click();
+  const card = page.getByRole("dialog", { name: "The topic of #general" });
+  await expect(card).toBeVisible();
+  const fit = await card.evaluate((node) => {
+    const box = node.getBoundingClientRect();
+    const words = node.querySelector<HTMLElement>(".nx-pane-whole-text");
+    return { top: box.top, bottom: box.bottom, scrolls: words ? words.scrollHeight > words.clientHeight : false };
+  });
+  expect(fit.top).toBeGreaterThanOrEqual(0);
+  expect(fit.bottom).toBeLessThanOrEqual(170);
+  expect(fit.scrolls).toBe(true);
+});
+
+test("an open card moves back inside a window made narrower (#796 review)", async ({ page }) => {
+  await open(page, "room=r-general&longwords");
+  const whole = page.locator(".nx-pane-head .nx-pane-whole");
+  await page.setViewportSize({ width: 900, height: 600 });
+  await expect(page.locator(".nx-pane-head .nx-pane-sub")).toHaveAttribute("data-cut", "yes");
+  await whole.click();
+  const card = page.getByRole("dialog", { name: "The topic of #general" });
+  await expect(card).toBeVisible();
+  await page.setViewportSize({ width: 420, height: 600 });
+  await expect.poll(async () => card.evaluate((node) => node.getBoundingClientRect().right <= window.innerWidth)).toBe(true);
+});
+
+test("clicking the cut words again closes the card (#796 review)", async ({ page }) => {
+  await open(page, "room=r-general&longwords");
+  const whole = page.locator(".nx-pane-head .nx-pane-whole");
+  await whole.click();
+  const card = page.getByRole("dialog", { name: "The topic of #general" });
+  await expect(card).toBeVisible();
+  await whole.click();
+  await expect(card).toHaveCount(0);
+  await expect(whole).toHaveAttribute("aria-expanded", "false");
+});
+
+test("words a late font cuts become a button (#796 review)", async ({ page }) => {
+  await open(page);
+  const line = page.locator(".nx-pane-head .nx-pane-sub");
+  await expect(line).not.toHaveAttribute("data-cut", "yes");
+  // A wider face arriving: the words grow, the line's own width doesn't.
+  await page.addStyleTag({ content: ".nx-pane-head .nx-pane-sub { letter-spacing: 3em; }" });
+  await page.evaluate(() => document.fonts.dispatchEvent(new Event("loadingdone")));
+  await expect(line).toHaveAttribute("data-cut", "yes");
+});
+
+test("an open card closes when the header's words change under it, as on a switch to another conversation (#796 review)", async ({ page }) => {
+  await open(page, "room=r-general&longwords");
+  await page.locator(".nx-pane-head .nx-pane-whole").click();
+  await expect(page.getByRole("dialog", { name: "The topic of #general" })).toBeVisible();
+  // Other words in the same header, still too long to fit: the card doesn't
+  // quietly take them over.
+  await page.evaluate(() =>
+    window.owner?.frame({
+      op: "room.update",
+      d: {
+        id: "r-general",
+        slug: "general",
+        name: "general",
+        topic: "A different topic, and long enough that it still runs past the end of the header in a window this narrow, by a long way.",
+        kind: "room",
+        member_ids: null,
+        position: 0,
+        archived_at: null,
+        last_message_id: "m000016",
+      },
+    } as never),
+  );
+  await expect(page.locator(".nx-pane-head .nx-pane-sub")).toContainText("A different topic");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
