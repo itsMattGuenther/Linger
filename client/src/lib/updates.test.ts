@@ -1,24 +1,42 @@
 import { describe, expect, it } from "vitest";
 
-import { isOlderVersion, releaseNotesUrl, serverVersionLine, updateLine, type UpdateCheck } from "./updates";
+import { isOlderVersion, releaseNotesUrl, serverVersionLine, type UpdateCheck, updateLead, updateLine, WAIT_MS } from "./updates";
 
 describe("updateLine", () => {
+  const published = 1_800_000_000_000;
+  const newer: UpdateCheck = { kind: "newer", version: "0.5.4", line: null, published, downloaded: false, silent: true };
+
   it("says what it is doing while it is doing it", () => {
     expect(updateLine(null, true)).toBe("Looking…");
-    expect(updateLine({ kind: "current" }, true)).toBe("Looking…");
+    expect(updateLine({ kind: "current", silent: true }, true)).toBe("Looking…");
   });
 
   it("is silent before anything has been asked", () => {
     expect(updateLine(null, false)).toBe("");
   });
 
-  it("names the version that is waiting", () => {
-    const ready: UpdateCheck = { kind: "ready", version: "0.2.0", notes: null };
-    expect(updateLine(ready, false)).toBe("Version 0.2.0 is ready to install.");
+  it("says a downloaded update is ready, and when it installs (#772)", () => {
+    expect(updateLine({ ...newer, downloaded: true }, false)).toBe(
+      "Linger 0.5.4 is ready. It installs the next time Linger starts, or while you're away from your computer.",
+    );
+  });
+
+  it("says a release on its day's wait is out, and that Restart now doesn't wait", () => {
+    expect(updateLine(newer, false, published + 60_000)).toBe("Linger 0.5.4 is out. It installs by itself a day after it came out, or now with Restart now.");
+  });
+
+  it("says a release past its wait is downloading", () => {
+    expect(updateLine(newer, false, published + WAIT_MS)).toBe("Linger 0.5.4 is out. It's downloading, and installs the next time Linger starts.");
+  });
+
+  it("tells a copy that needs a password that it waits for Update", () => {
+    expect(updateLine({ ...newer, silent: false, downloaded: true }, false)).toBe(
+      "Linger 0.5.4 is out. Updating asks for your computer's password, so it waits for you to press Update.",
+    );
   });
 
   it("says so plainly when there is nothing to do", () => {
-    expect(updateLine({ kind: "current" }, false)).toBe("This is the newest version.");
+    expect(updateLine({ kind: "current", silent: true }, false)).toBe("This is the newest version.");
   });
 
   it("tells an unsigned build to go and fetch one, rather than pretending", () => {
@@ -28,6 +46,25 @@ describe("updateLine", () => {
   it("passes the reason through instead of swallowing it", () => {
     const failed: UpdateCheck = { kind: "failed", reason: "the network is down" };
     expect(updateLine(failed, false)).toBe("Couldn't check for updates: the network is down");
+  });
+});
+
+describe("updateLead (#772)", () => {
+  it("says Linger keeps itself up to date, never while you're in voice", () => {
+    for (const check of [null, { kind: "current", silent: true }, { kind: "unconfigured" }] as const) {
+      expect(updateLead(check)).toMatch(/^Linger keeps itself up to date\..*never restarts while you're in voice\.$/);
+    }
+    expect(updateLead(null)).not.toMatch(/Nothing is downloaded until you ask/);
+  });
+
+  it("tells a copy that needs a password that installing waits for Update", () => {
+    expect(updateLead({ kind: "current", silent: false })).toMatch(/asks for your computer's password/);
+  });
+
+  it("tells a copy the system updates that it does", () => {
+    expect(updateLead({ kind: "managed", by: "pacman", newer: null })).toBe(
+      "Your system installed this copy of Linger, and updates it along with everything else.",
+    );
   });
 });
 
@@ -52,15 +89,19 @@ describe("releaseNotesUrl", () => {
 });
 
 describe("a copy the system updates", () => {
-  it("points pacman installs at the system update, not the install button", () => {
-    expect(updateLine({ kind: "managed", by: "pacman" }, false)).toBe(
-      "This copy updates with your system: use Update in the Omarchy menu, or run sudo pacman -Syu.",
-    );
+  it("says a newer release comes with the system update, in words true on any Arch system (#772)", () => {
+    const line = updateLine({ kind: "managed", by: "pacman", newer: { version: "0.5.4", line: null } }, false);
+    expect(line).toBe("Linger 0.5.4 is out. It comes with your next system update (sudo pacman -Syu).");
+    expect(line).not.toMatch(/Omarchy/);
+  });
+
+  it("says it's the newest when it is", () => {
+    expect(updateLine({ kind: "managed", by: "pacman", newer: null }, false)).toBe("This is the newest version.");
   });
 
   it("names any other manager", () => {
-    expect(updateLine({ kind: "managed", by: "dnf" }, false)).toBe(
-      "This copy updates with your system, through dnf.",
+    expect(updateLine({ kind: "managed", by: "dnf", newer: { version: "0.5.4", line: null } }, false)).toBe(
+      "Linger 0.5.4 is out. It comes with your next system update, through dnf.",
     );
   });
 });

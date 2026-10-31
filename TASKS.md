@@ -46,7 +46,17 @@ Text Size, as the Android app follows its Font size (#690). Settings → Account
 & App has **Privacy**, which opens the privacy page, and **Report a problem**,
 which opens GitHub's forms for a new issue (#779). On an iPhone, Linger says
 why it wants the local network when your server is on your home network
-(#779). **Thanks** (`docs/releasing.md`): @Gleasonmt for the iPhone app's iOS
+(#779). **Linger updates itself (#772)**, starting from this release: a day
+after a release is published, the setup.exe and the AppImage download it and
+install it at the next start, or after half an hour with nobody using Linger,
+never in voice or while sharing; the .deb, .rpm and .msi download it and ask
+with Update, since they need a password; the foot of the list says "You're on
+…" once after. This release itself is installed the old way (Settings → Account
+& App → Install and restart in 0.5.3), and the notes must say so. A host whose
+server is behind sees it at the foot of the list, with How to update, and the
+disk and backup lines say Server settings instead of Hosting…. Write the
+release's one line in `client/src/next/core/release-line.json`
+(`docs/releasing.md`). **Thanks** (`docs/releasing.md`): @Gleasonmt for the iPhone app's iOS
 15 minimum (#749), bigger text on the phone and the iPhone following its Text
 Size (#690), and the Privacy and Report a problem buttons and getting the
 iPhone app ready for the App Store (#779), and @eGGnogSC for messages that

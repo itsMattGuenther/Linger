@@ -804,11 +804,38 @@ said, but only while it's true (decision 1, `core/notes.ts`,
   trying.", with the reason on hover, and a `Spinner` for its mark;
 - a keyring that can't keep sign-ins, with the key icon;
 - a server you host needing you (#582): its disk nearly full, its file space
-  nearly used up, or three days without a backup, with the house icon and a
-  small quiet "Hosting…" that opens Settings → Hosting → Server. The host's
-  alone: the server tells nobody else;
-- a new version, with the download icon and a small quiet "Update…" that opens
-  Settings → Account & App.
+  nearly used up, or three days without a backup, with the house icon and an
+  outlined `sm` "Server settings" that opens Settings → Hosting → Server. The
+  host's alone: the server tells nobody else. Not "Hosting…": that named a
+  section of Settings rather than what you get, and a quiet button there read
+  as more words (#772);
+- a server you host running an older release than the newest (#772): "The
+  Good Company is behind. 0.5.4 is out.", with the house icon and an outlined
+  `sm` "How to update" that opens the host guide's "Updating the server". One
+  version in the words: "runs 0.5.3. 0.5.4 is out." wrapped into two numbers
+  side by side at the list's width. The version it runs is on hover. The
+  host's alone too.
+
+Under the lines, an update (#772) is a block of its own: the mark, a title in
+`--text-primary` at `--text-control` (500), a line or two of 12.5px, and its
+buttons on a row under them, with an `sm` × at the end when it can be put
+away. The words start on the lines' edge.
+
+- **Ready** (a copy that installs by itself, downloaded): calm, on the foot's
+  own ground, since there's nothing to do. "Linger 0.5.4 is ready", "It
+  installs the next time Linger starts, or while you're away from your
+  computer." in `--text-muted`, and an outlined "Restart now", `unavailable`
+  in voice or while sharing ("Not while you're in voice."). Nothing is said
+  before the update is downloaded: on its day's wait, there's nothing to do.
+- **Out** (a copy somebody has to update: one that needs a password, or one
+  the system updates): lit, like a DM nobody has read, since it's news and
+  needs doing. "Linger 0.5.4 is out", the release's one line, and for a
+  system's copy "It comes with your next system update." in `--text-muted`. A
+  `primary` "Update" for a copy that needs a password, an outlined "What's
+  new", and × ("Not now") puts it off until tomorrow, on this computer.
+- **Just installed**: lit, with the check mark: "You're on Linger 0.5.4", the
+  one line, "What's new", and × ("Close"). Once, on the first start of a new
+  version.
 
 With nothing to say, nothing is drawn: no bar, no hairline. Protocol words
 ("tls ok…", "ready (28ms)") are never shown. The storage figure lives in the

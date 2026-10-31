@@ -16,9 +16,15 @@
 // upload with its file name, and the website, the Arch package job
 // (arch-repo.yml) and docs/releasing.md all find the files by name.
 //
-// Usage: node scripts/updater-urls.mjs <latest.json> <assets.json> <repo> <tag>
-//   assets.json is `gh release view <tag> --json assets`. The file is
-//   rewritten in place.
+// And it sets `notes` to the release's one line about what's in it (#772),
+// from client/src/next/core/release-line.json, which the release pull
+// request fills in. Installed copies show that line beside "Linger 0.5.4 is
+// out". tauri-action writes the release's whole install section there, which
+// is no use to them, so a release without its line gets no notes at all.
+//
+// Usage: node scripts/updater-urls.mjs <latest.json> <assets.json> <repo> <tag> [<release-line.json>]
+//   assets.json is `gh release view <tag> --json assets,isDraft,publishedAt`.
+//   The file is rewritten in place.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
@@ -48,6 +54,57 @@ export function rewrite(latest, assets, repo, tag) {
   return out;
 }
 
+/**
+ * latest.json with `notes` set to this release's one line (#772), or empty
+ * when the line names another version or none: a line left over from the
+ * release before says nothing true about this one.
+ */
+export function withLine(latest, said, tag) {
+  const version = tag.replace(/^v/, "");
+  const line = typeof said?.line === "string" ? said.line.trim() : "";
+  const ours = said?.version === version && line !== "" && !/[\r\n]/.test(line);
+  return { ...latest, notes: ours ? line : "" };
+}
+
+/**
+ * The date latest.json carries until the release is published: a day nobody
+ * reaches, so no copy counts its day's wait from the build (#794 review).
+ * tauri-action dates it when it's built, which can be days before it's
+ * published; a copy that looked in the minute between publishing and
+ * `updater-date.yml` would have found it a day old already. If that job never
+ * runs, nothing installs by itself, and Restart now still works.
+ */
+export const NOT_PUBLISHED = "2999-01-01T00:00:00Z";
+
+/** latest.json saying it isn't published yet (`NOT_PUBLISHED`). */
+export function undated(latest) {
+  return { ...latest, pub_date: NOT_PUBLISHED };
+}
+
+/**
+ * latest.json dated by the release's own state: when it was published, or
+ * not published yet while it's a draft. Running this job again after
+ * publishing (a re-run, or after a desktop job is re-run) must not undate a
+ * published release: nothing would date it again, and no copy would install
+ * it by itself (#794 review). `release` is `gh release view --json
+ * isDraft,publishedAt`.
+ */
+export function datedFor(latest, release) {
+  const published = release?.isDraft === false && typeof release.publishedAt === "string" && release.publishedAt !== "";
+  return published ? publishedAt(latest, release.publishedAt) : undated(latest);
+}
+
+/**
+ * latest.json dated when the release was published (#772), not when it was
+ * built: copies install a release by themselves only once it's a day old, and
+ * that day is the head start of whoever presses Restart now. tauri-action
+ * dates it at build time, which can be hours before the release goes out.
+ */
+export function publishedAt(latest, at) {
+  if (Number.isNaN(Date.parse(at))) throw new Error(`not a date: ${at}`);
+  return { ...latest, pub_date: at };
+}
+
 /** The desktop files a release carries, by name, as 0.4.10's were. */
 export function expectedFiles(tag) {
   const version = tag.replace(/^v/, "");
@@ -67,20 +124,39 @@ export function missingFiles(assets, tag) {
   return expectedFiles(tag).filter((name) => !names.has(name));
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
-  const [file, assetsFile, repo, tag] = process.argv.slice(2);
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href && process.argv[2] === "--published") {
+  // updater-urls.mjs --published <latest.json> <when>: dated at publishing (#772).
+  const [file, at] = process.argv.slice(3);
+  if (!file || !at) {
+    console.error("usage: updater-urls.mjs --published <latest.json> <when>");
+    process.exit(2);
+  }
+  const out = publishedAt(JSON.parse(readFileSync(file, "utf8")), at);
+  writeFileSync(file, `${JSON.stringify(out, null, 2)}\n`);
+  console.log(`pub_date: ${out.pub_date}`);
+} else if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  const [file, assetsFile, repo, tag, lineFile] = process.argv.slice(2);
   if (!file || !assetsFile || !repo || !tag) {
-    console.error("usage: updater-urls.mjs <latest.json> <assets.json> <repo> <tag>");
+    console.error("usage: updater-urls.mjs <latest.json> <assets.json> <repo> <tag> [<release-line.json>]");
     process.exit(2);
   }
   const latest = JSON.parse(readFileSync(file, "utf8"));
-  const { assets } = JSON.parse(readFileSync(assetsFile, "utf8"));
+  const release = JSON.parse(readFileSync(assetsFile, "utf8"));
+  const { assets } = release;
   const missing = missingFiles(assets, tag);
   if (missing.length > 0) {
     console.error(`${tag} is missing, or names differently: ${missing.join(", ")}`);
     process.exit(1);
   }
-  const out = rewrite(latest, assets, repo, tag);
+  // Dated by the release: not yet, while it's a draft (updater-date.yml
+  // dates it when it's published), or when it was, on a run after that.
+  let out = datedFor(rewrite(latest, assets, repo, tag), release);
+  if (lineFile) {
+    out = withLine(out, JSON.parse(readFileSync(lineFile, "utf8")), tag);
+    // Said in the job's summary, so a release with no line is noticed.
+    if (out.notes === "") console.log(`::warning::${lineFile} has no line for ${tag}: installed copies show none (docs/releasing.md)`);
+    else console.log(`notes: ${out.notes}`);
+  }
   writeFileSync(file, `${JSON.stringify(out, null, 2)}\n`);
   for (const [platform, entry] of Object.entries(out.platforms)) console.log(`${platform}: ${entry.url}`);
 }

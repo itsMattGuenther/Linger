@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { expectedFiles, missingFiles, rewrite } from "./updater-urls.mjs";
+import { datedFor, expectedFiles, missingFiles, NOT_PUBLISHED, publishedAt, rewrite, undated, withLine } from "./updater-urls.mjs";
 
 const repo = "itsMattGuenther/Linger";
 const tag = "v0.4.11";
@@ -76,4 +76,46 @@ test("the desktop files keep the names the site, the Arch job and the docs look 
     missingFiles(released.filter((name) => !name.endsWith(".deb")).map((name) => ({ name })), "v0.4.10"),
     ["Linger_0.4.10_amd64.deb"],
   );
+});
+
+test("the notes become this release's one line, and nothing else (#772)", () => {
+  const latest = { version: "0.4.11", notes: "**This is the Linger app**\n\nIt is not the server.", platforms: {} };
+  assert.equal(withLine(latest, { version: "0.4.11", line: " Screen sharing, and fixes for voice. " }, tag).notes, "Screen sharing, and fixes for voice.");
+  // Left over from the release before: says nothing true about this one.
+  assert.equal(withLine(latest, { version: "0.4.10", line: "Fixes for voice." }, tag).notes, "");
+  // None written: no notes, never tauri-action's install section.
+  assert.equal(withLine(latest, { version: "0.4.11", line: "" }, tag).notes, "");
+  assert.equal(withLine(latest, { version: "0.4.11", line: "two\nlines" }, tag).notes, "");
+  assert.equal(withLine(latest, null, tag).notes, "");
+  // Everything else is left as it was.
+  assert.deepEqual(withLine(latest, { version: "0.4.11", line: "x" }, tag), { ...latest, notes: "x" });
+});
+
+test("the line's file is where the job reads it, and well formed (#772)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const said = JSON.parse(readFileSync(new URL("../client/src/next/core/release-line.json", import.meta.url), "utf8"));
+  assert.equal(typeof said.version, "string");
+  assert.equal(typeof said.line, "string");
+});
+
+test("the feed is dated when the release went out, not when it was built (#772)", () => {
+  const latest = { version: "0.4.11", pub_date: "2026-10-27T21:49:05.872Z", platforms: {} };
+  assert.deepEqual(publishedAt(latest, "2026-10-28T09:00:00Z"), { ...latest, pub_date: "2026-10-28T09:00:00Z" });
+  assert.throws(() => publishedAt(latest, "soon"), /not a date/);
+});
+
+test("until it's published, the feed says it isn't, so no copy counts its day from the build (#794 review)", () => {
+  const latest = { version: "0.4.11", pub_date: "2026-10-27T21:49:05.872Z", platforms: {} };
+  assert.deepEqual(undated(latest), { ...latest, pub_date: NOT_PUBLISHED });
+  assert.ok(Date.parse(NOT_PUBLISHED) > Date.now() + 100 * 365 * 24 * 60 * 60 * 1000);
+});
+
+test("the feed is dated by the release: not yet as a draft, and never undated once it's out (#794 review)", () => {
+  const latest = { version: "0.4.11", pub_date: "2026-10-27T21:49:05.872Z", platforms: {} };
+  assert.equal(datedFor(latest, { isDraft: true, publishedAt: null }).pub_date, NOT_PUBLISHED);
+  // Run again after publishing: it keeps the publishing date, which nothing else would put back.
+  assert.equal(datedFor(latest, { isDraft: false, publishedAt: "2026-10-28T09:00:00Z" }).pub_date, "2026-10-28T09:00:00Z");
+  // Anything it can't read is taken as not published: nothing installs by itself early.
+  assert.equal(datedFor(latest, {}).pub_date, NOT_PUBLISHED);
+  assert.equal(datedFor(latest, null).pub_date, NOT_PUBLISHED);
 });
