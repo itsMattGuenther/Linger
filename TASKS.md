@@ -67,8 +67,8 @@ Size (#690), and the Privacy and Report a problem buttons and getting the
 iPhone app ready for the App Store (#779), and @eGGnogSC for sharing to
 Linger from the phone's share sheet (#792), and for messages that show the
 moment they're sent (#133) and the sidebar that no longer scrolls sideways
-(#84). @eGGnogSC's work
-shipped back in September, before the notes thanked contributors, so it's
+(#84). #133 and #84
+shipped back in September, before the notes thanked contributors, so they're
 thanked here once; from now on everybody is thanked in the release their work
 ships in.
 
