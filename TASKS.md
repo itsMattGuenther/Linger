@@ -651,8 +651,9 @@ macOS runners, or a friend's Mac.
   it comes back to the screen (`gateway_retry`). **The iPhone** builds on
   GitHub's Macs (`ios.yml`) and goes to friends through TestFlight, since
   0.5.1 (2026-10-20). Their first reports (2026-10-21 to 23: #686–#689,
-  #697, #698, #703, #704) are fixed, in TestFlight from 0.5.3. Not reported
-  on yet: the iPhone switching between Wi-Fi and mobile data. The launcher icon is the porch artwork
+  #697, #698, #703, #704) have fixes in TestFlight from 0.5.3, for them to
+  confirm. Not reported on yet: the iPhone switching between Wi-Fi and
+  mobile data. The launcher icon is the porch artwork
   (`scripts/app-icons.mjs`, checked in CI with the desktop icons). Setup is in `docs/development.md`.
   Tauri 2 builds for iOS and Android from the same crate. What does not carry
   over: the OS keyring (phones have their own secure storage), the tray, the
@@ -674,8 +675,8 @@ macOS runners, or a friend's Mac.
 - 🟡 **T-1603 · The layout at phone width** — effort: **medium**
   *Android: accepted on Matt's Pixel (2026-10-03). iPhone: used by friends
   through TestFlight since 0.5.1 (2026-10-20); what they found at phone
-  width (#686, #688, #689, #697, #698, #704) is fixed, in TestFlight from
-  0.5.3.*
+  width (#686, #688, #689, #697, #698, #704) has fixes in TestFlight from
+  0.5.3, for them to confirm.*
   *Started 2026-10-02 on `feat/t-1602-mobile-shell`.* **Done:** the phone's
   one window (`docs/design/architecture.md`, "The phone's one window"): the
   page keeps clear of the phone's bars, the ✕, pop-out and voice line are
