@@ -142,6 +142,8 @@ jobs:
       # app. Then which of the calls Apple asks a reason for the app's own
       # code makes: one in a category the manifest doesn't declare is one to
       # add there. Those are printed, not checked: Apple's scan is what counts.
+      # The share extension (#785) is a program of its own, so its calls are
+      # printed too: one making any of them needs a manifest of its own.
       - name: the calls the privacy manifest answers for
         run: |
           set -euo pipefail
@@ -150,16 +152,20 @@ jobs:
           unzip -q "$IPA" 'Payload/*' -d "$dir"
           app="$(find "$dir/Payload" -maxdepth 1 -name '*.app' -type d)"
           plutil -lint "$app/PrivacyInfo.xcprivacy"
-          bin="$app/$(plutil -extract CFBundleExecutable raw "$app/Info.plist")"
-          [ -f "$bin" ] || { echo "::error::no app binary at $bin"; exit 1; }
-          # nm on its own, so an app it can't read fails the step, and only
-          # grep's "nothing matched" (status 1) reads as none of them (#781).
-          imports="$(nm -u "$bin")"
-          listed="$(printf '%s\n' "$imports" |
-            grep -E '^_(f?stat|lstat|fstatat|f?getattrlist|getattrlistat|getattrlistbulk|f?statv?fs|mach_absolute_time)$|NSUserDefaults|NSFile(Creation|Modification)Date|NSFileSystemFree|NSURL(Creation|ContentModification|ContentAccess|AttributeModification)DateKey|NSURLVolume.*Capacity')" ||
-            status=$?
-          [ "${status:-0}" -le 1 ] || { echo "::error::couldn't search the app's imports"; exit 1; }
-          printf '%s\n' "${listed:-none of them}"
+          share="$app/PlugIns/LingerShare.appex"
+          for bundle in "$app" "$share"; do
+            bin="$bundle/$(plutil -extract CFBundleExecutable raw "$bundle/Info.plist")"
+            [ -f "$bin" ] || { echo "::error::no binary at $bin"; exit 1; }
+            # nm on its own, so an app it can't read fails the step, and only
+            # grep's "nothing matched" (status 1) reads as none of them (#781).
+            imports="$(nm -u "$bin")"
+            status=0
+            listed="$(printf '%s\n' "$imports" |
+              grep -E '^_(f?stat|lstat|fstatat|f?getattrlist|getattrlistat|getattrlistbulk|f?statv?fs|mach_absolute_time)$|NSUserDefaults|NSFile(Creation|Modification)Date|NSFileSystemFree|NSURL(Creation|ContentModification|ContentAccess|AttributeModification)DateKey|NSURLVolume.*Capacity')" ||
+              status=$?
+            [ "$status" -le 1 ] || { echo "::error::couldn't search ${bundle##*/}'s imports"; exit 1; }
+            printf '%s: %s\n' "${bundle##*/}" "${listed:-none of them}"
+          done
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: iphone-app

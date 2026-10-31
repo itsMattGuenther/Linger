@@ -312,7 +312,10 @@ submit for review.
   Identifiers & Profiles: the identifier, then the App Group, then tick App
   Groups on both identifiers and pick the group) and run it again. `ios.yml`
   fails a build whose app doesn't hold the extension, or whose extension's
-  version isn't the app's.
+  version isn't the app's. The extension has no privacy manifest of its own,
+  because it makes none of the calls Apple asks a reason for; "the calls the
+  privacy manifest answers for" prints its calls under the app's, so one that
+  turns up there means it needs one.
 
 ## Worth knowing
 
