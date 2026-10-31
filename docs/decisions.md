@@ -735,7 +735,11 @@ eGGnogSC's proposal on #253 over his own brainstorm of 2026-09-26, which had a
   Google Play first, with Matt paying the $25, and only once it has worked
   well there does it go to Apple. Until then the iPhone build only keeps
   compiling in CI, and the iPhone-only checks (swiping back, iPhone photos)
-  wait with it. Getting the app to other people (T-1604) waits until report
+  wait with it. *Since then:* Matt's Apple Developer membership came through,
+  and the iPhone app went to friends through TestFlight from 0.5.1
+  (2026-10-20), beside Play's internal test. Friends with iPhones have tested
+  it since, swiping back and photos included (#697, #785). The App Store
+  itself still comes after Play (#779). Getting the app to other people (T-1604) waits until report
   and block are done and Matt says go.
 - **Friends first, from the release page** (Matt, 2026-10-03). Report and
   block were done and every Pixel check had passed, so Matt said go, for the
