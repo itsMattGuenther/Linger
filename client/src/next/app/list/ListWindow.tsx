@@ -342,14 +342,16 @@ const ServerLink = memo(function ServerLink({
   // A server updated while Linger runs can need a newer app than this one
   // (#793): asked each time the connection comes back, which is what a
   // server restarting after an update looks like, and each time a try to
-  // get it back fails, in case the break is in connecting. Not on the first
-  // connection: signing in, or back in at launch, has just asked
-  // (core/signin.ts, lib/session.ts). `/health` needs no sign-in.
-  const beenUp = useRef(false);
+  // connect fails, in case the break is in connecting, before it has ever
+  // been up too: a server updated between signing in and connecting fails
+  // every try (#797 review). Not on the first time it's up: signing in, or
+  // back in at launch, has just asked (core/signin.ts, lib/session.ts).
+  // `/health` needs no sign-in.
+  const firstUp = useRef(true);
   useEffect(() => {
     if (status !== "ready" && status !== "waiting") return;
-    if (!beenUp.current) {
-      beenUp.current = status === "ready";
+    if (status === "ready" && firstUp.current) {
+      firstUp.current = false;
       return;
     }
     const abort = new AbortController();
