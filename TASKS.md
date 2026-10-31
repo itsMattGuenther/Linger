@@ -56,15 +56,19 @@ with Update, since they need a password; the foot of the list says "You're on
 server is behind sees it at the foot of the list, with How to update, and the
 disk and backup lines say Server settings instead of Hosting…. On an iPhone, Linger stays out of iCloud backups and its sign-in stays on
 that phone; nobody is signed out by the update, and TestFlight testers
-confirm both (#790). Write the
+confirm both (#790). Linger is in the phone's share sheet, on Android and the
+iPhone: share a picture or a file to Linger, pick a room or a DM, and it waits
+in that conversation's message box, unsent (#785); TestFlight and Play testers
+confirm it on a real phone. Write the
 release's one line in `client/src/next/core/release-line.json`
 (`docs/releasing.md`). **Thanks** (`docs/releasing.md`): @Gleasonmt for the iPhone app's iOS
 15 minimum (#749), bigger text on the phone and the iPhone following its Text
 Size (#690), and the Privacy and Report a problem buttons and getting the
-iPhone app ready for the App Store (#779), and @eGGnogSC for messages that
-show the moment they're sent
-(#133) and the sidebar that no longer scrolls sideways (#84). @eGGnogSC's work
-shipped back in September, before the notes thanked contributors, so it's
+iPhone app ready for the App Store (#779), and @eGGnogSC for sharing to
+Linger from the phone's share sheet (#792), and for messages that show the
+moment they're sent (#133) and the sidebar that no longer scrolls sideways
+(#84). #133 and #84
+shipped back in September, before the notes thanked contributors, so they're
 thanked here once; from now on everybody is thanked in the release their work
 ships in.
 
