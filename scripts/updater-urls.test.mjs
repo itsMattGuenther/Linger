@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { expectedFiles, missingFiles, NOT_PUBLISHED, publishedAt, rewrite, undated, withLine } from "./updater-urls.mjs";
+import { datedFor, expectedFiles, missingFiles, NOT_PUBLISHED, publishedAt, rewrite, undated, withLine } from "./updater-urls.mjs";
 
 const repo = "itsMattGuenther/Linger";
 const tag = "v0.4.11";
@@ -108,4 +108,14 @@ test("until it's published, the feed says it isn't, so no copy counts its day fr
   const latest = { version: "0.4.11", pub_date: "2026-10-27T21:49:05.872Z", platforms: {} };
   assert.deepEqual(undated(latest), { ...latest, pub_date: NOT_PUBLISHED });
   assert.ok(Date.parse(NOT_PUBLISHED) > Date.now() + 100 * 365 * 24 * 60 * 60 * 1000);
+});
+
+test("the feed is dated by the release: not yet as a draft, and never undated once it's out (#794 review)", () => {
+  const latest = { version: "0.4.11", pub_date: "2026-10-27T21:49:05.872Z", platforms: {} };
+  assert.equal(datedFor(latest, { isDraft: true, publishedAt: null }).pub_date, NOT_PUBLISHED);
+  // Run again after publishing: it keeps the publishing date, which nothing else would put back.
+  assert.equal(datedFor(latest, { isDraft: false, publishedAt: "2026-10-28T09:00:00Z" }).pub_date, "2026-10-28T09:00:00Z");
+  // Anything it can't read is taken as not published: nothing installs by itself early.
+  assert.equal(datedFor(latest, {}).pub_date, NOT_PUBLISHED);
+  assert.equal(datedFor(latest, null).pub_date, NOT_PUBLISHED);
 });

@@ -23,8 +23,8 @@
 // is no use to them, so a release without its line gets no notes at all.
 //
 // Usage: node scripts/updater-urls.mjs <latest.json> <assets.json> <repo> <tag> [<release-line.json>]
-//   assets.json is `gh release view <tag> --json assets`. The file is
-//   rewritten in place.
+//   assets.json is `gh release view <tag> --json assets,isDraft,publishedAt`.
+//   The file is rewritten in place.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
@@ -82,6 +82,19 @@ export function undated(latest) {
 }
 
 /**
+ * latest.json dated by the release's own state: when it was published, or
+ * not published yet while it's a draft. Running this job again after
+ * publishing (a re-run, or after a desktop job is re-run) must not undate a
+ * published release: nothing would date it again, and no copy would install
+ * it by itself (#794 review). `release` is `gh release view --json
+ * isDraft,publishedAt`.
+ */
+export function datedFor(latest, release) {
+  const published = release?.isDraft === false && typeof release.publishedAt === "string" && release.publishedAt !== "";
+  return published ? publishedAt(latest, release.publishedAt) : undated(latest);
+}
+
+/**
  * latest.json dated when the release was published (#772), not when it was
  * built: copies install a release by themselves only once it's a day old, and
  * that day is the head start of whoever presses Restart now. tauri-action
@@ -128,14 +141,16 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href && process.arg
     process.exit(2);
   }
   const latest = JSON.parse(readFileSync(file, "utf8"));
-  const { assets } = JSON.parse(readFileSync(assetsFile, "utf8"));
+  const release = JSON.parse(readFileSync(assetsFile, "utf8"));
+  const { assets } = release;
   const missing = missingFiles(assets, tag);
   if (missing.length > 0) {
     console.error(`${tag} is missing, or names differently: ${missing.join(", ")}`);
     process.exit(1);
   }
-  // Not published yet: dated when it is (updater-date.yml).
-  let out = undated(rewrite(latest, assets, repo, tag));
+  // Dated by the release: not yet, while it's a draft (updater-date.yml
+  // dates it when it's published), or when it was, on a run after that.
+  let out = datedFor(rewrite(latest, assets, repo, tag), release);
   if (lineFile) {
     out = withLine(out, JSON.parse(readFileSync(lineFile, "utf8")), tag);
     // Said in the job's summary, so a release with no line is noticed.

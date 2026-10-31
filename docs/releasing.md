@@ -157,7 +157,8 @@ own, at its next start or while nobody's using it. The day counts from
 publishing, not building: until then `latest.json` says it isn't published
 (a date in 2999, `updater-urls.mjs`), and `updater-date.yml` dates it when you
 click. Check that run went green: without it nothing installs by itself,
-though Restart now still works. **Use that day.** Press Restart now in your own Linger (Settings →
+though Restart now still works. Re-running `updater-json` after publishing
+is safe: it keeps the publishing date. **Use that day.** Press Restart now in your own Linger (Settings →
 Account & App, or the foot of the list once it's downloaded) and check the
 release in real use. If it's bad, mark it a pre-release before the day is
 out: `releases/latest` then points at the release before, so no copy sees it

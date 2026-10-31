@@ -1074,11 +1074,13 @@ function Servers({
     // From the tray with the list hidden, it comes back hidden.
     void shownNow().then((shown) => restartToUpdate(shown ? "shown" : "tray"));
   };
+  // Looked at again when voice ends, and when an install comes back: a
+  // "busy" answer can arrive after you've already left (#794 review).
   useEffect(() => {
-    if (notNow !== null || !updateWhenFree.current) return;
+    if (notNow !== null || updating || !updateWhenFree.current) return;
     updateWhenFree.current = false;
     updateAsked.current();
-  }, [notNow]);
+  }, [notNow, updating]);
   // Nobody has used Linger for half an hour, and nobody's in voice or
   // sharing: it restarts by itself to install a waiting update, coming back
   // as it was without taking the focus (#772). Counted from this start at

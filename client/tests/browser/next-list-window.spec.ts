@@ -1408,11 +1408,8 @@ test("left for half an hour, Linger restarts by itself to install it, without ta
   await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("update_now"))).toEqual(["update_now behind automatic"]);
 });
 
-test("the shell's last check finds you in voice: it waits, and goes in once you've left (#794 review)", async ({ page }) => {
-  await open(page, "?one&update&updatebusy");
-  // The list thought nobody was in voice, but somebody joined while it fetched.
-  await updates(page).getByRole("button", { name: "Restart now" }).click();
-  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("update_now"))).toEqual(["update_now shown"]);
+/** Into voice in #general, from another window, as the volume tests do. */
+async function joinVoice(page: Page) {
   const bar = page.getByRole("region", { name: /In voice/ });
   await expect
     .poll(
@@ -1424,9 +1421,35 @@ test("the shell's last check finds you in voice: it waits, and goes in once you'
       { timeout: 10_000 },
     )
     .toBe(1);
+  return bar;
+}
+
+const installs = async (page: Page) => (await did(page)).filter((line) => line.startsWith("update_now"));
+
+test("the shell's last check finds you in voice: it waits, and goes in once you've left (#794 review)", async ({ page }) => {
+  await open(page, "?one&update&updatebusy");
+  // The list thought nobody was in voice, but somebody joined while it fetched.
+  await updates(page).getByRole("button", { name: "Restart now" }).click();
+  await expect.poll(() => installs(page)).toEqual(["update_now shown"]);
+  const bar = await joinVoice(page);
+  await page.evaluate(() => window.core?.answerBusy());
+  await page.waitForTimeout(300);
+  expect(await installs(page)).toEqual(["update_now shown"]);
   await page.evaluate(() => window.core?.tray("leave"));
   await expect(bar).toHaveCount(0);
-  await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("update_now"))).toEqual(["update_now shown", "update_now shown"]);
+  await expect.poll(() => installs(page)).toEqual(["update_now shown", "update_now shown"]);
+});
+
+test("a busy answer that arrives after you've left voice still goes in (#794 review)", async ({ page }) => {
+  await open(page, "?one&update&updatebusy");
+  await updates(page).getByRole("button", { name: "Restart now" }).click();
+  await expect.poll(() => installs(page)).toEqual(["update_now shown"]);
+  const bar = await joinVoice(page);
+  await page.evaluate(() => window.core?.tray("leave"));
+  await expect(bar).toHaveCount(0);
+  // Left already when the shell's answer comes back.
+  await page.evaluate(() => window.core?.answerBusy());
+  await expect.poll(() => installs(page)).toEqual(["update_now shown", "update_now shown"]);
 });
 
 test("a host whose server is behind hears it at the foot, with How to update (#772)", async ({ page }) => {

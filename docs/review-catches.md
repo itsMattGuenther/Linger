@@ -120,6 +120,21 @@ on a world that has changed.
   date that never changed after a copy had read it. *Changed:* the release
   build says it isn't published (a date in 2999, `updater-urls.mjs`) until
   publishing dates it, and installs nobody pressed read the date again.
+- **#794: a "busy" answer that came back after you'd left voice left the
+  update waiting.** The list queued it for when you left, but you already
+  had, and the queue was only looked at when voice ended. *Missed because*
+  the test answered busy while still in voice, never after leaving. Second
+  round of the same gap as the call. *Changed:* the queue is looked at again
+  when an install comes back too, and tests answer in both orders
+  (`next-list-window.spec.ts`). Rule: an answer that can arrive after what
+  it depends on has changed is tested arriving before and after
+  (`docs/testing-strategy.md`).
+- **#794: re-running the release's feed job after publishing undated the
+  release.** The fix for the publishing gap had the job date the feed "not
+  published" every time it ran, and only publishing dated it again. *Missed
+  because* the job was written for its first run, before publishing.
+  *Changed:* it dates the feed by the release's own state, a draft or when it
+  was published, with tests of both (`datedFor` in `updater-urls.mjs`).
 - **#794: Settings couldn't try again after a failed update.** Its Restart now
   asked the list window, which did the install and kept a failure to itself,
   so Settings stayed pressed, saying Linger would restart. *Missed because*

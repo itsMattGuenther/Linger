@@ -215,7 +215,11 @@ rules that came out of them.
   list checked voice before asking the shell to update, the shell then
   fetched and downloaded for a minute, and a call joined in that minute was
   restarted (#794). The same for a date or a version approved earlier: an
-  install with nobody pressing anything reads the feed again.
+  install with nobody pressing anything reads the feed again. And an answer
+  that can come back after what it depends on has changed is tested arriving
+  before the change and after it (#794).
+- **A release job is safe to run again** after the release is published:
+  re-running one once undated a published release's feed (#794).
 - **What another window asks the list to do is tested failing**, from the
   list's side, and the asking window shows it: Settings' Restart now stayed
   pressed, saying Linger would restart, after the list's install failed

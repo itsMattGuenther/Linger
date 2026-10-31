@@ -38,7 +38,8 @@
  * password to install; `?update=arch` one pacman owns. Otherwise this is the
  * newest. Installing is written down as `update_now <how it comes back>` and
  * never answers, as a restart wouldn't (`?updatefail` has it refused, and
- * `?updatebusy` has the shell find you in voice the first time).
+ * `?updatebusy` has the shell find you in voice the first time, answered at
+ * `window.core.answerBusy()`).
  * `?pending` has 0.4.1 waiting for this start, whose install fails, as
  * offline, at `window.core.installFailed()`. `?updated` is the first start after an update, to the
  * version `release-line.json` names. `?behind` has The Good Company, which
@@ -122,8 +123,9 @@ const query = new URLSearchParams(location.search);
 if (query.has("updated")) localStorage.setItem("linger.next.update.seen", "0.0.1");
 /** Whether the update `?update=waiting` waits for is downloaded yet (`window.core.downloaded()`). */
 let updateDownloaded = query.get("update") !== "waiting";
-/** Whether `?updatebusy` has answered busy yet. */
+/** Whether `?updatebusy` has been asked yet, and how its busy answer is given. */
 let busyAnswered = false;
+let answerBusy: (() => void) | null = null;
 /** The start-up install `?pending` is waiting on, ended by `window.core.installFailed()`. */
 let installing: (() => void) | null = null;
 const did: string[] = [];
@@ -360,10 +362,13 @@ mockIPC((cmd, args) => {
     case "update_now":
       note(`update_now ${String(a.comeBack)}${a.automatic === true ? " automatic" : ""}`);
       // A restart never answers; a refusal does. `?updatebusy`: the shell's
-      // last check finds you in voice, once (#794 review).
+      // last check finds you in voice, once, answered at
+      // `window.core.answerBusy()` (#794 review).
       if (query.has("updatebusy") && !busyAnswered) {
         busyAnswered = true;
-        return { kind: "busy" };
+        return new Promise((done) => {
+          answerBusy = () => done({ kind: "busy" });
+        });
       }
       return query.has("updatefail") ? { kind: "failed", reason: "The network is down." } : new Promise(() => undefined);
     case "update_pending":
@@ -465,6 +470,8 @@ declare global {
       downloaded: () => void;
       /** The start-up install `?pending` waits on fails, as offline (#772). */
       installFailed: () => void;
+      /** The shell's busy answer `?updatebusy` holds comes back (#794 review). */
+      answerBusy: () => void;
       /** The desktop shell heard the talk key go "down" or "up" with any app in front (#500). */
       talkKey: (edge: string) => void;
       /** The desktop shell passes on a clicked banner's target. */
@@ -519,6 +526,7 @@ window.core = {
     deliver("next:update", null);
   },
   installFailed: () => installing?.(),
+  answerBusy: () => answerBusy?.(),
   talkKey: (edge) => deliver("next:talkkey", edge),
   banner: (target) => deliver("next:banner", target),
   back: () => {
