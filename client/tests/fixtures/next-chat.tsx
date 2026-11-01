@@ -666,7 +666,7 @@ function Fixture() {
       ...all,
       [roomId]: [
         ...(all[roomId] ?? []),
-        ...chosen.map((file, index) => ({ key: `f${Date.now()}-${index}`, name: file.name, progress: 1, ready: true, problem: null, preview: null })),
+        ...chosen.map((file, index) => ({ key: `f${Date.now()}-${index}`, name: file.name, progress: 1, ready: true, problem: null, again: false, waiting: false, preview: null })),
       ],
     }));
   }, []);
@@ -675,6 +675,7 @@ function Fixture() {
     if (roomId !== null) setFiles((all) => ({ ...all, [roomId]: (all[roomId] ?? []).filter((file) => file.key !== key) }));
   }, []);
   const onRestoreFiles = useCallback(() => undefined, []);
+  const onRetryFile = useCallback(() => undefined, []);
   const onTyping = useCallback(() => undefined, []);
   const startPoll = useCallback(async (request: CreatePollRequest) => {
     note(`poll:${JSON.stringify(request)}`);
@@ -778,6 +779,7 @@ function Fixture() {
         files: files[activeRoom] ?? NO_FILES,
         onAttach,
         onRemoveFile,
+        onRetryFile,
         onRestoreFiles,
         onSend,
         onTyping,

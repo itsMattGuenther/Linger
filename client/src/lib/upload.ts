@@ -8,8 +8,11 @@
  *
  * So this retries a part rather than an upload, and if `complete` says parts are
  * missing it sends those parts again and asks once more. That refusal is the
- * ordinary shape of a dropped connection and leaves the slot alive; every other
- * refusal is final and is thrown at the caller (PROTOCOL §6).
+ * ordinary shape of a dropped connection and leaves the slot alive. So does
+ * the server being busy with other pictures: then this waits as long as the
+ * server says and completes again, a few times (#801). Every other refusal is
+ * final and is thrown at the caller (PROTOCOL §6), which can offer to start
+ * the file over when `worthTryingAgain` says that could work.
  *
  * An upload that is stopped (its `signal` aborts) or fails gives its slot back
  * on the way out (#503). Nothing here ever resumes one later, and a slot holds
@@ -25,6 +28,16 @@ import { absoluteUrl } from "./url";
 
 /** How many goes one part gets before the upload is declared lost. */
 const PART_ATTEMPTS = 3;
+
+/**
+ * How many more times a file the server was too busy to finish is completed
+ * (#801). The server works on two pictures at a time and says when to ask
+ * again, five seconds as it stands, so a few goes see out a burst of them.
+ */
+const BUSY_ATTEMPTS = 3;
+
+/** The longest wait the server's word is taken for before giving up instead: past it, the person decides. */
+const BUSY_WAIT_MOST_MS = 30_000;
 
 /** One part's slice of the file. */
 export interface PartRange {
@@ -57,7 +70,19 @@ export function mimeOf(file: File): string {
 export interface UploadOptions {
   /** 0 to 1, called as each part lands. */
   onProgress?: (fraction: number) => void;
+  /** The bytes are there, and the server has asked for a moment before it finishes the file (#801). */
+  onWaiting?: () => void;
   signal?: AbortSignal;
+}
+
+/**
+ * Whether a file that didn't go up could go up if it were sent again from
+ * the start: anything but the server's verdict on the file itself, which the
+ * same bytes would only meet again (#801).
+ */
+export function worthTryingAgain(error: unknown): boolean {
+  if (!(error instanceof ApiError)) return true;
+  return !(["VALIDATION_FAILED", "FILE_TOO_LARGE", "UNSUPPORTED_MEDIA"] as const).some((code) => code === error.code);
 }
 
 /**
@@ -98,7 +123,7 @@ async function send(api: AuthedApi, slot: UploadSlot, file: File, options: Uploa
   await sendParts(api, slot, file, ranges, done, options);
 
   try {
-    return await complete(api, slot, done);
+    return await completeWhenFree(api, slot, done, options);
   } catch (error) {
     // Parts missing is the dropped-connection case and the slot is still there.
     // Send whatever did not land and ask again — once. A second failure is not
@@ -107,8 +132,50 @@ async function send(api: AuthedApi, slot: UploadSlot, file: File, options: Uploa
     const missing = ranges.filter((range) => !done.has(range.number));
     if (missing.length === 0) throw error;
     await sendParts(api, slot, file, missing, done, options);
-    return await complete(api, slot, done);
+    return await completeWhenFree(api, slot, done, options);
   }
+}
+
+/**
+ * Complete, and when the server is busy with other pictures, wait as long as
+ * it says and complete again (PROTOCOL §6): it keeps the slot for exactly
+ * that (#487). A few goes, then the refusal goes to the caller (#801).
+ */
+async function completeWhenFree(
+  api: AuthedApi,
+  slot: UploadSlot,
+  done: Map<number, string | null>,
+  options: UploadOptions,
+): Promise<Attachment> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await complete(api, slot, done);
+    } catch (error) {
+      const wait = error instanceof ApiError && error.code === "RATE_LIMITED" ? error.retryAfterMs : null;
+      if (wait === null || wait > BUSY_WAIT_MOST_MS || attempt >= BUSY_ATTEMPTS) throw error;
+      options.onWaiting?.();
+      await pause(wait, options.signal);
+    }
+  }
+}
+
+/** Wait `ms`, or until `signal` stops the upload. */
+function pause(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        reject(signal.reason);
+      },
+      { once: true },
+    );
+  });
 }
 
 function complete(

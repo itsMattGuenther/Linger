@@ -494,6 +494,31 @@ test.describe("a photo opened from a message zooms under your fingers (#689)", (
 test.describe("on a phone 320 wide, the narrowest (#688)", () => {
   test.use({ viewport: { width: 320, height: 568 } });
 
+  // #801: a file that didn't go up, but could on another go, says why and
+  // offers Try again on its row: all of it on the screen, its name and the
+  // reason whole, the button big enough for a finger. This page has no file
+  // store, so every upload fails as a lost connection does.
+  test("a file that didn't go up offers Try again on its row, and the row fits", async ({ page }) => {
+    await phone(page);
+    await room(page, "general").click();
+    await screen(page).locator(".nx-composer input[type='file']").setInputFiles({ name: "IMG_0042.png", mimeType: "image/png", buffer: Buffer.from("not really a png") });
+    const file = screen(page).getByRole("list", { name: "Files for this message" }).getByRole("listitem");
+    const again = file.getByRole("button", { name: "Try again" });
+    await expect(again).toBeVisible();
+    expect(await sticksOut(page), "the file's row").toEqual([]);
+    // Nothing cut short with a "…": the reason has a line of its own.
+    for (const part of [".nx-composer-file-name", ".nx-composer-file-problem"]) {
+      const cut = await file.locator(part).evaluate((element) => element.scrollWidth > element.clientWidth);
+      expect(cut, part).toBe(false);
+    }
+    const [name, problem] = await Promise.all([file.locator(".nx-composer-file-name").boundingBox(), file.locator(".nx-composer-file-problem").boundingBox()]);
+    expect(problem?.y ?? 0, "under the name").toBeGreaterThan((name?.y ?? 0) + (name?.height ?? 0) - 1);
+    const target = await again.boundingBox();
+    expect(target?.height ?? 0, "tall enough for a finger").toBeGreaterThanOrEqual(24);
+    await again.click();
+    await expect(again, "tried again, and refused again").toBeVisible();
+  });
+
   test("nothing reaches past the edge on the main screens, typing in the message box included", async ({ page }) => {
     await phone(page);
     expect(await sticksOut(page), "the list").toEqual([]);

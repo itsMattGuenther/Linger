@@ -828,6 +828,44 @@ test.describe("files", () => {
     const file = page.getByRole("list", { name: "Files for this message" }).getByRole("listitem");
     await expect(file).toContainText("That file is bigger than this server takes.");
     await expect(box(page)).toHaveValue("keep me");
+    // The same bytes would only be refused again (#801).
+    await expect(file.getByRole("button", { name: "Try again" })).toHaveCount(0);
+  });
+
+  // #801: the server works on two pictures at a time. One that waits too
+  // long is told to ask again in a moment, and the server keeps what it sent.
+  test("a picture the server was too busy for is finished once the server has room, without being sent again (#801)", async ({ page }) => {
+    await open(page, "room=r-general&uploadbusy=2&busyms=1500");
+    await page.locator(".nx-composer input[type='file']").setInputFiles({ name: "porch.png", mimeType: "image/png", buffer: Buffer.from("not really a png") });
+    const file = page.getByRole("list", { name: "Files for this message" }).getByRole("listitem");
+    await expect(file.locator(".nx-composer-file-waiting")).toHaveText("Waiting for the server…");
+    await expect.poll(async () => (await did(page)).filter((line) => line === "POST /uploads/f-1/complete as token-1"), { timeout: 10_000 }).toHaveLength(3);
+    await expect(file.locator(".nx-composer-file-waiting")).toHaveCount(0);
+    await expect(file).not.toContainText("busy");
+    await expect(file.getByRole("button", { name: "Try again" })).toHaveCount(0);
+    const asked = await did(page);
+    expect(asked.filter((line) => line === "POST /uploads as token-1"), "one slot").toHaveLength(1);
+    expect(asked.filter((line) => line === "PUT /store/f-1/1"), "the bytes went once").toHaveLength(1);
+  });
+
+  test("still too busy after a few goes, the picture says so and offers Try again, which sends it (#801)", async ({ page }) => {
+    await open(page, "room=r-general&uploadbusy=4");
+    await page.locator(".nx-composer input[type='file']").setInputFiles({ name: "porch.png", mimeType: "image/png", buffer: Buffer.from("not really a png") });
+    const file = page.getByRole("list", { name: "Files for this message" }).getByRole("listitem");
+    await expect(file).toContainText("The server is busy with other pictures. Send this one again in a moment.");
+    const again = file.getByRole("button", { name: "Try again" });
+    await expect(again).toBeVisible();
+    expect(await did(page)).toContain("DELETE /uploads/f-1 as token-1");
+
+    await again.click();
+    await expect(again).toHaveCount(0);
+    await expect.poll(async () => (await did(page)).includes("POST /uploads/f-2/complete as token-1")).toBe(true);
+    await expect(file).not.toContainText("busy");
+    await box(page).fill("the porch");
+    await box(page).press("Enter");
+    await expect.poll(async () => (await did(page)).filter((line) => line.startsWith("sent:")).at(-1)).toBe(
+      `sent:${JSON.stringify({ body: "the porch", reply_to: null, attachment_ids: ["f-2"] })}`,
+    );
   });
 
   // A slot holds its file's size against the pool everybody shares (#503):
