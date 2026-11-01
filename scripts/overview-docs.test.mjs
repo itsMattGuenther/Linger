@@ -49,6 +49,13 @@ export function fenced(markdown, language = "") {
   return blocks;
 }
 
+/** A table or column name: bare, or quoted any of the three ways SQLite takes. */
+const NAME = String.raw`("[^"]+"|` + "`[^`]+`" + String.raw`|\[[^\]]+\]|\w+)`;
+const unquote = (name) => name.replace(/^["`[]|["`\]]$/g, "");
+
+/** A statement that changes which tables or columns there are. */
+const SCHEMA = /^(?:CREATE (?:TEMP |TEMPORARY )?(?:VIRTUAL )?TABLE|ALTER TABLE|DROP TABLE)\b/i;
+
 /**
  * The column names in a CREATE TABLE's parentheses. Table constraints
  * (PRIMARY KEY, UNIQUE, FOREIGN KEY, CHECK, CONSTRAINT) and an FTS5 table's
@@ -70,33 +77,53 @@ function columns(body) {
   return parts
     .map((part) => part.trim())
     .filter((part) => part && !/^(PRIMARY|UNIQUE|FOREIGN|CHECK|CONSTRAINT)\b/i.test(part) && !/^\w+\s*=/.test(part))
-    .map((part) => part.split(/\s+/)[0].replace(/^["`[]|["`\]]$/g, ""));
+    .map((part) => unquote(new RegExp(`^${NAME}`).exec(part)?.[1] ?? part.split(/\s+/)[0]));
 }
+
+const CREATE = new RegExp(String.raw`^CREATE (?:VIRTUAL )?TABLE (?:IF NOT EXISTS )?${NAME} ?(?:USING \w+ ?)?\((.*)\)(?: ?(?:WITHOUT ROWID|STRICT))*$`, "i");
+const ADD = new RegExp(String.raw`^ALTER TABLE ${NAME} ADD (?:COLUMN )?${NAME}`, "i");
+const DROP_COLUMN = new RegExp(String.raw`^ALTER TABLE ${NAME} DROP (?:COLUMN )?${NAME}$`, "i");
+const RENAME_TABLE = new RegExp(String.raw`^ALTER TABLE ${NAME} RENAME TO ${NAME}$`, "i");
+const RENAME_COLUMN = new RegExp(String.raw`^ALTER TABLE ${NAME} RENAME (?:COLUMN )?${NAME} TO ${NAME}$`, "i");
+const DROP_TABLE = new RegExp(String.raw`^DROP TABLE (IF EXISTS )?${NAME}$`, "i");
 
 /**
  * The tables, and each one's columns, that some SQL leaves behind, applied in
  * order to `tables` (a Map of name to a Set of columns). Order matters: a
  * migration that rebuilds a table makes the new one, drops the old one and
  * renames the new one into its place.
+ *
+ * A statement that changes the tables in a way this can't follow throws,
+ * naming it, rather than being passed over: a table this couldn't read is a
+ * table the check would say nothing about (#807's review).
  */
 export function applySql(sql, tables = new Map()) {
   const statements = sql.replace(/--[^\n]*/g, "").split(";").map((s) => s.trim().replace(/\s+/g, " "));
+  const unreadable = (statement) => new Error(`can't follow this schema change, so the check can't vouch for the schema: ${statement.slice(0, 120)}`);
+  const known = (name, statement) => {
+    const table = tables.get(unquote(name));
+    if (!table) throw unreadable(statement);
+    return table;
+  };
   for (const statement of statements) {
     let m;
-    if ((m = /^CREATE (?:VIRTUAL )?TABLE (?:IF NOT EXISTS )?(\w+) ?(?:USING \w+ ?)?\((.*)\)(?: ?(?:WITHOUT ROWID|STRICT))*$/i.exec(statement))) {
-      tables.set(m[1], new Set(columns(m[2])));
-    } else if ((m = /^ALTER TABLE (\w+) ADD (?:COLUMN )?(\w+)/i.exec(statement))) {
-      tables.get(m[1])?.add(m[2]);
-    } else if ((m = /^ALTER TABLE (\w+) DROP (?:COLUMN )?(\w+)/i.exec(statement))) {
-      tables.get(m[1])?.delete(m[2]);
-    } else if ((m = /^ALTER TABLE (\w+) RENAME TO (\w+)$/i.exec(statement))) {
-      tables.set(m[2], tables.get(m[1]) ?? new Set());
-      tables.delete(m[1]);
-    } else if ((m = /^ALTER TABLE (\w+) RENAME (?:COLUMN )?(\w+) TO (\w+)/i.exec(statement))) {
-      const table = tables.get(m[1]);
-      if (table?.delete(m[2])) table.add(m[3]);
-    } else if ((m = /^DROP TABLE (?:IF EXISTS )?(\w+)/i.exec(statement))) {
-      tables.delete(m[1]);
+    if ((m = CREATE.exec(statement))) {
+      tables.set(unquote(m[1]), new Set(columns(m[2])));
+    } else if ((m = ADD.exec(statement))) {
+      known(m[1], statement).add(unquote(m[2]));
+    } else if ((m = RENAME_TABLE.exec(statement))) {
+      tables.set(unquote(m[2]), known(m[1], statement));
+      tables.delete(unquote(m[1]));
+    } else if ((m = RENAME_COLUMN.exec(statement))) {
+      const table = known(m[1], statement);
+      if (!table.delete(unquote(m[2]))) throw unreadable(statement);
+      table.add(unquote(m[3]));
+    } else if ((m = DROP_COLUMN.exec(statement))) {
+      if (!known(m[1], statement).delete(unquote(m[2]))) throw unreadable(statement);
+    } else if ((m = DROP_TABLE.exec(statement))) {
+      if (!tables.delete(unquote(m[2])) && !m[1]) throw unreadable(statement);
+    } else if (SCHEMA.test(statement)) {
+      throw unreadable(statement);
     }
   }
   return tables;
@@ -119,7 +146,7 @@ export function schemaDifferences(migrations, doc) {
 }
 
 /** Whether a layout names `dir/` as a whole word, not inside another name. */
-const names = (text, dir) => new RegExp(String.raw`(^|[\s/(,])${dir.replace(/[.]/g, "\\.")}/`, "m").test(text);
+const names = (text, dir) => new RegExp(String.raw`(^|[\s/(,])${dir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/`, "m").test(text);
 
 test("a section runs to the next heading at its level, and a missing heading throws", () => {
   const markdown = "# A\n## 3. Layout\nkeep\n### deeper\nkeep too\n## 4. Next\ngone";
@@ -148,6 +175,8 @@ test("the schema reader follows migrations in order", () => {
     ALTER TABLE users RENAME COLUMN name TO username;
     CREATE TABLE gone (x);
     DROP TABLE IF EXISTS gone;
+    DROP TABLE IF EXISTS never_made;
+    CREATE TABLE rooms (id BLOB, old TEXT);
     CREATE TABLE rooms_new (id BLOB, topic TEXT);
     DROP TABLE rooms;
     ALTER TABLE rooms_new RENAME TO rooms;
@@ -166,6 +195,31 @@ test("the schema reader follows migrations in order", () => {
   );
 });
 
+test("quoted names are read as the names they quote", () => {
+  const tables = applySql(`
+    CREATE TABLE "quoted" ("id" BLOB PRIMARY KEY, [name] TEXT, \`kind\` TEXT);
+    ALTER TABLE \`quoted\` ADD COLUMN "extra" TEXT;
+    ALTER TABLE quoted RENAME COLUMN [name] TO "label";
+  `);
+  assert.deepEqual([...tables.get("quoted")].sort(), ["extra", "id", "kind", "label"]);
+});
+
+test("a schema change it can't follow fails, naming it, rather than being passed over (#807)", () => {
+  const known = "CREATE TABLE users (id BLOB, name TEXT);";
+  for (const sql of [
+    "CREATE TEMP TABLE scratch (x);",
+    "CREATE TABLE main.users2 (id BLOB);",
+    "CREATE TABLE copy AS SELECT * FROM users;",
+    `${known} ALTER TABLE missing ADD COLUMN x TEXT;`,
+    `${known} ALTER TABLE users RENAME COLUMN nope TO x;`,
+    `${known} ALTER TABLE users DROP COLUMN nope;`,
+    "DROP TABLE never_made;",
+  ]) {
+    assert.throws(() => applySql(sql), /can't follow this schema change/, sql);
+  }
+  assert.doesNotThrow(() => applySql(`${known} CREATE INDEX i ON users(name); UPDATE users SET name = 'x'; INSERT INTO users VALUES (1, 'a');`));
+});
+
 test("a missing table, a missing column and one the migrations dropped are all named", () => {
   const migrations = new Map([["users", new Set(["id", "deleted_at"])], ["exports", new Set(["id"])]]);
   const doc = new Map([["users", new Set(["id", "old"])], ["gone", new Set(["x"])]]);
@@ -182,6 +236,8 @@ test("a layout names a directory only as a whole word", () => {
   assert.ok(names("packaging/arch/  the package", "packaging"));
   assert.ok(!names("crates/linger-sfu-old/", "linger-sfu"));
   assert.ok(!names("subassets/", "assets"));
+  assert.ok(names("└─ .github/              # CI", ".github"));
+  assert.ok(!names("x.github/", ".github"));
 });
 
 test("ARCHITECTURE.md §5's schema has every table and column the migrations leave, and no others", () => {
@@ -202,7 +258,8 @@ test("ARCHITECTURE.md §3 and the README's layout name every crate and top-level
   const crates = [...members[1].matchAll(/"crates\/([^"]+)"/g)].map((m) => m[1]);
   assert.ok(crates.length > 0, "the workspace has crates");
   const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: ROOT, encoding: "utf8" }).split("\0");
-  const top = [...new Set(tracked.filter((path) => path.includes("/")).map((path) => path.split("/")[0]))].filter((dir) => !dir.startsWith("."));
+  const top = [...new Set(tracked.filter((path) => path.includes("/")).map((path) => path.split("/")[0]))];
+  assert.ok(top.includes(".github"), "dot-directories are checked too (#807's review)");
   const layouts = {
     "ARCHITECTURE.md §3": fenced(section(read("ARCHITECTURE.md"), /^## 3\. /)).join("\n"),
     "the README's layout": fenced(section(read("README.md"), /^## .*Development/))[0] ?? "",

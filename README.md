@@ -231,6 +231,8 @@ assets/                logos and fonts' licenses
 agents/                skills for your own coding agent (linger-report, linger-contribute)
 docs/                  guides, decisions, design, release notes
 scripts/               check.sh (the local gate) and what it calls
+.github/               CI workflows, issue forms, the PR template
+.cargo/                where cargo test writes the TypeScript wire types
 ```
 
 ```bash

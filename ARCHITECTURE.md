@@ -255,7 +255,8 @@ linger/
 ├─ docs/                      # guides, decisions, design, release notes;
 │                             #   docs/tasks/ archives closed milestones
 ├─ scripts/                   # check.sh (what CI runs) and the checks it calls
-└─ .github/                   # CI workflows, issue forms
+├─ .github/                   # CI workflows, issue forms, the PR template
+└─ .cargo/                    # config.toml: where cargo test writes the TS bindings
 ```
 
 `AGENTS.md`, "The overview docs", says when this map, §1 and the schema below
