@@ -148,12 +148,12 @@ pass.
   When a reviewer (Greptile, which reviews every pull request but a `docs/…`
   branch's, or a person) finds a real problem, fix it, then say in the pull
   request why our own checks missed it, and close that gap: a test or check
-  that would have caught it,
-  code shaped so the mistake is hard to make again, or a rule in the docs. Do
-  it in the same pull request, or file an issue for it before merging, and add
-  the catch to `docs/review-catches.md`. A comment that's wrong gets a reply
-  saying why, and a line there too. Never take a reviewer's fix with GitHub's
-  one-click "commit suggestion": it makes the bot a co-author (hard rule 1).
+  that would have caught it, code shaped so the mistake is hard to make
+  again, or a rule in the docs. Do it in the same pull request, or file an
+  issue for it before merging, and add the catch to `docs/review-catches.md`.
+  A comment that's wrong gets a reply saying why, and a line there too. Never
+  take a reviewer's fix with GitHub's one-click "commit suggestion": it makes
+  the bot a co-author (hard rule 1).
 - `agents/skills/` holds two skills for people's own agents (#147):
   `linger-report` turns a problem into a well-formed, private-safe issue, and
   `linger-contribute` is the short path from a fix to a PR under these rules. They
