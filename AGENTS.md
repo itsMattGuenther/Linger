@@ -106,6 +106,11 @@ pass.
 - One logical change per commit. Docs updated in the same commit as the behavior change.
 - Branches are `feat/t-xxx-short-slug` (or `docs/…`, `fix/…`). Pushing the branch
   is how a task is claimed — see `TASKS.md` §"How to run a task".
+- **A `docs/…` branch carries docs only.** Greptile skips it (a filter in its
+  dashboard, since each review costs a credit), so a script, a test or a code
+  comment goes on a `fix/…`, `feat/…` or `test/…` branch, where it gets
+  reviewed. When a docs change still deserves a look, such as a new rule,
+  comment `@greptileai` on its pull request.
 - GitHub deletes a pull request's branch when it merges. Your local copy stays
   until `scripts/tidy-branches.sh` deletes it, with its worktree, once GitHub
   says it merged at that commit. Anything that isn't in main stays and is
@@ -140,9 +145,10 @@ pass.
   reason to leave an issue looking unclaimed. Linked issues close on merge when
   repository auto-closing is enabled, so finish their acceptance checks before merging.
 - **A real review catch strengthens the project, not only the code it was on.**
-  When a reviewer (Greptile, which reviews every pull request, or a person)
-  finds a real problem, fix it, then say in the pull request why our own checks
-  missed it, and close that gap: a test or check that would have caught it,
+  When a reviewer (Greptile, which reviews every pull request but a `docs/…`
+  branch's, or a person) finds a real problem, fix it, then say in the pull
+  request why our own checks missed it, and close that gap: a test or check
+  that would have caught it,
   code shaped so the mistake is hard to make again, or a rule in the docs. Do
   it in the same pull request, or file an issue for it before merging, and add
   the catch to `docs/review-catches.md`. A comment that's wrong gets a reply

@@ -75,7 +75,10 @@ The repo is arranged so a session reads little and misses nothing:
   rules lint.
 - Docs move in the same commit as the behavior they describe (README rules are
   in `AGENTS.md`).
-- Greptile, an automated reviewer, comments on every PR within a few minutes.
+- Greptile, an automated reviewer, comments on every PR within a few minutes,
+  except one from a `docs/…` branch, which it skips. So a `docs/…` branch
+  carries docs only: a script, a test or a code comment goes on a `fix/…` or
+  `feat/…` branch, where it gets reviewed.
   When it finds a real problem, fix it by hand (not with GitHub's "commit
   suggestion" button, which makes the bot a co-author) and add a test that
   would have caught it; if a comment is wrong, reply saying why. What it has
