@@ -63,7 +63,8 @@ confirm it on a real phone. Write the
 release's one line in `client/src/next/core/release-line.json`
 (`docs/releasing.md`). **Thanks** (`docs/releasing.md`): @Gleasonmt for the iPhone app's iOS
 15 minimum (#749), bigger text on the phone and the iPhone following its Text
-Size (#690), and the Privacy and Report a problem buttons and getting the
+Size (#690), Settings saying when an Appearance choice couldn't be saved
+(#782), and the Privacy and Report a problem buttons and getting the
 iPhone app ready for the App Store (#779), and @eGGnogSC for sharing to
 Linger from the phone's share sheet (#792), and for messages that show the
 moment they're sent (#133) and the sidebar that no longer scrolls sideways
