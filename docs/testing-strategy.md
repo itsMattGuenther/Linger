@@ -76,7 +76,7 @@ version check, and the tests of these scripts themselves
 `scripts/package-deps.test.mjs`, `scripts/playwright-image.test.mjs`,
 `scripts/issue-label.test.mjs`, `scripts/action-pins.test.mjs`,
 `scripts/workflow-downloads.test.mjs`, `scripts/linux-next-env.test.mjs`,
-`scripts/doc-paths.test.mjs`,
+`scripts/doc-paths.test.mjs`, `scripts/overview-docs.test.mjs`,
 `scripts/startup-time.test.mjs`,
 `python3 scripts/linux-audio-check.test.py`,
 `scripts/android-signing-test.sh`, `scripts/tidy-branches-test.sh`,
@@ -185,7 +185,9 @@ rules that came out of them.
   every form the language has, not only the ones in use today (Markdown
   links come plain, in angle brackets, as references and as HTML; #771).
   `scripts/workflow-downloads.test.mjs` took three rounds of review to get
-  there (#763).
+  there (#763). And it **fails on an input it can't read**, naming it,
+  rather than passing over it: a form nobody listed then shows up as a
+  failure, not as a quiet pass (#807).
 - **State worked out from a room's history, or kept beside it, is tested with
   the history in every shape the app holds it:** older history only, the
   newest not loaded, trimmed, paged back in, replaced by a window around a

@@ -52,7 +52,10 @@ breaking any of them.
   SQLite); test those harder.
 - Update the docs **in the same commit** as the behavior they describe: SPEC,
   ARCHITECTURE, PROTOCOL, the user guide, and the README when running,
-  installing or what the product does changes.
+  installing or what the product does changes. A new crate, top-level
+  directory or migration, a change to where something runs, or a milestone's
+  status also changes the overview docs (`AGENTS.md`, "The overview docs");
+  `scripts/overview-docs.test.mjs` catches the crates, directories and schema.
 
 ## Checking it
 

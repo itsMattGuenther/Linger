@@ -248,6 +248,22 @@ on a world that has changed.
   (`linkTargets`, 15 forms, a link's title among them, which nobody had
   flagged), and the directories compared are the ones git tracks. Adding
   forms one review at a time was the gap itself.
+- **#807: the overview docs check passed over SQL it couldn't read.** Its
+  schema reader matched bare table names only, so a migration making
+  `"quoted"` (or `main.x`, or a `TEMP` table) would have added a table the
+  check said nothing about; an `ALTER TABLE` on a table it hadn't seen was
+  skipped the same way. *Missed because* the same gap as #763 and #771: its
+  tests were the forms our migrations use today, though the rule already
+  said every form. *Changed:* quoted names are read, and any statement that
+  changes the tables in a way the reader can't follow fails the check,
+  naming it. A reader that can only fail loudly can't hide a form nobody
+  listed, so the rule now says so too.
+- **#807: dot-directories escaped the layout check.** It said every
+  top-level directory and left out `.github/` and `.cargo/`, which the
+  README didn't list. *Missed because* the exception was written into the
+  code and not into its tests or its promise. *Changed:* they're checked
+  like the others, with a test that `.github` is among them, and both
+  layouts list them.
 - **#774: an open volume card held its own level until it closed.** A change
   made in the voice bar or another window didn't show on it, and its next
   step undid that change. *Missed because* the tests only ever changed a

@@ -219,8 +219,12 @@ a task fails its acceptance criteria twice.
 **M15, the Buddy list client (#198), is the app from 0.4.0**; what's left of it
 is under [M15](#m15--the-buddy-list-client-198). **M13 (ambient voice) is
 cut** (Matt, 2026-10-11, `docs/decisions.md`); it was never started. Larger
-groups and the voice rework are #197. **Mobile is
-started** (2026-10-02, text first): [its own section](#mobile--started-2026-10-02-text-first).
+groups and the voice rework were #197, closed 2026-10-19. **M16, screen
+sharing (#360), shipped in 0.5.2** (2026-10-27); what's left of it, its real
+check (T-1908) included, is under
+[M16](#m16--screen-sharing-360-shipped-in-052). **Mobile is started**
+(2026-10-02): Android since 0.4.8, voice since 2026-10-19, and friends'
+iPhones through TestFlight since 0.5.1. It has [its own section](#mobile--started-2026-10-02).
 
 Closed milestones are archived in `docs/tasks/` with every landing note and
 surprise intact. Tasks T-001…T-604 live there. Decisions that shaped the queue
@@ -610,7 +614,7 @@ Rules for this milestone:
 
 ---
 
-## Mobile — started 2026-10-02, text first
+## Mobile — started 2026-10-02
 
 *Off the backburner on 2026-10-02 (Matt, #253).* It was parked on 2026-08-28
 until the desktop app was finished and lived with; the release checks closed on
@@ -910,7 +914,7 @@ macOS runners, or a friend's Mac.
 Two things live here: one V1 feature that is still in the spec, and one release
 errand blocked on money. Neither is on the path to a usable desktop product. Do
 not pull either "while you're in there". The mobile client lived here until
-2026-10-02 and is now [its own section](#mobile--started-2026-10-02-text-first).
+2026-10-02 and is now [its own section](#mobile--started-2026-10-02).
 
 **Activity detection used to be here and is gone** (Matt, 2026-08-28 —
 [`docs/decisions.md`](docs/decisions.md)). T-911…T-917 are deleted, along with
@@ -965,15 +969,15 @@ middle of it. Anything that lands before them must not break the frames they rel
 
 ---
 
-## V2 — M9, M10 and M11 built; voice is started
+## V2 — M9 to M12 built, M13 cut, M16 shipped
 
-**Three of the five are built and archived** — knock on 2026-08-29
+**Knock, search and DMs are built and archived**: knock on 2026-08-29
 ([`m9.md`](docs/tasks/m9.md)), search and DMs on 2026-08-31
-([`m10.md`](docs/tasks/m10.md), [`m11.md`](docs/tasks/m11.md)). Everything
-in M12 is implemented but awaits its human checks. M13 was cut on 2026-10-11 without being started. V1 is
-done except the things in *Human checks*, and those come first — a release
-nobody has installed is not a finished V1, and four of the nine checks now
-belong to V2 features that have only ever run on one computer.
+([`m10.md`](docs/tasks/m10.md), [`m11.md`](docs/tasks/m11.md)). **M12
+(voice) is built**, and its release checks closed with V1's on 2026-09-25
+([*Release checks*](#release-checks--desktop-and-real-world-evidence)). M13
+was cut on 2026-10-11 without being started. **M16 (screen sharing) shipped in
+0.5.2**, and its real check is still owed.
 
 **Read `m11.md` before touching the gateway fan-out, or anything that lists
 messages, files or search results.** DMs put a membership check in every one of
@@ -981,17 +985,17 @@ those, and three of the mechanisms are load-bearing in ways the code does not
 say out loud.
 
 **Read this before touching any of it:** SPEC §6 lists what V2 is; anything not
-on that list is not V2, it is scope creep. Voice is the one left that adds a
-whole category of thing this product does not have, and **T-1402 says to
-coordinate with Matt before starting** — that is where audio, real networks and
-`webrtc-rs` all arrive at once.
+on that list is not V2, it is scope creep. Voice and screen sharing are where
+audio, video and real networks arrive, so read `AGENTS.md`'s *Where you will be
+wrong* before changing either.
 
 **Numbering.** V1 used `T-1xx`–`T-8xx` for milestones M1–M8, plus `T-9xx` for
 the V1 work that came off the critical path — and for small V1 changes that land
 after the milestones closed (`T-904`). V2 starts a new band at **`T-1xxx`, where
 the hundreds digit is the area** — `T-11xx` knock, `T-12xx` search, `T-13xx`
 DMs, `T-14xx` voice, `T-15xx` ambient voice (retired with M13) — and `T-16xx` mobile, which has
-its own section rather than a milestone, and `T-17xx` themes, which is V3. It does not
+its own section rather than a milestone, `T-17xx` themes, which is V3, `T-18xx`
+the Buddy list client (M15) and `T-19xx` screen sharing (M16). It does not
 continue the milestone-matches-number rule, because `T-9xx` is already spoken
 for.
 
@@ -1003,14 +1007,15 @@ Build order, cheapest and safest first:
 
 ```
 M9 knock (built) → M10 search (built) → M11 DMs (built)
-  → M12 voice (built; its four-network check is HC-9)
+  → M12 voice (built; HC-9 closed 2026-09-25)
   → M13 ambient voice (cut 2026-10-11, never started)
+  → M16 screen sharing (shipped in 0.5.2; its real check is T-1908)
 ```
 
 **Mobile is not in this sequence** (Matt, 2026-08-28). It was going to be M14
 and went to the *Backburner* until the desktop app had been used by real
 people. It came back on 2026-10-02 as
-[its own section](#mobile--started-2026-10-02-text-first), not a milestone.
+[its own section](#mobile--started-2026-10-02), not a milestone.
 
 ---
 
@@ -1036,7 +1041,7 @@ Matt cut it before it started: "it's antiquated. It doesn't apply anymore"
 (`docs/decisions.md`). What voice work built toward it stays as ordinary voice.
 The section as it stood that day is in [`docs/tasks/m13.md`](docs/tasks/m13.md).
 
-### M16 — screen sharing (#360): started 2026-10-25
+### M16 — screen sharing (#360): shipped in 0.5.2
 
 Matt took it off SPEC §2's anti-goals on 2026-10-25, cameras staying there, for a
 friend's presentation from Windows on 2026-10-28. SPEC §4.20 is what it does, PROTOCOL §8

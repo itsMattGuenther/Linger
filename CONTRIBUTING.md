@@ -73,8 +73,9 @@ The repo is arranged so a session reads little and misses nothing:
 - One task per PR, branched from and targeting `main`.
 - CI must be green: rust gates, web gates, the desktop-shell pass, and the
   rules lint.
-- Docs move in the same commit as the behavior they describe (README rules are
-  in `AGENTS.md`).
+- Docs move in the same commit as the behavior they describe. The rules for the
+  README and for the overview docs, the parts of `ARCHITECTURE.md` that map
+  the whole project, are in `AGENTS.md`.
 - Greptile, an automated reviewer, comments on every PR within a few minutes,
   except one from a `docs/…` branch, which it skips. So a `docs/…` branch
   carries docs only: a script, a test or a code comment goes on a `fix/…` or
