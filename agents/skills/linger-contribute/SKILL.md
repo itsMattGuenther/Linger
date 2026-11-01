@@ -42,7 +42,8 @@ breaking any of them.
 ## Making the change
 
 - Branch: `fix/<issue number>` for a bug, `feat/<issue number>-short-slug` for
-  a feature, `docs/...` for documentation.
+  a feature, `docs/...` for documentation. A `docs/...` branch carries docs
+  only: the automated review skips it, so anything else on it goes unreviewed.
 - Use the project's words (`SPEC.md` §1): a *room*, never a channel; a
   *server*; a *status*.
 - Write the test that fails without the fix, at the lowest level that can
@@ -91,11 +92,12 @@ commits that carry them (`scripts/lint-rules.sh`).
 - Explain the change the way `AGENTS.md` asks: short, plain sentences for a
   smart friend who didn't read the code. Say what was wrong, what changed, how
   it was tested, and what still needs a real computer to confirm.
-- Greptile reviews every pull request. When it, or a person, finds a real
-  problem, fix it by hand (never GitHub's "commit suggestion" button: that
-  makes the bot a co-author), and add a test that would have caught it. Say in
-  the pull request why the tests missed it; the maintainer adds the catch to
-  `docs/review-catches.md`. If a comment is wrong, reply saying why.
+- Greptile reviews every pull request but a `docs/...` branch's. When it, or
+  a person, finds a real problem, fix it by hand (never GitHub's "commit
+  suggestion" button: that makes the bot a co-author), and add a test that
+  would have caught it. Say in the pull request why the tests missed it; the
+  maintainer adds the catch to `docs/review-catches.md`. If a comment is
+  wrong, reply saying why.
 
 Only push and open the PR when the user says so, under their own GitHub
 account. Never merge it; the maintainer does that. Once it has merged, GitHub
