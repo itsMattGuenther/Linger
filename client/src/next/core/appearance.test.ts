@@ -176,12 +176,43 @@ describe("how the new client looks, in every window", () => {
 
   it("applies plain names from what's saved", async () => {
     vi.resetModules();
-    const { applyAppearance, saveNormalize } = await import("./appearance");
+    const { applyAppearance } = await import("./appearance");
+    const { saveNormalize } = await import("../../lib/normalize");
     saveNormalize(true);
     const root = document.documentElement as unknown as { dataset: Record<string, string> };
-    delete root.dataset.normalize;
     await applyAppearance();
     expect(root.dataset.normalize).toBe("true");
+  });
+
+  it("changes nothing when storage refuses a choice, and says so, for Settings to tell (#782)", async () => {
+    vi.resetModules();
+    const { applyAppearance, loadHideReactions, loadOneLine, loadScale, saveHideReactions, saveOneLine, saveScale } = await import("./appearance");
+    const { loadNormalize, saveNormalize } = await import("../../lib/normalize");
+    // Chosen while storage worked.
+    expect(saveScale(125)).toBe(125);
+    expect(saveOneLine(true)).toBe(true);
+    expect(saveHideReactions(true)).toBe(true);
+    expect(saveNormalize(true)).toBe(true);
+    // Full: each new choice is refused, and says it was.
+    const local = window.localStorage as { setItem: (key: string, value: string) => void };
+    local.setItem = () => {
+      throw new Error("QuotaExceededError");
+    };
+    expect(saveScale(150)).toBeNull();
+    expect(saveOneLine(false)).toBe(false);
+    expect(saveHideReactions(false)).toBe(false);
+    expect(saveNormalize(false)).toBe(false);
+    // Every window applies what was chosen before.
+    expect([loadScale(), loadOneLine(), loadHideReactions(), loadNormalize()]).toEqual([125, true, true, true]);
+    await applyAppearance();
+    expect(shell.zoom).toBe(1.25);
+    expect((document.documentElement as unknown as { dataset: Record<string, string> }).dataset.normalize).toBe("true");
+    // Gone altogether: refused the same way.
+    vi.stubGlobal("window", {});
+    expect(saveScale(150)).toBeNull();
+    expect(saveOneLine(false)).toBe(false);
+    expect(saveHideReactions(false)).toBe(false);
+    expect(saveNormalize(false)).toBe(false);
   });
 
   it("keeps the phone's Text size until the app closes when storage refuses it (#780)", async () => {

@@ -5,6 +5,10 @@
  * announces it; every window applies it at once, and each applies what's
  * saved when it opens.
  *
+ * A change storage refuses (full, or switched off) isn't made: Settings says
+ * it couldn't save it, and the setting stays as it was (#782). Only the
+ * phone's Text size is kept in memory as well, as the phone has one window.
+ *
  * Interface size zooms the whole page, like a browser's zoom, because the new
  * client's sizes are fixed pixels (docs/design/system.md) and a larger base
  * font would grow nothing. A window grows by the same ratio, so its layout
@@ -40,13 +44,17 @@ export function loadScale(): number {
   }
 }
 
-/** Save an interface size; anything not on the list is 100. Returns what was saved. */
-export function saveScale(value: number): number {
+/**
+ * Save an interface size; anything not on the list is 100. Returns what was
+ * saved, or null if storage refused it.
+ */
+export function saveScale(value: number): number | null {
   const scale = validScale(value);
   try {
     window.localStorage.setItem(SCALE_KEY, String(scale));
   } catch {
-    // Storage refused: this session still gets what was asked for.
+    // Storage refused: nothing changes, and Settings says so (#782).
+    return null;
   }
   return scale;
 }
@@ -94,12 +102,14 @@ export function loadOneLine(): boolean {
   }
 }
 
-/** Save one line per person; announce it with `announceAppearance`. */
-export function saveOneLine(on: boolean): void {
+/** Save one line per person; announce it with `announceAppearance`. Says whether storage took it. */
+export function saveOneLine(on: boolean): boolean {
   try {
     window.localStorage.setItem(ONE_LINE_KEY, String(on));
+    return true;
   } catch {
-    // Storage refused: this window still gets it, until it's opened again.
+    // Storage refused: nothing changes, and Settings says so (#782).
+    return false;
   }
 }
 
@@ -114,18 +124,15 @@ export function loadHideReactions(): boolean {
   }
 }
 
-/** Save hiding reactions; announce it with `announceAppearance`. */
-export function saveHideReactions(hidden: boolean): void {
+/** Save hiding reactions; announce it with `announceAppearance`. Says whether storage took it. */
+export function saveHideReactions(hidden: boolean): boolean {
   try {
     window.localStorage.setItem(HIDE_REACTIONS_KEY, String(hidden));
+    return true;
   } catch {
-    // Storage refused: this window still gets it, until it's opened again.
+    // Storage refused: nothing changes, and Settings says so (#782).
+    return false;
   }
-}
-
-/** Plain names: applied to this window, and saved for the others. */
-export function saveNormalize(on: boolean): void {
-  applyNormalize(on);
 }
 
 /** A window's size after a change of interface size: grown or shrunk by the same ratio. */

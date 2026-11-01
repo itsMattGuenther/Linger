@@ -1,7 +1,7 @@
 import { SCALE_OPTIONS, TEXT_SIZE_OPTIONS } from "../../../lib/interface";
 import { HEADINGS } from "../../core/settings";
 import { Select, SettingRow, Switch } from "../../kit";
-import { Block, Plain } from "./parts";
+import { Block, Note, Plain } from "./parts";
 
 /** A setting that takes effect at once: its value and how to change it. */
 export interface Live<T> {
@@ -40,6 +40,19 @@ export interface AppearanceProps {
    * Everybody else still sees theirs.
    */
   reactions?: Live<boolean>;
+  /**
+   * The choice storage just refused to save (full, or switched off), said
+   * under it while the setting stays as it was (#782). Null once one saves.
+   */
+  unsaved?: AppearanceChoice | null;
+}
+
+/** The choices a save can refuse. The phone's Text size never says so: it's kept until the app closes. */
+export type AppearanceChoice = "scale" | "plainNames" | "reactions" | "oneLine";
+
+/** Said under a choice storage refused (#782). */
+function Unsaved() {
+  return <Note tone="problem">Couldn't save that here.</Note>;
 }
 
 /** A size's choices, the usual first: "100%, the usual", then each step. */
@@ -61,7 +74,7 @@ function SizePreview() {
 }
 
 /** Appearance: how Linger looks on this computer or phone (LOOK-1, LOOK-2, NAME-4, #197, #690). */
-export function AppearanceSection({ scale, textSize, warmth, plainNames, oneLine, reactions }: AppearanceProps) {
+export function AppearanceSection({ scale, textSize, warmth, plainNames, oneLine, reactions, unsaved = null }: AppearanceProps) {
   return (
     <>
       {/* Only when there's something to choose: a heading over nothing would look unfinished. */}
@@ -83,6 +96,7 @@ export function AppearanceSection({ scale, textSize, warmth, plainNames, oneLine
               options={sizeOptions(SCALE_OPTIONS)}
             />
           </div>
+          {unsaved === "scale" ? <Unsaved /> : null}
         </Block>
       ) : null}
       {textSize ? (
@@ -106,6 +120,7 @@ export function AppearanceSection({ scale, textSize, warmth, plainNames, oneLine
           description="Hide custom styles in your view. Everyone else keeps theirs."
           control={<Switch label="Use plain names and message fonts" checked={plainNames.value} onChange={plainNames.onChange} />}
         />
+        {unsaved === "plainNames" ? <Unsaved /> : null}
       </Plain>
       {reactions ? (
         <Plain>
@@ -115,6 +130,7 @@ export function AppearanceSection({ scale, textSize, warmth, plainNames, oneLine
             description="Turned off, you see no reactions and no buttons for leaving one. Everyone else still sees theirs."
             control={<Switch label="Show reactions" checked={reactions.value} onChange={reactions.onChange} />}
           />
+          {unsaved === "reactions" ? <Unsaved /> : null}
         </Plain>
       ) : null}
       {oneLine ? (
@@ -125,6 +141,7 @@ export function AppearanceSection({ scale, textSize, warmth, plainNames, oneLine
             description="Fits more people in your list. A status shows when you point at someone."
             control={<Switch label="One line per person" checked={oneLine.value} onChange={oneLine.onChange} />}
           />
+          {unsaved === "oneLine" ? <Unsaved /> : null}
         </Plain>
       ) : null}
     </>

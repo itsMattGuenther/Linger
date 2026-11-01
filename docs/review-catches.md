@@ -287,6 +287,17 @@ on a world that has changed.
   make the same promise on a computer, where the windows that apply them
   read storage too; keeping it there needs Settings' announcement to carry
   the choice to them.
+- **#784: keeping a refused choice in step across windows had three
+  holes.** #782's first fix kept the Appearance choices storage refused in
+  each window's memory and passed them between windows. A window reopened
+  while storage refused grew again each time, since the size it was grown
+  for went with the page; a window opened while Settings announced one
+  choice dropped the list's others; and Settings opened as the list's answer
+  came in showed the old choices. *Missed because* the tests opened each
+  window once and had every answer arrive in one order. *Changed:* nothing
+  keeps choices in step between windows. A choice storage refuses isn't
+  made, and Settings says so (#782), so every window reads one place,
+  storage.
 - **#796: a card opened from a cut topic had five holes.** A topic taller
   than the window lost its end; the card stayed where it opened when the
   window narrowed; pressing the words again closed and reopened it; words a
