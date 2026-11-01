@@ -197,6 +197,37 @@ The website, [linger.im](https://linger.im), built from the private
 is brought up to date once per release, not in feature pull requests: step 5 of
 `docs/releasing.md`.
 
+**The overview docs**
+
+Some docs describe the whole project rather than one feature, so no feature's
+pull request reads them, and they go stale first. By 2026-11-01,
+`ARCHITECTURE.md` still drew the server without voice forwarding and the client
+without the phone app, its schema was missing three tables, the README's layout
+was missing a crate, and three files still called shipped work "started". These
+are the overview docs:
+
+- `ARCHITECTURE.md` §1 (the drawing), §2 (stack choices), §3 (repository
+  layout), §5 (schema), §9 (deployment) and §10 (milestones).
+- The README's layout, under Development.
+- Milestone status, which lives in three places that must agree: *Build order*
+  in this file, `ARCHITECTURE.md` §10, and `TASKS.md`'s *Status* and section
+  headings.
+
+Change them in the same commit as the change that makes them wrong:
+
+- **A crate, a top-level directory or a part of the client** added, moved or
+  removed: `ARCHITECTURE.md` §1 and §3, and the README's layout.
+- **A migration**: §5, every table and column it adds, drops or renames.
+- **What runs where**: a new process, container or port, or a job moved
+  between the server, the shell and the page: §1, §2 and §9.
+- **A milestone started, shipped, closed or cut**: all three status places at
+  once.
+
+`scripts/overview-docs.test.mjs` fails CI when a crate, a top-level directory,
+a table or a column is missing, so the first two can't drift unnoticed. The
+other two are this rule alone, so check them whenever a pull request changes
+where something runs or finishes a milestone.
+
 ---
 
 ## Build and check
@@ -352,8 +383,8 @@ M0 scaffold → M1 server REST → M2 gateway → M3 client shell
   → M12 voice                                                        ← V2, built
   → M13 ambient voice                                   ← V2, cut 2026-10-11
   → M15 the Buddy list client (#198)                    ← built, the app from 0.4.0
-  → M16 screen sharing (#360)                           ← V2, started 2026-10-25
-  → mobile (T-16xx), text first, no push                 ← started 2026-10-02
+  → M16 screen sharing (#360)                ← V2, shipped in 0.5.2, check owed
+  → mobile (T-16xx), no push        ← Android from 0.4.8, iPhone in TestFlight
   → backburner: entrance sounds (T-901…T-903)
 ```
 
@@ -365,9 +396,13 @@ from real use of the published app; the steps are kept in
 `docs/tasks/release-checks.md` for re-running when their area changes. **M13
 (ambient voice) is cut** (Matt, 2026-10-11, `docs/decisions.md`); it was never
 started, so don't build toward it. Larger groups and the voice rework (a
-forwarding server) are #197. **Mobile is started** (Matt, 2026-10-02): a phone app for
-iPhone and Android from the same Tauri 2 crate, text first, with no push and no
-notifications. Read SPEC §4.15 before touching it; its tasks are `TASKS.md`
+forwarding server) were #197, closed 2026-10-19. **M16 (screen sharing) shipped
+in 0.5.2** (2026-10-27); its real check (T-1908) is still owed, so it isn't
+closed. **Mobile is started** (Matt, 2026-10-02): a phone app for
+iPhone and Android from the same Tauri 2 crate, with no push and no
+notifications. It started text only and got voice on 2026-10-19 (#429). It
+has been on Android since 0.4.8 and on friends' iPhones through TestFlight
+since 0.5.1. Read SPEC §4.15 before touching it; its tasks are `TASKS.md`
 §Mobile. Close a milestone's checks before starting the next.
 
 **The app is the Buddy list client, in `client/src/next/` (M15, #198).** Read

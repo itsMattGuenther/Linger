@@ -8,33 +8,48 @@ Companion to `SPEC.md`. Wire protocol is in `PROTOCOL.md`. Agent working rules a
 ## 1. Shape
 
 ```
-┌────────────────────────────────────────────┐
-│  CLIENT (Tauri 2)                          │
-│                                            │
-│  Frontend — TypeScript + React + Vite      │
-│    message list (virtualized)              │
-│    roster, composer, settings              │
-│                                            │
-│  Core — Rust                               │
-│    gateway client (WS, resume, backoff)    │
-│    token storage (OS keyring)              │
-│    voice (WebRTC, microphone, speakers;    │
-│      on a phone, the page's own WebRTC)    │
-└────────────────────────────────────────────┘
-                    │ WSS + HTTPS
-                    ▼
-┌────────────────────────────────────────────┐
-│  SERVER (single Rust binary)               │
-│                                            │
-│  axum   REST + WS gateway                  │
-│  SQLite (WAL)  messages, users, rooms      │
-│  Object store adapter                      │
-│    local filesystem | S3-compatible        │
-│  Background: media processing, expiry      │
-└────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│  CLIENT (Tauri 2): the desktop app, and the      │
+│  phone app built from the same crate (§4.15)     │
+│                                                  │
+│  Page — TypeScript + React + Vite                │
+│    the buddy list, conversations (virtualized),  │
+│    media, search, settings                       │
+│    screen sharing: WebCodecs, its own socket     │
+│    on a phone, voice too (the page's WebRTC)     │
+│                                                  │
+│  Shell — Rust                                    │
+│    gateway client (WS, resume, backoff)          │
+│    sign-ins (OS keyring)                         │
+│    voice (WebRTC, microphone, speakers)          │
+│    chimes, tray, updates, the push-to-talk key   │
+│    on Linux, screen capture (PipeWire)           │
+└──────────────────────────────────────────────────┘
+       │ HTTPS + WSS                  │ voice: UDP 3479
+       ▼                              │ (TURN relay if
+┌──────────────────────────────┐      │  UDP is blocked)
+│  Caddy: TLS for the domain   │      │
+│  and for cdn. (the files)    │      │
+└──────────────────────────────┘      │
+       │                              │
+       ▼                              ▼
+┌──────────────────────────────────────────────────┐
+│  SERVER (single Rust binary)                     │
+│                                                  │
+│  axum   REST + WS gateway + screen socket        │
+│  voice forwarding (crates/linger-sfu): each      │
+│    voice comes in once and goes out to the room  │
+│  SQLite (WAL)  messages, users, rooms            │
+│  Object store adapter                            │
+│    local filesystem | S3-compatible              │
+│  Background: media processing (ffmpeg),          │
+│    expiry, daily backups                         │
+└──────────────────────────────────────────────────┘
 ```
 
-Deployment is one binary plus one data directory, or one Docker image.
+The server is one binary plus one data directory, shipped as one Docker image.
+Caddy and the optional voice relay (coturn) are the deployment's other two
+containers (§9).
 
 ---
 
@@ -47,6 +62,8 @@ Deployment is one binary plus one data directory, or one Docker image.
 | **Tauri 2, not Electron** | Uses the OS WebView rather than bundling a browser; the gateway, keyring and audio live in Rust. Installed size, startup time, memory and idle use are measured in `docs/performance.md` (T-910): Linux so far, Windows still owed. | Only if WebKitGTK rendering on Linux becomes untenable. |
 | **TypeScript + React frontend** | Largest ecosystem for virtualized lists and rich text; fastest to iterate. | — |
 | **Object store adapter, not blobs in DB** | 500 MB files must never traverse the app server. | — |
+| **Voice through the server (an SFU), not a mesh** | Each person sends their voice once, and the server passes it on, so a room holds 60 rather than stopping somewhere past ten. Built into the server binary (`crates/linger-sfu`, with `str0m`), so a host installs nothing extra and opens one UDP port. The cost: the server hears what it forwards (SPEC §4.14). `docs/decisions.md` has the reasons. | Only if one room's voice is more than one server can carry. |
+| **One Tauri crate for desktop and phone** | The phone app shares the gateway client, sign-in and wire types, rather than being a second app to keep in step (SPEC §4.15). Desktop-only code is switched off with `#[cfg(desktop)]`. | If a phone needs something the Tauri mobile runtime can't give. |
 
 ### The Tauri caveat, stated up front
 
@@ -212,25 +229,38 @@ would otherwise shadow the package's own launcher
 
 ```
 linger/
-├─ SPEC.md
-├─ ARCHITECTURE.md
-├─ PROTOCOL.md
-├─ AGENTS.md
-├─ Cargo.toml                 # workspace
+├─ SPEC.md, ARCHITECTURE.md, PROTOCOL.md  # the source of truth
+├─ AGENTS.md, CONTRIBUTING.md, TASKS.md   # how to work here, and the queue
+├─ Cargo.toml                 # workspace: the three crates below
 ├─ crates/
-│  ├─ linger-core/             # shared types, ID generation, color palette
-│  ├─ linger-server/           # axum, SQLite, object store, gateway
+│  ├─ linger-core/            # the wire contract: shared types, IDs, palette, fonts
+│  ├─ linger-server/          # axum, SQLite, object store, gateway
+│  │                          #   (migrations/ and tests/ beside src/)
+│  └─ linger-sfu/             # voice forwarding, which the server runs (#197)
 ├─ client/
-│  ├─ src-tauri/              # Tauri shell, commands, keyring, gateway client
-│  └─ src/                    # React frontend
-├─ assets/
-│  ├─ fonts/                  # subset, bundled
-│  └─ sounds/                 # curated entrance sounds
-└─ deploy/
-   ├─ Dockerfile
-   ├─ compose.yaml            # linger + caddy
-   └─ Caddyfile
+│  ├─ src-tauri/              # the Rust shell: gateway client, keyring, voice,
+│  │                          #   tray, updates; outside the workspace (GUI libs);
+│  │                          #   gen/android and gen/apple are the phone projects
+│  ├─ src/next/               # the app: app/ screens, core/ logic, kit/ parts,
+│  │                          #   styles/ tokens (docs/design/architecture.md)
+│  ├─ src/lib/                # logic the windows share (.ts only)
+│  ├─ src/generated/          # wire types from linger-core, never edited by hand
+│  └─ tests/browser/          # the browser tests (Playwright)
+├─ deploy/                    # Dockerfile, compose.yaml, Caddyfile, .env.example,
+│                             #   setup.sh, update.sh, entrypoint.sh
+├─ packaging/arch/            # the Arch and Omarchy package and its repository
+├─ assets/                    # logos and fonts' licenses; sounds/ waits for
+│                             #   entrance sounds (TASKS.md, Backburner)
+├─ agents/                    # skills for contributors' own agents (#147)
+├─ docs/                      # guides, decisions, design, release notes;
+│                             #   docs/tasks/ archives closed milestones
+├─ scripts/                   # check.sh (what CI runs) and the checks it calls
+└─ .github/                   # CI workflows, issue forms
 ```
+
+`AGENTS.md`, "The overview docs", says when this map, §1 and the schema below
+have to change, and `scripts/overview-docs.test.mjs` fails CI when a crate, a
+top-level directory, a table or a column is missing from them.
 
 `linger-core` is the contract. Types defined there are exported to TypeScript via `ts-rs`
 during build. **The frontend never hand-writes a type that crosses the wire.**
@@ -267,7 +297,9 @@ CREATE TABLE users (
   created_at      INTEGER NOT NULL,
   last_seen_at    INTEGER,
   deactivated_at  INTEGER,
-  token_generation INTEGER NOT NULL DEFAULT 0  -- +1 ends every sign-in (#496, 0016)
+  token_generation INTEGER NOT NULL DEFAULT 0, -- +1 ends every sign-in (#496, 0016)
+  time_zone       TEXT,                        -- shared on the card, NULL = off (#604, 0023)
+  deleted_at      INTEGER                      -- deleted account, row kept emptied (#650, 0025)
 );
 
 -- name and message styling; see SPEC §4.5
@@ -390,6 +422,33 @@ CREATE INDEX idx_attachments_media ON attachments(created_at DESC) WHERE state='
 CREATE INDEX idx_attachments_message ON attachments(message_id);   -- a message's files (#518)
 CREATE INDEX idx_attachments_media_order                           -- Media's order (#518)
   ON attachments((starred_at IS NOT NULL), created_at, id) WHERE state = 'complete';
+
+-- A server's own emoji (#359, 0011): the picture is a finished upload that was
+-- never posted. It never expires, and removing the emoji removes it.
+CREATE TABLE custom_emoji (
+  id              BLOB PRIMARY KEY,
+  name            TEXT NOT NULL UNIQUE,         -- written :name: in a message
+  attachment_id   BLOB NOT NULL UNIQUE REFERENCES attachments(id),
+  created_by      BLOB NOT NULL REFERENCES users(id),
+  created_at      INTEGER NOT NULL
+);
+
+-- Export jobs (SPEC §4.11, T-801, 0003). The row is the job, so one running at a
+-- restart is visible and can be marked failed. One archive per member: a new
+-- export deletes the last one. Not `attachments` rows, so never in Media.
+CREATE TABLE exports (
+  id              BLOB PRIMARY KEY,
+  user_id         BLOB NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  state           TEXT NOT NULL,                -- queued | running | complete | failed
+  progress        REAL NOT NULL DEFAULT 0,      -- 0.0 .. 1.0
+  object_key      TEXT,                         -- set once there is an archive
+  size_bytes      INTEGER,
+  filename        TEXT,                         -- what it downloads as
+  error           TEXT,                         -- why it failed, for the log
+  created_at      INTEGER NOT NULL,
+  finished_at     INTEGER
+);
+CREATE INDEX idx_exports_by_user ON exports(user_id, created_at DESC);
 
 -- One row per URL in a message body, re-extracted on every edit. This is what
 -- the media grid pages over for `kind=link`; the stream re-extracts client-side
@@ -541,6 +600,21 @@ CREATE TABLE refresh_tokens (
 CREATE INDEX idx_refresh_hash ON refresh_tokens(token_hash);
 CREATE INDEX idx_refresh_family ON refresh_tokens(family_id);   -- logout, reuse (#520)
 CREATE INDEX idx_refresh_user ON refresh_tokens(user_id);       -- revoke everything a person holds
+
+-- Sign-in links (#581, PROTOCOL §5, 0024): the host makes one for somebody who
+-- forgot their password. One use, one day. Only the code's sha256 is kept, as
+-- for refresh tokens. Rows stay after use, so Settings can say who made one and
+-- when; a new link cancels any open one for the same person.
+CREATE TABLE sign_in_links (
+  token_hash      TEXT PRIMARY KEY,
+  user_id         BLOB NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  made_by         BLOB NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at      INTEGER NOT NULL,
+  expires_at      INTEGER NOT NULL,
+  used_at         INTEGER,
+  cancelled_at    INTEGER
+);
+CREATE INDEX idx_sign_in_links_user ON sign_in_links(user_id, created_at);
 
 CREATE TABLE server_config (
   key             TEXT PRIMARY KEY,
@@ -1297,7 +1371,7 @@ is gone (#306).
 | **M12** | Voice rooms | Four people, four networks, one hour, no drops | 1–2 weeks — **the audio path and the surface landed 2026-09-01 and 2026-09-04 (T-1401, T-1402, T-1404): frames, peer connections, ICE, microphone → Opus → RTP → speakers, and join / mute / push-to-talk / who is talking / per-person volume / a device picker. and a coturn relay in the deploy with short-lived passwords the server signs (T-1403). In real use across separate networks since 2026-09-17; HC-8 and HC-9 closed 2026-09-25, without the four-person hour (see #197)** |
 | **M13** | Ambient voice | A room left running all day costs almost no CPU, and nobody joined anything | **Cut 2026-10-11, never started** (`docs/decisions.md`). What voice work built toward it stays as voice: silence isn't sent (#430), being in a room's voice is being in the room (#420). Notes in `docs/tasks/m13.md` |
 | **M15** | The Buddy list client (#198) | The new client does everything in `docs/design/parity.md` and becomes the default; the old client is deleted | Several weeks — **the app from 0.4.0; the old client deleted after 0.4.3 (#306).** What's left is in `TASKS.md`; plan in `docs/design/architecture.md` |
-| **M16** | Screen sharing (SPEC §4.20, #360) | A Windows share is watched at 30 and 60 frames a second on Linux, Windows, Android and an iPhone through a real server for half an hour | Days — **started 2026-10-25** (`TASKS.md` M16) |
+| **M16** | Screen sharing (SPEC §4.20, #360) | A Windows share is watched at 30 and 60 frames a second on Linux, Windows, Android and an iPhone through a real server for half an hour | Days — **started 2026-10-25, shipped in 0.5.2 (2026-10-27).** Its real check (T-1908) is still owed, so it isn't closed (`TASKS.md` M16) |
 | **M14** | Custom themes | Somebody makes a colour scheme, it survives a restart, and a file carries it to another computer | **V3, not V2.** Three decisions come first — see `TASKS.md` *Parking lot* |
 
 **A mobile client is not in this sequence** (Matt, 2026-08-28). It was going to
@@ -1305,7 +1379,9 @@ be M14 and went to `TASKS.md`'s *Backburner*, because the desktop app had to be
 finished and used by real people before a second platform doubled the surface
 of every bug still in it. It came back on 2026-10-02 as its own section of
 `TASKS.md` (T-16xx), not a milestone: a phone app for iPhone and Android from
-the same Tauri 2 crate, text first, with no push (SPEC §4.15). **M14 is now custom themes** (Matt,
+the same Tauri 2 crate, with no push (SPEC §4.15). It started text only and
+got voice on 2026-10-19 (#429). It has been on Android since 0.4.8 and on
+friends' iPhones through TestFlight since 0.5.1. **M14 is now custom themes** (Matt,
 2026-08-31), which is V3 rather than V2: SPEC §6 carries the scope line and
 `TASKS.md` M14 carries the three things that have to be decided before any of it
 starts. The short version is that a theme is a list of token values rather than

@@ -126,7 +126,8 @@ This is not an attempt to build a better platform. It's an attempt to not need o
 - **Full export.** Anyone can export public rooms and their own DMs, with
   files, without asking the host. It opens in any web browser with a
   double-click.
-- **Linux and Windows** (Tauri 2, not Electron). macOS builds from source.
+- **Linux, Windows and Android** (Tauri 2, not Electron). An iPhone app is in
+  testing with a small group, and macOS builds from source.
 
 **What it will never have:** XP, streaks or engagement metrics. Federation,
 bots, roles, threads, `@everyone`, algorithmic ordering, unread badges.
@@ -218,13 +219,16 @@ addresses and invite links. If you use a coding agent, the
 ```
 crates/linger-core/    shared types, IDs and the palette: the wire contract
 crates/linger-server/  the server: REST and WebSocket gateway, SQLite, file storage
+crates/linger-sfu/     voice forwarding, which the server runs
 client/                the desktop app: Tauri 2 shell (src-tauri) and React
                        (src/next is the app; src/lib is the logic its windows
                        share, and src/generated the wire types); the phone
-                       app, started, builds from the same shell
-                       (src-tauri/gen/android)
+                       apps build from the same shell (src-tauri/gen/android
+                       and src-tauri/gen/apple)
 deploy/                Dockerfile, compose, Caddyfile, .env.example, setup.sh, update.sh
 packaging/arch/        the Arch/Omarchy package and its repository
+assets/                logos and fonts' licenses
+agents/                skills for your own coding agent (linger-report, linger-contribute)
 docs/                  guides, decisions, design, release notes
 scripts/               check.sh (the local gate) and what it calls
 ```

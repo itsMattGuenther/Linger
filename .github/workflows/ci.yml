@@ -406,6 +406,10 @@ jobs:
       - name: every file the living docs name exists
         # A renamed or deleted file leaves every doc naming it stale (#770).
         run: node --test scripts/doc-paths.test.mjs
+      - name: the overview docs name every crate, top-level directory, table and column
+        # No feature reads ARCHITECTURE.md's map or the README's layout, so
+        # they went stale without anybody seeing (AGENTS.md, "The overview docs").
+        run: node --test scripts/overview-docs.test.mjs
       - name: the packaged-app checks start the app without the caller's WebKit, media and graphics settings
         # A workaround in the shell could pass for the fix it stands in for (#757, #765).
         run: node --test scripts/linux-next-env.test.mjs
