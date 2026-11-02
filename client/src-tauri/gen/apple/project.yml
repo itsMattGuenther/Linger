@@ -140,3 +140,19 @@ targets:
             value="$(/usr/libexec/PlistBuddy -c "Print :$key" "$app")"
             /usr/libexec/PlistBuddy -c "Set :$key $value" "$mine"
           done
+      # tauri ios build builds with signing off, then signs only the app's own
+      # binary with its entitlements before the export, which signs every part
+      # again but keeps the entitlements each was signed with. Unsigned, this
+      # extension lost its App Group and couldn't open the folder a share goes
+      # in (#811). So sign it ad hoc with its entitlements, last, for the
+      # export to keep. A build that signs for real skips this.
+      - name: Its App Group in its signature
+        basedOnDependencyAnalysis: false
+        inputFiles:
+          - $(SRCROOT)/ShareExtension/ShareExtension.entitlements
+        script: |
+          if [ "${CODE_SIGNING_ALLOWED}" = "NO" ]; then
+            /usr/bin/codesign --force --sign - --timestamp=none --generate-entitlement-der \
+              --entitlements "${SRCROOT}/ShareExtension/ShareExtension.entitlements" \
+              "${CODESIGNING_FOLDER_PATH}"
+          fi

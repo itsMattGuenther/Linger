@@ -348,8 +348,15 @@ submit for review.
   that needs it, at Certificates, Identifiers & Profiles → Identifiers: an App
   Group under **+** → App Groups; a capability by opening the identifier
   (switch the list's filter, top right, to App IDs), ticking it, Configure,
-  Save. `ios.yml`
-  fails a build whose app doesn't hold the extension, or whose extension's
+  Save. **The extension signs itself with its entitlements** in its last build
+  phase, ad hoc, when the build doesn't sign (#811): `tauri ios build` builds
+  with signing off, then signs only the app's own binary with the app's
+  entitlements before the export, and the export signs every part again but
+  keeps only the entitlements each was already signed with. Unsigned, the
+  extension lost its App Group, and every share failed on a phone with
+  "Linger couldn't take that". `ios.yml` fails a build whose app or extension
+  isn't signed with the App Group ("the App Group in both signatures"), and
+  one whose app doesn't hold the extension, or whose extension's
   version isn't the app's. The extension has no privacy manifest of its own,
   because it makes none of the calls Apple asks a reason for; "the calls the
   privacy manifest answers for" prints its calls under the app's, so one that
