@@ -11,6 +11,7 @@ import {
   type ShareListing,
   type ShareShell,
   type ShareStatus,
+  shareListings,
   shareWindowList,
 } from "../../core/shareWindow";
 
@@ -103,20 +104,31 @@ export function useShareSignIns(on: boolean, sessions: Sessions): ReadonlyMap<st
 /**
  * On an iPhone, write the list the share window picks from (#820) whenever
  * the list or a server's sign-in changes, a moment after, so a burst of
- * changes is written once.
+ * changes is written once. `signedIn` is every server signed in here, in the
+ * list's order: one the app isn't connected to right now is written as it
+ * last was (`shareListings`, #822).
  */
-export function useShareWindowList(on: boolean, listings: readonly ShareListing[], status: ReadonlyMap<string, ShareStatus>): void {
+export function useShareWindowList(
+  on: boolean,
+  signedIn: readonly string[],
+  listings: readonly ShareListing[],
+  status: ReadonlyMap<string, ShareStatus>,
+): void {
+  const kept = useRef(new Map<string, ShareListing>());
   useEffect(() => {
     if (!on) return undefined;
+    // Now, not when the write comes round: every connected listing is kept.
+    const servers = shareListings(signedIn, listings, kept.current);
+    if (servers === null) return undefined;
     const timer = window.setTimeout(() => {
       const reader = colorReader(document);
       try {
-        const list = shareWindowList(listings, status, readTheme(reader), (key) => nameColor(reader, key), Date.now());
+        const list = shareWindowList(servers, status, readTheme(reader), (key) => nameColor(reader, key), Date.now());
         void shell.writeList(list).catch(() => undefined);
       } finally {
         reader.done();
       }
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [on, listings, status]);
+  }, [on, signedIn, listings, status]);
 }

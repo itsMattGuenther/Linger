@@ -6,6 +6,8 @@ import {
   hexOf,
   keepShareSignIns,
   oneAtATime,
+  type ShareListing,
+  shareListings,
   RENEW_AFTER_MS,
   SHARE_LIST_VERSION,
   type ShareShell,
@@ -117,6 +119,52 @@ describe("the list the share window picks from", () => {
   it("writes a colour the Swift side reads: #rrggbbaa", () => {
     expect(hexOf([243, 181, 92, 255])).toBe("#f3b55cff");
     expect(hexOf([0, 0, 0, 0])).toBe("#00000000");
+  });
+});
+
+describe("the servers the list is written from (#822)", () => {
+  const eli = person("u-eli", "Eli", "azure");
+  const connected = (id: string, room: string): ShareListing => ({
+    id,
+    name: id,
+    model: model({ me: row(eli, null), rooms: [{ id: room, name: room, fresh: false, people: [], voice: false, screen: false }] }),
+  });
+  // What a server the app has let go of, or is connecting to, looks like: nobody yet.
+  const unconnected = (id: string): ShareListing => ({ id, name: id, model: model({}) });
+
+  it("a server the app has let go of, a while in the background, keeps its conversations", () => {
+    const kept = new Map<string, ShareListing>();
+    const good = connected("https://good.example", "r-general");
+    expect(shareListings(["https://good.example"], [good], kept)).toEqual([good]);
+    // Thirty seconds in the background: the app has no state for it at all.
+    expect(shareListings(["https://good.example"], [], kept)).toEqual([good]);
+    // Connecting again, nothing heard yet.
+    expect(shareListings(["https://good.example"], [unconnected("https://good.example")], kept)).toEqual([good]);
+    // Connected: what it says now.
+    const later = connected("https://good.example", "r-new");
+    expect(shareListings(["https://good.example"], [later], kept)).toEqual([later]);
+  });
+
+  it("signing out of a server takes it off", () => {
+    const kept = new Map<string, ShareListing>();
+    const good = connected("https://good.example", "r-general");
+    const other = connected("https://other.example", "r-x");
+    shareListings(["https://good.example", "https://other.example"], [good, other], kept);
+    expect(shareListings(["https://other.example"], [], kept)).toEqual([other]);
+    expect(kept.has("https://good.example")).toBe(false);
+    // Signed out of every one: an empty list, to say so.
+    expect(shareListings([], [], kept)).toEqual([]);
+  });
+
+  it("writes nothing until every server signed in has been connected to since the app started", () => {
+    const kept = new Map<string, ShareListing>();
+    const good = connected("https://good.example", "r-general");
+    // Just opened: connecting to both, nothing heard. The list on file stays.
+    expect(shareListings(["https://good.example", "https://down.example"], [unconnected("https://good.example")], kept)).toBeNull();
+    // One connected, the other down: still the list on file, which has both.
+    expect(shareListings(["https://good.example", "https://down.example"], [good, unconnected("https://down.example")], kept)).toBeNull();
+    const down = connected("https://down.example", "r-x");
+    expect(shareListings(["https://good.example", "https://down.example"], [good, down], kept)).toEqual([good, down]);
   });
 });
 

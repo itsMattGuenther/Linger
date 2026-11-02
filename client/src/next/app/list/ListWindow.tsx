@@ -1328,7 +1328,8 @@ function Servers({
   useEffect(() => (isTauri() && onPhone() ? watchShares({ bus: tauriBus(), window, document }, askShell, showShare) : undefined), [showShare]);
   const shareSections = useMemo(() => shareTargets(listings), [listings]);
   // The list the iPhone's share window picks from (#820).
-  useShareWindowList(isTauri() && onIPhone(), listings, shareStatus);
+  const signedInServers = useMemo(() => ordered.map((session) => session.baseUrl), [ordered]);
+  useShareWindowList(isTauri() && onIPhone(), signedInServers, listings, shareStatus);
   const pickShare = useCallback(
     async (target: ShareTarget) => {
       const share = showing.current;

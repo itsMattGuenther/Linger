@@ -164,6 +164,34 @@ export interface ShareServer {
 }
 
 /**
+ * The listings the share window's list is written from (#822): every server
+ * signed in here, in order, as it is now if the app is connected to it, or as
+ * it was the last time it was. The app lets go of a server's rooms and people
+ * while it's a while in the background or offline, and has none of them yet
+ * while connecting, and the list written from that had no servers: sharing
+ * from Photos a minute after leaving Linger said to sign in. Only signing out
+ * of a server takes it off. `null`, and nothing to write, while a server
+ * signed in hasn't been connected to since the app started (just opened,
+ * offline, or that server down): the list already written has it as it last
+ * was, which is better than without it. `kept` holds each server's last
+ * connected listing, and is brought up to date.
+ */
+export function shareListings(signedIn: readonly string[], now: readonly ShareListing[], kept: Map<string, ShareListing>): ShareListing[] | null {
+  const current = new Map(now.map((listing) => [listing.id, listing]));
+  for (const id of [...kept.keys()]) if (!signedIn.includes(id)) kept.delete(id);
+  const servers: ShareListing[] = [];
+  for (const id of signedIn) {
+    const listing = current.get(id);
+    // Connected: the server has said who you are.
+    if (listing && listing.model.me !== null) kept.set(id, listing);
+    const known = kept.get(id);
+    if (!known) return null;
+    servers.push(known);
+  }
+  return servers;
+}
+
+/**
  * A queue for `keepShareSignIns`: each run starts once the one before it has
  * settled (#822). Two at once, a sign-out's run could finish before an older
  * run, still asking, saved what it got, which then stayed after the sign-out
