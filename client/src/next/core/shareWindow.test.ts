@@ -1,0 +1,205 @@
+import { describe, expect, it, vi } from "vitest";
+import type { User } from "../../generated/User";
+import { ApiError } from "../../lib/api";
+import type { ListModel, PersonRow } from "./list";
+import {
+  hexOf,
+  keepShareSignIns,
+  RENEW_AFTER_MS,
+  SHARE_LIST_VERSION,
+  type ShareShell,
+  type ShareWindowList,
+  type ShareWindowTheme,
+  shareWindowList,
+} from "./shareWindow";
+
+// The iPhone's share window (#820): the app hands it a sign-in of its own on
+// each server and the list it picks from, through the App Group.
+
+function person(id: string, name: string, color: string): User {
+  return {
+    id,
+    username: name.toLowerCase(),
+    display_name: name,
+    is_host: false,
+    is_cohost: false,
+    style: { font_key: "inter", weight: 400, italic: false, fill: { kind: "solid", color }, effect: "none", msg_font_key: null },
+    status: null,
+    entrance_sound: null,
+    last_seen_at: null,
+  };
+}
+
+function row(user: User, dm: string | null): PersonRow {
+  return { user, state: "around", note: "around", line: null, inVoice: false, sharing: false, dm, fresh: false, talked: dm !== null };
+}
+
+function model(parts: Partial<ListModel>): ListModel {
+  return { me: null, rooms: [], groups: [], dmMembers: [], people: { here: [], away: [], offline: [] }, ...parts };
+}
+
+const THEME: ShareWindowTheme = {
+  background: "#182135ff",
+  raised: "#1b2436ff",
+  field: "#0f1522ff",
+  chosen: "#f3b55c1f",
+  chosenEdge: "#f3b55c73",
+  text: "#f1ebe0ff",
+  textSecondary: "#c0c6d2ff",
+  textMuted: "#8d96a9ff",
+  hairline: "#222d44ff",
+  accent: "#f3b55cff",
+  onAccent: "#1c1206ff",
+  danger: "#ff7a7aff",
+};
+
+const colorOf = (key: string) => `#${key}`;
+
+describe("the list the share window picks from", () => {
+  const eli = person("u-eli", "Eli", "azure");
+  const sam = person("u-sam", "Sam", "sage");
+  const jules = person("u-jules", "Jules", "rust");
+  const dave = person("u-dave", "Dave", "plum");
+  const good = model({
+    rooms: [
+      { id: "r-general", name: "general", fresh: false, people: [], voice: false, screen: false },
+      { id: "r-raid", name: "raid-night", fresh: true, people: [], voice: true, screen: false },
+    ],
+    groups: [
+      { id: "g-trip", label: "Eli and Sam", people: [{ user: eli, state: "around" }, { user: sam, state: "away" }], memberIds: [], fresh: false, leavable: true, last: false },
+      { id: "g-empty", label: "Dave", people: [], memberIds: [], fresh: false, leavable: true, last: true },
+    ],
+    people: { here: [row(eli, "d-eli"), row(sam, null)], away: [], offline: [row(jules, "d-jules"), row(dave, null)] },
+  });
+
+  it("is every server's rooms, groups and DMs in the list's order, with people's colours", () => {
+    const list = shareWindowList(
+      [
+        { id: "https://good.example", name: "The Good Company", model: good },
+        { id: "https://other.example", name: "Other", model: model({ rooms: [{ id: "r-x", name: "x", fresh: false, people: [], voice: false, screen: false }] }) },
+      ],
+      new Map([["https://good.example", "ready"], ["https://other.example", "old"]]),
+      THEME,
+      colorOf,
+      1_000,
+    );
+    const expected: ShareWindowList = {
+      version: SHARE_LIST_VERSION,
+      written_at: 1_000,
+      theme: THEME,
+      servers: [
+        {
+          base_url: "https://good.example",
+          name: "The Good Company",
+          share: "ready",
+          conversations: [
+            { room_id: "r-general", kind: "room", name: "general", colors: [] },
+            { room_id: "r-raid", kind: "room", name: "raid-night", colors: [] },
+            // A group nobody else is in any more is left out: nobody would see it.
+            { room_id: "g-trip", kind: "group", name: "Eli and Sam", colors: ["#azure", "#sage"] },
+            // People you have a DM with, here first, then offline; not those you haven't.
+            { room_id: "d-eli", kind: "dm", name: "Eli", colors: ["#azure"] },
+            { room_id: "d-jules", kind: "dm", name: "Jules", colors: ["#rust"] },
+          ],
+        },
+        { base_url: "https://other.example", name: "Other", share: "old", conversations: [{ room_id: "r-x", kind: "room", name: "x", colors: [] }] },
+      ],
+    };
+    expect(list).toEqual(expected);
+  });
+
+  it("is `none` for a server whose sign-in nobody has said", () => {
+    const list = shareWindowList([{ id: "https://good.example", name: "G", model: good }], new Map(), THEME, colorOf, 0);
+    expect(list.servers[0]?.share).toBe("none");
+  });
+
+  it("writes a colour the Swift side reads: #rrggbbaa", () => {
+    expect(hexOf([243, 181, 92, 255])).toBe("#f3b55cff");
+    expect(hexOf([0, 0, 0, 0])).toBe("#00000000");
+  });
+});
+
+/** A shell keeping sign-ins in memory, as the Keychain would. */
+function memoryShell(kept: Record<string, { token: string; at: number }> = {}) {
+  const store = new Map(Object.entries(kept));
+  const shell: ShareShell = {
+    savedAt: async (baseUrl) => store.get(baseUrl)?.at ?? null,
+    save: async (baseUrl, token) => {
+      const before = store.get(baseUrl)?.token ?? null;
+      store.set(baseUrl, { token, at: NOW });
+      return before;
+    },
+    forget: async (baseUrl) => {
+      const before = store.get(baseUrl)?.token ?? null;
+      store.delete(baseUrl);
+      return before;
+    },
+    kept: async () => [...store.keys()],
+    writeList: async () => undefined,
+  };
+  return { shell, store };
+}
+
+const NOW = 10 * RENEW_AFTER_MS;
+const GOOD = "https://good.example";
+
+describe("keeping the share window's sign-ins", () => {
+  it("asks for one on a server that has none, and keeps it", async () => {
+    const { shell, store } = memoryShell();
+    const logout = vi.fn(async () => undefined);
+    const status = await keepShareSignIns([{ baseUrl: GOOD, shareSignIn: async () => "share-1" }], new Set([GOOD]), shell, logout, NOW);
+    expect(status.get(GOOD)).toBe("ready");
+    expect(store.get(GOOD)?.token).toBe("share-1");
+    expect(logout).not.toHaveBeenCalled();
+  });
+
+  it("leaves a fresh one alone, without asking", async () => {
+    const { shell } = memoryShell({ [GOOD]: { token: "kept", at: NOW - RENEW_AFTER_MS + 1 } });
+    const ask = vi.fn(async () => "share-2");
+    const status = await keepShareSignIns([{ baseUrl: GOOD, shareSignIn: ask }], new Set([GOOD]), shell, vi.fn(), NOW);
+    expect(status.get(GOOD)).toBe("ready");
+    expect(ask).not.toHaveBeenCalled();
+  });
+
+  it("renews one that's getting old, and signs the old one out", async () => {
+    const { shell, store } = memoryShell({ [GOOD]: { token: "old-share", at: NOW - RENEW_AFTER_MS } });
+    const logout = vi.fn(async () => undefined);
+    await keepShareSignIns([{ baseUrl: GOOD, shareSignIn: async () => "share-2" }], new Set([GOOD]), shell, logout, NOW);
+    expect(store.get(GOOD)?.token).toBe("share-2");
+    expect(logout).toHaveBeenCalledWith(GOOD, "old-share");
+  });
+
+  it("says a server from before it is `old`, and keeps nothing", async () => {
+    const { shell, store } = memoryShell();
+    const old = async (): Promise<string> => {
+      throw new ApiError(404, { code: "NOT_FOUND", message: "Not found.", retry_after_ms: null });
+    };
+    const status = await keepShareSignIns([{ baseUrl: GOOD, shareSignIn: old }], new Set([GOOD]), shell, vi.fn(), NOW);
+    expect(status.get(GOOD)).toBe("old");
+    expect(store.has(GOOD)).toBe(false);
+  });
+
+  it("keeps using one within its 30 days when a renewal can't reach the server", async () => {
+    const { shell, store } = memoryShell({ [GOOD]: { token: "kept", at: NOW - RENEW_AFTER_MS - 5 } });
+    const offline = async (): Promise<string> => {
+      throw new TypeError("Network unavailable");
+    };
+    const status = await keepShareSignIns([{ baseUrl: GOOD, shareSignIn: offline }], new Set([GOOD]), shell, vi.fn(), NOW);
+    expect(status.get(GOOD)).toBe("ready");
+    expect(store.get(GOOD)?.token).toBe("kept");
+    const none = await keepShareSignIns([{ baseUrl: "https://new.example", shareSignIn: offline }], new Set(["https://new.example"]), memoryShell().shell, vi.fn(), NOW);
+    expect(none.get("https://new.example")).toBe("none");
+  });
+
+  it("signs out of a server the app has left, but not one still being reached", async () => {
+    const { shell, store } = memoryShell({
+      [GOOD]: { token: "gone-share", at: NOW },
+      "https://waiting.example": { token: "waiting-share", at: NOW },
+    });
+    const logout = vi.fn(async () => undefined);
+    await keepShareSignIns([], new Set(["https://waiting.example"]), shell, logout, NOW);
+    expect(store.has(GOOD)).toBe(false);
+    expect(logout).toHaveBeenCalledWith(GOOD, "gone-share");
+    expect(store.get("https://waiting.example")?.token).toBe("waiting-share");
+  });
+});

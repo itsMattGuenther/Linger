@@ -38,6 +38,7 @@ import type { LoginRequest } from "../generated/LoginRequest";
 import type { MediaItem } from "../generated/MediaItem";
 import type { MediaKind } from "../generated/MediaKind";
 import type { RefreshRequest } from "../generated/RefreshRequest";
+import type { ShareSignInResponse } from "../generated/ShareSignInResponse";
 import type { CreatePollRequest } from "../generated/CreatePollRequest";
 import type { RefreshResponse } from "../generated/RefreshResponse";
 import type { RegisterRequest } from "../generated/RegisterRequest";
@@ -384,6 +385,11 @@ export class PublicApi {
     return requestJson(this.baseUrl, "POST", "/auth/refresh", { body: request });
   }
 
+  /** A sign-in of its own for the iPhone's share window (PROTOCOL §2, #820). The token asked with isn't spent. */
+  shareSignIn(request: RefreshRequest): Promise<ShareSignInResponse> {
+    return requestJson(this.baseUrl, "POST", "/auth/share-sign-in", { body: request });
+  }
+
   logout(refreshToken: string): Promise<void> {
     const body: RefreshRequest = { refresh_token: refreshToken };
     return requestVoid(this.baseUrl, "POST", "/auth/logout", { body });
@@ -432,6 +438,11 @@ export interface TokenSource {
   replace(change: () => Promise<Tokens | null>): Promise<boolean>;
   /** The refresh token, which only the owning source holds. */
   readonly refreshToken: string | null;
+  /**
+   * A sign-in of its own for the iPhone's share window (#820), asked with
+   * the refresh token, which isn't spent. Only the owning source can.
+   */
+  shareSignIn?(): Promise<string>;
 }
 
 interface SignInHandlers {
@@ -455,6 +466,12 @@ class RotatingTokens implements TokenSource {
    * revoked, which signs this device out.
    */
   #changing: Promise<boolean> | null = null;
+  /**
+   * A share window's sign-in being asked for (#820), with the refresh token
+   * as it is. A renewal waits for it: spending that token meanwhile would
+   * make the ask a replay, which revokes this sign-in.
+   */
+  #asking: Promise<unknown> | null = null;
   readonly #handlers: SignInHandlers;
 
   constructor(baseUrl: string, tokens: Tokens, handlers: SignInHandlers) {
@@ -500,9 +517,28 @@ class RotatingTokens implements TokenSource {
     return changed;
   }
 
+  shareSignIn(): Promise<string> {
+    const asked = (async () => {
+      // Never with a token on its way to being spent or replaced.
+      await this.#refreshing?.catch(() => undefined);
+      await this.#changing;
+      const answer = await new PublicApi(this.#baseUrl).shareSignIn({ refresh_token: this.#tokens.refreshToken });
+      return answer.refresh_token;
+    })();
+    const settled = asked.catch(() => undefined);
+    this.#asking = settled;
+    void settled.then(() => {
+      if (this.#asking === settled) this.#asking = null;
+    });
+    return asked;
+  }
+
   #rotate(): Promise<void> {
     if (this.#refreshing) return this.#refreshing;
     const attempt = (async () => {
+      // A share window's sign-in proving this token: let it finish first (#820).
+      // Only then: without one, a renewal starts at once, as it always has.
+      if (this.#asking) await this.#asking;
       const previous = this.#tokens.refreshToken;
       try {
         const fresh = await new PublicApi(this.#baseUrl).refresh({
@@ -617,6 +653,15 @@ export class AuthedApi {
       if (!handlers) throw new Error("an owned sign-in needs its handlers");
       this.#source = new RotatingTokens(baseUrl, tokens, handlers);
     }
+  }
+
+  /**
+   * A sign-in of its own for the iPhone's share window (#820): the first
+   * refresh token of a new family. Only the owning window can ask.
+   */
+  shareSignIn(): Promise<string> {
+    if (!this.#source.shareSignIn) return Promise.reject(new Error("a borrowed sign-in can't ask for another"));
+    return this.#source.shareSignIn();
   }
 
   /** The refresh token, for signing out. Only the owning window has one. */
