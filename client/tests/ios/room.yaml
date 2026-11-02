@@ -5,15 +5,17 @@
 # Maestro matches words whatever their case, and the whole of an element's
 # words, so the room is called something nothing else on these screens is:
 # a room called porch matched the server's name, Porch, in the title bar.
+# Its row reads "#evenings" to VoiceOver, and so to Maestro: the # and the
+# name together.
 appId: io.github.itsmattguenther.linger
 ---
 - runScript:
     file: seed.js
 - extendedWaitUntil:
-    visible: "evenings"
+    visible: "#evenings"
     timeout: 30000
 - takeScreenshot: 07-list-with-a-room
-- tapOn: "evenings"
+- tapOn: "#evenings"
 - extendedWaitUntil:
     visible: "Hello from the runner."
     timeout: 30000
