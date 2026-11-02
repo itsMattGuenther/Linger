@@ -408,6 +408,11 @@ margin 6 | padding 10 | lead slot 14 | gap 8 | text column … | actions
     and its `label` says it for screen readers.
   - `knocked` means you just knocked on this person's door: the row gives one
     small shake (two slow durations long, so none under reduced motion).
+- **A row with nothing to do** (no `onActivate`, `onDoubleActivate`, `hold`
+  or tooltip) is text, not a button: a list of names to read, such as the
+  people in a conversation, or everyone in a call on an iPhone, which has no
+  per-person volume (#816). A button that does nothing is announced as one
+  and stops the keyboard (Greptile on #819), and it doesn't light on hover.
 - **Actions:** up to three md `IconButton`s, shown on keyboard focus, and
   while one of them has its menu open (`expanded`), so the menu never points
   at nothing (#565). Where the pointer can hover (`@media (hover: hover)`),

@@ -158,6 +158,8 @@ export function Row({
   option,
 }: RowProps) {
   const count = Math.min(actions?.length ?? 0, 3);
+  // A row nothing happens to: no tap, double tap, hold or tooltip.
+  const plain = onActivate === undefined && onDoubleActivate === undefined && hold === undefined && !(detailTip && detail);
   const detailNode = useRef<HTMLSpanElement | null>(null);
   const [tipAt, setTipAt] = useState<HTMLElement | null>(null);
   const main = useRef<HTMLButtonElement | null>(null);
@@ -239,20 +241,30 @@ export function Row({
       data-holdable={holder ? "yes" : undefined}
       {...holder}
     >
-      <button
-        ref={main}
-        type="button"
-        className="k-row-main"
-        aria-label={label}
-        aria-current={selected || undefined}
-        disabled={disabled}
-        onClick={onActivate}
-        onDoubleClick={onDoubleActivate}
-        {...tip}
-      >
-        <Lead lead={lead} />
-        {text}
-      </button>
+      {plain ? (
+        // Nothing to do here, only something to read: not a button, so a
+        // screen reader doesn't announce one and the keyboard doesn't stop
+        // on it (#819). A list of names, as people in a conversation are.
+        <div className="k-row-main" data-plain="">
+          <Lead lead={lead} />
+          {text}
+        </div>
+      ) : (
+        <button
+          ref={main}
+          type="button"
+          className="k-row-main"
+          aria-label={label}
+          aria-current={selected || undefined}
+          disabled={disabled}
+          onClick={onActivate}
+          onDoubleClick={onDoubleActivate}
+          {...tip}
+        >
+          <Lead lead={lead} />
+          {text}
+        </button>
+      )}
       {count > 0 ? <span className="k-row-actions">{actions?.slice(0, 3)}</span> : null}
       {tipAt ? <TooltipBubble anchor={tipAt}>{detail}</TooltipBubble> : null}
       {hold?.raised ?? null}

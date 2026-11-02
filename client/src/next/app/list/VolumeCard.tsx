@@ -56,9 +56,10 @@ export function VolumeCard({
   // Risen on the phone, Back closes it, as it does the phone's other sheets.
   useBackButton(sheet, onClose);
 
-  // The slider has the keyboard as soon as it opens.
+  // The slider has the keyboard as soon as it opens; on an iPhone, which has
+  // none, Take out does (Greptile on #819), not the chip behind the card.
   useEffect(() => {
-    body.current?.querySelector<HTMLInputElement>("input")?.focus();
+    body.current?.querySelector<HTMLElement>("input, button")?.focus();
   }, []);
 
   return (

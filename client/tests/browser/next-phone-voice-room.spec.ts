@@ -249,7 +249,8 @@ test.describe("on an iPhone, where a voice's volume can't be set (#816)", () => 
     await strip(page).getByRole("button", { name: "Take Eli out of voice" }).click();
     const card = page.getByRole("dialog", { name: "Eli in voice" });
     await expect(card).toBeVisible();
-    await expect(card.getByRole("button", { name: "Take out of voice" })).toBeVisible();
+    // With no slider, the keyboard goes to Take out, not the chip behind (Greptile on #819).
+    await expect(card.getByRole("button", { name: "Take out of voice" })).toBeFocused();
     await expect(card.getByRole("slider")).toHaveCount(0);
     await expect(card.getByText("Only for you, on this phone.")).toHaveCount(0);
     // Everyone by name: each row opens the same, and shows no volume.
@@ -272,10 +273,10 @@ test.describe("on an iPhone, where a voice's volume can't be set (#816)", () => 
     const everyone = page.getByRole("dialog", { name: "Everyone in voice in #general" });
     const names = everyone.getByRole("list", { name: "In voice in #general" });
     await expect(names.getByRole("listitem")).not.toHaveCount(0);
-    // A name, as the people card lists them (a kit row): no volume, no Take
-    // out, and a tap opens nothing.
-    await expect(names.getByRole("button", { name: /volume|out of voice/ })).toHaveCount(0);
-    await names.getByRole("button").first().click();
+    // Names to read, not buttons that do nothing (Greptile on #819): a
+    // screen reader doesn't announce a button, and the keyboard doesn't stop.
+    await expect(names.getByRole("button")).toHaveCount(0);
+    await names.getByRole("listitem").first().click();
     await expect(page.getByRole("dialog", { name: / in voice$|'s volume$/ })).toHaveCount(0);
     await expect(everyone).toBeVisible();
     await page.keyboard.press("Escape");
