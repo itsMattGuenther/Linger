@@ -339,11 +339,16 @@ submit for review.
 - **The share extension** (#785) is a second program inside the app, with its
   own identifier, `io.github.itsmattguenther.linger.share`, and both belong to
   the App Group `group.io.github.itsmattguenther.linger`, whose folder is how
-  a share reaches the app. Automatic signing should register the identifier
-  and the group the first time `ios.yml` builds with them. If the build says
-  it can't, register both by hand in the Apple account (Certificates,
-  Identifiers & Profiles: the identifier, then the App Group, then tick App
-  Groups on both identifiers and pick the group) and run it again. `ios.yml`
+  a share reaches the app. Both are registered in the Apple account, by hand
+  (2026-11-02): automatic signing through the API key makes certificates and
+  profiles, but can't register a new identifier or turn on a capability, and
+  the first build with the extension failed at export with "Automatic signing
+  cannot register bundle identifier". So a new identifier or capability (a
+  second extension, push, iCloud) is registered by hand **before** the build
+  that needs it, at Certificates, Identifiers & Profiles → Identifiers: an App
+  Group under **+** → App Groups; a capability by opening the identifier
+  (switch the list's filter, top right, to App IDs), ticking it, Configure,
+  Save. `ios.yml`
   fails a build whose app doesn't hold the extension, or whose extension's
   version isn't the app's. The extension has no privacy manifest of its own,
   because it makes none of the calls Apple asks a reason for; "the calls the
