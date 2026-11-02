@@ -1,158 +1,161 @@
 import ImageIO
+import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-/// Share to Linger (#785, SPEC §4.15): the iPhone's share sheet hands this
-/// extension the pictures, videos or files somebody chose, and it copies them
-/// into the inbox in the App Group's folder, which the app can read and this
-/// can write (`src-tauri/src/shared.rs`). Each file goes in a numbered folder
-/// of its own: `shared/0/IMG_0001.jpeg`. They're written into
-/// `shared-incoming` and take the inbox's place with one move once every file
-/// is whole, so the app never reads half a file, and a new share replaces the
-/// last. The folder is marked to stay out of iCloud backups before anything
-/// goes in it.
+/// Share to Linger (#785, #820, SPEC §4.15): the window that rises inside the
+/// iPhone's share sheet when somebody picks Linger. It shows what's being
+/// shared, a message box and every conversation (`ShareView`), and posts to
+/// the one picked, as the person, without leaving the app they shared from
+/// (`ShareModel`, `ShareSender`). The app keeps it a sign-in of its own and
+/// the list it picks from (`ShareStore`, `share_window.rs`).
 ///
-/// Then it opens `linger://shared` to bring Linger forward, where the list asks
-/// which conversation they're for. An extension can't open its app directly;
-/// this asks the responder chain for an application that can. If iOS refuses,
-/// the share still waits ten minutes for the person to open Linger.
-///
-/// Nothing about the app that shared is read or kept (AGENTS.md hard rule 2),
-/// and nothing is sent anywhere from here.
+/// This holds the window and gathers what was shared: each file copied into
+/// the extension's own temporary folder, a photo kept only as HEIC made a
+/// JPEG at a bounded size first (#817), and a thumbnail of each picture.
+/// Nothing about the app that shared is read or kept (AGENTS.md hard rule 2).
 @objc(ShareViewController)
 final class ShareViewController: UIViewController {
-  /// The App Group the app and this extension share. The same name is in both
-  /// entitlements files and in `shared.rs`.
-  private static let appGroup = "group.io.github.itsmattguenther.linger"
+  private var model: ShareModel?
 
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    // Linger is dark only (docs/decisions.md).
+    overrideUserInterfaceStyle = .dark
+    let model = ShareModel(
+      finish: { [weak self] in self?.extensionContext?.completeRequest(returningItems: nil) },
+      cancel: { [weak self] in self?.extensionContext?.cancelRequest(withError: CocoaError(.userCancelled)) }
+    )
+    self.model = model
+    let window = UIHostingController(rootView: ShareView(model: model))
+    window.view.backgroundColor = .clear
+    addChild(window)
+    window.view.frame = view.bounds
+    window.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    view.addSubview(window.view)
+    window.didMove(toParent: self)
+
+    let providers = (extensionContext?.inputItems as? [NSExtensionItem] ?? []).flatMap { $0.attachments ?? [] }
+    Task {
+      let gathered = await Gather.all(providers)
+      model.gathered(gathered.files, previews: gathered.previews, note: gathered.note)
+    }
+  }
+}
+
+/// Copying what was shared where the window can send it from.
+enum Gather {
   /// As many files as one message takes (`linger-core`,
   /// `MAX_ATTACHMENTS_PER_MESSAGE`); the activation rule says the same.
-  private static let mostFiles = 10
-
+  static let mostFiles = 10
+  /// The biggest file the server takes (`linger-core`, `MAX_FILE_BYTES`).
+  static let mostBytes: Int64 = 500 * 1024 * 1024
   /// The longest name a shared file is given, in characters, keeping a short
   /// extension, by the rules downloads follow (`phone_save.rs`, `file_name`).
-  private static let longestName = 120
-  private static let longestExtension = 16
-
+  static let longestName = 120
+  static let longestExtension = 16
   /// The longest side, in pixels, of the JPEG a HEIC photo is made into
   /// (#817). A share extension gets about 120 MB, and decoding a recent
-  /// iPhone's photo whole (24 or 48 megapixels, 100 to 200 MB) got this one
-  /// ended mid-share: the sheet dropped away and nothing arrived. Read at
-  /// this size instead, a photo takes about 50 MB at most, and keeps the
-  /// detail of a 12-megapixel one.
-  private static let longestSide = 4096
+  /// iPhone's photo whole (24 or 48 megapixels, 100 to 200 MB) got it ended
+  /// mid-share. Read at this size instead, a photo takes about 50 MB at most,
+  /// and keeps the detail of a 12-megapixel one.
+  static let longestSide = 4096
+  /// A thumbnail's longest side, in pixels: three times the 56-point tile.
+  static let thumbnailSide = 168
 
-  private var started = false
-
-  /// How the share ended, for what the person sees before the sheet closes.
-  private enum Outcome {
-    /// Linger is coming forward with it.
-    case opened
-    /// It's in the inbox, but iOS didn't let this open Linger.
-    case waiting
-    /// Nothing shared was a picture, a video or a file.
-    case nothing
-    /// Something was, but it couldn't be kept for Linger: the App Group's
-    /// folder wouldn't open (#811), or no file could be copied into it.
-    case failed
+  struct Gathered {
+    var files: [ShareFile] = []
+    var previews: [SharePreview] = []
+    /// What was left out, in words.
+    var note: String?
   }
 
-  override func viewDidAppear(_ animated: Bool) {
-    super.viewDidAppear(animated)
-    guard !started else { return }
-    started = true
-    Task { await share() }
-  }
-
-  private func share() async {
-    let providers = (extensionContext?.inputItems as? [NSExtensionItem] ?? [])
-      .flatMap { $0.attachments ?? [] }
-      .prefix(Self.mostFiles)
-    guard let group = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: Self.appGroup) else {
-      finish(.failed)
-      return
+  /// Every file shared, in order, up to `mostFiles`, with what was left out said.
+  static func all(_ providers: [NSItemProvider]) async -> Gathered {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent("linger-share-\(UUID().uuidString)", isDirectory: true)
+    var gathered = Gathered()
+    var notes: [String] = []
+    let offered = providers.filter { fileType($0) != nil }
+    if offered.count > mostFiles { notes.append("A message takes \(mostFiles) files at most, so the first \(mostFiles) are here.") }
+    for (place, provider) in offered.prefix(mostFiles).enumerated() {
+      guard let file = await copy(provider, into: folder.appendingPathComponent(String(place), isDirectory: true)) else {
+        notes.append("One couldn't be read, so it's left out.")
+        continue
+      }
+      if file.size > mostBytes {
+        notes.append("\(file.name) is too big to send. A file can be 500 MB at most.")
+        try? FileManager.default.removeItem(at: file.url)
+        continue
+      }
+      gathered.files.append(file)
+      gathered.previews.append(preview(of: file))
     }
-    let incoming = group.appendingPathComponent("shared-incoming", isDirectory: true)
-    let inbox = group.appendingPathComponent("shared", isDirectory: true)
-    let files = FileManager.default
-    try? files.removeItem(at: incoming)
-    do {
-      try files.createDirectory(at: incoming, withIntermediateDirectories: true)
-      // Out of iCloud backups before anything is written, as the rest of
-      // Linger is (SPEC §4.15, #792): an App Group's folder is backed up
-      // unless told otherwise. The mark is the folder's own, so it moves with
-      // it into `shared`, and on into the app's `shared-taken`. A share that
-      // can't be kept out isn't taken.
-      var outOfBackups = URLResourceValues()
-      outOfBackups.isExcludedFromBackup = true
-      var marked = incoming
-      try marked.setResourceValues(outOfBackups)
-    } catch {
-      finish(.failed)
-      return
-    }
-    var offered = 0
-    var place = 0
-    for provider in providers where Self.fileType(provider) != nil {
-      offered += 1
-      let folder = incoming.appendingPathComponent(String(place), isDirectory: true)
-      if await copy(provider, into: folder) { place += 1 }
-    }
-    guard place > 0 else {
-      try? files.removeItem(at: incoming)
-      finish(offered == 0 ? Outcome.nothing : Outcome.failed)
-      return
-    }
-    try? files.removeItem(at: inbox)
-    do {
-      try files.moveItem(at: incoming, to: inbox)
-    } catch {
-      try? files.removeItem(at: incoming)
-      finish(.failed)
-      return
-    }
-    finish(openLinger() ? .opened : .waiting)
+    if gathered.files.isEmpty && offered.isEmpty { notes.append("Only pictures, videos and files can be shared to Linger.") }
+    // Each note once, in the order they came.
+    var seen = Set<String>()
+    let said = notes.filter { seen.insert($0).inserted }.joined(separator: " ")
+    gathered.note = said.isEmpty ? nil : said
+    return gathered
   }
 
   /// Copy one shared thing into `folder`, as its own name made safe. A photo
   /// goes as a JPEG, which the server takes, rather than as HEIC, which it
-  /// doesn't: the sharing app's own JPEG when it offers one, or one made
-  /// here at a bounded size (`jpeg`, #817). Answers whether a file was written.
-  private func copy(_ provider: NSItemProvider, into folder: URL) async -> Bool {
-    guard let type = Self.fileType(provider) else { return false }
+  /// doesn't: the sharing app's own JPEG when it offers one, or one made here
+  /// at a bounded size (`jpeg`, #817).
+  private static func copy(_ provider: NSItemProvider, into folder: URL) async -> ShareFile? {
+    guard let type = fileType(provider) else { return nil }
     let heicOnly = type.conforms(to: .heic) && !provider.hasItemConformingToTypeIdentifier(UTType.jpeg.identifier)
     let asked = provider.hasItemConformingToTypeIdentifier(UTType.jpeg.identifier) && type.conforms(to: .image) ? UTType.jpeg : type
+    let saved = heicOnly ? UTType.jpeg : asked
+    let suggested = provider.suggestedName
     return await withCheckedContinuation { done in
       _ = provider.loadFileRepresentation(forTypeIdentifier: asked.identifier) { url, _ in
         // The file is iOS's only until this returns: copy it now.
         guard let url else {
-          done.resume(returning: false)
+          done.resume(returning: nil)
           return
         }
         let files = FileManager.default
         do {
           try files.createDirectory(at: folder, withIntermediateDirectories: true)
-          let name = Self.name(provider.suggestedName, url: url, type: heicOnly ? .jpeg : asked)
+          let name = Gather.name(suggested, url: url, type: saved)
           let target = folder.appendingPathComponent(name)
           if heicOnly {
-            guard Self.jpeg(from: url, to: target) else { throw CocoaError(.fileReadCorruptFile) }
+            guard Gather.jpeg(from: url, to: target) else { throw CocoaError(.fileReadCorruptFile) }
           } else {
             try files.copyItem(at: url, to: target)
           }
-          done.resume(returning: true)
+          let size = (try? files.attributesOfItem(atPath: target.path)[.size] as? NSNumber)?.int64Value ?? 0
+          let mime = saved.preferredMIMEType ?? UTType(filenameExtension: target.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
+          done.resume(returning: ShareFile(url: target, name: name, mime: mime, size: size))
         } catch {
           try? files.removeItem(at: folder)
-          done.resume(returning: false)
+          done.resume(returning: nil)
         }
       }
     }
+  }
+
+  /// A small picture of a photo, read at thumbnail size; a symbol for the rest.
+  private static func preview(of file: ShareFile) -> SharePreview {
+    if file.mime.hasPrefix("image/"), let source = CGImageSourceCreateWithURL(file.url as CFURL, nil) {
+      let reading: [CFString: Any] = [
+        kCGImageSourceCreateThumbnailFromImageAlways: true,
+        kCGImageSourceCreateThumbnailWithTransform: true,
+        kCGImageSourceThumbnailMaxPixelSize: thumbnailSide,
+      ]
+      if let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, reading as CFDictionary) {
+        return SharePreview(image: UIImage(cgImage: thumbnail), symbol: "photo", name: file.name)
+      }
+    }
+    return SharePreview(image: nil, symbol: file.mime.hasPrefix("video/") ? "film" : "doc", name: file.name)
   }
 
   /// A photo as a JPEG at `target`, read no bigger than `longestSide` and
   /// turned upright (#817). ImageIO reads a HEIC at the size asked rather than
   /// whole, so the memory this takes is the smaller picture's, and it writes
   /// the JPEG as it goes. Answers whether one was written.
-  private static func jpeg(from source: URL, to target: URL) -> Bool {
+  static func jpeg(from source: URL, to target: URL) -> Bool {
     guard let image = CGImageSourceCreateWithURL(source as CFURL, nil) else { return false }
     let reading: [CFString: Any] = [
       kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -170,7 +173,7 @@ final class ShareViewController: UIViewController {
 
   /// The kind of file a shared thing is, or nil for words or a link, which
   /// Linger doesn't take (the activation rule offers Linger only for files).
-  private static func fileType(_ provider: NSItemProvider) -> UTType? {
+  static func fileType(_ provider: NSItemProvider) -> UTType? {
     provider.registeredTypeIdentifiers
       .compactMap { UTType($0) }
       .first { type in
@@ -182,7 +185,7 @@ final class ShareViewController: UIViewController {
   /// The name a shared file is saved under: the one the sharing app suggests,
   /// or the temporary file's, made safe to be one file in one folder, with
   /// the extension of what's actually saved.
-  private static func name(_ suggested: String?, url: URL, type: UTType) -> String {
+  static func name(_ suggested: String?, url: URL, type: UTType) -> String {
     let given = suggested.flatMap { $0.isEmpty ? nil : $0 } ?? url.deletingPathExtension().lastPathComponent
     let bare = (given as NSString).deletingPathExtension
     let stem = safe(bare.isEmpty ? given : bare)
@@ -193,7 +196,7 @@ final class ShareViewController: UIViewController {
 
   /// Only what's after the last slash, no control characters, none that turn
   /// text around (#488), no colon, no leading dots.
-  private static func safe(_ name: String) -> String {
+  static func safe(_ name: String) -> String {
     let last = name.split(whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init) ?? ""
     let kept = String(String.UnicodeScalarView(last.unicodeScalars.filter { scalar in
       !CharacterSet.controlCharacters.contains(scalar) && !changesDirection(scalar) && scalar != ":"
@@ -204,7 +207,7 @@ final class ShareViewController: UIViewController {
   }
 
   /// At most `longestName` characters, with a short extension kept whole.
-  private static func shortened(_ name: String) -> String {
+  static func shortened(_ name: String) -> String {
     guard name.count > longestName else { return name }
     let ext = (name as NSString).pathExtension
     let keep = ext.isEmpty || ext.count + 1 > longestExtension ? "" : ".\(ext)"
@@ -216,45 +219,6 @@ final class ShareViewController: UIViewController {
     switch scalar.value {
     case 0x202A...0x202E, 0x2066...0x2069, 0x061C, 0x200E, 0x200F: return true
     default: return false
-    }
-  }
-
-  /// Ask the responder chain for the application, and have it open
-  /// `linger://shared`. Answers whether there was one to ask.
-  private func openLinger() -> Bool {
-    guard let link = URL(string: "linger://shared") else { return false }
-    var responder: UIResponder? = self
-    while let next = responder {
-      if let application = next as? UIApplication {
-        application.open(link, options: [:], completionHandler: nil)
-        return true
-      }
-      responder = next.next
-    }
-    return false
-  }
-
-  /// Close the share sheet. When Linger isn't coming forward, say why first,
-  /// so the share isn't a mystery.
-  private func finish(_ outcome: Outcome) {
-    DispatchQueue.main.async {
-      let words: (title: String, message: String)
-      switch outcome {
-      case .opened:
-        self.extensionContext?.completeRequest(returningItems: nil)
-        return
-      case .waiting:
-        words = ("Open Linger to share", "It's waiting there for the next ten minutes.")
-      case .nothing:
-        words = ("Linger couldn't take that", "Only pictures, videos and files can be shared to Linger.")
-      case .failed:
-        words = ("Linger couldn't keep that", "Try sharing it again, or attach it from inside Linger.")
-      }
-      let alert = UIAlertController(title: words.title, message: words.message, preferredStyle: .alert)
-      alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in
-        self.extensionContext?.completeRequest(returningItems: nil)
-      })
-      self.present(alert, animated: true)
     }
   }
 }
