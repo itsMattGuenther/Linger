@@ -66,6 +66,16 @@ to be right for every shape that window takes.
   inherited setting in those families is #765. Rule: a check that proves the
   app does something starts where it isn't already done
   (`docs/testing-strategy.md`, "What reviews have taught").
+- **#809: a test's queue was roomier than the real one.** The test that a
+  resume replays 2,000 frames gave its socket room for 4,096, so the replay
+  never waited for the socket, as it does over a real one, whose queue holds
+  256, while what arrives meanwhile waits on the bus. *Missed because* each
+  test chose its own queue size, and chose one that never fills. *Changed:*
+  the size is `SOCKET_QUEUE_FRAMES`, shared by the socket and the tests'
+  helper, which no longer takes one; the replay test fills it seven times
+  with frames arriving meanwhile, and a second test has the bus lap the
+  session mid-replay. Rule: a test of code that waits on a queue uses the
+  real queue (`docs/testing-strategy.md`, "What reviews have taught").
 
 ## A script that assumes one machine's layout
 

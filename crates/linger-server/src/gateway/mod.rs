@@ -497,10 +497,21 @@ impl Default for Gateway {
     }
 }
 
+/// How many frames the bus holds for the session that has read the fewest.
+/// A session it laps ends rather than skip what it missed (`spawn_session`).
+const BUS_FRAMES: usize = 1024;
+
+/// How many frames wait for a socket's writer. A full queue makes whoever is
+/// sending wait, and a session replaying a resume reads nothing from the bus
+/// meanwhile, so a replay the socket is slow to take can let the bus lap it
+/// (#809). Shared with the tests, so a test's socket fills when a real one
+/// would rather than when the test chooses.
+pub(super) const SOCKET_QUEUE_FRAMES: usize = 256;
+
 impl Gateway {
     #[must_use]
     pub fn new() -> Self {
-        let (bus, _) = broadcast::channel(1024);
+        let (bus, _) = broadcast::channel(BUS_FRAMES);
         Self {
             bus,
             sessions: DashMap::new(),
@@ -1589,20 +1600,19 @@ mod tests {
     }
 
     async fn attach(ctl: &mpsc::Sender<Ctl>, is_resume: bool) -> Socket {
-        let (taken, socket) = attach_from(ctl, 0, is_resume, 16).await;
+        let (taken, socket) = attach_from(ctl, 0, is_resume).await;
         assert!(taken, "the session took the socket");
         socket
     }
 
-    /// A socket attached as a resume from `resume_from` would be, room for
-    /// `room` frames, and whether the session took it.
+    /// A socket attached as a resume from `resume_from` would be, with a real
+    /// socket's queue (#809), and whether the session took it.
     async fn attach_from(
         ctl: &mpsc::Sender<Ctl>,
         resume_from: u64,
         is_resume: bool,
-        room: usize,
     ) -> (bool, Socket) {
-        let (sink, frames) = mpsc::channel(room);
+        let (sink, frames) = mpsc::channel(SOCKET_QUEUE_FRAMES);
         let (closer, closed) = oneshot::channel();
         let (answer, answered) = oneshot::channel();
         ctl.send(Ctl::Attach {
@@ -1642,11 +1652,37 @@ mod tests {
         serde_json::from_str::<serde_json::Value>(frame).ok()?["s"].as_u64()
     }
 
-    /// A busy call sends far more than 500 frames inside the window (#678).
-    /// Until #678 a resume replayed the newest 500, and the app found the
-    /// hole. Now it gets every one it missed, in order.
+    /// Read a socket the way its writer does, until the session has nothing
+    /// more for it or `most` frames have come. Time is paused in these tests,
+    /// so a session that stops sending fails here rather than hangs.
+    async fn read_all(socket: Socket, most: usize) -> Vec<String> {
+        let Socket {
+            sink, mut frames, ..
+        } = socket;
+        // Only the session's copy is left, so the queue closes when it ends.
+        drop(sink);
+        let reader = async move {
+            let mut got = Vec::new();
+            while got.len() < most {
+                let Some(frame) = frames.recv().await else {
+                    break;
+                };
+                got.push(frame);
+            }
+            got
+        };
+        tokio::time::timeout(Duration::from_secs(10), reader)
+            .await
+            .expect("the session stopped sending")
+    }
+
+    /// Seven times what a socket's queue holds missed while away, then more
+    /// as it's replayed (#678, #809). The replay waits for the socket over
+    /// and over, and reads nothing from the bus meanwhile. The app still gets
+    /// every frame it missed, then what came meanwhile, each once and in
+    /// order. Until #678 a resume replayed the newest 500, with a hole.
     #[tokio::test(start_paused = true)]
-    async fn a_busy_session_resumes_with_everything_it_missed() {
+    async fn a_busy_session_resumes_with_everything_it_missed_then_what_came_meanwhile() {
         let gateway = Arc::new(Gateway::new());
         let user = UserId::new();
         let ctl = spawn_session(Arc::clone(&gateway), "s".into(), user);
@@ -1655,23 +1691,55 @@ mod tests {
             .await
             .expect("the session is running");
 
-        publish_many(&gateway, user, 2_000).await;
+        let missed = SOCKET_QUEUE_FRAMES * 7;
+        publish_many(&gateway, user, missed).await;
         tokio::time::sleep(WINDOW / 2).await;
 
-        let (taken, mut socket) = attach_from(&ctl, 0, true, 4_096).await;
+        let (taken, socket) = attach_from(&ctl, 0, true).await;
         assert!(taken, "a resume inside the window was refused");
-        tokio::time::sleep(Duration::from_millis(1)).await;
-        let mut frames = Vec::new();
-        while let Ok(frame) = socket.frames.try_recv() {
-            frames.push(frame);
+        // The replay is waiting on a full queue now, with nobody reading.
+        let meanwhile = 300;
+        for _ in 0..meanwhile {
+            gateway.publish_to(user, ServerEvent::ReportsChanged {});
         }
+        let frames = read_all(socket, 1 + missed + meanwhile).await;
         assert!(
             frames[0].contains("\"resumed\""),
             "first came {}",
             frames[0]
         );
         let numbers: Vec<u64> = frames[1..].iter().filter_map(|f| number(f)).collect();
-        assert_eq!(numbers, (1..=2_000).collect::<Vec<u64>>());
+        let every = u64::try_from(missed + meanwhile).unwrap();
+        assert_eq!(numbers, (1..=every).collect::<Vec<u64>>());
+        assert!(!ctl.is_closed(), "the session ended");
+    }
+
+    /// When a replay waits on its socket for so long that the bus laps the
+    /// session, it ends rather than skip what it missed (#809): its app is
+    /// cut off and starts afresh. Nothing it was sent has a hole in it.
+    #[tokio::test(start_paused = true)]
+    async fn a_session_the_bus_laps_during_a_replay_ends_and_sends_no_hole() {
+        let gateway = Arc::new(Gateway::new());
+        let user = UserId::new();
+        let ctl = spawn_session(Arc::clone(&gateway), "s".into(), user);
+        let socket = attach(&ctl, false).await;
+        ctl.send(Ctl::Detach { from: socket.sink })
+            .await
+            .expect("the session is running");
+
+        let missed = SOCKET_QUEUE_FRAMES * 3;
+        publish_many(&gateway, user, missed).await;
+        let (taken, socket) = attach_from(&ctl, 0, true).await;
+        assert!(taken);
+        for _ in 0..BUS_FRAMES + 10 {
+            gateway.publish_to(user, ServerEvent::ReportsChanged {});
+        }
+        let frames = read_all(socket, usize::MAX).await;
+        let numbers: Vec<u64> = frames.iter().filter_map(|f| number(f)).collect();
+        let replayed = u64::try_from(missed).unwrap();
+        assert_eq!(numbers, (1..=replayed).collect::<Vec<u64>>());
+        tokio::time::sleep(Duration::from_millis(1)).await;
+        assert!(ctl.is_closed(), "a lapped session carried on with a hole");
     }
 
     /// When a frame the app missed is gone, the session ends at once (#678),
@@ -1688,7 +1756,7 @@ mod tests {
         publish_many(&gateway, user, 5).await;
 
         // The app missed all five on another socket; the session kept three.
-        let (taken, _) = attach_from(&ctl, 0, true, 16).await;
+        let (taken, _) = attach_from(&ctl, 0, true).await;
         assert!(!taken, "a resume with a hole was taken");
         tokio::time::sleep(Duration::from_millis(1)).await;
         assert!(ctl.is_closed(), "the session waited out its window");
@@ -1709,7 +1777,7 @@ mod tests {
         let _socket = attach(&ctl, false).await;
         publish_many(&gateway, user, 5).await;
 
-        let (taken, mut socket) = attach_from(&ctl, 2, true, 16).await;
+        let (taken, mut socket) = attach_from(&ctl, 2, true).await;
         assert!(taken, "a resume with nothing missing was refused");
         tokio::time::sleep(Duration::from_millis(1)).await;
         let mut numbers = Vec::new();

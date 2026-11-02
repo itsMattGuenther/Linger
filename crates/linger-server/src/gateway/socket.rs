@@ -17,7 +17,10 @@ use linger_core::limits::{
 use linger_core::UserId;
 use tokio::sync::{mpsc, oneshot};
 
-use super::{spawn_session, Ctl, HeldVoice, Merged, SessionHandle, VoiceJoined, WantedSeat};
+use super::{
+    spawn_session, Ctl, HeldVoice, Merged, SessionHandle, VoiceJoined, WantedSeat,
+    SOCKET_QUEUE_FRAMES,
+};
 use crate::db::now_ms;
 use crate::state::AppState;
 use crate::{auth, repo, validate};
@@ -58,7 +61,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
 
     // Writer task: everything outbound funnels through one queue so the
     // handler, the session task, and heartbeat acks can't interleave frames.
-    let (sink, mut sink_rx) = mpsc::channel::<String>(256);
+    let (sink, mut sink_rx) = mpsc::channel::<String>(SOCKET_QUEUE_FRAMES);
     let writer = tokio::spawn(async move {
         while let Some(json) = sink_rx.recv().await {
             if ws_tx.send(Message::Text(json.into())).await.is_err() {

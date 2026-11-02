@@ -196,6 +196,11 @@ rules that came out of them.
 - **A check that proves the app does something starts where it isn't
   already done.** An environment, a file or a setting the check inherits can
   pass for what it's there to prove (#757; #765 for the packaged-app check).
+- **A test of code that waits on a queue uses the real queue,** at its real
+  size, with a reader draining it and more arriving while it's full. A queue
+  the test made too big to fill passes code that misbehaves once it's full.
+  The size is a constant the code and the test share, never the test's own
+  number (`SOCKET_QUEUE_FRAMES`, #809).
 - **Test what a script does, not what its source says.** A test that looks
   for a line in the source passes a change that keeps the line and defeats
   it. Run the script, with stand-ins on `PATH` for what it calls, and check
