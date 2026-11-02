@@ -134,8 +134,12 @@ jobs:
 
       # Release, as a host runs it (deploy/Dockerfile). Its password
       # hashing unoptimized took 23 to over 30 seconds a sign-in here, past
-      # the 30 the app waits for an answer.
+      # the 30 the app waits for an answer. Without the link-time
+      # optimisation the image has, which changes how fast it runs, not
+      # what it does: with it, this build took 14 minutes here.
       - name: build the server
+        env:
+          CARGO_PROFILE_RELEASE_LTO: "false"
         run: cargo build --locked --release -p linger-server
       # Debug, for the build's speed. `tauri ios build` builds the page,
       # then the app with the page inside it, as for a phone, and puts the
@@ -188,13 +192,15 @@ jobs:
         run: |
           set -euo pipefail
           xcrun simctl bootstatus "$UDID" -b
-          # The keyboard types what a flow says, not its guesses: no
-          # auto-correction or predictions, which change words as they're typed.
+          # Auto-correction and predictions asked off, so the keyboard types
+          # what a flow says. On iOS 26.5 the bar of suggestions still shows;
+          # what's typed has come out as typed in every run, and the
+          # pictures show it.
           for key in KeyboardAutocorrection KeyboardPrediction KeyboardShowPredictionBar; do
             xcrun simctl spawn "$UDID" defaults write com.apple.Preferences "$key" -bool NO
           done
-          # Nor its first-use tip about sliding to type, which covers the
-          # bottom of the screen in the pictures.
+          # The first-use tip about sliding to type, marked seen: it covered
+          # the bottom of the screen in the pictures until this.
           for domain in com.apple.Preferences com.apple.keyboard.preferences; do
             xcrun simctl spawn "$UDID" defaults write "$domain" DidShowContinuousPathIntroduction -bool YES
           done
