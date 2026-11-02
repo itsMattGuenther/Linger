@@ -68,7 +68,9 @@ that phone; nobody is signed out by the update, and TestFlight testers
 confirm both (#790). Linger is in the phone's share sheet, on Android and the
 iPhone: share a picture or a file to Linger, pick a room or a DM, and it waits
 in that conversation's message box, unsent (#785); TestFlight and Play testers
-confirm it on a real phone. Sending several pictures at once to a busy server,
+confirm it on a real phone. A photo an iPhone keeps as HEIC arrives as a JPEG at
+most 4,096 pixels on its longest side, since the share program has too little
+memory to read a recent iPhone's photo whole (#817). Sending several pictures at once to a busy server,
 one that waits its turn goes up after all, or offers Try again, rather than
 leaving a red line with nothing to do but take it out (#801). The server
 keeps the last two minutes of what somebody missed while their connection was
