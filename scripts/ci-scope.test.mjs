@@ -11,12 +11,23 @@ const active = (paths) => Object.entries(classify(paths)).filter(([, value]) => 
 for (const paths of [["README.md"], ["docs/testing.md", "LICENSE"], ["docs/screenshots/example.png"]])
   test(`documentation only: ${paths}`, () => assert.deepEqual(active(paths), []));
 for (const paths of [[], ["unexpected.conf"], ["Cargo.lock"], [".github/workflows/ci.yml"], ["crates/linger-core/src/lib.rs"]])
-  test(`conservative fallback: ${paths}`, () => assert.equal(active(paths).length, 6));
-test("UI changes test both browser and native packages, not unrelated server jobs", () => {
-  assert.deepEqual(active(["client/src/next/styles/app.css"]), ["web", "packages"]);
+  test(`conservative fallback: ${paths}`, () => assert.equal(active(paths).length, 7));
+test("UI changes test both browser and native packages and the iPhone app, not unrelated server jobs", () => {
+  assert.deepEqual(active(["client/src/next/styles/app.css"]), ["web", "packages", "ios"]);
 });
 test("browser assertions alone need no package rebuild", () => {
   assert.deepEqual(active(["client/tests/browser/console.spec.ts"]), ["web"]);
+});
+test("the iPhone flows and what they run on run only the iPhone check", () => {
+  for (const path of ["client/tests/ios/set-up.yaml", "client/tests/ios/seed.js", "scripts/https-front.mjs",
+    "scripts/https-front.test.mjs", "scripts/test-certs.sh"])
+    assert.deepEqual(active([path]), ["ios"], path);
+});
+test("the iPhone check runs for the app's page and shell, and for its own workflow", () => {
+  for (const path of ["client/src/next/core/phone.ts", "client/src-tauri/gen/apple/project.yml", "client/package.json",
+    ".github/workflows/ios-simulator.yml"])
+    assert(active([path]).includes("ios"), path);
+  assert(!active(["crates/linger-server/src/main.rs"]).includes("ios"));
 });
 test("the packaged audio and video checks' own files rebuild only the packages", () => {
   for (const path of ["scripts/linux-audio-check.py", "scripts/video-runtime-probe.js", "scripts/fixtures/tone-h264-aac.mp4",
@@ -25,7 +36,7 @@ test("the packaged audio and video checks' own files rebuild only the packages",
 });
 test("the startup measurement is run by hand, and only its own tests run for it", () => {
   assert.deepEqual(active(["scripts/startup-time.mjs", "scripts/startup-time.test.mjs"]), []);
-  assert.equal(active(["scripts/startup-time.sh"]).length, 6);
+  assert.equal(active(["scripts/startup-time.sh"]).length, 7);
 });
 test("the Windows hidden-window check runs for the shell, the list window and its own files (#594)", () => {
   for (const path of ["client/src-tauri/src/window.rs", "client/src/next/app/list/ListWindow.tsx",
@@ -35,12 +46,12 @@ test("the Windows hidden-window check runs for the shell, the list window and it
 test("server changes include real storage tests", () => {
   assert.deepEqual(active(["crates/linger-server/src/storage.rs"]), ["rust", "s3"]);
 });
-test("desktop changes test the separately built shell and packages", () => {
-  assert.deepEqual(active(["client/src-tauri/Cargo.lock"]), ["shell", "packages"]);
+test("desktop changes test the separately built shell, packages and the iPhone app", () => {
+  assert.deepEqual(active(["client/src-tauri/Cargo.lock"]), ["shell", "packages", "ios"]);
 });
 test("union retains every affected domain, including deletion side of a rename", () => {
   assert.deepEqual(active(["client/src/next/styles/app.css", "docs/old.css", "deploy/Dockerfile"]),
-    ["rust", "s3", "web", "coturn", "packages"]);
+    ["rust", "s3", "web", "coturn", "packages", "ios"]);
 });
 
 // scripts/check.sh --local: a throwaway repository with a main and a branch.
@@ -79,12 +90,12 @@ test("local: the shell gets a count and one line per domain", (t) => {
   git("commit", "-q", "-am", "docs");
   const script = fileURLToPath(new URL("./ci-scope.mjs", import.meta.url));
   const out = execFileSync("node", [script, "--local", "main"], { cwd: dir, encoding: "utf8" });
-  assert.equal(out, "changed=1\nrust=false\ns3=false\nweb=false\nshell=false\ncoturn=false\npackages=false\n");
+  assert.equal(out, "changed=1\nrust=false\ns3=false\nweb=false\nshell=false\ncoturn=false\npackages=false\nios=false\n");
 });
 test("local: no base to compare with selects everything", (t) => {
   const { dir } = branchRepo(t);
   const script = fileURLToPath(new URL("./ci-scope.mjs", import.meta.url));
   const out = execFileSync("node", [script, "--local", "no-such-ref"], { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
   assert.match(out, /^changed=0\nrust=true\n/);
-  assert.equal(out.match(/=true/g).length, 6);
+  assert.equal(out.match(/=true/g).length, 7);
 });

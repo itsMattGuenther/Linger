@@ -1,0 +1,27 @@
+# A room made on the server while the app is open shows up in its list (the
+# gateway, live), opens with what's been said in it, and takes a message
+# typed on the phone, which the server then has.
+appId: io.github.itsmattguenther.linger
+---
+- runScript:
+    file: seed.js
+- extendedWaitUntil:
+    visible: "porch"
+    timeout: 30000
+- takeScreenshot: 07-list-with-a-room
+- tapOn: "porch"
+- extendedWaitUntil:
+    visible: "Hello from the runner."
+    timeout: 30000
+- takeScreenshot: 08-room
+- tapOn: "Message in porch"
+- inputText: "Hello from the iPhone."
+- takeScreenshot: 09-typing-a-message
+- tapOn: "Send"
+- extendedWaitUntil:
+    visible: "Hello from the iPhone."
+    timeout: 30000
+- runScript:
+    file: sent.js
+- assertTrue: ${output.sent}
+- takeScreenshot: 10-message-sent

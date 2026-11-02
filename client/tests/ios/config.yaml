@@ -1,0 +1,19 @@
+# The iPhone app in the iOS Simulator, driven by Maestro
+# (.github/workflows/ios-simulator.yml; docs/development.md, "The iPhone in
+# the simulator"). Each flow picks up where the last one left the app, so
+# they run in this order and stop at the first that fails.
+#
+# What they need, passed with `maestro test -e NAME=value`:
+#   SERVER         a Linger server's plain http address, http://127.0.0.1:<port>
+#   SETUP_LINK     its setup link, through an https front the simulator trusts
+#   HOST_USERNAME  the host account set-up makes
+#   HOST_PASSWORD  and its password
+flows:
+  - "*.yaml"
+executionOrder:
+  continueOnFailure: false
+  flowsOrder:
+    - first-screen
+    - plain-http
+    - set-up
+    - room

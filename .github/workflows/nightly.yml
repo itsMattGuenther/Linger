@@ -2,7 +2,8 @@ name: nightly
 
 # Everything, on main, every night (docs/testing-strategy.md): the checks a
 # pull request only runs for what it touched, the package checks, the Windows
-# and macOS shell builds that otherwise run by hand, and every browser test
+# and macOS shell builds that otherwise run by hand, the iPhone app in the
+# simulator, and every browser test
 # three times over with no retries. Separately green PRs can disagree once
 # merged, and a test that fails one run in twenty rarely shows on one PR; this
 # is where both surface. A failure opens an issue, or comments on the one
@@ -34,6 +35,11 @@ jobs:
 
   desktop:
     uses: ./.github/workflows/desktop.yml
+
+  iphone:
+    uses: ./.github/workflows/ios-simulator.yml
+    with:
+      all: true
 
   repeat:
     # Every browser test three times, in parts at once so each part takes
@@ -85,7 +91,7 @@ jobs:
           retention-days: 7
 
   report:
-    needs: [tests, packages, desktop, repeat]
+    needs: [tests, packages, desktop, iphone, repeat]
     if: ${{ failure() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -107,6 +113,7 @@ jobs:
           | Every CI check | ${{ needs.tests.result }} |
           | Packages on Linux and Windows | ${{ needs.packages.result }} |
           | Shell builds on Windows and macOS, and the phone app's | ${{ needs.desktop.result }} |
+          | The iPhone app in the simulator | ${{ needs.iphone.result }} |
           | Every browser test, three times | ${{ needs.repeat.result }} |
 
           Only the repeated browser tests failing usually means a test that fails at random. The failed job names it, and [the testing strategy](https://github.com/${{ github.repository }}/blob/main/docs/testing-strategy.md#a-test-that-fails-at-random) says what to do. Close this once the nightly run is green again.

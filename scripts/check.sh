@@ -22,7 +22,7 @@ if [ -z "$base" ]; then
 fi
 
 if [ "$all" = 1 ] || [ -z "$base" ]; then
-  scope=$'changed=0\nrust=true\ns3=true\nweb=true\nshell=true\ncoturn=true\npackages=true'
+  scope=$'changed=0\nrust=true\ns3=true\nweb=true\nshell=true\ncoturn=true\npackages=true\nios=true'
 else
   scope="$(node scripts/ci-scope.mjs --local "$base")"
 fi
@@ -42,7 +42,7 @@ scripts/lint-rules.sh "$base"
 echo "== version check, and the checks' own tests =="
 scripts/version-check.sh
 node --test --test-reporter=dot scripts/ci-scope.test.mjs scripts/ci-gate.test.mjs scripts/changed-tests.test.mjs scripts/action-pins.test.mjs scripts/workflow-downloads.test.mjs
-node --test --test-reporter=dot scripts/csp-assets.test.mjs scripts/doc-paths.test.mjs scripts/overview-docs.test.mjs scripts/ios-app-group.test.mjs scripts/linux-next-env.test.mjs scripts/package-deps.test.mjs scripts/playwright-image.test.mjs scripts/issue-label.test.mjs scripts/startup-time.test.mjs scripts/updater-urls.test.mjs client/scripts/webview2-wait.test.mjs
+node --test --test-reporter=dot scripts/csp-assets.test.mjs scripts/doc-paths.test.mjs scripts/overview-docs.test.mjs scripts/ios-app-group.test.mjs scripts/https-front.test.mjs scripts/linux-next-env.test.mjs scripts/package-deps.test.mjs scripts/playwright-image.test.mjs scripts/issue-label.test.mjs scripts/startup-time.test.mjs scripts/updater-urls.test.mjs client/scripts/webview2-wait.test.mjs
 python3 scripts/linux-audio-check.test.py -q
 bash scripts/android-signing-test.sh >/dev/null
 bash scripts/tidy-branches-test.sh >/dev/null
@@ -122,6 +122,7 @@ if on web && [ "$webkit_here" = 0 ]; then
   extra+=("the WebKit browser tests, and this branch's new or edited ones ten times (scripts/webkit.sh runs them here, with Docker)")
 fi
 on packages && extra+=("the desktop packages on Linux and Windows")
+on ios && extra+=("the iPhone app in the simulator, on a Mac (ios-simulator.yml)")
 if [ "${#extra[@]}" -gt 0 ]; then
   echo "== CI also runs =="
   printf '  %s\n' "${extra[@]}"
