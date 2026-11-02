@@ -1950,3 +1950,21 @@ release does.
 - **Accepted limit:** apps already out there can't read it, so the first real use
   is a break after this ships.
 
+## Decided — no per-person volume on an iPhone (#816)
+
+**Matt, 2026-11-02.** Found by a TestFlight tester before 0.5.4: on an iPhone
+the volume card's slider moved and changed nothing. The phone plays each voice
+through the web engine's own player (`lib/pageVoice.ts`), and iOS leaves a
+player's volume where it is whatever a page sets; only the phone's own buttons
+change loudness. Android's engine honours it.
+
+- **None on an iPhone,** rather than a control that does nothing
+  (`personVolumeWorks`, `client/src/next/core/phone.ts`). A person's chip
+  there opens only the host's or a co-host's Take out, and nothing for
+  anybody else. Android keeps its slider, up to 100%.
+- **No "mute for you" in its place,** although muting a player does work on
+  an iPhone: somebody you'd muted would go on talking to you, unheard, and the
+  conversation gets awkward.
+- **Possible later:** playing each voice through Web Audio with a gain of its
+  own. That changes how the iPhone routes call audio and what its echo
+  cancelling hears, so it would need a tester round on speaker first.

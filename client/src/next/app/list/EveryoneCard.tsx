@@ -1,5 +1,6 @@
 import { type RefObject, useEffect, useRef, useState } from "react";
 import { volumeLabel } from "../../../lib/voice";
+import { personVolumeWorks } from "../../core/phone";
 import { Icon, Name, Popover, Row, RowList, TextField, VoiceGlyph } from "../../kit";
 import { markerFor } from "../markers";
 import { useBackButton } from "../useBackButton";
@@ -12,12 +13,15 @@ import "./EveryoneCard.css";
  * markers, or from "and others" on the voice line (#747): to see who's there, and to find somebody to make quieter or
  * louder. Alphabetical, so a name stays put while people talk; talking shows
  * as the bars beside a name. Picking somebody opens their volume card in its
- * place. You aren't listed: your own seat is always first in the bar.
+ * place. You aren't listed: your own seat is always first in the bar. On an
+ * iPhone, which has no per-person volume, only a host's rows open anything,
+ * for Take out (#816): the rest is the list of names.
  */
 export function EveryoneCard({
   people,
   where,
   anchor,
+  actionOf,
   onPick,
   onClose,
   side = "above",
@@ -29,6 +33,8 @@ export function EveryoneCard({
   where: string;
   /** The crowd that opened it: the card sits over it. */
   anchor: RefObject<HTMLElement | null>;
+  /** What picking this person opens, as their row names it, or null for nothing (`personAction`, #816). */
+  actionOf: (person: VoiceDockPerson) => string | null;
   onPick: (person: VoiceDockPerson) => void;
   onClose: () => void;
   side?: CardSide;
@@ -70,25 +76,27 @@ export function EveryoneCard({
           onChange={setFind}
           // Enter picks the first one found, as the new-message picker does.
           onEnter={() => {
-            const [first] = shown;
+            const first = shown.find((person) => actionOf(person) !== null);
             if (first) onPick(first);
           }}
         />
         {shown.length > 0 ? (
           <div className="nx-everyone-list">
             <RowList label={`In voice in ${where}`}>
-              {shown.map((person) => (
-                <Row
-                  key={person.user.id}
-                  lead={{ kind: "person", person: markerFor(person.user, "in_room") }}
-                  lines="one"
-                  title={<Name person={person.user} />}
-                  trailing={<Marks person={person} />}
-                  note={noteOf(person)}
-                  label={`${person.user.display_name}'s volume, ${volumeLabel(person.volume ?? 1)}`}
-                  onActivate={() => onPick(person)}
-                />
-              ))}
+              {shown.map((person) => {
+                const action = actionOf(person);
+                return (
+                  <Row
+                    key={person.user.id}
+                    lead={{ kind: "person", person: markerFor(person.user, "in_room") }}
+                    lines="one"
+                    title={<Name person={person.user} />}
+                    trailing={<Marks person={person} />}
+                    note={noteOf(person)}
+                    {...(action === null ? {} : { label: action, onActivate: () => onPick(person) })}
+                  />
+                );
+              })}
             </RowList>
           </div>
         ) : (
@@ -121,5 +129,5 @@ function noteOf(person: VoiceDockPerson): string | undefined {
   if (person.link === "connecting") return "connecting…";
   if (person.link === "unreachable") return "can't reach";
   const volume = person.volume ?? 1;
-  return Math.abs(volume - 1) > 0.001 ? volumeLabel(volume) : undefined;
+  return personVolumeWorks() && Math.abs(volume - 1) > 0.001 ? volumeLabel(volume) : undefined;
 }

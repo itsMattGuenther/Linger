@@ -34,6 +34,19 @@ export function onIPhone(): boolean {
 }
 
 /**
+ * Whether this app can set how loud one person in a call is (#816). The
+ * phone plays each voice through the web engine's own player
+ * (`lib/pageVoice.ts`), and on an iPhone iOS leaves a player's volume where
+ * it is, whatever a page sets: only the phone's own buttons change it. So an
+ * iPhone has no per-person volume, rather than a slider that moves and does
+ * nothing, and no "mute for you" in its place, which would leave somebody
+ * talking to a person who can't hear them (Matt, 2026-11-02).
+ */
+export function personVolumeWorks(): boolean {
+  return !onIPhone();
+}
+
+/**
  * Whether this is the Linux app, from its engine's user agent (WebKitGTK
  * names Linux); `shell` is whether the page is in Linger's own shell rather
  * than a browser. Android's engine names Linux too, so it's left out.

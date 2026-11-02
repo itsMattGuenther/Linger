@@ -70,7 +70,10 @@ iPhone: share a picture or a file to Linger, pick a room or a DM, and it waits
 in that conversation's message box, unsent (#785); TestFlight and Play testers
 confirm it on a real phone. Sending several pictures at once to a busy server,
 one that waits its turn goes up after all, or offers Try again, rather than
-leaving a red line with nothing to do but take it out (#801). The server
+leaving a red line with nothing to do but take it out (#801). An iPhone has no
+per-person volume any more: iOS doesn't let Linger set one voice's volume, so
+the slider moved and did nothing; there a person's name in a call opens only
+the host's Take out (#816). Android keeps its slider. The server
 keeps the last two minutes of what somebody missed while their connection was
 down, not only the last 500 things, so somebody back from a drop of a minute or
 two in a busy call is still in it; when even that isn't enough, they start

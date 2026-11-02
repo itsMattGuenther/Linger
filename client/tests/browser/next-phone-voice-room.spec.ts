@@ -233,3 +233,55 @@ test("held sideways, everyone's sheet fits the screen, its search box and Close 
   const names = everyone.getByRole("list", { name: "In voice in #general" });
   expect(await names.evaluate((list) => list.closest(".nx-everyone-list")?.scrollHeight ?? 0)).toBeGreaterThan(await names.evaluate((list) => list.closest(".nx-everyone-list")?.clientHeight ?? 0));
 });
+
+// #816: on an iPhone a page can't set a voice's volume (iOS leaves the
+// player's volume where it is), so the iPhone has no per-person volume, and
+// no "mute for you" in its place (Matt). A host still takes somebody out from
+// their chip; anybody else's chips open nothing. Android keeps its slider
+// (the tests above, on Android's engine name).
+test.describe("on an iPhone, where a voice's volume can't be set (#816)", () => {
+  test.use({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148" });
+
+  test("the host's tap on somebody opens only Take out, with no slider", async ({ page }) => {
+    await inGeneral(page, "&seven");
+    await join(page);
+    await expect(strip(page).getByRole("button", { name: /^Eli's volume/ })).toHaveCount(0);
+    await strip(page).getByRole("button", { name: "Take Eli out of voice" }).click();
+    const card = page.getByRole("dialog", { name: "Eli in voice" });
+    await expect(card).toBeVisible();
+    await expect(card.getByRole("button", { name: "Take out of voice" })).toBeVisible();
+    await expect(card.getByRole("slider")).toHaveCount(0);
+    await expect(card.getByText("Only for you, on this phone.")).toHaveCount(0);
+    // Everyone by name: each row opens the same, and shows no volume.
+    await page.keyboard.press("Escape");
+    await expect(card).toHaveCount(0);
+    await strip(page).getByRole("button", { name: "and others" }).click();
+    const everyone = page.getByRole("dialog", { name: "Everyone in voice in #general" });
+    await everyone.getByRole("button", { name: "Take Callie out of voice" }).click();
+    await expect(page.getByRole("dialog", { name: "Callie in voice" }).getByRole("button", { name: "Take out of voice" })).toBeVisible();
+  });
+
+  test("anybody else's taps open nothing, on the voice line, everyone's list and the list's voice bar", async ({ page }) => {
+    await inGeneral(page, "&seven&guest");
+    await join(page);
+    const people = strip(page).getByRole("list", { name: "In voice here" });
+    await expect(people.getByRole("listitem")).not.toHaveCount(0);
+    await expect(people.getByRole("button")).toHaveCount(0);
+    // Everyone by name is still there to read.
+    await strip(page).getByRole("button", { name: "and others" }).click();
+    const everyone = page.getByRole("dialog", { name: "Everyone in voice in #general" });
+    const names = everyone.getByRole("list", { name: "In voice in #general" });
+    await expect(names.getByRole("listitem")).not.toHaveCount(0);
+    // A name, as the people card lists them (a kit row): no volume, no Take
+    // out, and a tap opens nothing.
+    await expect(names.getByRole("button", { name: /volume|out of voice/ })).toHaveCount(0);
+    await names.getByRole("button").first().click();
+    await expect(page.getByRole("dialog", { name: / in voice$|'s volume$/ })).toHaveCount(0);
+    await expect(everyone).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Back", exact: true }).click();
+    const bar = page.getByRole("region", { name: /^In voice in #general/ });
+    await expect(bar.getByText("you", { exact: true })).toBeVisible();
+    await expect(bar.getByRole("button", { name: /volume|out of voice/ })).toHaveCount(0);
+  });
+});
