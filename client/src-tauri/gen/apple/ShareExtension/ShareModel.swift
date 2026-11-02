@@ -47,10 +47,14 @@ final class ShareModel: ObservableObject {
   private let nonce = UUID().uuidString
   private let finish: () -> Void
   private let cancel: () -> Void
+  /// Hold the share sheet still while sending: swiped away, the share
+  /// would end half-way.
+  private let hold: (Bool) -> Void
 
-  init(finish: @escaping () -> Void, cancel: @escaping () -> Void) {
+  init(finish: @escaping () -> Void, cancel: @escaping () -> Void, hold: @escaping (Bool) -> Void) {
     self.finish = finish
     self.cancel = cancel
+    self.hold = hold
     let list = ShareStore.list()
     self.list = list
     colors = ShareColors(list?.theme)
@@ -132,6 +136,7 @@ final class ShareModel: ObservableObject {
     stage = .sending
     failure = nil
     progress = 0
+    hold(true)
     let sender = ShareSender(base: base, serverName: row.serverName, refreshToken: kept.refresh_token) { token in
       ShareStore.renewed(token, for: target.server)
     }
@@ -147,13 +152,18 @@ final class ShareModel: ObservableObject {
           }
         }
         ShareStore.remember(target)
+        self?.hold(false)
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         self?.stage = .sent
         try? await Task.sleep(nanoseconds: 900_000_000)
         self?.finish()
       } catch {
+        self?.hold(false)
         self?.stage = .picking
-        self?.failure = (error as? ShareFailure)?.words ?? "That didn't go. Try again in a moment."
+        let failure = error as? ShareFailure
+        // Ended on the server: dropped here, so the app asks for a new one.
+        if failure?.signInGone == true { ShareStore.forget(target.server) }
+        self?.failure = failure?.words ?? "That didn't go. Try again in a moment."
       }
     }
   }

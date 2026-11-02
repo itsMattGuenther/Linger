@@ -98,9 +98,12 @@ let mostRecent = 4
 
 /// What a server's state means for sending there, in words; nil when it can.
 /// `signedIn` is whether the window holds a sign-in there.
+///
+/// The sign-in decides: the app writes the list before it has one on a new
+/// server, and may not have written it again since.
 func unavailable(_ server: ShareList.Server, signedIn: Bool) -> String? {
   if server.share == "old" { return "\(server.name) needs updating to share from here" }
-  if server.share != "ready" || !signedIn { return "Open Linger once to share here" }
+  if !signedIn { return "Open Linger once to share here" }
   return nil
 }
 

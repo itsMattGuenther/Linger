@@ -76,6 +76,14 @@ enum ShareStore {
     }
   }
 
+  /// Drop `server`'s sign-in, which the server has ended (a password change,
+  /// say), so the app asks for a new one the next time it's opened.
+  static func forget(_ server: String) {
+    var table = signIns()
+    guard table.removeValue(forKey: server) != nil, let data = try? JSONEncoder().encode(table) else { return }
+    SecItemUpdate(entry() as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+  }
+
   // MARK: - Recent
 
   private static var recentFile: URL? { folder?.appendingPathComponent("recent.json") }

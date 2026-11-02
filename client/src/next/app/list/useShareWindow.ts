@@ -41,11 +41,21 @@ export function useShareSignIns(on: boolean, sessions: Sessions): ReadonlyMap<st
   const [round, setRound] = useState(0);
   useEffect(() => {
     if (!on) return undefined;
-    const timer = window.setInterval(() => {
+    const again = () => {
       looked.current.clear();
       setRound((was) => was + 1);
-    }, LOOK_AGAIN_MS);
-    return () => window.clearInterval(timer);
+    };
+    const timer = window.setInterval(again, LOOK_AGAIN_MS);
+    // And whenever the app comes forward: the window drops a sign-in the
+    // server has ended, and this is when to ask for another.
+    const forward = () => {
+      if (document.visibilityState === "visible") again();
+    };
+    document.addEventListener("visibilitychange", forward);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", forward);
+    };
   }, [on]);
 
   const state = sessions.state;

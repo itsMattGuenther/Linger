@@ -190,6 +190,12 @@ export async function keepShareSignIns(
       const token = await server.shareSignIn();
       const replaced = await shell.save(server.baseUrl, token);
       if (replaced !== null) await logout(server.baseUrl, replaced).catch(() => undefined);
+      // The Keychain may refuse: then the new one is signed out again, not left about.
+      if ((await shell.savedAt(server.baseUrl)) === null) {
+        await logout(server.baseUrl, token).catch(() => undefined);
+        status.set(server.baseUrl, "none");
+        continue;
+      }
       status.set(server.baseUrl, "ready");
     } catch (error) {
       if (error instanceof ApiError && error.code === "NOT_FOUND") status.set(server.baseUrl, "old");

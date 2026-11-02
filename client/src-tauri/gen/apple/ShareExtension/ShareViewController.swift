@@ -24,7 +24,8 @@ final class ShareViewController: UIViewController {
     overrideUserInterfaceStyle = .dark
     let model = ShareModel(
       finish: { [weak self] in self?.extensionContext?.completeRequest(returningItems: nil) },
-      cancel: { [weak self] in self?.extensionContext?.cancelRequest(withError: CocoaError(.userCancelled)) }
+      cancel: { [weak self] in self?.extensionContext?.cancelRequest(withError: CocoaError(.userCancelled)) },
+      hold: { [weak self] holding in self?.isModalInPresentation = holding }
     )
     self.model = model
     let window = UIHostingController(rootView: ShareView(model: model))

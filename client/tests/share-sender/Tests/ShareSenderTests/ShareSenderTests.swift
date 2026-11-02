@@ -131,7 +131,7 @@ final class ShareSenderTests: XCTestCase {
       XCTFail("an ended sign-in sent")
     } catch let failure as ShareFailure {
       XCTAssertTrue(failure.signInGone)
-      XCTAssertTrue(failure.words.contains("Open Linger and sign in again"), failure.words)
+      XCTAssertTrue(failure.words.hasPrefix("Open Linger, then share again"), failure.words)
     }
   }
 

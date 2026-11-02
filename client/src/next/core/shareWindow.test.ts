@@ -191,6 +191,15 @@ describe("keeping the share window's sign-ins", () => {
     expect(none.get("https://new.example")).toBe("none");
   });
 
+  it("a Keychain that won't keep it: `none`, and the new one signed out again rather than left about", async () => {
+    const { shell } = memoryShell();
+    const refusing: ShareShell = { ...shell, save: async () => null, savedAt: async () => null };
+    const logout = vi.fn(async () => undefined);
+    const status = await keepShareSignIns([{ baseUrl: GOOD, shareSignIn: async () => "share-1" }], new Set([GOOD]), refusing, logout, NOW);
+    expect(status.get(GOOD)).toBe("none");
+    expect(logout).toHaveBeenCalledWith(GOOD, "share-1");
+  });
+
   it("signs out of a server the app has left, but not one still being reached", async () => {
     const { shell, store } = memoryShell({
       [GOOD]: { token: "gone-share", at: NOW },

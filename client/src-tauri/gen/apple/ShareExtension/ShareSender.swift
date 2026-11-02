@@ -142,7 +142,7 @@ final class ShareSender: @unchecked Sendable {
     let (data, response) = try await call("POST", "/auth/refresh", body: body, authorized: false)
     guard response.statusCode == 200 else {
       if response.statusCode == 401 || response.statusCode == 403 {
-        throw ShareFailure(words: "Your sign-in on \(serverName) has ended. Open Linger and sign in again.", signInGone: true)
+        throw ShareFailure(words: "Open Linger, then share again: its sign-in on \(serverName) needs renewing.", signInGone: true)
       }
       throw refusal(data, response)
     }
