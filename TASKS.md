@@ -39,10 +39,16 @@ reaction or an edit on the newest message keeps the conversation at its very
 end, not a few pixels short, and messages arriving in a burst no longer leave
 the newest below the bottom (#760). In a call, a click on somebody on the
 conversation's voice line opens their volume, as in the voice bar; on a phone it
-rises from the bottom, and the people there are easier to tap (#747). The
+rises from the bottom, and the people there are easier to tap (#747). A
+room's topic or a friend's status cut short with "…" in the header opens whole
+with a click or a tap, in a card, or a sheet on a phone (#778). The
 phone app's words can be made bigger in Settings → Appearance, with a Text size
 of its own on top of the phone's, and the iPhone app now follows the iPhone's
-Text Size, as the Android app follows its Font size (#690). Settings → Account
+Text Size, as the Android app follows its Font size (#690). When storage won't
+keep an Appearance choice (full, or switched off in a browser), Settings says
+"Couldn't save that here." and the setting stays as it was, rather than
+showing a choice no window used; in the installed app it hardly ever happens
+(#782). Settings → Account
 & App has **Privacy**, which opens the privacy page, and **Report a problem**,
 which opens GitHub's forms for a new issue (#779). On an iPhone, Linger says
 why it wants the local network when your server is on your home network
@@ -54,19 +60,26 @@ with Update, since they need a password; the foot of the list says "You're on
 …" once after. This release itself is installed the old way (Settings → Account
 & App → Install and restart in 0.5.3), and the notes must say so. A host whose
 server is behind sees it at the foot of the list, with How to update, and the
-disk and backup lines say Server settings instead of Hosting…. On an iPhone, Linger stays out of iCloud backups and its sign-in stays on
+disk and backup lines say Server settings instead of Hosting…. A server now
+says the oldest app it works with: an app older than that says so on that
+server's row and offers Update now, and its other servers keep working. That's
+0.4.1 today, so nobody is turned away (#793). On an iPhone, Linger stays out of iCloud backups and its sign-in stays on
 that phone; nobody is signed out by the update, and TestFlight testers
 confirm both (#790). Linger is in the phone's share sheet, on Android and the
 iPhone: share a picture or a file to Linger, pick a room or a DM, and it waits
 in that conversation's message box, unsent (#785); TestFlight and Play testers
-confirm it on a real phone. Write the
+confirm it on a real phone. Sending several pictures at once to a busy server,
+one that waits its turn goes up after all, or offers Try again, rather than
+leaving a red line with nothing to do but take it out (#801). Write the
 release's one line in `client/src/next/core/release-line.json`
-(`docs/releasing.md`). **Thanks** (`docs/releasing.md`): @Gleasonmt for the iPhone app's iOS
+(`docs/releasing.md`); Matt chose it on 2026-11-02: "Linger now updates
+itself, and phones can share pictures and files straight to it." **Thanks** (`docs/releasing.md`): @Gleasonmt for the iPhone app's iOS
 15 minimum (#749), bigger text on the phone and the iPhone following its Text
 Size (#690), Settings saying when an Appearance choice couldn't be saved
 (#782), and the Privacy and Report a problem buttons and getting the
 iPhone app ready for the App Store (#779), and @eGGnogSC for sharing to
-Linger from the phone's share sheet (#792), and for messages that show the
+Linger from the phone's share sheet (#792) and pictures that wait out a busy
+server rather than fail (#801), and for messages that show the
 moment they're sent (#133) and the sidebar that no longer scrolls sideways
 (#84). #133 and #84
 shipped back in September, before the notes thanked contributors, so they're
