@@ -35,7 +35,7 @@ import { createServer } from "node:net";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
-import { seconds, waitFor } from "./webview2-wait.mjs";
+import { seconds, whileRunning } from "./webview2-wait.mjs";
 
 assert.equal(process.platform, "win32", "Run this check on an ephemeral Windows runner");
 assert.equal(process.env.GITHUB_ACTIONS, "true", "This check sets temporary machine policy on a disposable runner only");
@@ -123,22 +123,17 @@ async function launch(switches, profile, logName) {
   const log = openSync(resolve(output, logName), "w");
   app = spawn(resolve(exe), [], { stdio: ["ignore", log, log] });
   closeSync(log);
-  let launchError;
-  app.on("error", (error) => { launchError = error; });
+  // Every wait checks first that the app is still running (#814).
+  const wait = whileRunning(app, "Installed");
   // By the clock, not by counting tries: a refused try fails at once, so a
   // count of them was a far shorter wait than it looked, and a busy runner's
   // WebView2 outlasted it (#813, client/scripts/webview2-wait.mjs).
-  const answered = await waitFor(`Installed WebView2's debugging port didn't answer`,
-    () => chromium.connectOverCDP(`http://127.0.0.1:${port}`, { timeout: 1000 }), {
-      check: () => {
-        assert(!launchError, String(launchError));
-        assert.equal(app.exitCode, null, `Installed app exited: ${app.exitCode}`);
-      },
-    });
+  const answered = await wait(`Installed WebView2's debugging port didn't answer`,
+    () => chromium.connectOverCDP(`http://127.0.0.1:${port}`, { timeout: 1000 }));
   browser = answered.got;
   console.log(`Installed WebView2 answered after ${seconds(answered.took)}`);
   const context = browser.contexts()[0];
-  const { got: page } = await waitFor("The list window's page is missing from WebView2",
+  const { got: page } = await wait("The list window's page is missing from WebView2",
     () => context.pages().find((candidate) => candidate.url().startsWith("http://tauri.localhost") && !candidate.url().includes("window=")));
   await page.waitForLoadState("domcontentloaded");
   let hwnd = 0;

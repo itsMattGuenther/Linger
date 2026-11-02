@@ -6,9 +6,10 @@
 // debugging port opens after 20 seconds, is in #813's pull request.
 
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { test } from "node:test";
 
-import { seconds, waitFor } from "./webview2-wait.mjs";
+import { seconds, waitFor, whileRunning } from "./webview2-wait.mjs";
 
 /** A pretend clock: sleeping moves it on, and so can a try. */
 function clock() {
@@ -78,4 +79,44 @@ test("nothing found yet is waited for like a refusal: a page that isn't there", 
 test("seconds reads as a person would", () => {
   assert.equal(seconds(20_412), "20.4 s");
   assert.equal(seconds(0), "0.0 s");
+});
+
+/** A stand-in for the spawned app: running until told otherwise. */
+function fakeApp() {
+  return Object.assign(new EventEmitter(), { exitCode: null, signalCode: null });
+}
+
+test("an app that quits while its page is awaited fails as an exit, at once, not as a missing page (#814)", async () => {
+  const time = clock();
+  const app = fakeApp();
+  const wait = whileRunning(app, "Packaged", time);
+  const { took } = await wait("port didn't answer", () => "browser");
+  assert.equal(took, 0);
+  await assert.rejects(wait("Packaged application page missing from WebView2", () => {
+    if (time.now() >= 2_000) app.exitCode = 1;
+    return undefined;
+  }), /^Error: Packaged app exited: 1$/);
+  assert.ok(time.now() < 3_000, `noticed at ${time.now()} ms, not after 90 s`);
+});
+
+test("an app that failed to start, or was killed, fails the wait at once", async () => {
+  const time = clock();
+  const unstarted = fakeApp();
+  const wait = whileRunning(unstarted, "Installed", time);
+  unstarted.emit("error", new Error("spawn linger-client.exe ENOENT"));
+  await assert.rejects(wait("no answer", () => undefined), /ENOENT/);
+
+  const killed = fakeApp();
+  killed.signalCode = "SIGKILL";
+  await assert.rejects(whileRunning(killed, "Installed", time)("no answer", () => undefined), /^Error: Installed app exited: SIGKILL$/);
+});
+
+test("a running app's waits wait by the clock, as waitFor's do", async () => {
+  const time = clock();
+  const wait = whileRunning(fakeApp(), "Packaged", time);
+  const { took } = await wait("port didn't answer", async () => {
+    if (time.now() < 20_000) throw refused();
+    return "browser";
+  });
+  assert.equal(took, 20_000);
 });

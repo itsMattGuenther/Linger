@@ -40,6 +40,25 @@ export async function waitFor(what, attempt, {
   }
 }
 
+/**
+ * `waitFor`, for one app the check started: every wait first checks that the
+ * app started and hasn't exited, and fails at once if it has. A wait for its
+ * page once left that out, so an app that quit after WebView2 answered was
+ * reported, 90 seconds later, as a page that never came (#814). `name` starts
+ * the message: "Packaged app exited: 1".
+ */
+export function whileRunning(app, name, options = {}) {
+  let launchError;
+  app.on("error", (error) => { launchError = error; });
+  const check = () => {
+    if (launchError) throw launchError;
+    if (app.exitCode !== null || app.signalCode) {
+      throw new Error(`${name} app exited: ${app.exitCode ?? app.signalCode}`);
+    }
+  };
+  return (what, attempt, more = {}) => waitFor(what, attempt, { ...options, ...more, check });
+}
+
 /** Seconds, for a log line: "4.2 s". */
 export function seconds(ms) {
   return `${(ms / SECOND).toFixed(1)} s`;
