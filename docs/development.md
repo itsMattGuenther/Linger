@@ -519,9 +519,11 @@ flow carries on from where the last left the app):
    "Couldn't reach …", as in every installed app: their CSP
    (`tauri.conf.json`) allows only `https:` and `wss:`. So the check doesn't
    sign in that way.
-3. `set-up.yaml`: a real server, built from the branch and running on the
-   same Mac with a temporary data folder, is set up from its setup link,
-   through the app's form, and the app lands on its empty list.
+3. `set-up.yaml`: a real server, built from the branch as a host runs it
+   (a release build: a debug one hashes passwords too slowly for the app's
+   30-second wait) and running on the same Mac with a temporary data folder,
+   is set up from its setup link, through the app's form, and the app lands
+   on its empty list.
 4. `room.yaml`: a room made on the server (`seed.js`, through the server's
    API) shows up in the list without a reload, opens with the message in it,
    and takes a message typed on the phone; `sent.js` asks the server that it

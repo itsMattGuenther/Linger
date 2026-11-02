@@ -132,8 +132,11 @@ jobs:
           printf '%s\n%s\n' "$name" "$runtime" > "$OUT/device.txt"
           xcrun simctl boot "$udid"
 
+      # Release, as a host runs it (deploy/Dockerfile). Its password
+      # hashing unoptimized took 23 to over 30 seconds a sign-in here, past
+      # the 30 the app waits for an answer.
       - name: build the server
-        run: cargo build --locked -p linger-server
+        run: cargo build --locked --release -p linger-server
       # Debug, for the build's speed. `tauri ios build` builds the page,
       # then the app with the page inside it, as for a phone, and puts the
       # app in gen/apple/build/arm64-sim.
@@ -209,7 +212,7 @@ jobs:
           echo "CERTS=$certs" >> "$GITHUB_ENV"
           mkdir -p "$OUT/server"
           LINGER_DATA_DIR="$RUNNER_TEMP/linger-data" LINGER_BIND="127.0.0.1:$SERVER_PORT" RUST_LOG=info \
-            nohup target/debug/linger-server > "$OUT/server/server.log" 2>&1 &
+            nohup target/release/linger-server > "$OUT/server/server.log" 2>&1 &
           # It prints its one-time setup link once it's ready.
           deadline=$((SECONDS + 60))
           token=""
