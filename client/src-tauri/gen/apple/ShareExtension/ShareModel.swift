@@ -51,15 +51,19 @@ final class ShareModel: ObservableObject {
   /// would end half-way.
   private let hold: (Bool) -> Void
 
-  init(finish: @escaping () -> Void, cancel: @escaping () -> Void, hold: @escaping (Bool) -> Void) {
+  /// The window as the app left things: its list, sign-ins and recents.
+  convenience init(finish: @escaping () -> Void, cancel: @escaping () -> Void, hold: @escaping (Bool) -> Void) {
+    self.init(list: ShareStore.list(), signedIn: Set(ShareStore.signIns().keys), recent: ShareStore.recent(), finish: finish, cancel: cancel, hold: hold)
+  }
+
+  init(list: ShareList?, signedIn: Set<String>, recent: [ShareTarget], finish: @escaping () -> Void, cancel: @escaping () -> Void, hold: @escaping (Bool) -> Void) {
     self.finish = finish
     self.cancel = cancel
     self.hold = hold
-    let list = ShareStore.list()
     self.list = list
     colors = ShareColors(list?.theme)
-    signedIn = Set(ShareStore.signIns().keys)
-    recent = ShareStore.recent()
+    self.signedIn = signedIn
+    self.recent = recent
     if list == nil {
       blocked = "Open Linger and sign in, then share again."
     } else if list?.servers.isEmpty == true {
@@ -205,3 +209,15 @@ struct ShareColors {
     danger = color(theme?.danger, "#f06e6eff")
   }
 }
+
+#if SHARE_PREVIEW
+extension ShareModel {
+  /// For the preview app's screenshots (`client/tests/share-window-preview`):
+  /// a stage the window reaches only by sending.
+  func showing(_ stage: Stage, progress: Double = 0, failure: String? = nil) {
+    self.stage = stage
+    self.progress = progress
+    self.failure = failure
+  }
+}
+#endif

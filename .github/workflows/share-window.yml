@@ -12,6 +12,8 @@ on:
     paths:
       - client/src-tauri/gen/apple/**
       - client/tests/share-sender/**
+      - client/tests/share-window-preview/**
+      - scripts/share-window-shots.sh
       - scripts/share-sender-test.sh
       - crates/**
       - .github/workflows/share-window.yml
@@ -45,6 +47,24 @@ jobs:
             -target LingerShare -sdk iphonesimulator -configuration debug \
             CODE_SIGNING_ALLOWED=NO build | tee "$RUNNER_TEMP/build.log" | grep -E "error:|warning:|BUILD (SUCCEEDED|FAILED)" || true
           grep -q "BUILD SUCCEEDED" "$RUNNER_TEMP/build.log"
+
+  screens:
+    name: the share window's screens, on the iPhone Simulator
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Xcode 26
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app
+      # The real window with sample conversations, in each state and at the
+      # biggest text size, to look at before anybody installs it.
+      - name: screenshots
+        run: scripts/share-window-shots.sh "$RUNNER_TEMP/screens"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: share-window-screens
+          path: ${{ runner.temp }}/screens
+          retention-days: 14
 
   sender:
     name: the share window's sender, against a real server
