@@ -60,8 +60,15 @@ shoot() {
   local state="$1" name="$2"
   xcrun simctl terminate "$device" im.linger.share-preview 2>/dev/null || true
   xcrun simctl launch "$device" im.linger.share-preview "$state" >/dev/null
-  sleep 3
-  xcrun simctl io "$device" screenshot "$out/$name.png" >/dev/null
+  # Until the window is up: the launch screen alone is a small, blank picture.
+  for _ in 1 2 3 4 5; do
+    sleep 3
+    xcrun simctl io "$device" screenshot "$out/$name.png" >/dev/null
+    [ "$(wc -c <"$out/$name.png")" -gt 90000 ] && break
+  done
+  if ! pgrep -f "SharePreview.app/SharePreview" >/dev/null; then
+    echo "::warning::the preview app wasn't running after showing $state"
+  fi
 }
 
 for state in picking first one files chosen sending sent failed search note gathering blocked; do
@@ -73,4 +80,6 @@ if xcrun simctl ui "$device" content_size extra-extra-extra-large 2>/dev/null; t
   shoot chosen big-text-chosen
   xcrun simctl ui "$device" content_size large 2>/dev/null || true
 fi
-ls "$out"
+# Anything that crashed, to read.
+find "$HOME/Library/Logs/DiagnosticReports" -name 'SharePreview*' -exec cp {} "$out/" \; 2>/dev/null || true
+ls -la "$out"

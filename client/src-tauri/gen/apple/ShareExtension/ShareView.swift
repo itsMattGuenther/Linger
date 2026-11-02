@@ -78,8 +78,17 @@ struct ShareView: View {
     let colors = model.colors
     return VStack(alignment: .leading, spacing: 8) {
       HStack(alignment: .top, spacing: 12) {
-        Previews(previews: model.previews, colors: colors)
-          .accessibilityLabel("Sharing \(model.what)")
+        VStack(spacing: 6) {
+          Previews(previews: model.previews, colors: colors)
+          if model.files.count > 1 {
+            Text(model.what)
+              .font(.caption2)
+              .foregroundColor(colors.textMuted)
+              .lineLimit(1)
+          }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Sharing \(model.what)")
         message
       }
       .padding(12)
@@ -151,10 +160,12 @@ struct ShareView: View {
         }
         ForEach(sections, id: \.self) { section in
           Section {
-            ForEach(section.rows, id: \.target) { row in
+            // A conversation can be in Recent and under its server: each row
+            // is its section's own, or the lazy list draws one of them blank.
+            ForEach(section.rows, id: \.self) { row in
               Row(
                 row: row,
-                label: model.label(row.conversation),
+                label: row.conversation.name,
                 server: model.severalServers && section.title == nil ? row.serverName : nil,
                 chosen: model.chosen == row.target,
                 busy: model.stage != .picking,
@@ -223,7 +234,8 @@ struct ShareView: View {
   }
 }
 
-/// One conversation: its mark, its name, and a check when it's the one.
+/// One conversation: its mark, its name (a room's without "#", which its
+/// mark is), and a check when it's the one.
 private struct Row: View {
   let row: ShareRow
   let label: String
@@ -317,8 +329,8 @@ private struct Previews: View {
     ZStack(alignment: .bottomTrailing) {
       ForEach(Array(previews.prefix(3).enumerated().reversed()), id: \.element.id) { index, preview in
         tile(preview)
-          .rotationEffect(.degrees(Double(index) * 5))
-          .offset(x: CGFloat(index) * 3, y: CGFloat(index) * -2)
+          .rotationEffect(.degrees(Double(index) * 6))
+          .offset(x: CGFloat(index) * 5, y: CGFloat(index) * -3)
       }
       if previews.count > 3 {
         Text("+\(previews.count - 3)")
@@ -353,6 +365,7 @@ private struct Previews: View {
       .padding(4)
       .frame(width: 56, height: 56)
       .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(colors.field))
+      .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(colors.hairline, lineWidth: 1))
     }
   }
 }
