@@ -91,6 +91,9 @@ struct ShareSection: Hashable {
   /// "Recent", a server's name, or nil for one server's only section.
   let title: String?
   let rows: [ShareRow]
+  /// Whether each row says its server: Recent and what a search found, when
+  /// there are several, or two rooms called "general" would look the same.
+  var namesServers = false
 }
 
 /// The most recent conversations shown above the rest.
@@ -125,7 +128,7 @@ func shareSections(_ list: ShareList, signedIn: Set<String>, recent: [ShareTarge
   let words = search.trimmingCharacters(in: .whitespacesAndNewlines)
   if !words.isEmpty {
     let found = rows.joined().filter { matches($0.conversation.name, words) }
-    return found.isEmpty ? [] : [ShareSection(title: nil, rows: Array(found))]
+    return found.isEmpty ? [] : [ShareSection(title: nil, rows: Array(found), namesServers: list.servers.count > 1)]
   }
   var sections: [ShareSection] = []
   let byTarget = Dictionary(rows.joined().map { ($0.target, $0) }, uniquingKeysWith: { first, _ in first })
@@ -134,8 +137,8 @@ func shareSections(_ list: ShareList, signedIn: Set<String>, recent: [ShareTarge
     guard let row = byTarget[target], row.unavailable == nil, seen.insert(target).inserted else { return nil }
     return row
   }.prefix(mostRecent)
-  if !recents.isEmpty { sections.append(ShareSection(title: "Recent", rows: Array(recents))) }
   let several = list.servers.count > 1
+  if !recents.isEmpty { sections.append(ShareSection(title: "Recent", rows: Array(recents), namesServers: several)) }
   for (server, serverRows) in zip(list.servers, rows) where !serverRows.isEmpty {
     sections.append(ShareSection(title: several || !recents.isEmpty ? server.name : nil, rows: serverRows))
   }

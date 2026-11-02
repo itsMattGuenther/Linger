@@ -75,6 +75,10 @@ final class ShareListTests: XCTestCase {
     XCTAssertEqual(sections.map(\.title), ["Recent", "The Good Company", "Other"])
     // Gone, and on a server that needs updating: left out of Recent.
     XCTAssertEqual(sections[0].rows.map(\.target.room), ["d-jose", "r-general"])
+    // Recent's rows say their server; a server's own section's don't.
+    XCTAssertEqual(sections.map(\.namesServers), [true, false, false])
+    let one = shareSections(list([good]), signedIn: ["https://good.example"], recent: recent, search: "")
+    XCTAssertEqual(one.map(\.namesServers), [false, false])
   }
 
   /// A server that needs updating, or where the window has no sign-in, is
@@ -91,6 +95,7 @@ final class ShareListTests: XCTestCase {
     let found = shareSections(list([good, other]), signedIn: ["https://good.example"], recent: [], search: " GENERAL ")
     XCTAssertEqual(found.count, 1)
     XCTAssertEqual(found[0].rows.map(\.serverName), ["The Good Company", "Other"])
+    XCTAssertTrue(found[0].namesServers)
     XCTAssertEqual(shareSections(list([good]), signedIn: [], recent: [], search: "jose").first?.rows.first?.conversation.name, "José")
     XCTAssertTrue(shareSections(list([good]), signedIn: [], recent: [], search: "nobody").isEmpty)
   }

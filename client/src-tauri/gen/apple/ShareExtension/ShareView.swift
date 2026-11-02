@@ -65,7 +65,7 @@ struct ShareView: View {
             .foregroundColor(model.canSend ? colors.onAccent : colors.textMuted)
           }
           .disabled(!model.canSend)
-          .accessibilityLabel(model.chosenRow.map { "Send to \(model.label($0.conversation))" } ?? "Send")
+          .accessibilityLabel(model.chosenRow == nil ? "Send" : "Send to \(model.destination)")
         }
       }
     }
@@ -167,7 +167,7 @@ struct ShareView: View {
               Row(
                 row: row,
                 label: row.conversation.name,
-                server: model.severalServers && section.title == nil ? row.serverName : nil,
+                server: section.namesServers ? row.serverName : nil,
                 chosen: model.chosen == row.target,
                 busy: model.stage != .picking,
                 colors: colors
@@ -208,10 +208,10 @@ struct ShareView: View {
             .foregroundColor(colors.accent)
         } else if model.stage == .sending {
           ProgressView(value: model.progress).tint(colors.accent)
-          Text("Sending \(model.what) to \(model.chosenRow.map { model.label($0.conversation) } ?? "…")…")
+          Text("Sending \(model.what) to \(model.destination)…")
             .font(.footnote)
             .foregroundColor(colors.textSecondary)
-            .lineLimit(1)
+            .lineLimit(2)
         } else if let failure = model.failure {
           HStack(alignment: .firstTextBaseline, spacing: 8) {
             Image(systemName: "exclamationmark.circle.fill").foregroundColor(colors.danger)

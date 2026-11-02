@@ -76,9 +76,6 @@ final class ShareModel: ObservableObject {
     return shareSections(list, signedIn: signedIn, recent: recent, search: search)
   }
 
-  /// Several servers: a found conversation says which.
-  var severalServers: Bool { (list?.servers.count ?? 0) > 1 }
-
   var canSend: Bool {
     stage == .picking && !files.isEmpty && chosenRow?.unavailable == nil && chosen != nil
   }
@@ -108,6 +105,14 @@ final class ShareModel: ObservableObject {
   /// "#general", or a person's or group's name.
   func label(_ conversation: ShareList.Conversation) -> String {
     conversation.kind == "room" ? "#\(conversation.name)" : conversation.name
+  }
+
+  /// Where it's going, in a sentence: "#general", and which server's when
+  /// there are several.
+  var destination: String {
+    guard let row = chosenRow else { return "…" }
+    let several = (list?.servers.count ?? 0) > 1
+    return several ? "\(label(row.conversation)) on \(row.serverName)" : label(row.conversation)
   }
 
   func gathered(_ files: [ShareFile], previews: [SharePreview], note: String?) {
