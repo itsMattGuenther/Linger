@@ -15,9 +15,9 @@ what CI adds on top.
 | Where | When | What | How long |
 |---|---|---|---|
 | Your machine | Before every push | `scripts/check.sh`: the checks for what the branch touched | Under a second for docs; about 3 minutes for a client change with WebKit, 1½ without, more when the branch edits browser tests (each runs ten times); a Rust change also rebuilds, which is slow in a fresh copy |
-| A pull request | Every push | `ci.yml`: the same selection, plus S3 against MinIO, the relay and a real server update in Docker, the WebKit browser tests, and the browser tests the PR added or edited ten times in both engines; `package-check.yml` builds the desktop packages on Linux and Windows | About 5 minutes; the packages about 10 |
+| A pull request | Every push | `ci.yml`: the same selection, plus S3 against MinIO, the relay and a real server update in Docker, the WebKit browser tests, and the browser tests the PR added or edited ten times in both engines; `package-check.yml` builds the desktop packages on Linux and Windows; `ios-simulator.yml` builds the iPhone app for the simulator on a Mac and drives it with Maestro, when the PR touches the app | About 5 minutes; the packages about 10; the iPhone about 25 |
 | `main` | Every merge | `ci.yml` for what the merge changed. A run still waiting is cancelled when a newer merge lands, since the newer run covers it | As a PR |
-| `main`, nightly | 08:23 UTC | `nightly.yml`: every CI check, the package checks, the Windows and macOS shell builds, and every browser test three times with no retries. A failure opens an issue | About 40 minutes |
+| `main`, nightly | 08:23 UTC | `nightly.yml`: every CI check, the package checks, the Windows and macOS shell builds, the iPhone app in the simulator, and every browser test three times with no retries. A failure opens an issue | About 40 minutes |
 | A release | A `v*` tag | `release.yml` and `image.yml` each run every CI check on the tagged commit first and build nothing unless it passes; then the signed packages, their audio, the Buddy list starting on Linux, the Windows shortcuts, and the server image | About 25 minutes |
 | Real computers | Before a release, when an area changes | The [release checks](tasks/release-checks.md): several computers, real networks, audio devices, installs | By hand |
 
@@ -28,6 +28,7 @@ what CI adds on top.
 | Rust/TypeScript tests | Logic, real HTTP/temp SQLite, forced gateway reconnect, palette contrast, generated types | Desktop rendering or physical audio |
 | Chromium + WebKit browser tests | Real components with synthetic people, keyboard/pointer behavior and geometry | Installed WebView2/WebKitGTK behavior |
 | Linux/Windows package checks | Installation, icons, recorded chimes, Windows shortcut upgrades, the list window starting and drawing at every interface size, a minimized or tray-hidden Windows window stopping its drawing and coming back drawn, nothing the shipped CSP refuses, a shared screen's VP8 and H.264 playing in the packaged app on Ubuntu's WebKit and on Arch's current one (`scripts/linux-arch-check.sh`), and the app refusing to play one, without crashing, where WebKit draws on the CPU (#729); on Windows, the shell's own tests of the computer's sound in a share: Windows' process loopback started and read for a second, where the runner has an audio engine, and the 20 ms packets it makes (#736) | Signed-in use, every distro, physical speakers, real-network voice, a real GPU, the computer's sound heard with somebody talking |
+| The iPhone app in the simulator (`ios-simulator.yml`, `client/tests/ios/`) | The app as a phone builds it, share extension inside, starts on an iPhone (the simulator) and shows the screen for joining a server; it refuses a plain http address, as installed apps do; it sets up a real server on the same Mac, reached over https and wss as a real one is; a room made on the server shows up live, opens with its message, and takes one typed on the phone, which the server then has. A picture of every screen is kept | A real phone's memory and its limits, the camera, the microphone and calls, the share sheet, sleep and waking, real networks, Apple's real signing and TestFlight's build (`ios.yml` checks what it can of that) |
 | GPU check, before every release | The packaged app plays a shared screen on Arch's WebKit with a real computer's GPUs and their hardware decoders installed, and a chat's video shows its picture there, the page drawing on NVIDIA's own EGL too where the computer has it (`scripts/linux-arch-check.sh --gpu`, `docs/releasing.md` step 1, #730, #756) | GPUs that computer doesn't have, Windows' decoders, native Wayland (it runs X11 with GBM forced on, as Wayland has it) |
 | Short two-person release check | Your installed clients, actual update path, listening and interaction | Exhaustive platform coverage |
 
@@ -62,9 +63,10 @@ only changes documentation.
 |---|---|---|
 | Only docs: `docs/`, any `*.md`, `LICENSE` | The rules lint and version check | Nothing |
 | The server, `crates/linger-server/` | fmt, clippy, the Rust tests, bindings drift | S3 against a real MinIO |
-| The client, `client/` | Typecheck, unit tests, the browser tests in Chromium and (with Docker) WebKit, the production build's CSP check | The packages on Linux and Windows, and WebKit when `check.sh` couldn't run it |
+| The client, `client/` | Typecheck, unit tests, the browser tests in Chromium and (with Docker) WebKit, the production build's CSP check | The packages on Linux and Windows, the iPhone app in the simulator, and WebKit when `check.sh` couldn't run it |
 | Only browser tests, `client/tests/browser/` | As the client | WebKit when `check.sh` couldn't run it (no packages) |
-| The desktop shell, `client/src-tauri/` | Its clippy and tests, when the GUI libraries are installed | The packages |
+| The desktop shell, `client/src-tauri/` | Its clippy and tests, when the GUI libraries are installed | The packages, and the iPhone app in the simulator |
+| Only the iPhone flows, `client/tests/ios/`, or their https front (`scripts/https-front.mjs`, `scripts/test-certs.sh`) | The rules lint, the version check and the front's tests | The iPhone app in the simulator |
 | `deploy/` | The Rust checks and the update script's test | S3, the relay and a real server update in Docker |
 | The startup measurement, `scripts/startup-time.mjs` | Its own tests (below); the measuring itself is run by hand ([performance.md](performance.md)) | Nothing more |
 | Shared types (`crates/linger-core/`, `client/src/generated/`), CI, `scripts/`, anything else | Everything | Everything |
@@ -77,7 +79,7 @@ version check, and the tests of these scripts themselves
 `scripts/issue-label.test.mjs`, `scripts/action-pins.test.mjs`,
 `scripts/workflow-downloads.test.mjs`, `scripts/linux-next-env.test.mjs`,
 `scripts/doc-paths.test.mjs`, `scripts/overview-docs.test.mjs`,
-`scripts/ios-app-group.test.mjs`,
+`scripts/ios-app-group.test.mjs`, `scripts/https-front.test.mjs`,
 `scripts/startup-time.test.mjs`, `client/scripts/webview2-wait.test.mjs`,
 `python3 scripts/linux-audio-check.test.py`,
 `scripts/android-signing-test.sh`, `scripts/tidy-branches-test.sh`,
@@ -89,9 +91,9 @@ waits for every other `ci.yml` job and passes when each passed or was skipped
 because the change didn't touch it. Anything else fails it: a job that failed,
 was cancelled, or never ran because GitHub had no machine for it, which
 GitHub reports as `abandoned` (#445). A new job joins by being listed in its `needs`, and
-`scripts/ci-gate.test.mjs` fails if one isn't. The package checks run in their
-own workflow and don't block a merge; the nightly run and every release run
-them.
+`scripts/ci-gate.test.mjs` fails if one isn't. The package checks and the
+iPhone simulator check run in their own workflows and don't block a merge;
+the nightly run runs both, and every release the package checks.
 
 **Every action is pinned.** Each action a workflow takes from another
 repository is named by a full commit SHA with its version in a comment
