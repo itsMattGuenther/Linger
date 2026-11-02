@@ -1118,7 +1118,11 @@ nothing back to it. Text and links shared to Linger are not part of this: only
 files, so on Android Linger isn't offered for a link or words shared from a
 browser. Android comes first: a share arrives through the app's own intent
 filter. The iPhone follows, through a share extension that hands the files to
-the app (a second signed program, `docs/releasing.md`, "The iPhone"). A share
+the app (a second signed program, `docs/releasing.md`, "The iPhone"). A photo the
+iPhone offers only as HEIC, which the server doesn't take, arrives as a JPEG no
+more than 4,096 pixels on its longest side, the detail of a 12-megapixel photo:
+a share extension has about 120 MB to work in, and a recent iPhone's photo read
+whole needs more (#817). A share
 the app never picked up is deleted from the phone after ten minutes, and the
 app keeps nothing of it once it is in a message box or turned down.
 

@@ -1,3 +1,4 @@
+import ImageIO
 import UIKit
 import UniformTypeIdentifiers
 
@@ -32,6 +33,14 @@ final class ShareViewController: UIViewController {
   /// extension, by the rules downloads follow (`phone_save.rs`, `file_name`).
   private static let longestName = 120
   private static let longestExtension = 16
+
+  /// The longest side, in pixels, of the JPEG a HEIC photo is made into
+  /// (#817). A share extension gets about 120 MB, and decoding a recent
+  /// iPhone's photo whole (24 or 48 megapixels, 100 to 200 MB) got this one
+  /// ended mid-share: the sheet dropped away and nothing arrived. Read at
+  /// this size instead, a photo takes about 50 MB at most, and keeps the
+  /// detail of a 12-megapixel one.
+  private static let longestSide = 4096
 
   private var started = false
 
@@ -107,7 +116,8 @@ final class ShareViewController: UIViewController {
 
   /// Copy one shared thing into `folder`, as its own name made safe. A photo
   /// goes as a JPEG, which the server takes, rather than as HEIC, which it
-  /// doesn't. Answers whether a file was written.
+  /// doesn't: the sharing app's own JPEG when it offers one, or one made
+  /// here at a bounded size (`jpeg`, #817). Answers whether a file was written.
   private func copy(_ provider: NSItemProvider, into folder: URL) async -> Bool {
     guard let type = Self.fileType(provider) else { return false }
     let heicOnly = type.conforms(to: .heic) && !provider.hasItemConformingToTypeIdentifier(UTType.jpeg.identifier)
@@ -125,8 +135,7 @@ final class ShareViewController: UIViewController {
           let name = Self.name(provider.suggestedName, url: url, type: heicOnly ? .jpeg : asked)
           let target = folder.appendingPathComponent(name)
           if heicOnly {
-            guard let jpeg = UIImage(contentsOfFile: url.path)?.jpegData(compressionQuality: 0.9) else { throw CocoaError(.fileReadCorruptFile) }
-            try jpeg.write(to: target)
+            guard Self.jpeg(from: url, to: target) else { throw CocoaError(.fileReadCorruptFile) }
           } else {
             try files.copyItem(at: url, to: target)
           }
@@ -137,6 +146,26 @@ final class ShareViewController: UIViewController {
         }
       }
     }
+  }
+
+  /// A photo as a JPEG at `target`, read no bigger than `longestSide` and
+  /// turned upright (#817). ImageIO reads a HEIC at the size asked rather than
+  /// whole, so the memory this takes is the smaller picture's, and it writes
+  /// the JPEG as it goes. Answers whether one was written.
+  private static func jpeg(from source: URL, to target: URL) -> Bool {
+    guard let image = CGImageSourceCreateWithURL(source as CFURL, nil) else { return false }
+    let reading: [CFString: Any] = [
+      kCGImageSourceCreateThumbnailFromImageAlways: true,
+      kCGImageSourceCreateThumbnailWithTransform: true,
+      kCGImageSourceThumbnailMaxPixelSize: longestSide,
+      kCGImageSourceShouldCacheImmediately: true,
+    ]
+    guard let picture = CGImageSourceCreateThumbnailAtIndex(image, 0, reading as CFDictionary),
+      let out = CGImageDestinationCreateWithURL(target as CFURL, UTType.jpeg.identifier as CFString, 1, nil)
+    else { return false }
+    let writing: [CFString: Any] = [kCGImageDestinationLossyCompressionQuality: 0.9]
+    CGImageDestinationAddImage(out, picture, writing as CFDictionary)
+    return CGImageDestinationFinalize(out)
   }
 
   /// The kind of file a shared thing is, or nil for words or a link, which
