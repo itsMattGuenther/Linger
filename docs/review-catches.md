@@ -179,6 +179,20 @@ on a world that has changed.
   from the list's side (`next-settings-window.spec.ts`). Rule: what another
   window asks the list to do is tested failing (`docs/testing-strategy.md`).
 
+## A check nobody could run before it mattered
+
+- **#812: the iPhone build's App Group check could never pass.** The new
+  step in `ios.yml` read `com.apple.security.application-groups` with
+  `plutil -extract`, whose key paths split on dots, so it found nothing in a
+  correct signature and would have stopped every build before TestFlight.
+  *Missed because* it runs only on a Mac, after the build, and nothing here
+  could run it first. *Changed:* the reading is `scripts/ios-app-group.mjs`,
+  and `ios-app-group.test.mjs` runs it in CI on the real signatures of build
+  0.5.3 (5.1) and every other way the list can be written; what it can't
+  read fails. Rule: a step that only runs on another machine keeps its logic
+  where a test can run it here (`docs/testing-strategy.md`, "What reviews
+  have taught").
+
 ## A rule nothing checks
 
 - **#794: the update files blocked the async workers.** AGENTS.md says never
@@ -189,6 +203,19 @@ on a world that has changed.
   mistake is hard to make: every touch of the update folder from a command
   goes through `Store`, whose methods run off the workers
   (`spawn_blocking`), and installing does too.
+- **#811: the share extension was signed without its App Group.** Caught by
+  @eGGnogSC on TestFlight, not in review: every share to Linger from an
+  iPhone failed. The App Group was in the extension's entitlements file and
+  in its provisioning profile, but not in its signature, because
+  `tauri ios build` signs only the app's own binary with entitlements and the
+  export keeps only what each part was signed with. *Missed because*
+  `ios.yml` checked that the extension was in the app, with the app's
+  version, but not what it was allowed to do, and nothing could run it
+  before a phone did. *Changed:* the extension signs itself with its
+  entitlements when the build doesn't (its last build phase), and `ios.yml`
+  stops before TestFlight unless both the app and the extension are signed
+  with the App Group. The share's alert now says a failure apart from
+  something it can't take, which had pointed the tester at photo types.
 
 ## Tests written from the case in mind, not from the ways things fail
 

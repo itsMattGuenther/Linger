@@ -41,8 +41,11 @@ final class ShareViewController: UIViewController {
     case opened
     /// It's in the inbox, but iOS didn't let this open Linger.
     case waiting
-    /// Nothing could be copied.
+    /// Nothing shared was a picture, a video or a file.
     case nothing
+    /// Something was, but it couldn't be kept for Linger: the App Group's
+    /// folder wouldn't open (#811), or no file could be copied into it.
+    case failed
   }
 
   override func viewDidAppear(_ animated: Bool) {
@@ -57,7 +60,7 @@ final class ShareViewController: UIViewController {
       .flatMap { $0.attachments ?? [] }
       .prefix(Self.mostFiles)
     guard let group = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: Self.appGroup) else {
-      finish(.nothing)
+      finish(.failed)
       return
     }
     let incoming = group.appendingPathComponent("shared-incoming", isDirectory: true)
@@ -76,17 +79,19 @@ final class ShareViewController: UIViewController {
       var marked = incoming
       try marked.setResourceValues(outOfBackups)
     } catch {
-      finish(.nothing)
+      finish(.failed)
       return
     }
+    var offered = 0
     var place = 0
-    for provider in providers {
+    for provider in providers where Self.fileType(provider) != nil {
+      offered += 1
       let folder = incoming.appendingPathComponent(String(place), isDirectory: true)
       if await copy(provider, into: folder) { place += 1 }
     }
     guard place > 0 else {
       try? files.removeItem(at: incoming)
-      finish(.nothing)
+      finish(offered == 0 ? Outcome.nothing : Outcome.failed)
       return
     }
     try? files.removeItem(at: inbox)
@@ -94,7 +99,7 @@ final class ShareViewController: UIViewController {
       try files.moveItem(at: incoming, to: inbox)
     } catch {
       try? files.removeItem(at: incoming)
-      finish(.nothing)
+      finish(.failed)
       return
     }
     finish(openLinger() ? .opened : .waiting)
@@ -213,6 +218,8 @@ final class ShareViewController: UIViewController {
         words = ("Open Linger to share", "It's waiting there for the next ten minutes.")
       case .nothing:
         words = ("Linger couldn't take that", "Only pictures, videos and files can be shared to Linger.")
+      case .failed:
+        words = ("Linger couldn't keep that", "Try sharing it again, or attach it from inside Linger.")
       }
       let alert = UIAlertController(title: words.title, message: words.message, preferredStyle: .alert)
       alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in

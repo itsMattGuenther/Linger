@@ -171,6 +171,25 @@ jobs:
           name: iphone-app
           path: ${{ env.IPA }}
           retention-days: 7
+      # What each part is allowed to do, as signed (#811). The share extension
+      # was in the app with the app's version, but signed without its App
+      # Group, so it couldn't open the folder a share goes in and every share
+      # failed on a phone. After the artifact, so a build this stops can be
+      # looked at, and before TestFlight.
+      - name: the App Group in both signatures
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/signed"
+          rm -rf "$dir"
+          unzip -q "$IPA" 'Payload/*' -d "$dir"
+          app="$(find "$dir/Payload" -maxdepth 1 -name '*.app' -type d)"
+          # The reading is scripts/ios-app-group.mjs, tested on a real build's
+          # output: a line of shell here split the key on its dots (#812).
+          for bundle in "$app" "$app/PlugIns/LingerShare.appex"; do
+            codesign -d --entitlements - --xml "$bundle" > "$RUNNER_TEMP/entitlements.plist"
+            node scripts/ios-app-group.mjs "$RUNNER_TEMP/entitlements.plist" \
+              group.io.github.itsmattguenther.linger "${bundle##*/}"
+          done
       - name: send it to TestFlight
         if: inputs.upload
         env:

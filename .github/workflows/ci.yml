@@ -410,6 +410,10 @@ jobs:
         # No feature reads ARCHITECTURE.md's map or the README's layout, so
         # they went stale without anybody seeing (AGENTS.md, "The overview docs").
         run: node --test scripts/overview-docs.test.mjs
+      - name: the iPhone build's App Group check reads a real build's signatures
+        # It runs only on a Mac after the build, so its reading is tested here
+        # (#811, #812).
+        run: node --test scripts/ios-app-group.test.mjs
       - name: the packaged-app checks start the app without the caller's WebKit, media and graphics settings
         # A workaround in the shell could pass for the fix it stands in for (#757, #765).
         run: node --test scripts/linux-next-env.test.mjs

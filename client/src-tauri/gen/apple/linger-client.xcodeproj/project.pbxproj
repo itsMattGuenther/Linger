@@ -311,6 +311,7 @@
 				5A4E0C11D2B34F6E8A9B0C0D /* Resources */,
 				5A4E0C11D2B34F6E8A9B0C0C /* Frameworks */,
 				5A4E0C11D2B34F6E8A9B0C0E /* Same version as Linger */,
+				5A4E0C11D2B34F6E8A9B0C20 /* Its App Group in its signature */,
 			);
 			buildRules = (
 			);
@@ -416,6 +417,26 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "# App Store Connect refuses an extension whose version isn't its app's (#785).\n# tauri ios build writes both numbers into the app's Info.plist; copy them.\napp=\"${SRCROOT}/linger-client_iOS/Info.plist\"\nmine=\"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\nfor key in CFBundleShortVersionString CFBundleVersion; do\n  value=\"$(/usr/libexec/PlistBuddy -c \"Print :$key\" \"$app\")\"\n  /usr/libexec/PlistBuddy -c \"Set :$key $value\" \"$mine\"\ndone\n";
+		};
+		5A4E0C11D2B34F6E8A9B0C20 /* Its App Group in its signature */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/ShareExtension/ShareExtension.entitlements",
+			);
+			name = "Its App Group in its signature";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# tauri ios build builds with signing off, then signs only the app's own\n# binary with its entitlements before the export, which signs every part\n# again but keeps the entitlements each was signed with. Unsigned, this\n# extension lost its App Group and couldn't open the folder a share goes\n# in (#811). So sign it ad hoc with its entitlements, last, for the\n# export to keep. A build that signs for real skips this.\nif [ \"${CODE_SIGNING_ALLOWED}\" = \"NO\" ]; then\n  /usr/bin/codesign --force --sign - --timestamp=none --generate-entitlement-der \\\n    --entitlements \"${SRCROOT}/ShareExtension/ShareExtension.entitlements\" \\\n    \"${CODESIGNING_FOLDER_PATH}\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
