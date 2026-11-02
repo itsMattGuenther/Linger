@@ -70,7 +70,13 @@ iPhone: share a picture or a file to Linger, pick a room or a DM, and it waits
 in that conversation's message box, unsent (#785); TestFlight and Play testers
 confirm it on a real phone. Sending several pictures at once to a busy server,
 one that waits its turn goes up after all, or offers Try again, rather than
-leaving a red line with nothing to do but take it out (#801). Write the
+leaving a red line with nothing to do but take it out (#801). The server
+keeps the last two minutes of what somebody missed while their connection was
+down, not only the last 500 things, so somebody back from a drop of a minute or
+two in a busy call is still in it; when even that isn't enough, they start
+afresh at once and the call sees them leave then, rather than a silent seat
+staying in it for up to two more minutes (#678). That's the server's part,
+updated anyway for the share line. Write the
 release's one line in `client/src/next/core/release-line.json`
 (`docs/releasing.md`); Matt chose it on 2026-11-02: "Linger now updates
 itself, and phones can share pictures and files straight to it." **Thanks** (`docs/releasing.md`): @Gleasonmt for the iPhone app's iOS

@@ -1673,8 +1673,21 @@ S→C  { "op": "resumed", "d": { "replayed": <n> } }    # then replays missed fr
 S→C  { "op": "invalid_session", "d": { "reason": "expired" } }   # → re-identify
 ```
 
-The server holds a 500-frame ring buffer per session for 120 seconds after disconnect.
-Beyond that, the client must re-identify and refetch.
+A session outlasts its socket by 120 seconds (`RESUME_WINDOW_MS`), and keeps what a
+resume replays (#678): every frame it sent in the last 120 seconds while a socket is
+attached, and every frame since while none is, up to 5,000
+(`RESUME_BUFFER_MAX_FRAMES`, there for a flood rather than a busy call). The 120
+seconds while attached cover a socket that died before the server noticed, which its
+liveness timeout (2.5 heartbeats) does sooner.
+
+A replay is whole or it isn't given. When a frame the client hasn't had (one after its
+`s`) is no longer kept, the resume is refused with `expired` and **the session ends
+then**, as one whose window ran out: its voice seat goes and the room is told at once.
+The client identifies afresh and refetches. Until #678 a session kept the newest 500
+frames, which a busy call could send inside the window, and a resume replayed what was
+left. The client found the hole and started afresh anyway (a gap in `s` always means
+that), while its old seat sat out the rest of the window in the call, silent, and took
+a place in a full one.
 
 ### `invalid_session`
 
@@ -1685,7 +1698,7 @@ socket ends after it. The reasons:
 |---|---|---|
 | `unauthenticated` | `identify` or `resume` with a token that is not good: a bad signature, expired, or from before something ended every sign-in the account had (§2). Also sent to an open session when that happens: the account was removed or its password changed. | Gets a fresh access token and identifies. If renewal is refused, the sign-in is over. |
 | `unknown user` | `identify` for an account that is removed (§5). | Nothing works until the host restores the account. |
-| `expired` | `resume` of a session the server no longer holds: the 120 seconds passed, or the server restarted. | Identifies afresh. |
+| `expired` | `resume` of a session the server no longer holds: the 120 seconds passed, or the server restarted. Or of one it can't replay whole, which ends then (#678, "Resume" above). | Identifies afresh. |
 
 A `resume` with a token from before a password change is refused with
 `unauthenticated` even when the session it names is live, and the session is left

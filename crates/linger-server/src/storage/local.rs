@@ -385,6 +385,7 @@ mod tests {
             presence_grace: std::time::Duration::from_millis(
                 linger_core::limits::PRESENCE_GRACE_MS,
             ),
+            resume_frames: linger_core::limits::RESUME_BUFFER_MAX_FRAMES,
             trusted_proxies: crate::config::TrustedProxies::default(),
             signups_per_hour: Some(linger_core::limits::DEFAULT_SIGNUPS_PER_HOUR),
             password_checks_at_once: crate::auth::DEFAULT_PASSWORD_CHECKS_AT_ONCE,

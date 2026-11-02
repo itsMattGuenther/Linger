@@ -419,6 +419,79 @@ async fn a_session_that_ends_leaves_voice_and_the_room_is_told() {
     assert!(left, "a closed client stayed in the voice list");
 }
 
+/// Somebody back from a drop in a busy call, with more gone by than their
+/// session kept (#678). Their session can't be replayed whole, so it ends
+/// there and then: their app is told `expired` and starts afresh, and the
+/// call is told at once that they left. Until #678 the resume replayed what
+/// was left, the app found the hole and started afresh anyway, and the old
+/// seat sat out the rest of the two-minute window in the list, silent, in a
+/// call its app had left.
+#[tokio::test]
+async fn a_resume_that_cant_be_replayed_whole_takes_its_seat_out_at_once() {
+    let (server, host, room) =
+        common::voice_server_tuned("garage", |config| config.resume_frames = 3).await;
+    let callie = common::join_member(&server, &host.access_token, "callie").await;
+    let room_id = room.id.to_string();
+
+    let (mut a, a_id) = connect(&server, &host.access_token).await;
+    let (mut b, b_id) = connect(&server, &callie.access_token).await;
+    join_voice(&mut a, &room_id).await;
+    join_voice(&mut b, &room_id).await;
+    tokio::time::sleep(SETTLE).await;
+    let last_seq = drain(&mut b, SETTLE)
+        .await
+        .iter()
+        .filter_map(|f| f["s"].as_u64())
+        .max()
+        .expect("b saw something");
+    drain(&mut a, SETTLE).await;
+
+    // B's network goes, with no goodbye, and the room carries on: six
+    // messages, a frame each for B, twice what its session keeps.
+    drop(b);
+    tokio::time::sleep(SETTLE).await;
+    for i in 0..6 {
+        let resp = reqwest::Client::new()
+            .post(server.url(&format!("/rooms/{room_id}/messages")))
+            .bearer_auth(&host.access_token)
+            .json(&json!({ "body": format!("while you were out {i}") }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+    }
+    let meanwhile = drain(&mut a, SETTLE).await;
+    assert!(
+        voice_state(&meanwhile, &room_id).is_none(),
+        "a drop took B out of voice before it came back: {meanwhile:?}"
+    );
+
+    let (mut b2, _) = connect_async(server.gateway_url())
+        .await
+        .expect("reconnect");
+    assert_eq!(recv_json(&mut b2).await["op"], "hello");
+    send_json(
+        &mut b2,
+        json!({ "op": "resume", "d": { "session_id": b_id, "token": callie.access_token, "s": last_seq } }),
+    )
+    .await;
+    let answer = drain(&mut b2, SETTLE).await;
+    assert!(
+        answer.iter().all(|f| f["op"] != "resumed"),
+        "a resume with a hole in it was taken: {answer:?}"
+    );
+    let invalid = answer
+        .iter()
+        .find(|f| f["op"] == "invalid_session")
+        .expect("the app is told to start afresh");
+    assert_eq!(invalid["d"]["reason"], "expired");
+
+    // The call is told now, not when the window would have run out.
+    let frames = drain(&mut a, SETTLE).await;
+    let state = voice_state(&frames, &room_id).expect("the call is told B left");
+    assert_eq!(peer_sessions(state), vec![a_id]);
+}
+
 // ---------------------------------------------------------------------------
 // Privacy: a voice room inside a DM is as private as the DM
 // ---------------------------------------------------------------------------

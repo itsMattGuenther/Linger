@@ -7,7 +7,8 @@ use std::time::Duration;
 
 use linger_core::limits::{
     DEFAULT_POOL_BYTES, DEFAULT_SIGNUPS_PER_HOUR, MAX_FILE_BYTES, PRESENCE_GRACE_MS,
-    SCREEN_ALIVE_MS, SCREEN_SHARE_LINE_AFTER_MS, VOICE_JOIN_LINE_AFTER_MS,
+    RESUME_BUFFER_MAX_FRAMES, SCREEN_ALIVE_MS, SCREEN_SHARE_LINE_AFTER_MS,
+    VOICE_JOIN_LINE_AFTER_MS,
 };
 
 use crate::auth::{DEFAULT_PASSWORD_CHECKS_AT_ONCE, MAX_PASSWORD_CHECKS_AT_ONCE};
@@ -132,6 +133,10 @@ pub struct Config {
     /// Not an environment variable, like `voice_line_after`. Tests shorten it
     /// rather than wait.
     pub presence_grace: Duration,
+    /// The most frames a session keeps for its app to resume from (#678):
+    /// `RESUME_BUFFER_MAX_FRAMES`. Not an environment variable, like
+    /// `voice_line_after`. Tests make it small rather than send thousands.
+    pub resume_frames: usize,
     /// How often a screen socket is told it's still there and asked back
     /// (#360): `SCREEN_ALIVE_MS`. Not an environment variable, like
     /// `voice_line_after`. Tests shorten it rather than wait.
@@ -419,6 +424,7 @@ impl Config {
             voice_line_after: Duration::from_millis(VOICE_JOIN_LINE_AFTER_MS),
             share_line_after: Duration::from_millis(SCREEN_SHARE_LINE_AFTER_MS),
             presence_grace: Duration::from_millis(PRESENCE_GRACE_MS),
+            resume_frames: RESUME_BUFFER_MAX_FRAMES,
             screen_alive: Duration::from_millis(SCREEN_ALIVE_MS),
             trusted_proxies: trusted_proxies(std::env::var("LINGER_TRUSTED_PROXIES").ok())?,
             signups_per_hour: signups_per_hour(std::env::var("LINGER_SIGNUPS_PER_HOUR").ok())?,
@@ -1204,6 +1210,7 @@ mod tests {
             voice_line_after: Duration::from_millis(VOICE_JOIN_LINE_AFTER_MS),
             share_line_after: Duration::from_millis(SCREEN_SHARE_LINE_AFTER_MS),
             presence_grace: Duration::from_millis(PRESENCE_GRACE_MS),
+            resume_frames: RESUME_BUFFER_MAX_FRAMES,
             screen_alive: Duration::from_millis(SCREEN_ALIVE_MS),
             trusted_proxies: TrustedProxies::default(),
             signups_per_hour: Some(DEFAULT_SIGNUPS_PER_HOUR),

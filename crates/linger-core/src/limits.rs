@@ -241,8 +241,19 @@ pub const SCREEN_SOUND_QUEUE: usize = 10;
 
 /// Gateway (PROTOCOL §8).
 pub const HEARTBEAT_INTERVAL_MS: u64 = 30_000;
-pub const RESUME_BUFFER_FRAMES: usize = 500;
+/// How long a session outlasts its socket, waiting for its app to resume.
+/// While a socket is attached, the session also keeps each frame it sends for
+/// this long, so a socket that died before anybody noticed still has what it
+/// missed to replay (#678).
 pub const RESUME_WINDOW_MS: u64 = 120_000;
+/// The most frames a session keeps for a resume, whatever their age (#678).
+/// It is there for a flood, not for a busy call. A busy call sends each
+/// person a few frames a second, and a session holds at most twice the window
+/// of them (the window while attached, then the window while not), so this is
+/// room for about twenty a second. Until #678 a session kept the newest 500
+/// and nothing else, which a busy call could send inside the window, so
+/// somebody back from a drop of a minute or two came back out of voice.
+pub const RESUME_BUFFER_MAX_FRAMES: usize = 5_000;
 
 /// How long a session's presence outlasts a socket that drops without a
 /// goodbye (PROTOCOL §8, #654). Nobody is told anything meanwhile, and an app
