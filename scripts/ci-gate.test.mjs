@@ -40,3 +40,12 @@ test("all-green passes only when every job passed or had nothing to check", () =
     assert.equal(failsGate(["success", result, "skipped"]), true, result);
   }
 });
+
+// GitHub can take minutes to close a job after its last step, and that time
+// counts toward the job's limit: `rules`, done in 28 seconds, was cancelled
+// at five minutes, and the gate with it (#823).
+test("every job's time limit leaves room for GitHub to close it", () => {
+  const limits = [...jobsBlock.matchAll(/^ {4}timeout-minutes: (\d+)$/gm)].map((match) => Number(match[1]));
+  assert.equal(limits.length, jobs.length, "every job has a timeout-minutes");
+  for (const limit of limits) assert.ok(limit >= 10, `a ${limit}-minute limit`);
+});
