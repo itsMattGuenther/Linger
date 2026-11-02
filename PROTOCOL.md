@@ -96,7 +96,7 @@ turned into a 30-day sign-in. A token that's unknown, expired or of somebody
 removed is `UNAUTHENTICATED`; one already spent is a replay, refused the same
 way, and its family is revoked, as at `POST /auth/refresh`. One person gets
 `RATE_SHARE_SIGN_IN` (10 an hour); past it, `RATE_LIMITED` with
-`retry_after_ms`. It's a sign-in like any other: what ends every sign-in (a
+`retry_after_ms`, and nothing is stored. It's a sign-in like any other: what ends every sign-in (a
 password change, a reset, removal) ends it, and `POST /auth/logout` with its
 token ends it alone. A server from before it answers `NOT_FOUND`, and the app
 says the server needs updating to share from the share sheet.

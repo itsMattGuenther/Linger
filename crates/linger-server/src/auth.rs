@@ -494,10 +494,16 @@ pub async fn rotate_refresh(db: &SqlitePool, token: &str) -> anyhow::Result<Refr
 /// first, as presenting it to `rotate_refresh` does. One transaction on the
 /// writer, so a password change can't land between the check and the new
 /// family and leave a sign-in it meant to end (#496).
-pub async fn share_family(
+///
+/// `allow` is asked once the person is known and before anything is written,
+/// so a request over their limit stores nothing (#822): counted after the row
+/// went in, a client looping one token grew the table with families it was
+/// refused.
+pub async fn share_family<E>(
     db: &SqlitePool,
     token: &str,
-) -> anyhow::Result<Option<(UserId, String)>> {
+    allow: impl FnOnce(&UserId) -> Result<(), E>,
+) -> anyhow::Result<Option<Result<(UserId, String), E>>> {
     // (user_id, family_id, expires_at, revoked_at)
     type Row = (Vec<u8>, Vec<u8>, i64, Option<i64>);
 
@@ -537,6 +543,9 @@ pub async fn share_family(
         return Ok(None);
     }
     let user_id = UserId::from_slice(&user_bytes)?;
+    if let Err(held) = allow(&user_id) {
+        return Ok(Some(Err(held)));
+    }
     let new_token = new_opaque_token();
     sqlx::query(
         "INSERT INTO refresh_tokens (id, user_id, family_id, token_hash, expires_at, created_at)
@@ -551,7 +560,7 @@ pub async fn share_family(
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
-    Ok(Some((user_id, new_token)))
+    Ok(Some(Ok((user_id, new_token))))
 }
 
 /// Logout: revoke the presented token's whole family. Idempotent; unknown

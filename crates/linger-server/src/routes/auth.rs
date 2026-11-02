@@ -346,21 +346,19 @@ async fn share_sign_in(
     State(state): State<AppState>,
     Json(req): Json<RefreshRequest>,
 ) -> Result<Json<ShareSignInResponse>, ApiError> {
-    let Some((user_id, refresh_token)) =
-        auth::share_family(&state.db.write, &req.refresh_token).await?
-    else {
-        return Err(ApiError::unauthenticated());
-    };
-    // Counted after the token is proved, per person: nobody can use up
-    // somebody else's.
-    if let Err(retry) = state
-        .limiter
-        .check(&format!("share-sign-in:{user_id}"), RATE_SHARE_SIGN_IN)
-    {
-        auth::revoke_family(&state.db.write, &refresh_token).await?;
-        return Err(ApiError::rate_limited(retry));
+    // Counted once the token is proved, per person, so nobody can use up
+    // somebody else's, and before the new family is written, so a refused
+    // request stores nothing (#822).
+    let limiter = &state.limiter;
+    let asked = auth::share_family(&state.db.write, &req.refresh_token, |user_id| {
+        limiter.check(&format!("share-sign-in:{user_id}"), RATE_SHARE_SIGN_IN)
+    })
+    .await?;
+    match asked {
+        None => Err(ApiError::unauthenticated()),
+        Some(Err(retry)) => Err(ApiError::rate_limited(retry)),
+        Some(Ok((_, refresh_token))) => Ok(Json(ShareSignInResponse { refresh_token })),
     }
-    Ok(Json(ShareSignInResponse { refresh_token }))
 }
 
 async fn logout(

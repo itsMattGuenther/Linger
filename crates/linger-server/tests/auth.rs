@@ -642,11 +642,23 @@ async fn share_sign_ins_are_limited_per_person() {
             200
         );
     }
-    let refused = share_sign_in(&server, &host.refresh_token).await;
-    assert_eq!(refused.status(), 429);
-    let body: ErrorEnvelope = refused.json().await.unwrap();
-    assert_eq!(body.error.code, ErrorCode::RateLimited);
-    assert!(body.error.retry_after_ms.is_some_and(|ms| ms > 0));
+    let families = || async {
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM refresh_tokens")
+            .fetch_one(&server.state.db.read)
+            .await
+            .unwrap()
+    };
+    let before = families().await;
+    for _ in 0..3 {
+        let refused = share_sign_in(&server, &host.refresh_token).await;
+        assert_eq!(refused.status(), 429);
+        let body: ErrorEnvelope = refused.json().await.unwrap();
+        assert_eq!(body.error.code, ErrorCode::RateLimited);
+        assert!(body.error.retry_after_ms.is_some_and(|ms| ms > 0));
+    }
+    // A refused request writes nothing (#822): asking over and over can't
+    // grow the table.
+    assert_eq!(families().await, before);
     // Still the app's to use.
     assert_eq!(refreshed(&server, &host.refresh_token).await.0, 200);
 }
