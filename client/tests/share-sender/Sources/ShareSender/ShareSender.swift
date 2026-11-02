@@ -1,0 +1,1 @@
+../../../../src-tauri/gen/apple/ShareExtension/ShareSender.swift
