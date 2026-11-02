@@ -556,6 +556,12 @@ tree says, which isn't always what's drawn: a room's row reads `#evenings`,
 the # and the name together. When a flow can't find something, the failed
 step's `screen-hierarchy/*.json` in the artifact has every element's words.
 
+**Wait for anything that arrives on its own** with `extendedWaitUntil` and
+a timeout; `assertVisible` looks once, and suits only what's drawn with
+something the flow already waited for. After setting up, the list arrived
+first and the server's name a moment later, and a one-look check for the
+name failed one run in two.
+
 **On a Mac of your own**, with Xcode 26, Java 17 or later and
 [Maestro](https://docs.maestro.dev/getting-started/installing-maestro):
 

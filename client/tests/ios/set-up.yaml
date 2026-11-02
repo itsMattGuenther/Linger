@@ -24,5 +24,9 @@ appId: io.github.itsmattguenther.linger
 - extendedWaitUntil:
     visible: "No rooms yet."
     timeout: 60000
-- assertVisible: "Porch"
+# The server's name comes in its own request, after the list: the title says
+# "Linger" until it does. Waited for, not looked for once.
+- extendedWaitUntil:
+    visible: "Porch"
+    timeout: 30000
 - takeScreenshot: 06-list-empty-server
