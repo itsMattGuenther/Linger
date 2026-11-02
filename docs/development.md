@@ -551,7 +551,10 @@ what VoiceOver reads, so a flow finds a control by its words or its
 name is one VoiceOver can't name either. Maestro matches the whole of an
 element's words, whatever their case, so give what a flow makes a name
 nothing else on the screen has: a room called porch matched the server's
-name, Porch, in the title bar, and the tap went there.
+name, Porch, in the title bar, and the tap went there. And match what the
+tree says, which isn't always what's drawn: a room's row reads `#evenings`,
+the # and the name together. When a flow can't find something, the failed
+step's `screen-hierarchy/*.json` in the artifact has every element's words.
 
 **On a Mac of your own**, with Xcode 26, Java 17 or later and
 [Maestro](https://docs.maestro.dev/getting-started/installing-maestro):
