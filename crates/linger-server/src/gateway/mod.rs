@@ -2,10 +2,10 @@
 //!
 //! Shape: one broadcast bus of [`Fanout`]s — an event plus who it is for; a
 //! *session task* per session that assigns per-session sequence numbers, keeps
-//! the 500-frame resume ring, and forwards to whichever socket is currently
-//! attached. The session task outlives its socket by up to 120s
+//! what a resume can replay (`replay`, #678), and forwards to whichever socket
+//! is currently attached. The session task outlives its socket by up to 120s
 //! (`RESUME_WINDOW_MS`) so a reconnecting client can replay what it missed —
-//! no gaps, no duplicates.
+//! no gaps, no duplicates — and ends at once when it can't be replayed whole.
 //!
 //! Each event is turned into JSON once, however many sessions it reaches, and
 //! that one string is what every session's ring holds (`frame`, #519).
@@ -14,12 +14,13 @@
 //! everyone offline until they reconnect.
 
 mod frame;
+mod replay;
 mod screen_socket;
 pub mod screens;
 mod socket;
 
-use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
@@ -28,13 +29,14 @@ use dashmap::{DashMap, DashSet};
 use linger_core::gateway::{
     ServerEvent, ServerFrame, VoiceControls, VoicePeer, VoiceRoomState, VoiceTrack,
 };
-use linger_core::limits::{MAX_VOICE_PEERS, RESUME_BUFFER_FRAMES, RESUME_WINDOW_MS};
+use linger_core::limits::{MAX_VOICE_PEERS, RESUME_BUFFER_MAX_FRAMES, RESUME_WINDOW_MS};
 use linger_core::wire::{PresenceEntry, PresenceState};
 use linger_core::{RoomId, UserId};
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::time::Instant;
 
 use frame::EventJson;
+use replay::Replay;
 pub use screen_socket::screen_route;
 pub use socket::{tell_back_everywhere, ws_route};
 
@@ -119,6 +121,9 @@ pub struct Gateway {
     pub(crate) screens: screens::Screens,
     /// `LINGER_SCREENS` (#360): off, nobody shares and the app offers no Share.
     screens_allowed: std::sync::atomic::AtomicBool,
+    /// The most frames a session keeps for a resume (`Config::resume_frames`,
+    /// #678). Read when each session starts.
+    resume_frames: AtomicUsize,
 }
 
 /// One session's own say in where its person is (#653). Somebody on a phone
@@ -472,6 +477,10 @@ enum Ctl {
         resume_from: u64,
         /// Resume attaches get a `resumed` frame before the replay.
         is_resume: bool,
+        /// Whether the session took the socket. It doesn't when what the
+        /// client missed can't be replayed whole (#678): it ends instead, and
+        /// the socket says `expired`.
+        answer: oneshot::Sender<bool>,
     },
     /// The socket whose sink is `from` has gone. Only the socket attached
     /// right now detaches the session (#451): one that a resume has already
@@ -488,10 +497,21 @@ impl Default for Gateway {
     }
 }
 
+/// How many frames the bus holds for the session that has read the fewest.
+/// A session it laps ends rather than skip what it missed (`spawn_session`).
+const BUS_FRAMES: usize = 1024;
+
+/// How many frames wait for a socket's writer. A full queue makes whoever is
+/// sending wait, and a session replaying a resume reads nothing from the bus
+/// meanwhile, so a replay the socket is slow to take can let the bus lap it
+/// (#809). Shared with the tests, so a test's socket fills when a real one
+/// would rather than when the test chooses.
+pub(super) const SOCKET_QUEUE_FRAMES: usize = 256;
+
 impl Gateway {
     #[must_use]
     pub fn new() -> Self {
-        let (bus, _) = broadcast::channel(1024);
+        let (bus, _) = broadcast::channel(BUS_FRAMES);
         Self {
             bus,
             sessions: DashMap::new(),
@@ -507,6 +527,7 @@ impl Gateway {
             voice: DashMap::new(),
             screens: screens::Screens::default(),
             screens_allowed: std::sync::atomic::AtomicBool::new(true),
+            resume_frames: AtomicUsize::new(RESUME_BUFFER_MAX_FRAMES),
             seats: AtomicU64::new(0),
             forwarding: OnceLock::new(),
         }
@@ -571,6 +592,12 @@ impl Gateway {
     /// Set from `LINGER_SCREENS` at startup.
     pub fn allow_screens(&self, on: bool) {
         self.screens_allowed.store(on, Ordering::Relaxed);
+    }
+
+    /// Set from `Config::resume_frames` at startup (#678): sessions that start
+    /// after it keep this many frames at most for a resume.
+    pub fn keep_for_resume(&self, frames: usize) {
+        self.resume_frames.store(frames, Ordering::Relaxed);
     }
 
     /// Fan an event out, to whoever the event says it is for.
@@ -1434,7 +1461,7 @@ fn spawn_session(gateway: Arc<Gateway>, session_id: String, user_id: UserId) -> 
         let mut seq: u64 = 0;
         // Every entry is the same string every other session holds for that
         // event (#519); its `s` is spliced in as it's sent.
-        let mut ring: VecDeque<(u64, EventJson)> = VecDeque::with_capacity(RESUME_BUFFER_FRAMES);
+        let mut kept = Replay::new(gateway.resume_frames.load(Ordering::Relaxed));
         let mut sink: Option<mpsc::Sender<String>> = None;
         // Held alongside the sink and replaced with it: it belongs to whichever
         // socket is attached right now, not to the session.
@@ -1451,11 +1478,8 @@ fn spawn_session(gateway: Arc<Gateway>, session_id: String, user_id: UserId) -> 
                             continue;
                         };
                         seq += 1;
-                        if ring.len() == RESUME_BUFFER_FRAMES {
-                            ring.pop_front();
-                        }
                         let frame = json.sequenced(seq);
-                        ring.push_back((seq, json));
+                        kept.keep(seq, json, Instant::now(), detached_at.is_none());
                         if let Some(tx) = &sink {
                             // A full queue means a dead or pathologically slow
                             // socket; detach and let resume recover it.
@@ -1473,12 +1497,23 @@ fn spawn_session(gateway: Arc<Gateway>, session_id: String, user_id: UserId) -> 
                     Err(broadcast::error::RecvError::Closed) => break,
                 },
                 ctl = ctl_rx.recv() => match ctl {
-                    Some(Ctl::Attach { sink: new_sink, closer: new_closer, resume_from, is_resume }) => {
-                        let replay: Vec<String> = ring
-                            .iter()
-                            .filter(|(s, _)| *s > resume_from)
-                            .map(|(s, json)| json.sequenced(*s))
-                            .collect();
+                    Some(Ctl::Attach { sink: new_sink, closer: new_closer, resume_from, is_resume, answer }) => {
+                        // More reached this session while its app was away
+                        // than it kept (#678), so no replay can be whole. It
+                        // ends now, as one whose window ran out: the socket
+                        // says `expired`, the app starts afresh at once, and
+                        // the session's voice seat goes below rather than sit
+                        // out the window in a call its app has left. Replaying
+                        // what was left, as before #678, made the app find the
+                        // hole and start afresh anyway, with that seat behind.
+                        let Some(replay) = kept.after(resume_from) else {
+                            let _ = answer.send(false);
+                            if let Some(closer) = closer.take() {
+                                let _ = closer.send(());
+                            }
+                            break;
+                        };
+                        let _ = answer.send(true);
                         if is_resume {
                             let resumed = ServerFrame::control(ServerEvent::Resumed {
                                 replayed: replay.len() as u64,
@@ -1560,26 +1595,197 @@ mod tests {
     /// A socket for the session: its frames and its closer, both kept open.
     struct Socket {
         sink: mpsc::Sender<String>,
-        _frames: mpsc::Receiver<String>,
-        _closed: oneshot::Receiver<()>,
+        frames: mpsc::Receiver<String>,
+        closed: oneshot::Receiver<()>,
     }
 
     async fn attach(ctl: &mpsc::Sender<Ctl>, is_resume: bool) -> Socket {
-        let (sink, frames) = mpsc::channel(16);
+        let (taken, socket) = attach_from(ctl, 0, is_resume).await;
+        assert!(taken, "the session took the socket");
+        socket
+    }
+
+    /// A socket attached as a resume from `resume_from` would be, with a real
+    /// socket's queue (#809), and whether the session took it.
+    async fn attach_from(
+        ctl: &mpsc::Sender<Ctl>,
+        resume_from: u64,
+        is_resume: bool,
+    ) -> (bool, Socket) {
+        let (sink, frames) = mpsc::channel(SOCKET_QUEUE_FRAMES);
         let (closer, closed) = oneshot::channel();
+        let (answer, answered) = oneshot::channel();
         ctl.send(Ctl::Attach {
             sink: sink.clone(),
             closer,
-            resume_from: 0,
+            resume_from,
             is_resume,
+            answer,
         })
         .await
         .expect("the session is running");
-        Socket {
-            sink,
-            _frames: frames,
-            _closed: closed,
+        let taken = answered.await.unwrap_or(false);
+        (
+            taken,
+            Socket {
+                sink,
+                frames,
+                closed,
+            },
+        )
+    }
+
+    /// Publish `count` frames for `user`, letting the session take each
+    /// batch before the next so the bus never laps it.
+    async fn publish_many(gateway: &Gateway, user: UserId, count: usize) {
+        for sent in 0..count {
+            gateway.publish_to(user, ServerEvent::ReportsChanged {});
+            if sent % 200 == 199 {
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
         }
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    }
+
+    /// The number a frame went out under.
+    fn number(frame: &str) -> Option<u64> {
+        serde_json::from_str::<serde_json::Value>(frame).ok()?["s"].as_u64()
+    }
+
+    /// Read a socket the way its writer does, until the session has nothing
+    /// more for it or `most` frames have come. Time is paused in these tests,
+    /// so a session that stops sending fails here rather than hangs.
+    async fn read_all(socket: Socket, most: usize) -> Vec<String> {
+        let Socket {
+            sink, mut frames, ..
+        } = socket;
+        // Only the session's copy is left, so the queue closes when it ends.
+        drop(sink);
+        let reader = async move {
+            let mut got = Vec::new();
+            while got.len() < most {
+                let Some(frame) = frames.recv().await else {
+                    break;
+                };
+                got.push(frame);
+            }
+            got
+        };
+        tokio::time::timeout(Duration::from_secs(10), reader)
+            .await
+            .expect("the session stopped sending")
+    }
+
+    /// Seven times what a socket's queue holds missed while away, then more
+    /// as it's replayed (#678, #809). The replay waits for the socket over
+    /// and over, and reads nothing from the bus meanwhile. The app still gets
+    /// every frame it missed, then what came meanwhile, each once and in
+    /// order. Until #678 a resume replayed the newest 500, with a hole.
+    #[tokio::test(start_paused = true)]
+    async fn a_busy_session_resumes_with_everything_it_missed_then_what_came_meanwhile() {
+        let gateway = Arc::new(Gateway::new());
+        let user = UserId::new();
+        let ctl = spawn_session(Arc::clone(&gateway), "s".into(), user);
+        let socket = attach(&ctl, false).await;
+        ctl.send(Ctl::Detach { from: socket.sink })
+            .await
+            .expect("the session is running");
+
+        let missed = SOCKET_QUEUE_FRAMES * 7;
+        publish_many(&gateway, user, missed).await;
+        tokio::time::sleep(WINDOW / 2).await;
+
+        let (taken, socket) = attach_from(&ctl, 0, true).await;
+        assert!(taken, "a resume inside the window was refused");
+        // The replay is waiting on a full queue now, with nobody reading.
+        let meanwhile = 300;
+        for _ in 0..meanwhile {
+            gateway.publish_to(user, ServerEvent::ReportsChanged {});
+        }
+        let frames = read_all(socket, 1 + missed + meanwhile).await;
+        assert!(
+            frames[0].contains("\"resumed\""),
+            "first came {}",
+            frames[0]
+        );
+        let numbers: Vec<u64> = frames[1..].iter().filter_map(|f| number(f)).collect();
+        let every = u64::try_from(missed + meanwhile).unwrap();
+        assert_eq!(numbers, (1..=every).collect::<Vec<u64>>());
+        assert!(!ctl.is_closed(), "the session ended");
+    }
+
+    /// When a replay waits on its socket for so long that the bus laps the
+    /// session, it ends rather than skip what it missed (#809): its app is
+    /// cut off and starts afresh. Nothing it was sent has a hole in it.
+    #[tokio::test(start_paused = true)]
+    async fn a_session_the_bus_laps_during_a_replay_ends_and_sends_no_hole() {
+        let gateway = Arc::new(Gateway::new());
+        let user = UserId::new();
+        let ctl = spawn_session(Arc::clone(&gateway), "s".into(), user);
+        let socket = attach(&ctl, false).await;
+        ctl.send(Ctl::Detach { from: socket.sink })
+            .await
+            .expect("the session is running");
+
+        let missed = SOCKET_QUEUE_FRAMES * 3;
+        publish_many(&gateway, user, missed).await;
+        let (taken, socket) = attach_from(&ctl, 0, true).await;
+        assert!(taken);
+        for _ in 0..BUS_FRAMES + 10 {
+            gateway.publish_to(user, ServerEvent::ReportsChanged {});
+        }
+        let frames = read_all(socket, usize::MAX).await;
+        let numbers: Vec<u64> = frames.iter().filter_map(|f| number(f)).collect();
+        let replayed = u64::try_from(missed).unwrap();
+        assert_eq!(numbers, (1..=replayed).collect::<Vec<u64>>());
+        tokio::time::sleep(Duration::from_millis(1)).await;
+        assert!(ctl.is_closed(), "a lapped session carried on with a hole");
+    }
+
+    /// When a frame the app missed is gone, the session ends at once (#678),
+    /// rather than replay the rest and sit out its window in voice: it says
+    /// no to the socket, which tells the app `expired`, and hangs up on the
+    /// socket still attached, if there is one.
+    #[tokio::test(start_paused = true)]
+    async fn a_resume_that_cant_be_replayed_whole_ends_the_session_at_once() {
+        let gateway = Arc::new(Gateway::new());
+        gateway.keep_for_resume(3);
+        let user = UserId::new();
+        let ctl = spawn_session(Arc::clone(&gateway), "s".into(), user);
+        let mut still_there = attach(&ctl, false).await;
+        publish_many(&gateway, user, 5).await;
+
+        // The app missed all five on another socket; the session kept three.
+        let (taken, _) = attach_from(&ctl, 0, true).await;
+        assert!(!taken, "a resume with a hole was taken");
+        tokio::time::sleep(Duration::from_millis(1)).await;
+        assert!(ctl.is_closed(), "the session waited out its window");
+        assert_eq!(
+            still_there.closed.try_recv(),
+            Ok(()),
+            "the socket still attached wasn't hung up on"
+        );
+    }
+
+    /// The same session, resumed from what it kept, is taken as before.
+    #[tokio::test(start_paused = true)]
+    async fn a_resume_from_inside_what_was_kept_is_taken() {
+        let gateway = Arc::new(Gateway::new());
+        gateway.keep_for_resume(3);
+        let user = UserId::new();
+        let ctl = spawn_session(Arc::clone(&gateway), "s".into(), user);
+        let _socket = attach(&ctl, false).await;
+        publish_many(&gateway, user, 5).await;
+
+        let (taken, mut socket) = attach_from(&ctl, 2, true).await;
+        assert!(taken, "a resume with nothing missing was refused");
+        tokio::time::sleep(Duration::from_millis(1)).await;
+        let mut numbers = Vec::new();
+        while let Ok(frame) = socket.frames.try_recv() {
+            numbers.extend(number(&frame));
+        }
+        assert_eq!(numbers, vec![3, 4, 5]);
+        assert!(!ctl.is_closed());
     }
 
     /// A session that never gets a socket ends when the resume window

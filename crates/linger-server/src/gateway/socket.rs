@@ -17,7 +17,10 @@ use linger_core::limits::{
 use linger_core::UserId;
 use tokio::sync::{mpsc, oneshot};
 
-use super::{spawn_session, Ctl, HeldVoice, Merged, SessionHandle, VoiceJoined, WantedSeat};
+use super::{
+    spawn_session, Ctl, HeldVoice, Merged, SessionHandle, VoiceJoined, WantedSeat,
+    SOCKET_QUEUE_FRAMES,
+};
 use crate::db::now_ms;
 use crate::state::AppState;
 use crate::{auth, repo, validate};
@@ -58,7 +61,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
 
     // Writer task: everything outbound funnels through one queue so the
     // handler, the session task, and heartbeat acks can't interleave frames.
-    let (sink, mut sink_rx) = mpsc::channel::<String>(256);
+    let (sink, mut sink_rx) = mpsc::channel::<String>(SOCKET_QUEUE_FRAMES);
     let writer = tokio::spawn(async move {
         while let Some(json) = sink_rx.recv().await {
             if ws_tx.send(Message::Text(json.into())).await.is_err() {
@@ -185,6 +188,27 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     let _ = writer.await;
 }
 
+/// Hand this socket to its session, and wait for the session's answer: no when
+/// what the app missed can't be replayed whole (#678), or the session has just
+/// ended.
+async fn attach(
+    ctl: &mpsc::Sender<Ctl>,
+    sink: &mpsc::Sender<String>,
+    closer: oneshot::Sender<()>,
+    resume_from: u64,
+    is_resume: bool,
+) -> bool {
+    let (answer, answered) = oneshot::channel();
+    let attach = Ctl::Attach {
+        sink: sink.clone(),
+        closer,
+        resume_from,
+        is_resume,
+        answer,
+    };
+    ctl.send(attach).await.is_ok() && matches!(answered.await, Ok(true))
+}
+
 /// Run the handshake; `Some((user_id, session_id))` once a session is attached.
 ///
 /// The session id comes back out because voice needs it (SPEC §4.14): a peer
@@ -292,14 +316,7 @@ async fn handshake(
             let frame = ServerFrame::sequenced(ServerEvent::Ready(ready), 0);
             sink.send(serde_json::to_string(&frame).ok()?).await.ok()?;
 
-            ctl.send(Ctl::Attach {
-                sink: sink.clone(),
-                closer,
-                resume_from: 0,
-                is_resume: false,
-            })
-            .await
-            .ok()?;
+            attach(&ctl, sink, closer, 0, false).await.then_some(())?;
             Some((user_id, session_id))
         }
         ClientFrame::Resume {
@@ -332,7 +349,14 @@ async fn handshake(
                 .get(&session_id)
                 .filter(|e| e.value().user_id == user_id)
                 .map(|e| e.value().ctl.clone());
-            let Some(ctl) = ctl else {
+            // Gone (its window ran out, or the server restarted), or unable to
+            // replay whole what this app missed (#678), when the session ends
+            // at once: either way the app starts afresh.
+            let resumed = match ctl {
+                Some(ctl) => attach(&ctl, sink, closer, s, true).await,
+                None => false,
+            };
+            if !resumed {
                 send_control(
                     sink,
                     ServerEvent::InvalidSession {
@@ -341,15 +365,7 @@ async fn handshake(
                 )
                 .await;
                 return None;
-            };
-            ctl.send(Ctl::Attach {
-                sink: sink.clone(),
-                closer,
-                resume_from: s,
-                is_resume: true,
-            })
-            .await
-            .ok()?;
+            }
             Some((user_id, session_id))
         }
         _ => None,
