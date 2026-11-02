@@ -5,6 +5,7 @@ import type { ListModel, PersonRow } from "./list";
 import {
   hexOf,
   keepShareSignIns,
+  oneAtATime,
   RENEW_AFTER_MS,
   SHARE_LIST_VERSION,
   type ShareShell,
@@ -198,6 +199,49 @@ describe("keeping the share window's sign-ins", () => {
     const status = await keepShareSignIns([{ baseUrl: GOOD, shareSignIn: async () => "share-1" }], new Set([GOOD]), refusing, logout, NOW);
     expect(status.get(GOOD)).toBe("none");
     expect(logout).toHaveBeenCalledWith(GOOD, "share-1");
+  });
+
+  it("a sign-out while one is being asked for still ends it, once it's kept (#822)", async () => {
+    const { shell, store } = memoryShell();
+    const logout = vi.fn(async () => undefined);
+    let answer: (token: string) => void = () => undefined;
+    const asked = new Promise<string>((resolve) => {
+      answer = resolve;
+    });
+    const queue = oneAtATime();
+    const signedIn = queue(() => keepShareSignIns([{ baseUrl: GOOD, shareSignIn: () => asked }], new Set([GOOD]), shell, logout, NOW));
+    // Signed out while that's on its way: this run finds nothing kept yet,
+    // unless it waits.
+    const signedOut = queue(() => keepShareSignIns([], new Set(), shell, logout, NOW));
+    answer("share-1");
+    await Promise.all([signedIn, signedOut]);
+    expect(store.has(GOOD)).toBe(false);
+    expect(logout).toHaveBeenCalledWith(GOOD, "share-1");
+  });
+
+  it("one run at a time, and a failed run doesn't stop the next", async () => {
+    const queue = oneAtATime();
+    const order: string[] = [];
+    let finish: () => void = () => undefined;
+    const first = queue(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }).then(() => {
+          order.push("first");
+          throw new Error("refused");
+        }),
+    );
+    const second = queue(async () => {
+      order.push("second");
+      return 2;
+    });
+    await new Promise((settle) => setTimeout(settle, 5));
+    expect(order).toEqual([]);
+    finish();
+    await expect(first).rejects.toThrow("refused");
+    await expect(second).resolves.toBe(2);
+    expect(order).toEqual(["first", "second"]);
   });
 
   it("signs out of a server the app has left, but not one still being reached", async () => {

@@ -469,7 +469,8 @@ class RotatingTokens implements TokenSource {
   /**
    * A share window's sign-in being asked for (#820), with the refresh token
    * as it is. A renewal waits for it: spending that token meanwhile would
-   * make the ask a replay, which revokes this sign-in.
+   * make the ask a replay, which revokes this sign-in. Asks go one at a time,
+   * so this, the newest, settles after every one still out (#822).
    */
   #asking: Promise<unknown> | null = null;
   readonly #handlers: SignInHandlers;
@@ -518,9 +519,16 @@ class RotatingTokens implements TokenSource {
   }
 
   shareSignIn(): Promise<string> {
+    // Taken now, not once it's this ask's turn: a renewal that starts later
+    // waits for this ask, so waiting for it here would wait forever.
+    const before = this.#asking;
+    const refreshing = this.#refreshing;
     const asked = (async () => {
+      // After any ask still out (#822). Overlapping, the renewal would wait
+      // only for the newest, and could spend the token an older one carries.
+      await before;
       // Never with a token on its way to being spent or replaced.
-      await this.#refreshing?.catch(() => undefined);
+      await refreshing?.catch(() => undefined);
       await this.#changing;
       const answer = await new PublicApi(this.#baseUrl).shareSignIn({ refresh_token: this.#tokens.refreshToken });
       return answer.refresh_token;

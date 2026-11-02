@@ -720,7 +720,8 @@ E2EE launders a false promise, which is worse than an honest limitation.
    entries are moved over in place the first time they're read. The iPhone's share
    window (#820) posts with a sign-in of its own on each server (PROTOCOL §2), kept
    in one Keychain entry in the App Group's access group, this device only, so the
-   share extension can read it and write back what it renews
+   share extension can read it and write back what it renews, each side
+   changing it only while holding a lock on a file in the App Group's folder
    (`src-tauri/src/share_window.rs`).
 4. **No open registration.** Invite code required, always. Codes are 12 chars from a
    CSPRNG, single-use by default.

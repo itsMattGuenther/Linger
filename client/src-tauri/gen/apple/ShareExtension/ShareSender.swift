@@ -12,6 +12,22 @@ struct ShareFile: Sendable, Equatable {
   let size: Int64
 }
 
+/// The nonce each send goes with (#524, #822). A retry of the same words to
+/// the same conversation keeps the last one, so a send whose answer was lost
+/// posts once. Once the words or the conversation change, a new one: with the
+/// old one, the server would answer with the message it already has, and the
+/// window would say Sent without posting the change.
+struct ShareNonces {
+  private var last: (nonce: String, words: String, target: ShareTarget)?
+
+  mutating func next(words: String, target: ShareTarget, make: () -> String = { UUID().uuidString }) -> String {
+    if let last, last.words == words, last.target == target { return last.nonce }
+    let nonce = make()
+    last = (nonce, words, target)
+    return nonce
+  }
+}
+
 /// Why a share didn't go, in words a person can act on (#820). `signInGone`
 /// when the share window's sign-in on that server has ended, and only opening
 /// Linger can mend it.
@@ -323,6 +339,28 @@ private final class UploadProgress: NSObject, URLSessionTaskDelegate, @unchecked
   func urlSession(_ session: URLSession, task: URLSessionTask, didSendBodyData bytesSent: Int64, totalBytesSent: Int64, totalBytesExpectedToSend: Int64) {
     let sent = lock.holding { following[task.taskIdentifier] }
     sent?(totalBytesSent)
+  }
+}
+
+/// The folder a share's files are copied into to be sent (#822). The window
+/// removes it when it closes, sent or not, rather than leaving it for iOS to
+/// clear: ten files can be 5 GB. Copies that land after it closed (the window
+/// closed while they were being gathered) go the same way (`closed`).
+final class ShareCopies: @unchecked Sendable {
+  let folder: URL
+  private let lock = NSLock()
+  private var isClosed = false
+
+  init(in parent: URL = FileManager.default.temporaryDirectory) {
+    folder = parent.appendingPathComponent("linger-share-\(UUID().uuidString)", isDirectory: true)
+  }
+
+  var closed: Bool { lock.holding { isClosed } }
+
+  /// Remove the folder and everything in it.
+  func close() {
+    lock.holding { isClosed = true }
+    try? FileManager.default.removeItem(at: folder)
   }
 }
 

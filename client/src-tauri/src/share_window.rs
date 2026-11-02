@@ -12,7 +12,9 @@
 //!   (`Kept`), in the App Group's access group so the window can read it and
 //!   write back what it renews, and kept to this phone, as the app's own
 //!   sign-ins are (`secrets.rs`, #790). One entry rather than one per server,
-//!   so neither side has to list the Keychain.
+//!   so neither side has to list the Keychain. Both change it only holding a
+//!   lock on `share-window/sign-ins.lock` (`while_locked`), so neither writes
+//!   back a table read before the other's change (#822).
 //! - **The list it picks from**, with Linger's colours, as the page makes it
 //!   (`core/shareWindow.ts`): `share-window/list.json` in the App Group's
 //!   folder, marked "don't back up".
@@ -42,6 +44,9 @@ const ACCOUNT: &str = "sign-ins";
 /// The folder in the App Group the list goes in, and its name.
 const FOLDER: &str = "share-window";
 const LIST: &str = "list.json";
+/// The file both programs lock to change the sign-ins; `ShareList.swift`
+/// locks the same one.
+const LOCK: &str = "sign-ins.lock";
 
 /// The longest list kept: far more than any list of conversations, and short
 /// of anything a page could fill the phone with.
@@ -114,6 +119,43 @@ pub fn kept(store: &dyn Store) -> Vec<String> {
     load(store).into_keys().collect()
 }
 
+/// Run `change` holding the lock on `folder`'s `sign-ins.lock`, which the
+/// window takes too (`whileLocked` in `ShareList.swift`, #822). Each side reads
+/// the table, changes one server and writes it back; without the lock, one
+/// could write back a table read just before the other's write, and undo it:
+/// a renewed token lost is the window's sign-in lost. Held only for the read
+/// and write, never while asking a server. Without a folder, or a lock to be
+/// had, it runs anyway, as it did before there was one.
+pub fn while_locked<T>(folder: Option<&Path>, change: impl FnOnce() -> T) -> T {
+    let held = folder.and_then(|folder| {
+        std::fs::create_dir_all(folder).ok()?;
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(folder.join(LOCK))
+            .ok()?;
+        file.lock().ok()?;
+        Some(file)
+    });
+    let answer = change();
+    // Closing the file lets go of the lock.
+    drop(held);
+    answer
+}
+
+/// The folder whose lock guards the sign-ins: the App Group's on an iPhone.
+fn lock_folder() -> Option<std::path::PathBuf> {
+    #[cfg(target_os = "ios")]
+    {
+        ios::folder()
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        None
+    }
+}
+
 /// Write the list for the window into `folder`, whole or not at all: to a
 /// file beside it first, then moved into place, so the window never reads half
 /// of one. Refused when it isn't the list's shape, or is far too big.
@@ -167,7 +209,12 @@ pub async fn share_sign_in_saved_at(base_url: String) -> Option<u64> {
 #[tauri::command]
 pub async fn share_sign_in_save(base_url: String, refresh_token: String) -> Option<String> {
     crate::off_thread(
-        move || save(store()?.as_ref(), &base_url, refresh_token, now_ms()),
+        move || {
+            let store = store()?;
+            while_locked(lock_folder().as_deref(), || {
+                save(store.as_ref(), &base_url, refresh_token, now_ms())
+            })
+        },
         || None,
     )
     .await
@@ -176,7 +223,16 @@ pub async fn share_sign_in_save(base_url: String, refresh_token: String) -> Opti
 /// Stop keeping this server's window sign-in, answering with it.
 #[tauri::command]
 pub async fn share_sign_in_forget(base_url: String) -> Option<String> {
-    crate::off_thread(move || forget(store()?.as_ref(), &base_url), || None).await
+    crate::off_thread(
+        move || {
+            let store = store()?;
+            while_locked(lock_folder().as_deref(), || {
+                forget(store.as_ref(), &base_url)
+            })
+        },
+        || None,
+    )
+    .await
 }
 
 /// Every server a window sign-in is kept for.
@@ -384,6 +440,48 @@ mod tests {
 
     const GOOD: &str = "https://good.example";
     const OTHER: &str = "https://other.example";
+
+    /// A change waits while the other program holds the lock, and goes ahead
+    /// once it lets go (#822). Two opens of one file are two locks, so a
+    /// handle held here stands in for the window's.
+    #[test]
+    fn a_change_waits_for_the_lock_the_window_holds() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let folder = std::env::temp_dir().join(format!(
+            "linger-share-lock-{}-{}",
+            std::process::id(),
+            now_ms()
+        ));
+        std::fs::create_dir_all(&folder).expect("a folder");
+        let window = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(folder.join(LOCK))
+            .expect("the lock file");
+        window.lock().expect("the window's lock");
+        let (changed, change) = mpsc::channel();
+        let app = {
+            let folder = folder.clone();
+            std::thread::spawn(move || {
+                while_locked(Some(&folder), || changed.send(()).expect("told"));
+            })
+        };
+        assert!(
+            change.recv_timeout(Duration::from_millis(300)).is_err(),
+            "changed while the window held the lock"
+        );
+        drop(window);
+        change
+            .recv_timeout(Duration::from_secs(5))
+            .expect("changed once the window let go");
+        app.join().expect("the app's side");
+        // Without a folder, it runs at once, as before there was a lock.
+        assert_eq!(while_locked(None, || 7), 7);
+        let _ = std::fs::remove_dir_all(&folder);
+    }
 
     #[test]
     fn a_sign_in_is_kept_with_when_and_replacing_one_answers_the_old() {

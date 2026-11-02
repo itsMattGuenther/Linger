@@ -1,5 +1,8 @@
 import Foundation
 import XCTest
+#if canImport(Glibc)
+  import Glibc
+#endif
 
 @testable import ShareSender
 
@@ -98,6 +101,57 @@ final class ShareListTests: XCTestCase {
     XCTAssertTrue(found[0].namesServers)
     XCTAssertEqual(shareSections(list([good]), signedIn: [], recent: [], search: "jose").first?.rows.first?.conversation.name, "José")
     XCTAssertTrue(shareSections(list([good]), signedIn: [], recent: [], search: "nobody").isEmpty)
+  }
+
+  /// A change waits while the app holds the sign-ins' lock, and goes ahead
+  /// once it lets go (#822). Two opens of one file are two locks, so a
+  /// handle held here stands in for the app's.
+  func testAChangeWaitsForTheLockTheAppHolds() {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent("linger-share-lock-\(UUID().uuidString)")
+    try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let app = open(folder.appendingPathComponent("sign-ins.lock").path, O_CREAT | O_RDWR, 0o600)
+    XCTAssertGreaterThanOrEqual(app, 0)
+    XCTAssertEqual(flock(app, LOCK_EX), 0)
+    let changed = DispatchSemaphore(value: 0)
+    let window = Thread { _ = whileLocked(folder) { changed.signal() } }
+    window.start()
+    XCTAssertEqual(changed.wait(timeout: .now() + 0.3), .timedOut, "changed while the app held the lock")
+    close(app)
+    XCTAssertEqual(changed.wait(timeout: .now() + 5), .success, "changed once the app let go")
+    // Without a folder, it runs at once.
+    XCTAssertEqual(whileLocked(nil) { 7 }, 7)
+  }
+
+  /// A retry keeps its nonce; changed words or another conversation get a
+  /// new one, so the change is posted (#822).
+  func testARetryKeepsItsNonceAndAChangeGetsANewOne() {
+    var nonces = ShareNonces()
+    let general = ShareTarget(server: "s", room: "general")
+    let other = ShareTarget(server: "s", room: "other")
+    let first = nonces.next(words: "hi", target: general)
+    XCTAssertEqual(nonces.next(words: "hi", target: general), first)
+    let edited = nonces.next(words: "hi there", target: general)
+    XCTAssertNotEqual(edited, first)
+    let elsewhere = nonces.next(words: "hi there", target: other)
+    XCTAssertNotEqual(elsewhere, edited)
+    XCTAssertEqual(nonces.next(words: "hi there", target: other), elsewhere)
+  }
+
+  /// A share's copies go when the window closes, sent or not (#822).
+  func testASharesCopiesGoWhenTheWindowCloses() throws {
+    let parent = FileManager.default.temporaryDirectory.appendingPathComponent("linger-copies-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: parent) }
+    let copies = ShareCopies(in: parent)
+    let photo = copies.folder.appendingPathComponent("0/IMG_0001.jpeg")
+    try FileManager.default.createDirectory(at: photo.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data("a photo".utf8).write(to: photo)
+    XCTAssertFalse(copies.closed)
+    copies.close()
+    XCTAssertTrue(copies.closed)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: copies.folder.path))
+    // Two shares, two folders.
+    XCTAssertNotEqual(ShareCopies(in: parent).folder, ShareCopies(in: parent).folder)
   }
 
   func testRememberingPutsTheNewestFirstOnce() {

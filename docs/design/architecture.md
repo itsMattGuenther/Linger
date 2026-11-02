@@ -671,7 +671,11 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   and writes the list it picks from with Linger's colours read from the design
   tokens (`core/shareWindow.ts`). The shell keeps both where the extension
   reads them: the sign-ins in one Keychain entry in the App Group's access
-  group, the list in the App Group's folder (`src-tauri/src/share_window.rs`).
+  group, changed by either side only while holding `share-window/sign-ins.lock`
+  so neither writes over the other's change, and the list in the App Group's
+  folder (`src-tauri/src/share_window.rs`). The app asks for one sign-in at a
+  time, one run after another, so a sign-out always comes after a sign-in
+  still being asked for, and ends it.
   The extension's `ShareSender.swift` uploads and posts, and runs on Linux in
   `client/tests/share-sender` against a real server.
 - **The phone's bars.** The page is drawn under the phone's status bar and

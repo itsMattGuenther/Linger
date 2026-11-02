@@ -42,9 +42,9 @@ final class ShareModel: ObservableObject {
   private let list: ShareList?
   private let signedIn: Set<String>
   private let recent: [ShareTarget]
-  /// One for the whole share, so a retry whose first answer was lost can't
-  /// post it twice (#524).
-  private let nonce = UUID().uuidString
+  /// The same for a retry, so one whose first answer was lost can't post it
+  /// twice (#524); new when the words or the conversation change (#822).
+  private var nonces = ShareNonces()
   private let finish: () -> Void
   private let cancel: () -> Void
   /// Hold the share sheet still while sending: swiped away, the share
@@ -151,7 +151,7 @@ final class ShareModel: ObservableObject {
     }
     let files = files
     let words = message
-    let nonce = nonce
+    let nonce = nonces.next(words: words, target: target)
     Task { [weak self] in
       do {
         try await sender.send(files: files, message: words, roomId: target.room, nonce: nonce) { sent in

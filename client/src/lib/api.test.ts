@@ -435,18 +435,17 @@ describe("a share window's sign-in", () => {
   /** A fetch that answers each path when the test says. */
   function routed() {
     const { api, fetcher, onTokens, onSignedOut } = client();
-    const waiting = new Map<string, (response: Response) => void>();
+    // Each path's requests on their way, oldest first.
+    const waiting = new Map<string, ((response: Response) => void)[]>();
     const asked: { path: string; body: unknown }[] = [];
     fetcher.mockImplementation((input, init) => {
       const path = new URL(String(input)).pathname.replace(/^\/api\/v1/, "");
       asked.push({ path, body: init?.body ? JSON.parse(String(init.body)) : null });
-      return new Promise<Response>((answer) => waiting.set(path, answer));
+      return new Promise<Response>((answer) => waiting.set(path, [...(waiting.get(path) ?? []), answer]));
     });
     const answer = async (path: string, response: Response) => {
-      await vi.waitFor(() => expect(waiting.has(path)).toBe(true));
-      const send = waiting.get(path);
-      waiting.delete(path);
-      send?.(response);
+      await vi.waitFor(() => expect(waiting.get(path)?.length).toBeGreaterThan(0));
+      waiting.get(path)?.shift()?.(response);
     };
     return { api, asked, answer, onTokens, onSignedOut };
   }
@@ -489,6 +488,35 @@ describe("a share window's sign-in", () => {
     await share;
     await answer("/auth/refresh", Response.json(FRESH));
     expect(asked.find((one) => one.path === "/auth/refresh")?.body).toEqual({ refresh_token: "old-refresh" });
+    await answer("/me", Response.json({}));
+    await me;
+  });
+
+  it("asks one at a time, and a renewal waits for every ask on its way, not just the newest", async () => {
+    const { api, asked, answer } = routed();
+    const paths = () => asked.map((one) => one.path);
+    const first = api.shareSignIn();
+    await vi.waitFor(() => expect(paths()).toContain("/auth/share-sign-in"));
+    const second = api.shareSignIn();
+    const me = api.me();
+    await answer("/me", refusal(401, "UNAUTHENTICATED"));
+    await new Promise((settle) => setTimeout(settle, 10));
+    // The second waits for the first. Sent together, the second could be
+    // answered first, the renewal spend the token, and the first, arriving
+    // with it, be taken for a replay that ends this sign-in (#822).
+    expect(paths()).toEqual(["/auth/share-sign-in", "/me"]);
+    await answer("/auth/share-sign-in", Response.json({ refresh_token: "share-1" }));
+    await expect(first).resolves.toBe("share-1");
+    await vi.waitFor(() => expect(paths()).toEqual(["/auth/share-sign-in", "/me", "/auth/share-sign-in"]));
+    await new Promise((settle) => setTimeout(settle, 10));
+    expect(paths()).not.toContain("/auth/refresh");
+    await answer("/auth/share-sign-in", Response.json({ refresh_token: "share-2" }));
+    await expect(second).resolves.toBe("share-2");
+    await answer("/auth/refresh", Response.json(FRESH));
+    expect(asked.filter((one) => one.path === "/auth/share-sign-in").map((one) => one.body)).toEqual([
+      { refresh_token: "old-refresh" },
+      { refresh_token: "old-refresh" },
+    ]);
     await answer("/me", Response.json({}));
     await me;
   });

@@ -164,6 +164,22 @@ export interface ShareServer {
 }
 
 /**
+ * A queue for `keepShareSignIns`: each run starts once the one before it has
+ * settled (#822). Two at once, a sign-out's run could finish before an older
+ * run, still asking, saved what it got, which then stayed after the sign-out
+ * it should have ended with. One at a time, the sign-out's run finds it kept,
+ * and ends it.
+ */
+export function oneAtATime(): <T>(run: () => Promise<T>) => Promise<T> {
+  let last: Promise<unknown> = Promise.resolve();
+  return (run) => {
+    const next = last.then(run);
+    last = next.catch(() => undefined);
+    return next;
+  };
+}
+
+/**
  * Keep the window's sign-ins as the app's are: one for every server signed in
  * here, renewed once it's `RENEW_AFTER_MS` old, and signed out of a server the
  * app no longer is (`signedIn` counts one still being reached, or waiting for

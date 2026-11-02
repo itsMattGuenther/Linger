@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(Glibc)
+  import Glibc
+#endif
 
 /// The list the share window picks from (#820), as the app writes it
 /// (`client/src/next/core/shareWindow.ts`, `ShareWindowList`) into the App
@@ -156,4 +159,21 @@ func matches(_ name: String, _ words: String) -> Bool {
 /// shown, with `target` now the newest.
 func remembering(_ target: ShareTarget, in recent: [ShareTarget]) -> [ShareTarget] {
   Array(([target] + recent.filter { $0 != target }).prefix(mostRecent + 4))
+}
+
+/// Run `change` holding the lock on `folder`'s `sign-ins.lock`, which the app
+/// takes too (`while_locked` in `share_window.rs`, #822). Each side reads the
+/// sign-ins, changes one server's and writes them back; without the lock, one
+/// could write back what it read just before the other's write, and undo it.
+/// Held only for the read and write, never while asking a server. Without a
+/// folder, or a lock to be had, it runs anyway.
+func whileLocked<T>(_ folder: URL?, _ change: () -> T) -> T {
+  guard let folder else { return change() }
+  try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+  let file = open(folder.appendingPathComponent("sign-ins.lock").path, O_CREAT | O_RDWR, 0o600)
+  guard file >= 0 else { return change() }
+  // Closing the file lets go of the lock.
+  defer { close(file) }
+  guard flock(file, LOCK_EX) == 0 else { return change() }
+  return change()
 }

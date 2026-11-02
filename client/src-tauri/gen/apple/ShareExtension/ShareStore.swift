@@ -61,27 +61,32 @@ enum ShareStore {
   }
 
   /// Keep `token` as `server`'s renewed sign-in. The table is read again
-  /// first, so a sign-in the app changed meanwhile on another server stays.
+  /// first, holding the lock the app takes too (`whileLocked`, #822), so a
+  /// sign-in the app changes on another server is never written over.
   static func renewed(_ token: String, for server: String) {
-    var table = signIns()
-    table[server] = Kept(refresh_token: token, saved_at: UInt64(Date().timeIntervalSince1970 * 1000))
-    guard let data = try? JSONEncoder().encode(table) else { return }
-    let changes: [String: Any] = [
-      kSecValueData as String: data,
-      kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
-    ]
-    let status = SecItemUpdate(entry() as CFDictionary, changes as CFDictionary)
-    if status == errSecItemNotFound {
-      SecItemAdd(entry().merging(changes) { _, new in new } as CFDictionary, nil)
+    whileLocked(folder) {
+      var table = signIns()
+      table[server] = Kept(refresh_token: token, saved_at: UInt64(Date().timeIntervalSince1970 * 1000))
+      guard let data = try? JSONEncoder().encode(table) else { return }
+      let changes: [String: Any] = [
+        kSecValueData as String: data,
+        kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+      ]
+      let status = SecItemUpdate(entry() as CFDictionary, changes as CFDictionary)
+      if status == errSecItemNotFound {
+        SecItemAdd(entry().merging(changes) { _, new in new } as CFDictionary, nil)
+      }
     }
   }
 
   /// Drop `server`'s sign-in, which the server has ended (a password change,
   /// say), so the app asks for a new one the next time it's opened.
   static func forget(_ server: String) {
-    var table = signIns()
-    guard table.removeValue(forKey: server) != nil, let data = try? JSONEncoder().encode(table) else { return }
-    SecItemUpdate(entry() as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+    whileLocked(folder) {
+      var table = signIns()
+      guard table.removeValue(forKey: server) != nil, let data = try? JSONEncoder().encode(table) else { return }
+      SecItemUpdate(entry() as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+    }
   }
 
   // MARK: - Recent

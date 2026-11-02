@@ -12,19 +12,28 @@ import UniformTypeIdentifiers
 ///
 /// This holds the window and gathers what was shared: each file copied into
 /// the extension's own temporary folder, a photo kept only as HEIC made a
-/// JPEG at a bounded size first (#817), and a thumbnail of each picture.
+/// JPEG at a bounded size first (#817), and a thumbnail of each picture. The
+/// folder goes when the window closes (`ShareCopies`, #822).
 /// Nothing about the app that shared is read or kept (AGENTS.md hard rule 2).
 @objc(ShareViewController)
 final class ShareViewController: UIViewController {
   private var model: ShareModel?
+  private let copies = ShareCopies()
 
   override func viewDidLoad() {
     super.viewDidLoad()
     // Linger is dark only (docs/decisions.md).
     overrideUserInterfaceStyle = .dark
+    let copies = copies
     let model = ShareModel(
-      finish: { [weak self] in self?.extensionContext?.completeRequest(returningItems: nil) },
-      cancel: { [weak self] in self?.extensionContext?.cancelRequest(withError: CocoaError(.userCancelled)) },
+      finish: { [weak self] in
+        copies.close()
+        self?.extensionContext?.completeRequest(returningItems: nil)
+      },
+      cancel: { [weak self] in
+        copies.close()
+        self?.extensionContext?.cancelRequest(withError: CocoaError(.userCancelled))
+      },
       hold: { [weak self] holding in self?.isModalInPresentation = holding }
     )
     self.model = model
@@ -38,9 +47,20 @@ final class ShareViewController: UIViewController {
 
     let providers = (extensionContext?.inputItems as? [NSExtensionItem] ?? []).flatMap { $0.attachments ?? [] }
     Task {
-      let gathered = await Gather.all(providers)
+      let gathered = await Gather.all(providers, into: copies.folder)
+      // Closed while they were being copied: these go too.
+      if copies.closed {
+        copies.close()
+        return
+      }
       model.gathered(gathered.files, previews: gathered.previews, note: gathered.note)
     }
+  }
+
+  /// Swiped away, which the sheet allows except while sending: the copies go.
+  override func viewDidDisappear(_ animated: Bool) {
+    super.viewDidDisappear(animated)
+    if model?.stage != .sending { copies.close() }
   }
 }
 
@@ -71,9 +91,9 @@ enum Gather {
     var note: String?
   }
 
-  /// Every file shared, in order, up to `mostFiles`, with what was left out said.
-  static func all(_ providers: [NSItemProvider]) async -> Gathered {
-    let folder = FileManager.default.temporaryDirectory.appendingPathComponent("linger-share-\(UUID().uuidString)", isDirectory: true)
+  /// Every file shared, in order, up to `mostFiles`, copied into `folder`,
+  /// with what was left out said.
+  static func all(_ providers: [NSItemProvider], into folder: URL) async -> Gathered {
     var gathered = Gathered()
     var notes: [String] = []
     let offered = providers.filter { fileType($0) != nil }

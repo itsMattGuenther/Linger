@@ -6,6 +6,7 @@ import {
   colorReader,
   keepShareSignIns,
   nameColor,
+  oneAtATime,
   readTheme,
   type ShareListing,
   type ShareShell,
@@ -38,6 +39,9 @@ const LOOK_AGAIN_MS = 6 * 60 * 60 * 1000;
 export function useShareSignIns(on: boolean, sessions: Sessions): ReadonlyMap<string, ShareStatus> {
   const [status, setStatus] = useState<ReadonlyMap<string, ShareStatus>>(new Map());
   const looked = useRef(new Set<string>());
+  // One run at a time, so a sign-out's run comes after a run still asking,
+  // and ends what it gets (#822).
+  const queue = useRef(oneAtATime());
   const [round, setRound] = useState(0);
   useEffect(() => {
     if (!on) return undefined;
@@ -71,13 +75,9 @@ export function useShareSignIns(on: boolean, sessions: Sessions): ReadonlyMap<st
     let live = true;
     const unlooked = servers.filter((server) => !looked.current.has(server.baseUrl));
     for (const server of unlooked) looked.current.add(server.baseUrl);
-    void keepShareSignIns(
-      unlooked.map((server) => ({ baseUrl: server.baseUrl, shareSignIn: () => server.api.shareSignIn() })),
-      new Set(signedIn),
-      shell,
-      logout,
-      Date.now(),
-    )
+    const asking = unlooked.map((server) => ({ baseUrl: server.baseUrl, shareSignIn: () => server.api.shareSignIn() }));
+    const stillSignedIn = new Set(signedIn);
+    void queue.current(() => keepShareSignIns(asking, stillSignedIn, shell, logout, Date.now()))
       .then((found) => {
         if (live && found.size > 0) setStatus((was) => new Map([...was, ...found]));
       })
