@@ -230,7 +230,7 @@ mod ios {
     use security_framework_sys::base::{errSecDuplicateItem, errSecSuccess};
     use security_framework_sys::item::{
         kSecAttrAccessGroup, kSecAttrAccount, kSecAttrService, kSecClass, kSecClassGenericPassword,
-        kSecMatchLimit, kSecMatchLimitOne, kSecReturnData, kSecValueData,
+        kSecMatchLimit, kSecReturnData, kSecValueData,
     };
     use security_framework_sys::keychain_item::{SecItemAdd, SecItemCopyMatching, SecItemUpdate};
 
@@ -241,6 +241,9 @@ mod ios {
         /// An entry's protection; `security-framework-sys` doesn't name it
         /// (as in `secrets.rs`).
         static kSecAttrAccessible: CFStringRef;
+        /// "One entry at most", for `kSecMatchLimit`; `security-framework-sys`
+        /// names the key but not this value.
+        static kSecMatchLimitOne: CFStringRef;
     }
 
     /// One of Security.framework's constants, as a CFString.

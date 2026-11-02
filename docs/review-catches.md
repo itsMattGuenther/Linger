@@ -392,3 +392,19 @@ on a world that has changed.
   nothing blocks the reactor. Awaiting `tokio::fs` there would mean starting
   a runtime only to wait on it on the same thread, and the marking has to be
   done before the web view writes anything. Kept as it is.
+
+## Code only one platform compiles
+
+Code behind `#[cfg(target_os = "ios")]` (or Android's) is compiled only when
+the app is built for that phone, and the checks a pull request runs build the
+shell for Linux.
+
+- **#822: the share window's Keychain half didn't compile for the iPhone.** It
+  imported `kSecMatchLimitOne` from `security-framework-sys`, which names the
+  key but not that value, so no iPhone build could be made from the branch.
+  Caught by the iPhone Simulator check on a branch stacked on it (#821), not
+  by a reviewer. *Missed because* the Rust iPhone build (`desktop.yml`) runs
+  by hand and nightly, never on a pull request, and `share-window.yml` built
+  only the Swift extension. *Changed:* the value is declared beside
+  `kSecAttrAccessible`, and `share-window.yml` builds the app's Rust for the
+  iPhone on every pull request that changes it.
