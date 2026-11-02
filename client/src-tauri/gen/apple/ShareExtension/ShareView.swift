@@ -77,7 +77,7 @@ struct ShareView: View {
   private var shared: some View {
     let colors = model.colors
     return VStack(alignment: .leading, spacing: 8) {
-      HStack(alignment: .top, spacing: 12) {
+      HStack(alignment: .top, spacing: 16) {
         VStack(spacing: 6) {
           Previews(previews: model.previews, colors: colors)
           if model.files.count > 1 {
@@ -161,8 +161,9 @@ struct ShareView: View {
         ForEach(sections, id: \.self) { section in
           Section {
             // A conversation can be in Recent and under its server: each row
-            // is its section's own, or the lazy list draws one of them blank.
-            ForEach(section.rows, id: \.self) { row in
+            // is known by its section too, or the lazy list draws one blank.
+            ForEach(section.rows.map { Placed(section: section.title, row: $0) }, id: \.self) { placed in
+              let row = placed.row
               Row(
                 row: row,
                 label: row.conversation.name,
@@ -342,7 +343,7 @@ private struct Previews: View {
           .offset(x: 6, y: 6)
       }
     }
-    .frame(width: 60, height: 60)
+    .frame(width: 68, height: 64, alignment: .leading)
   }
 
   @ViewBuilder private func tile(_ preview: SharePreview) -> some View {
@@ -392,4 +393,11 @@ private struct Blocked: View {
     }
     .frame(maxWidth: .infinity)
   }
+}
+
+/// A row where it's shown: the same conversation can be in Recent and under
+/// its server, and the lazy list needs each to be its own.
+private struct Placed: Hashable {
+  let section: String?
+  let row: ShareRow
 }
