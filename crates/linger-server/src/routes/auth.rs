@@ -9,10 +9,10 @@ use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use linger_core::gateway::ServerEvent;
-use linger_core::limits::{ACCESS_TOKEN_TTL_SECS, RATE_LOGIN_PER_IP};
+use linger_core::limits::{ACCESS_TOKEN_TTL_SECS, RATE_LOGIN_PER_IP, RATE_SHARE_SIGN_IN};
 use linger_core::wire::{
     AuthResponse, ErrorCode, InvitePreview, LoginRequest, RefreshRequest, RefreshResponse,
-    RegisterRequest,
+    RegisterRequest, ShareSignInResponse,
 };
 use linger_core::UserId;
 use sqlx::SqliteExecutor;
@@ -29,6 +29,7 @@ pub fn router() -> Router<AppState> {
         .route("/auth/login", post(login))
         .route("/auth/refresh", post(refresh))
         .route("/auth/logout", post(logout))
+        .route("/auth/share-sign-in", post(share_sign_in))
         .route("/auth/invite/{code}", get(invite_preview))
 }
 
@@ -337,6 +338,29 @@ async fn refresh(
         }
         RefreshOutcome::Rejected => Err(ApiError::unauthenticated()),
     }
+}
+
+/// A sign-in of its own for the iPhone's share window (PROTOCOL §2, #820),
+/// asked for with the app's current refresh token, which isn't spent.
+async fn share_sign_in(
+    State(state): State<AppState>,
+    Json(req): Json<RefreshRequest>,
+) -> Result<Json<ShareSignInResponse>, ApiError> {
+    let Some((user_id, refresh_token)) =
+        auth::share_family(&state.db.write, &req.refresh_token).await?
+    else {
+        return Err(ApiError::unauthenticated());
+    };
+    // Counted after the token is proved, per person: nobody can use up
+    // somebody else's.
+    if let Err(retry) = state
+        .limiter
+        .check(&format!("share-sign-in:{user_id}"), RATE_SHARE_SIGN_IN)
+    {
+        auth::revoke_family(&state.db.write, &refresh_token).await?;
+        return Err(ApiError::rate_limited(retry));
+    }
+    Ok(Json(ShareSignInResponse { refresh_token }))
 }
 
 async fn logout(

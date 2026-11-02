@@ -4,8 +4,10 @@
 
 mod common;
 
-use linger_core::limits::{DEFAULT_SIGNUPS_PER_HOUR, RATE_LOGIN_PER_IP};
-use linger_core::wire::{AuthResponse, ErrorCode, ErrorEnvelope, Invite, RefreshResponse};
+use linger_core::limits::{DEFAULT_SIGNUPS_PER_HOUR, RATE_LOGIN_PER_IP, RATE_SHARE_SIGN_IN};
+use linger_core::wire::{
+    AuthResponse, ErrorCode, ErrorEnvelope, Invite, RefreshResponse, ShareSignInResponse,
+};
 use linger_server::auth::SERVER_BUSY;
 
 #[tokio::test]
@@ -506,4 +508,119 @@ async fn two_people_racing_for_one_single_use_invite_cannot_both_get_in() {
     );
     let refused = if a.status() == 422 { a } else { b };
     assert_eq!(code_of(refused).await, ErrorCode::InviteInvalid);
+}
+
+// --- the share window's own sign-in (#820) -----------------------------------
+
+/// `POST /auth/refresh`'s status, and its answer when it worked.
+async fn refreshed(server: &common::TestServer, token: &str) -> (u16, Option<RefreshResponse>) {
+    let resp = reqwest::Client::new()
+        .post(server.url("/auth/refresh"))
+        .json(&serde_json::json!({ "refresh_token": token }))
+        .send()
+        .await
+        .unwrap();
+    let status = resp.status().as_u16();
+    (status, if status == 200 { Some(resp.json().await.unwrap()) } else { None })
+}
+
+async fn share_sign_in(server: &common::TestServer, token: &str) -> reqwest::Response {
+    reqwest::Client::new()
+        .post(server.url("/auth/share-sign-in"))
+        .json(&serde_json::json!({ "refresh_token": token }))
+        .send()
+        .await
+        .unwrap()
+}
+
+/// The share window gets a sign-in of its own: a new family, so the app's
+/// token isn't spent asking, and each renews without touching the other. A
+/// replay of the window's spent token takes down the window's family alone.
+#[tokio::test]
+async fn a_share_sign_in_is_a_family_of_its_own() {
+    let server = common::spawn_server().await;
+    let host = common::bootstrap_host(&server).await;
+
+    let resp = share_sign_in(&server, &host.refresh_token).await;
+    assert_eq!(resp.status(), 200);
+    let share: ShareSignInResponse = resp.json().await.unwrap();
+    assert_ne!(share.refresh_token, host.refresh_token);
+
+    // Its access tokens are the person's.
+    let (status, window) = refreshed(&server, &share.refresh_token).await;
+    assert_eq!(status, 200);
+    let window = window.unwrap();
+    let me = reqwest::Client::new()
+        .get(server.url("/me"))
+        .bearer_auth(&window.access_token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(me.status(), 200);
+
+    // The app's token wasn't spent asking, and still renews.
+    let (status, app) = refreshed(&server, &host.refresh_token).await;
+    assert_eq!(status, 200, "asking spent the app's token");
+    let app = app.unwrap();
+
+    // Replaying the window's spent token kills the window's family only.
+    assert_eq!(refreshed(&server, &share.refresh_token).await.0, 401);
+    assert_eq!(refreshed(&server, &window.refresh_token).await.0, 401, "the window's family lives on");
+    assert_eq!(refreshed(&server, &app.refresh_token).await.0, 200, "the app's family went with the window's");
+}
+
+/// Asking with a token already spent is a replay, as at `POST /auth/refresh`:
+/// no sign-in, and its family is revoked. An unknown token gets nothing.
+#[tokio::test]
+async fn a_spent_token_gets_no_share_sign_in_and_loses_its_family() {
+    let server = common::spawn_server().await;
+    let host = common::bootstrap_host(&server).await;
+    let (_, next) = refreshed(&server, &host.refresh_token).await;
+    let next = next.unwrap();
+
+    let resp = share_sign_in(&server, &host.refresh_token).await;
+    assert_eq!(resp.status(), 401);
+    let body: ErrorEnvelope = resp.json().await.unwrap();
+    assert_eq!(body.error.code, ErrorCode::Unauthenticated);
+    assert_eq!(refreshed(&server, &next.refresh_token).await.0, 401, "a replay must revoke the family");
+
+    assert_eq!(share_sign_in(&server, "not-a-token").await.status(), 401);
+}
+
+/// What ends every sign-in ends the share window's too: a password change.
+#[tokio::test]
+async fn a_password_change_ends_the_share_sign_in() {
+    let server = common::spawn_server().await;
+    let host = common::bootstrap_host(&server).await;
+    let share: ShareSignInResponse = share_sign_in(&server, &host.refresh_token).await.json().await.unwrap();
+
+    let changed = reqwest::Client::new()
+        .patch(server.url("/me/password"))
+        .bearer_auth(&host.access_token)
+        .json(&serde_json::json!({
+            "current_password": "correct horse battery", "new_password": "a brand new passphrase"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(changed.status().is_success(), "{}", changed.status());
+    assert_eq!(refreshed(&server, &share.refresh_token).await.0, 401);
+}
+
+/// A handful an hour per person, then `RATE_LIMITED` with when to try again;
+/// the one refused isn't left behind as a working sign-in.
+#[tokio::test]
+async fn share_sign_ins_are_limited_per_person() {
+    let server = common::spawn_server().await;
+    let host = common::bootstrap_host(&server).await;
+    for _ in 0..RATE_SHARE_SIGN_IN.0 {
+        assert_eq!(share_sign_in(&server, &host.refresh_token).await.status(), 200);
+    }
+    let refused = share_sign_in(&server, &host.refresh_token).await;
+    assert_eq!(refused.status(), 429);
+    let body: ErrorEnvelope = refused.json().await.unwrap();
+    assert_eq!(body.error.code, ErrorCode::RateLimited);
+    assert!(body.error.retry_after_ms.is_some_and(|ms| ms > 0));
+    // Still the app's to use.
+    assert_eq!(refreshed(&server, &host.refresh_token).await.0, 200);
 }

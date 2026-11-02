@@ -483,6 +483,74 @@ pub async fn rotate_refresh(db: &SqlitePool, token: &str) -> anyhow::Result<Refr
     })
 }
 
+/// A new refresh family for the person whose current refresh token this is,
+/// for the iPhone's share window (#820), and the token it starts with. The
+/// presented token isn't spent: it stays the app's. Proving it is what asking
+/// takes, rather than an access token, so a leaked 15-minute token can't be
+/// turned into a 30-day sign-in.
+///
+/// Answers `None`, as a refresh would be refused, for a token that's unknown,
+/// expired, spent, or of somebody removed; a spent one revokes its family
+/// first, as presenting it to `rotate_refresh` does. One transaction on the
+/// writer, so a password change can't land between the check and the new
+/// family and leave a sign-in it meant to end (#496).
+pub async fn share_family(db: &SqlitePool, token: &str) -> anyhow::Result<Option<(UserId, String)>> {
+    // (user_id, family_id, expires_at, revoked_at)
+    type Row = (Vec<u8>, Vec<u8>, i64, Option<i64>);
+
+    let now = now_ms();
+    let mut tx = db.begin().await?;
+    let row: Option<Row> = sqlx::query_as(
+        "SELECT user_id, family_id, expires_at, revoked_at
+         FROM refresh_tokens WHERE token_hash = ?",
+    )
+    .bind(token_hash(token))
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some((user_bytes, family, expires_at, revoked_at)) = row else {
+        return Ok(None);
+    };
+    if revoked_at.is_some() {
+        sqlx::query(
+            "UPDATE refresh_tokens SET revoked_at = ? WHERE family_id = ? AND revoked_at IS NULL",
+        )
+        .bind(now)
+        .bind(&family)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        tracing::warn!("refresh token reuse detected asking for a share sign-in; family revoked");
+        return Ok(None);
+    }
+    if expires_at <= now {
+        return Ok(None);
+    }
+    let active: Option<i64> =
+        sqlx::query_scalar("SELECT 1 FROM users WHERE id = ? AND deactivated_at IS NULL")
+            .bind(&user_bytes)
+            .fetch_optional(&mut *tx)
+            .await?;
+    if active.is_none() {
+        return Ok(None);
+    }
+    let user_id = UserId::from_slice(&user_bytes)?;
+    let new_token = new_opaque_token();
+    sqlx::query(
+        "INSERT INTO refresh_tokens (id, user_id, family_id, token_hash, expires_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)",
+    )
+    .bind(Uuid::now_v7().as_bytes().to_vec())
+    .bind(user_id.to_vec())
+    .bind(Uuid::now_v7().as_bytes().to_vec())
+    .bind(token_hash(&new_token))
+    .bind(now + REFRESH_TTL_MS)
+    .bind(now)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(Some((user_id, new_token)))
+}
+
 /// Logout: revoke the presented token's whole family. Idempotent; unknown
 /// tokens are silently fine (logout must never fail).
 pub async fn revoke_family(db: &SqlitePool, token: &str) -> anyhow::Result<()> {
