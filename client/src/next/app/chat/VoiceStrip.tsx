@@ -1,7 +1,7 @@
 import { type MouseEvent, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { User } from "../../../generated/User";
-import { startProblemWords, type StartProblem, volumeLabel } from "../../../lib/voice";
+import { startProblemWords, type StartProblem } from "../../../lib/voice";
 import { QUIET_MOVE_WORDS, stripFit, VOICE_ACTION_WORDS, type StripFit, type StripMeasure, type VoiceStrip as Strip } from "../../core/chat/voice";
 import { verbFor } from "../../core/chat/words";
 import { copyText } from "../../core/copy";
@@ -11,7 +11,7 @@ import { useTalkSeats } from "../useTalkSeats";
 import { ShareButton, type ShareControl } from "../screen/ShareButton";
 import { EveryoneCard } from "../list/EveryoneCard";
 import type { VoiceDockPerson } from "../list/VoiceDock";
-import { VolumeCard } from "../list/VolumeCard";
+import { personAction, VolumeCard } from "../list/VolumeCard";
 import "./VoiceStrip.css";
 
 /**
@@ -163,6 +163,28 @@ export const VoiceStrip = memo(function VoiceStrip({
   const heard = volumes ? here.filter((user) => user.id !== meId) : NO_USERS;
   const openOf = volumeOf === null ? undefined : heard.find((user) => user.id === volumeOf);
   const everyoneOpen = everyone && volumes !== undefined;
+  // What tapping somebody opens: their volume, or on an iPhone only a host's
+  // Take out (#816); yours opens nothing.
+  const actionOf = (user: User): string | null =>
+    volumes && user.id !== meId ? personAction(user, volumes.of.get(user.id) ?? 1, volumes.onTakeOut !== undefined) : null;
+  // A chip's action, when it has one: its card opens, or closes again.
+  const chipAction = (user: User) => {
+    const action = actionOf(user);
+    if (action === null) return {};
+    return {
+      actionLabel: action,
+      expanded: volumeOf === user.id,
+      onActivate: (event: MouseEvent<HTMLButtonElement>) => {
+        setEveryone(false);
+        if (volumeOf === user.id) {
+          setVolumeOf(null);
+          return;
+        }
+        opener.current = event.currentTarget;
+        setVolumeOf(user.id);
+      },
+    };
+  };
   const shared = openOf ? (volume?.of.get(openOf.id) ?? 1) : null;
   useEffect(() => {
     if (volumeOf !== null && !openOf) setVolumeOf(null);
@@ -253,21 +275,7 @@ export const VoiceStrip = memo(function VoiceStrip({
               active={speaking.has(user.id)}
               sharing={sharing?.has(user.id)}
               state={micState(mics?.get(user.id))}
-              {...(volumes && user.id !== meId
-                ? {
-                    actionLabel: `${user.display_name}'s volume, ${volumeLabel(volumes.of.get(user.id) ?? 1)}`,
-                    expanded: volumeOf === user.id,
-                    onActivate: (event: MouseEvent<HTMLButtonElement>) => {
-                      setEveryone(false);
-                      if (volumeOf === user.id) {
-                        setVolumeOf(null);
-                        return;
-                      }
-                      opener.current = event.currentTarget;
-                      setVolumeOf(user.id);
-                    },
-                  }
-                : {})}
+              {...chipAction(user)}
             >
               {user.id === meId ? "you" : <Name person={user} size="control" />}
             </Chip>
@@ -326,6 +334,7 @@ export const VoiceStrip = memo(function VoiceStrip({
           anchor={opener}
           side="below"
           sheet={onPhone()}
+          actionOf={(person) => actionOf(person.user)}
           onPick={(person) => {
             setEveryone(false);
             setVolumeOf(person.user.id);

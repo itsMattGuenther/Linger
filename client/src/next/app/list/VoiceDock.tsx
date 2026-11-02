@@ -1,6 +1,5 @@
-import { useMemo, useRef, useState } from "react";
+import { type MouseEvent, useMemo, useRef, useState } from "react";
 import type { User } from "../../../generated/User";
-import { volumeLabel } from "../../../lib/voice";
 import { onPhone } from "../../core/phone";
 import { Button, Chip, Icon, IconButton, MarkerCrowd, Name, VoiceGlyph } from "../../kit";
 import { markerFor } from "../markers";
@@ -10,7 +9,7 @@ import { type SharePreview, SharingBox } from "../screen/SharingBox";
 import { EveryoneCard } from "./EveryoneCard";
 import "./VoiceDock.css";
 import { serverColor } from "./ServerSection";
-import { VolumeCard } from "./VolumeCard";
+import { personAction, VolumeCard } from "./VolumeCard";
 
 /**
  * A room shows everybody as chips up to this many people, you included.
@@ -109,6 +108,10 @@ export function VoiceDock({ where, people, muted, deafened, line, server, onGoTo
   const [everyone, setEveryone] = useState(false);
   const crowd = useRef<HTMLButtonElement | null>(null);
   const open = volumeOf ? people.find((person) => person.user.id === volumeOf.id && !person.you) : undefined;
+  // What tapping somebody opens: their volume, or on an iPhone only a host's
+  // Take out (#816); yours opens nothing.
+  const actionOf = (person: VoiceDockPerson): string | null =>
+    onVolume && !person.you ? personAction(person.user, person.volume ?? 1, onTakeOut !== undefined) : null;
   const closeVolume = () => {
     setVolumeOf(null);
     opener.current?.focus();
@@ -136,6 +139,25 @@ export function VoiceDock({ where, people, muted, deafened, line, server, onGoTo
   const you = people.find((person) => person.you);
   const seated = [...(you ? [you] : []), ...seatIds.flatMap((id) => others.find((person) => person.user.id === id) ?? [])];
 
+  // A chip's action, when it has one: its card opens, or closes again.
+  const chipAction = (person: VoiceDockPerson) => {
+    const action = actionOf(person);
+    if (action === null) return {};
+    return {
+      actionLabel: action,
+      expanded: volumeOf?.id === person.user.id,
+      onActivate: (event: MouseEvent<HTMLButtonElement>) => {
+        setEveryone(false);
+        if (volumeOf?.id === person.user.id) {
+          closeVolume();
+          return;
+        }
+        opener.current = event.currentTarget;
+        setVolumeOf({ id: person.user.id });
+      },
+    };
+  };
+
   const chip = (person: VoiceDockPerson, fill: boolean) => (
     <li key={person.user.id}>
       <Chip
@@ -146,21 +168,7 @@ export function VoiceDock({ where, people, muted, deafened, line, server, onGoTo
         state={stateOf(person)}
         note={noteOf(person)}
         fill={fill}
-        {...(onVolume && !person.you
-          ? {
-              actionLabel: `${person.user.display_name}'s volume, ${volumeLabel(person.volume ?? 1)}`,
-              expanded: volumeOf?.id === person.user.id,
-              onActivate: (event) => {
-                setEveryone(false);
-                if (volumeOf?.id === person.user.id) {
-                  closeVolume();
-                  return;
-                }
-                opener.current = event.currentTarget;
-                setVolumeOf({ id: person.user.id });
-              },
-            }
-          : {})}
+        {...chipAction(person)}
       >
         {person.you ? "you" : <Name person={person.user} size="control" />}
       </Chip>
@@ -224,6 +232,7 @@ export function VoiceDock({ where, people, muted, deafened, line, server, onGoTo
           where={where}
           anchor={crowd}
           sheet={onPhone()}
+          actionOf={actionOf}
           // Somebody found: their volume card, over the crowd, in this one's place.
           onPick={(person) => {
             setEveryone(false);

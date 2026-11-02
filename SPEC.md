@@ -1182,7 +1182,12 @@ room that line stands in for the room's own, so the phone never offers to move y
 voice: leave, then join. Sound comes out of the speaker, or a headset when one is
 connected, and there is no push-to-talk: Mute is how a phone goes quiet. Nobody plays
 louder than as sent on a phone (the web engine's player goes no further), so its
-per-person volume tops out at 100%. There a person's volume, and everyone in a
+per-person volume tops out at 100%. **An iPhone has no per-person volume** (#816):
+iOS leaves a player's volume where it is whatever a page sets, so a slider there
+moved and did nothing. Rather than that, or a "mute for you" that would leave
+somebody talking to a person who can't hear them (Matt, 2026-11-02), a person's
+chip on an iPhone opens only the host's Take out, and nothing for anybody else.
+There a person's volume, and everyone in a
 big room by name, rise from the bottom of the screen as its menus do, and each
 chip takes a tap a thumb's height (#747). A locked phone stays in the call (the call bar,
 above). Ringing a closed phone into a voice room would need push, so that stays out

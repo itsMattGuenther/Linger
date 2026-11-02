@@ -732,7 +732,10 @@ window, so you don't need the list in front to mute:
   with the microphone off. Press **Join** to carry on.
 - Click someone's name in the voice bar to set **how loud they are for you**,
   from silent to twice as loud. Linger remembers it for that person on this
-  server, on this computer only; nobody else hears or sees the change.
+  server, on this computer only; nobody else hears or sees the change. On an
+  Android phone it goes from silent to as loud as they sent it. An iPhone
+  doesn't let Linger change one person's volume, so there's none there: the
+  iPhone's own buttons set how loud the whole call is.
 - **In a big room** (more than six people), the voice bar keeps six places:
   you, then whoever just talked, lit while they talk. Somebody new who talks
   takes the place of whoever spoke longest ago, so nobody jumps around while

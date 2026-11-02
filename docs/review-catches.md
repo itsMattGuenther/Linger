@@ -371,6 +371,17 @@ on a world that has changed.
   `whileRunning` in `client/scripts/webview2-wait.mjs` makes one wait per
   app that always checks it first, and every wait in the four checks is
   that one; `webview2-wait.test.mjs` has an app quit during a page wait.
+- **#819: a card with its one control taken away left the keyboard behind
+  it, and a list of names stayed buttons.** On an iPhone, which lost its
+  per-person volume, the host's card had no slider, and its focus still
+  looked only for one; and the names in everyone's list kept the kit row's
+  button though nothing happened to them. *Missed because* the tests were
+  written from what the iPhone shows, not from what a keyboard or a screen
+  reader meets there, and the kit's Row had no form without a button.
+  *Changed:* the card focuses its first control, whichever it is; a Row
+  with nothing to do is text, not a button (`docs/design/system.md`, Row),
+  which mends the people card's names too; the iPhone tests check the focus
+  and that no name is a button.
 
 ## Comments that were wrong
 

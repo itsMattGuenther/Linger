@@ -69,7 +69,7 @@
 /* An option lights only when it's the highlighted one, which the pointer
    moves as it goes over: a plain hover would light a second row while the
    keyboard is on another. */
-.k-row:not([role="option"]) .k-row-main:hover:not(:disabled),
+.k-row:not([role="option"]) .k-row-main:hover:not(:disabled):not([data-plain]),
 .k-row[data-selected="yes"] .k-row-main,
 .k-row[data-active="yes"] .k-row-main {
   background: var(--surface-hover);
@@ -130,7 +130,7 @@
   color: var(--text-primary);
 }
 
-.k-row[data-lit="yes"]:not([role="option"]) .k-row-main:hover:not(:disabled) {
+.k-row[data-lit="yes"]:not([role="option"]) .k-row-main:hover:not(:disabled):not([data-plain]) {
   background: var(--lit-wash-hover);
 }
 

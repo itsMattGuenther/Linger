@@ -1,7 +1,7 @@
 import { type RefObject, useEffect, useRef, useState } from "react";
 import type { User } from "../../../generated/User";
 import { volumeLabel } from "../../../lib/voice";
-import { onPhone, thisDevice } from "../../core/phone";
+import { onPhone, personVolumeWorks, thisDevice } from "../../core/phone";
 import { Button, Name, Popover, Slider } from "../../kit";
 import { useBackButton } from "../useBackButton";
 import { type CardSide, useBeside } from "./useAbove";
@@ -14,7 +14,9 @@ import "./VolumeCard.css";
  * on this computer for that person on this server and never sent anywhere.
  * Every change is heard at once; there is nothing to save. The phone plays
  * each voice through the web engine's own player, which goes no louder than
- * as sent, so there the most is 100% (#429, lib/pageVoice.ts).
+ * as sent, so there the most is 100% (#429, lib/pageVoice.ts). An iPhone's
+ * player can't be made quieter either, so there it has no slider, and opens
+ * only for a host's Take out (#816, `personAction`).
  */
 export function VolumeCard({
   user,
@@ -45,6 +47,7 @@ export function VolumeCard({
 }) {
   const phone = onPhone();
   const loudest = phone ? 1 : 2;
+  const adjustable = personVolumeWorks();
   const [taking, setTaking] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const body = useRef<HTMLDivElement | null>(null);
@@ -53,26 +56,31 @@ export function VolumeCard({
   // Risen on the phone, Back closes it, as it does the phone's other sheets.
   useBackButton(sheet, onClose);
 
-  // The slider has the keyboard as soon as it opens.
+  // The slider has the keyboard as soon as it opens; on an iPhone, which has
+  // none, Take out does (Greptile on #819), not the chip behind the card.
   useEffect(() => {
-    body.current?.querySelector<HTMLInputElement>("input")?.focus();
+    body.current?.querySelector<HTMLElement>("input, button")?.focus();
   }, []);
 
   return (
-    <Popover label={`${user.display_name}'s volume`} at={at} sheet={sheet} onClose={onClose}>
+    <Popover label={adjustable ? `${user.display_name}'s volume` : `${user.display_name} in voice`} at={at} sheet={sheet} onClose={onClose}>
       <div className="nx-volume" ref={body}>
         <p className="nx-volume-who">
           <Name person={user} size="control" />
         </p>
-        <div className="nx-volume-row">
-          <Slider label={`How loud ${user.display_name} is for you`} value={Math.min(volume, loudest)} min={0} max={loudest} step={0.05} valueText={volumeLabel(Math.min(volume, loudest))} onChange={onVolume} />
-          <span className="nx-volume-value">{volumeLabel(Math.min(volume, loudest))}</span>
-        </div>
-        <p className="nx-volume-note">Only for you, on {thisDevice(phone)}.</p>
-        {Math.abs(volume - 1) > 0.001 ? (
-          <Button size="sm" variant="secondary" onClick={() => onVolume(1)}>
-            Back to 100%
-          </Button>
+        {adjustable ? (
+          <>
+            <div className="nx-volume-row">
+              <Slider label={`How loud ${user.display_name} is for you`} value={Math.min(volume, loudest)} min={0} max={loudest} step={0.05} valueText={volumeLabel(Math.min(volume, loudest))} onChange={onVolume} />
+              <span className="nx-volume-value">{volumeLabel(Math.min(volume, loudest))}</span>
+            </div>
+            <p className="nx-volume-note">Only for you, on {thisDevice(phone)}.</p>
+            {Math.abs(volume - 1) > 0.001 ? (
+              <Button size="sm" variant="secondary" onClick={() => onVolume(1)}>
+                Back to 100%
+              </Button>
+            ) : null}
+          </>
         ) : null}
         {onTakeOut ? (
           <>
@@ -105,4 +113,15 @@ export function VolumeCard({
       </div>
     </Popover>
   );
+}
+
+/**
+ * What tapping somebody in voice offers, as the chip or row names it, or null
+ * when there's nothing (#816): their volume, or, on an iPhone, where a page
+ * can't set one, the host's Take out alone, when `takeOut` is offered here and
+ * they aren't the host (#424).
+ */
+export function personAction(user: User, volume: number, takeOut: boolean): string | null {
+  if (personVolumeWorks()) return `${user.display_name}'s volume, ${volumeLabel(volume)}`;
+  return takeOut && !user.is_host ? `Take ${user.display_name} out of voice` : null;
 }

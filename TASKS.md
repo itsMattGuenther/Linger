@@ -72,7 +72,10 @@ confirm it on a real phone. A photo an iPhone keeps as HEIC arrives as a JPEG at
 most 4,096 pixels on its longest side, since the share program has too little
 memory to read a recent iPhone's photo whole (#817). Sending several pictures at once to a busy server,
 one that waits its turn goes up after all, or offers Try again, rather than
-leaving a red line with nothing to do but take it out (#801). The server
+leaving a red line with nothing to do but take it out (#801). An iPhone has no
+per-person volume any more: iOS doesn't let Linger set one voice's volume, so
+the slider moved and did nothing; there a person's name in a call opens only
+the host's Take out (#816). Android keeps its slider. The server
 keeps the last two minutes of what somebody missed while their connection was
 down, not only the last 500 things, so somebody back from a drop of a minute or
 two in a busy call is still in it; when even that isn't enough, they start
