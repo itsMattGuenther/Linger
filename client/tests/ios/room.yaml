@@ -1,26 +1,32 @@
 # A room made on the server while the app is open shows up in its list (the
 # gateway, live), opens with what's been said in it, and takes a message
 # typed on the phone, which the server then has.
+#
+# Maestro matches words whatever their case, and the whole of an element's
+# words, so the room is called something nothing else on these screens is:
+# a room called porch matched the server's name, Porch, in the title bar.
 appId: io.github.itsmattguenther.linger
 ---
 - runScript:
     file: seed.js
 - extendedWaitUntil:
-    visible: "porch"
+    visible: "evenings"
     timeout: 30000
 - takeScreenshot: 07-list-with-a-room
-- tapOn: "porch"
+- tapOn: "evenings"
 - extendedWaitUntil:
     visible: "Hello from the runner."
     timeout: 30000
 - takeScreenshot: 08-room
-- tapOn: "Message in porch"
+- tapOn: "Message in evenings"
 - inputText: "Hello from the iPhone."
 - takeScreenshot: 09-typing-a-message
 - tapOn: "Send"
 - extendedWaitUntil:
     visible: "Hello from the iPhone."
     timeout: 30000
+# On screen isn't enough: the app shows a message as it sends it, and the
+# words were in the box before Send. The server has to have it.
 - runScript:
     file: sent.js
 - assertTrue: ${output.sent}

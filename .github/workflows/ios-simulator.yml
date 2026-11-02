@@ -89,11 +89,14 @@ jobs:
         with:
           toolchain: stable
           targets: aarch64-apple-ios-sim
+      # Kept even when the flows fail: the builds are most of the run, and a
+      # failed flow is when it's run again.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: |
             client/src-tauri
             .
+          cache-on-failure: true
       # The same Xcode as ios.yml, for the reasons there (#779).
       - name: Xcode 26
         run: sudo xcode-select -s /Applications/Xcode_26.6.app
@@ -186,6 +189,11 @@ jobs:
           # auto-correction or predictions, which change words as they're typed.
           for key in KeyboardAutocorrection KeyboardPrediction KeyboardShowPredictionBar; do
             xcrun simctl spawn "$UDID" defaults write com.apple.Preferences "$key" -bool NO
+          done
+          # Nor its first-use tip about sliding to type, which covers the
+          # bottom of the screen in the pictures.
+          for domain in com.apple.Preferences com.apple.keyboard.preferences; do
+            xcrun simctl spawn "$UDID" defaults write "$domain" DidShowContinuousPathIntroduction -bool YES
           done
           # The same status bar in every picture.
           xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4
