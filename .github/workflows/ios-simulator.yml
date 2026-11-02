@@ -64,6 +64,10 @@ jobs:
       MAESTRO_SHA256: 5384593cb4e7a106489e75a821d157dd43f4e438df6bc308b72e82c685e1283a
       MAESTRO_CLI_NO_ANALYTICS: "1"
       MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED: "true"
+      # How long Maestro waits for its driver, the XCTest runner it puts on
+      # the iPhone, to answer: it gives up after 2 minutes unless told, and
+      # on a freshly booted simulator here the driver took 2 min 40 s.
+      MAESTRO_DRIVER_STARTUP_TIMEOUT: "600000"
       # Where everything kept goes: the artifact.
       OUT: ${{ github.workspace }}/iphone-simulator
       # The server on this Mac: plain http on SERVER_PORT, and https on
@@ -96,8 +100,34 @@ jobs:
       - name: what this Mac builds and runs with
         run: |
           xcodebuild -version
-          xcodebuild -showsdks | grep -i 'simulator'
+          xcodebuild -showsdks | grep -i 'iphonesimulator'
           xcrun simctl list runtimes
+
+      # The newest iOS this Xcode runs, and on it the plain iPhone (not a
+      # Pro, Plus or Max) where there is one: the size most people have.
+      # Started now and waited for after the builds: a first boot here takes
+      # about three minutes.
+      - name: an iPhone, starting
+        run: |
+          set -euo pipefail
+          xcrun simctl list devices available --json > "$RUNNER_TEMP/devices.json"
+          read -r udid runtime name < <(node -e '
+            const { devices } = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+            const version = (key) => (/iOS-(\d+)-(\d+)/.exec(key) ?? [0, 0, 0]).slice(1).map(Number);
+            const iphones = (key) => devices[key].filter((device) => /^iPhone/.test(device.name));
+            const runtime = Object.keys(devices)
+              .filter((key) => /SimRuntime\.iOS-/.test(key) && iphones(key).length > 0)
+              .sort((a, b) => version(a)[0] - version(b)[0] || version(a)[1] - version(b)[1])
+              .at(-1);
+            if (!runtime) { console.error("no iPhone simulator on this Mac"); process.exit(1); }
+            const phone = iphones(runtime).find((device) => /^iPhone \d+$/.test(device.name)) ?? iphones(runtime)[0];
+            console.log(phone.udid, runtime, phone.name);
+          ' "$RUNNER_TEMP/devices.json")
+          echo "an $name on $runtime: $udid"
+          echo "UDID=$udid" >> "$GITHUB_ENV"
+          mkdir -p "$OUT"
+          printf '%s\n%s\n' "$name" "$runtime" > "$OUT/device.txt"
+          xcrun simctl boot "$udid"
 
       - name: build the server
         run: cargo build --locked -p linger-server
@@ -148,32 +178,17 @@ jobs:
           echo "$RUNNER_TEMP/maestro/bin" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/maestro/bin/maestro" --version
 
-      # The newest iOS this Xcode runs, and on it the plain iPhone (not a
-      # Pro, Plus or Max) where there is one: the size most people have.
-      - name: an iPhone, booted
+      - name: the iPhone, booted
         run: |
           set -euo pipefail
-          xcrun simctl list devices available --json > "$RUNNER_TEMP/devices.json"
-          read -r udid runtime name < <(node -e '
-            const { devices } = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
-            const version = (key) => (/iOS-(\d+)-(\d+)/.exec(key) ?? [0, 0, 0]).slice(1).map(Number);
-            const iphones = (key) => devices[key].filter((device) => /^iPhone/.test(device.name));
-            const runtime = Object.keys(devices)
-              .filter((key) => /SimRuntime\.iOS-/.test(key) && iphones(key).length > 0)
-              .sort((a, b) => version(a)[0] - version(b)[0] || version(a)[1] - version(b)[1])
-              .at(-1);
-            if (!runtime) { console.error("no iPhone simulator on this Mac"); process.exit(1); }
-            const phone = iphones(runtime).find((device) => /^iPhone \d+$/.test(device.name)) ?? iphones(runtime)[0];
-            console.log(phone.udid, runtime, phone.name);
-          ' "$RUNNER_TEMP/devices.json")
-          echo "an $name on $runtime: $udid"
-          echo "UDID=$udid" >> "$GITHUB_ENV"
-          xcrun simctl boot "$udid"
-          xcrun simctl bootstatus "$udid" -b
+          xcrun simctl bootstatus "$UDID" -b
+          # The keyboard types what a flow says, not its guesses: no
+          # auto-correction or predictions, which change words as they're typed.
+          for key in KeyboardAutocorrection KeyboardPrediction KeyboardShowPredictionBar; do
+            xcrun simctl spawn "$UDID" defaults write com.apple.Preferences "$key" -bool NO
+          done
           # The same status bar in every picture.
-          xcrun simctl status_bar "$udid" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4
-          mkdir -p "$OUT"
-          printf '%s\n%s\n' "$name" "$runtime" > "$OUT/device.txt"
+          xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4
 
       # A real server, as a host runs one, with Caddy's part (https) done by
       # scripts/https-front.mjs and a certificate the simulator is told to
