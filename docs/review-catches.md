@@ -179,6 +179,20 @@ on a world that has changed.
   from the list's side (`next-settings-window.spec.ts`). Rule: what another
   window asks the list to do is tested failing (`docs/testing-strategy.md`).
 
+## A check nobody could run before it mattered
+
+- **#812: the iPhone build's App Group check could never pass.** The new
+  step in `ios.yml` read `com.apple.security.application-groups` with
+  `plutil -extract`, whose key paths split on dots, so it found nothing in a
+  correct signature and would have stopped every build before TestFlight.
+  *Missed because* it runs only on a Mac, after the build, and nothing here
+  could run it first. *Changed:* the reading is `scripts/ios-app-group.mjs`,
+  and `ios-app-group.test.mjs` runs it in CI on the real signatures of build
+  0.5.3 (5.1) and every other way the list can be written; what it can't
+  read fails. Rule: a step that only runs on another machine keeps its logic
+  where a test can run it here (`docs/testing-strategy.md`, "What reviews
+  have taught").
+
 ## A rule nothing checks
 
 - **#794: the update files blocked the async workers.** AGENTS.md says never

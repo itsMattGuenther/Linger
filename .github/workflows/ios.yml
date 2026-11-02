@@ -183,13 +183,12 @@ jobs:
           rm -rf "$dir"
           unzip -q "$IPA" 'Payload/*' -d "$dir"
           app="$(find "$dir/Payload" -maxdepth 1 -name '*.app' -type d)"
-          group=group.io.github.itsmattguenther.linger
+          # The reading is scripts/ios-app-group.mjs, tested on a real build's
+          # output: a line of shell here split the key on its dots (#812).
           for bundle in "$app" "$app/PlugIns/LingerShare.appex"; do
             codesign -d --entitlements - --xml "$bundle" > "$RUNNER_TEMP/entitlements.plist"
-            got="$(plutil -extract com.apple.security.application-groups.0 raw "$RUNNER_TEMP/entitlements.plist" 2>/dev/null || true)"
-            printf '%s: %s\n' "${bundle##*/}" "${got:-no App Group}"
-            [ "$got" = "$group" ] ||
-              { echo "::error::${bundle##*/} isn't signed with the App Group $group (#811)"; exit 1; }
+            node scripts/ios-app-group.mjs "$RUNNER_TEMP/entitlements.plist" \
+              group.io.github.itsmattguenther.linger "${bundle##*/}"
           done
       - name: send it to TestFlight
         if: inputs.upload

@@ -77,6 +77,7 @@ version check, and the tests of these scripts themselves
 `scripts/issue-label.test.mjs`, `scripts/action-pins.test.mjs`,
 `scripts/workflow-downloads.test.mjs`, `scripts/linux-next-env.test.mjs`,
 `scripts/doc-paths.test.mjs`, `scripts/overview-docs.test.mjs`,
+`scripts/ios-app-group.test.mjs`,
 `scripts/startup-time.test.mjs`,
 `python3 scripts/linux-audio-check.test.py`,
 `scripts/android-signing-test.sh`, `scripts/tidy-branches-test.sh`,
@@ -201,6 +202,11 @@ rules that came out of them.
   the test made too big to fill passes code that misbehaves once it's full.
   The size is a constant the code and the test share, never the test's own
   number (`SOCKET_QUEUE_FRAMES`, #809).
+- **A step that only runs on another machine** (a Mac, a release, a phone)
+  **keeps its logic in a script a test runs here,** on that machine's real
+  output. A line of shell in `ios.yml` read a signature wrong and would have
+  stopped every iPhone build; nothing could run it before a build did (#812,
+  `scripts/ios-app-group.mjs`).
 - **Test what a script does, not what its source says.** A test that looks
   for a line in the source passes a change that keeps the line and defeats
   it. Run the script, with stand-ins on `PATH` for what it calls, and check
