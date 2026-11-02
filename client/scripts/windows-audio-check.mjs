@@ -6,6 +6,7 @@ import { createServer } from "node:net";
 import { basename, resolve } from "node:path";
 import { buildAudioProbe } from "./build-audio-probe.mjs";
 import { chromium } from "@playwright/test";
+import { seconds, waitFor } from "./webview2-wait.mjs";
 
 assert.equal(process.platform, "win32", "Run this check on an ephemeral Windows runner");
 assert.equal(process.env.GITHUB_ACTIONS, "true", "This check sets temporary machine policy on a disposable runner only");
@@ -38,21 +39,21 @@ try {
   app = spawn(resolve(exe), [], { stdio: "ignore" });
   let launchError;
   app.on("error", (error) => { launchError = error; });
-  let connectionError;
-  for (let attempt = 0; attempt < 60 && !browser; attempt++) {
-    assert(!launchError, String(launchError));
-    assert.equal(app.exitCode, null, `Packaged app exited: ${app.exitCode}`);
-    try { browser = await chromium.connectOverCDP(endpoint, { timeout: 1000 }); }
-    catch (error) { connectionError = error; await new Promise((resolve) => setTimeout(resolve, 250)); }
-  }
-  assert(browser, `Packaged WebView2 debugging unavailable: ${connectionError}`);
+  // By the clock, not by counting tries: a refused try fails at once, so a
+  // count of them was a far shorter wait than it looked, and a busy runner's
+  // WebView2 outlasted it (#813, client/scripts/webview2-wait.mjs).
+  const answered = await waitFor(`Packaged WebView2's debugging port didn't answer`,
+    () => chromium.connectOverCDP(endpoint, { timeout: 1000 }), {
+      check: () => {
+        assert(!launchError, String(launchError));
+        assert.equal(app.exitCode, null, `Packaged app exited: ${app.exitCode}`);
+      },
+    });
+  browser = answered.got;
+  console.log(`Packaged WebView2 answered after ${seconds(answered.took)}`);
   const context = browser.contexts()[0];
-  let page;
-  for (let attempt = 0; attempt < 60 && !page; attempt++) {
-    page = context.pages().find((candidate) => candidate.url().startsWith("http://tauri.localhost"));
-    if (!page) await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  assert(page, "Packaged application page missing from WebView2");
+  const { got: page } = await waitFor("Packaged application page missing from WebView2",
+    () => context.pages().find((candidate) => candidate.url().startsWith("http://tauri.localhost")));
   await page.waitForLoadState("domcontentloaded");
   const probe = resolve(output, "probe.js");
   await buildAudioProbe(probe);
