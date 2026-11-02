@@ -549,7 +549,7 @@ the tick: a screen can pass every step and still be wrong.
 
 **Finding things on screen.** Maestro reads the iPhone's accessibility tree,
 what VoiceOver reads, so a flow finds a control by its words or its
-`aria-label` ("Message in evenings", "Send"). A control a flow can't find by
+`aria-label` ("Message in #evenings", "Send"). A control a flow can't find by
 name is one VoiceOver can't name either. Maestro matches the whole of an
 element's words, whatever their case, so give what a flow makes a name
 nothing else on the screen has: a room called porch matched the server's

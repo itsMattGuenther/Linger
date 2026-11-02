@@ -20,7 +20,7 @@ appId: io.github.itsmattguenther.linger
     visible: "Hello from the runner."
     timeout: 30000
 - takeScreenshot: 08-room
-- tapOn: "Message in evenings"
+- tapOn: "Message in #evenings"
 - inputText: "Hello from the iPhone."
 - takeScreenshot: 09-typing-a-message
 - tapOn: "Send"
