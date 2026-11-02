@@ -69,6 +69,13 @@ pub fn keep_out_of_backups() {
     });
 }
 
+/// Make `folder` if it isn't there and mark it "don't back up": the share
+/// window's folder in the App Group (#820), which isn't under `home`.
+#[cfg(target_os = "ios")]
+pub(crate) fn mark(folder: &std::path::Path) -> Result<(), String> {
+    ios::mark(folder)
+}
+
 /// The iPhone's half, through objc2's bindings to Foundation. Every
 /// `unsafe` is here, each with what makes it sound.
 #[cfg(target_os = "ios")]

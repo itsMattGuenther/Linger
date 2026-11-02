@@ -322,6 +322,11 @@ pub const RATE_UPLOAD_SLOTS: (u32, u64) = (20, 3_600);
 pub const RATE_INVITE_CREATE: (u32, u64) = (10, 86_400);
 /// Sign-in links the host may make in an hour (#581).
 pub const RATE_SIGN_IN_LINK_CREATE: (u32, u64) = (10, 3_600);
+/// Sign-ins for the iPhone's share window one person may get in an hour
+/// (#820). The app asks for one now and then and when the last is lost: a
+/// handful an hour is plenty, and an app asking in a loop can't fill the
+/// table with sign-ins.
+pub const RATE_SHARE_SIGN_IN: (u32, u64) = (10, 3_600);
 pub const RATE_KNOCK_PER_TARGET: (u32, u64) = (3, 3_600);
 /// Reports one person may send in an hour (PROTOCOL §5, "Report and block"):
 /// plenty for a real problem, and not a way to bury the host.

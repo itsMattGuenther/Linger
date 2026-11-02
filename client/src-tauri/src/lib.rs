@@ -49,6 +49,9 @@ mod secrets;
 // Files shared to Linger from the phone's share sheet (#785).
 #[cfg(any(mobile, test))]
 mod shared;
+// What the app keeps for the iPhone's share window (#820): its sign-ins and its list.
+#[cfg(any(mobile, test))]
+mod share_window;
 #[cfg(desktop)]
 pub mod sounds;
 #[cfg(desktop)]
@@ -492,6 +495,11 @@ fn phone_app() -> tauri::Builder<tauri::Wry> {
             phone_text::phone_text_scale,
             shared::shared_files,
             shared::shared_file,
-            shared::shared_done
+            shared::shared_done,
+            share_window::share_sign_in_saved_at,
+            share_window::share_sign_in_save,
+            share_window::share_sign_in_forget,
+            share_window::share_sign_ins_kept,
+            share_window::share_window_list_save
         ])
 }

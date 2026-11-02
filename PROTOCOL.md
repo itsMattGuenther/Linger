@@ -69,6 +69,9 @@ POST /auth/refresh      { refresh_token }
 
 POST /auth/logout       { refresh_token }              → 204
 
+POST /auth/share-sign-in { refresh_token }
+                     →  { refresh_token }               # the share window's own sign-in (#820)
+
 GET  /auth/invite/:code → { valid, server_name, expires_at }  # unauthenticated preview
 
 GET  /auth/sign-in-link/:code
@@ -78,6 +81,25 @@ POST /auth/sign-in-link { code, new_password }
 ```
 
 The two sign-in link endpoints are §5's "Sign-in links" (#581).
+
+**The share window's own sign-in** (#820). On an iPhone, sharing to Linger
+happens in a small program of its own inside the share sheet (SPEC §4.15),
+which uploads and posts as you. It can't use the app's refresh token: two
+programs renewing one family would spend a token twice, and that revokes the
+family and signs you out. So the app asks for a family of its own for it:
+`POST /auth/share-sign-in` with the app's current refresh token answers with
+the first refresh token of a **new family** for the same person, which the
+window renews with `POST /auth/refresh` like any other. The token asked with
+proves the sign-in and **isn't spent**: it stays the app's. It's asked with a
+refresh token rather than an access token so a leaked 15-minute token can't be
+turned into a 30-day sign-in. A token that's unknown, expired or of somebody
+removed is `UNAUTHENTICATED`; one already spent is a replay, refused the same
+way, and its family is revoked, as at `POST /auth/refresh`. One person gets
+`RATE_SHARE_SIGN_IN` (10 an hour); past it, `RATE_LIMITED` with
+`retry_after_ms`, and nothing is stored. It's a sign-in like any other: what ends every sign-in (a
+password change, a reset, removal) ends it, and `POST /auth/logout` with its
+token ends it alone. A server from before it answers `NOT_FOUND`, and the app
+says the server needs updating to share from the share sheet.
 
 A new account (from `POST /auth/register` or `POST /setup`) starts with a
 name style whose fill is the hued palette color the fewest active people on

@@ -1105,26 +1105,44 @@ sideways, and an iPhone would zoom in by itself on the message box. A photo
 opened from a message zooms on its own instead, as a phone's photo viewer does:
 pinched, dragged, and double-tapped in and out.
 
-**Share to Linger from the phone's share sheet** (#785). Linger appears
-in the phone's own share sheet for pictures, videos and files. Choosing it opens
-Linger on a list of your conversations: rooms, group DMs and DMs, across the
-servers you're signed in to. Tapping one puts the shared files in that
-conversation's message box as attachments, the way the + button does, and
-nothing is sent until you send it. Closing the list without picking turns the
-share down. Where a photo was taken is stripped as for any upload (§4.10), and a
-file over the size limit is said up front and refused as it is in the message
-box. Linger is told nothing about the app that shared the file, and shares
-nothing back to it. Text and links shared to Linger are not part of this: only
-files, so on Android Linger isn't offered for a link or words shared from a
-browser. Android comes first: a share arrives through the app's own intent
-filter. The iPhone follows, through a share extension that hands the files to
-the app (a second signed program, `docs/releasing.md`, "The iPhone"). A photo the
-iPhone offers only as HEIC, which the server doesn't take, arrives as a JPEG no
-more than 4,096 pixels on its longest side, the detail of a 12-megapixel photo:
-a share extension has about 120 MB to work in, and a recent iPhone's photo read
-whole needs more (#817). A share
-the app never picked up is deleted from the phone after ten minutes, and the
-app keeps nothing of it once it is in a message box or turned down.
+**Share to Linger from the phone's share sheet** (#785, #820). Linger appears
+in the phone's own share sheet for pictures, videos and files, the way each
+phone's messaging apps do there:
+
+- **On Android, choosing it opens Linger** on a list of your conversations:
+  rooms, group DMs and DMs, across the servers you're signed in to. Tapping one
+  puts the shared files in that conversation's message box as attachments, the
+  way the + button does, and nothing is sent until you send it. Closing the
+  list without picking turns the share down. A share arrives through the app's
+  own intent filter; one the app never picked up is deleted from the phone after
+  ten minutes, and the app keeps nothing of it once it is in a message box or
+  turned down.
+- **On an iPhone, Linger's own window rises inside the share sheet** (#820,
+  Matt, 2026-11-02), and you never leave the app you shared from. It shows
+  what's being shared, an **Add a message** box, a search box, the few
+  conversations you shared to last, then every server's rooms, group DMs and
+  DMs as the list has them. Tap one and **Send**: the files and the words are
+  posted as one message, with a bar for how far it has got, and the window
+  says "Sent" and closes. What goes wrong is said in words, with **Try again**.
+  It's a second signed program inside the app (`docs/releasing.md`, "The
+  iPhone"), which posts with **a sign-in of its own** (PROTOCOL §2, "The share
+  window's own sign-in"), so it never spends the app's. The app asks each
+  server for it, renews it before it can expire, and signs it out with the
+  server; it keeps it, and the list the window picks from, where the window can
+  read them and no backup reaches. A server from before #820 is listed and says
+  it needs updating. Opening the app and coming back, as the first version did,
+  used a way of opening an app that Apple doesn't give share extensions, and
+  iOS threw people back to the app they'd shared from.
+
+On both, where a photo was taken is stripped as for any upload (§4.10), and a
+file over the size limit is said up front and left out. A photo the iPhone
+offers only as HEIC, which the server doesn't take, goes as a JPEG no more than
+4,096 pixels on its longest side, the detail of a 12-megapixel photo: a share
+extension has about 120 MB to work in, and a recent iPhone's photo read whole
+needs more (#817). Linger is told nothing about the app that shared the file,
+and shares nothing back to it. Text and links shared to Linger are not part of
+this: only files, so Linger isn't offered for a link or words shared from a
+browser.
 
 **Phone backups leave Linger out.** A phone backs its apps up to Apple's or Google's
 cloud by default. The phone app opts out, so what it keeps (your list of servers and

@@ -65,10 +65,14 @@ says the oldest app it works with: an app older than that says so on that
 server's row and offers Update now, and its other servers keep working. That's
 0.4.1 today, so nobody is turned away (#793). On an iPhone, Linger stays out of iCloud backups and its sign-in stays on
 that phone; nobody is signed out by the update, and TestFlight testers
-confirm both (#790). Linger is in the phone's share sheet, on Android and the
-iPhone: share a picture or a file to Linger, pick a room or a DM, and it waits
-in that conversation's message box, unsent (#785); TestFlight and Play testers
-confirm it on a real phone. A photo an iPhone keeps as HEIC arrives as a JPEG at
+confirm both (#790). Linger is in the phone's share sheet (#785). On Android,
+sharing a picture or a file to Linger opens it on your conversations, and what
+you shared waits in the one you pick, unsent. On an iPhone, Linger's own window
+rises inside the share sheet: add a message, pick a room or a person, and Send
+posts it there and then, without leaving the app you shared from (#820). Hosts:
+the iPhone's share needs the server updated, for its sign-in of its own; an
+older server says so in the window. TestFlight and Play testers confirm both on
+a real phone. A photo an iPhone keeps as HEIC arrives as a JPEG at
 most 4,096 pixels on its longest side, since the share program has too little
 memory to read a recent iPhone's photo whole (#817). Sending several pictures at once to a busy server,
 one that waits its turn goes up after all, or offers Try again, rather than
@@ -914,7 +918,11 @@ macOS runners, or a friend's Mac.
   *Accept:* on a real phone, in a room with people on computers, both ways
   sound right, and the call survives the phone locked and a network change.
 
-- 🟡 **T-1607 · Share to Linger from the phone's share sheet** — effort: **high** (#785)
+- 🟡 **T-1607 · Share to Linger from the phone's share sheet** — effort: **high** (#785, #820)
+  *2026-11-02: on an iPhone it's now a window of its own in the share sheet
+  that posts there and then (#820, `docs/decisions.md`, "The iPhone shares
+  inside the share sheet"); what follows is the Android half, and the first
+  iPhone version it replaced.*
   *Decided by Matt, 2026-10-31 (`docs/decisions.md`, "Sharing to Linger from
   the phone's share sheet"); SPEC §4.15.* Pictures, videos and files shared from
   another app land in a conversation's message box, unsent. **Built on

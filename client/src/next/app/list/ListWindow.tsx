@@ -56,6 +56,8 @@ import { pageScreen, screenAround } from "../../core/screen";
 import { backTab, isTool, keepOnly, keyOf, loadTabs, NO_TABS, openTab, previewTab, pushTab, same, saveTabs, type SideTab, type Tabs } from "../../core/tabs";
 import { holdForConversation, readShared, type Share, sharedDone, type ShareTarget, shareTargets, watchShares } from "../../core/shareInbox";
 import { ShareSheet } from "./ShareSheet";
+import { useShareSignIns, useShareWindowList } from "./useShareWindow";
+import type { ShareStatus } from "../../core/shareWindow";
 import { type SideHandle, type SideOpen, SidePane } from "../chat/SidePane";
 import {
   type Accounts,
@@ -146,6 +148,9 @@ export function ListWindow() {
 function Owner() {
   const sessions = useSessions();
   const { addServer } = sessions;
+  // The iPhone's share window (#820): its own sign-ins, kept here, where
+  // signing out of the last server is seen too.
+  const shareStatus = useShareSignIns(isTauri() && onIPhone(), sessions);
   // Nothing signed in has answered yet, and the person would rather sign in
   // somewhere now than wait (T-907).
   const [signInAnyway, setSignInAnyway] = useState(false);
@@ -241,6 +246,7 @@ function Owner() {
   return (
     <Servers
       signedIn={sessions.state.servers}
+      shareStatus={shareStatus}
       waiting={sessions.state.waiting}
       blocked={blocked}
       onBlocked={sessions.block}
@@ -386,8 +392,11 @@ function Servers({
   keyringNotice,
   offer,
   offerTaken,
+  shareStatus,
 }: {
   signedIn: ServerSession[];
+  /** Whether the iPhone's share window can send to each server (#820). */
+  shareStatus: ReadonlyMap<string, ShareStatus>;
   waiting: readonly WaitingServer[];
   /** Servers that need a newer app than this one (#793): not connected to. */
   blocked: readonly BlockedServer[];
@@ -1318,6 +1327,8 @@ function Servers({
   );
   useEffect(() => (isTauri() && onPhone() ? watchShares({ bus: tauriBus(), window, document }, askShell, showShare) : undefined), [showShare]);
   const shareSections = useMemo(() => shareTargets(listings), [listings]);
+  // The list the iPhone's share window picks from (#820).
+  useShareWindowList(isTauri() && onIPhone(), listings, shareStatus);
   const pickShare = useCallback(
     async (target: ShareTarget) => {
       const share = showing.current;
