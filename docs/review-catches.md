@@ -362,6 +362,15 @@ on a world that has changed.
   tested with words taller than the window, the window resized while it's
   open, its opener pressed again, and what it shows changing under it
   (`docs/testing-strategy.md`).
+- **#814: a wait for the app's page didn't check that the app was still
+  running.** The Windows checks' wait for WebView2's port failed at once on
+  an app that exited; the wait for its page after it never had, so a crash
+  then would have read, 90 seconds on, as a page that never came. *Missed
+  because* each wait was handed its own checks, and the page's was written
+  from the case of a page that's slow, not an app that's gone. *Changed:*
+  `whileRunning` in `client/scripts/webview2-wait.mjs` makes one wait per
+  app that always checks it first, and every wait in the four checks is
+  that one; `webview2-wait.test.mjs` has an app quit during a page wait.
 
 ## Comments that were wrong
 

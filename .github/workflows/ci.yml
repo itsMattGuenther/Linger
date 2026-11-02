@@ -414,6 +414,10 @@ jobs:
         # It runs only on a Mac after the build, so its reading is tested here
         # (#811, #812).
         run: node --test scripts/ios-app-group.test.mjs
+      - name: the Windows checks wait for WebView2 by the clock, not by counting tries
+        # A refused try fails at once, so 60 tries were 15 seconds, and a busy
+        # runner's WebView2 took longer (#813).
+        run: node --test client/scripts/webview2-wait.test.mjs
       - name: the packaged-app checks start the app without the caller's WebKit, media and graphics settings
         # A workaround in the shell could pass for the fix it stands in for (#757, #765).
         run: node --test scripts/linux-next-env.test.mjs

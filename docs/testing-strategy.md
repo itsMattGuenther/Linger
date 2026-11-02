@@ -78,7 +78,7 @@ version check, and the tests of these scripts themselves
 `scripts/workflow-downloads.test.mjs`, `scripts/linux-next-env.test.mjs`,
 `scripts/doc-paths.test.mjs`, `scripts/overview-docs.test.mjs`,
 `scripts/ios-app-group.test.mjs`,
-`scripts/startup-time.test.mjs`,
+`scripts/startup-time.test.mjs`, `client/scripts/webview2-wait.test.mjs`,
 `python3 scripts/linux-audio-check.test.py`,
 `scripts/android-signing-test.sh`, `scripts/tidy-branches-test.sh`,
 `scripts/apt-mirrors-test.sh`, `scripts/apt-install-test.sh`, and
@@ -295,7 +295,11 @@ does losing audio twice, and the first recording is kept
    `taskset` can't reach. A fix that turns 8 failures in 8 into 8 passes is
    proof; a pass on an idle machine isn't.
 4. Fix whichever is wrong. Fixtures deliver events explicitly and in order;
-   a test waits for the thing itself, never for a fixed time. A test that
+   a test waits for the thing itself, never for a fixed time, and by the
+   clock, never by counting tries: a try that fails at once makes a count a
+   far shorter wait than it looks. The Windows checks gave WebView2 60 tries
+   a quarter of a second apart, 15 seconds, and a busy runner's took longer
+   (#813); they wait with `client/scripts/webview2-wait.mjs` now. A test that
    takes over 15 seconds on CI (half the usual limit) is one busy runner away
    from failing: split it, or mark it `test.slow()` if it is long by design
    (#328).
