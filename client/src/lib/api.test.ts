@@ -426,3 +426,106 @@ describe("a refusal", () => {
     expect(caught).toMatchObject({ status: 409, code: "INTERNAL", message: LOOKS_TAKEN });
   });
 });
+
+// The iPhone's share window gets a sign-in of its own (#820), asked for with
+// the app's refresh token, which isn't spent. Asking with a token a renewal
+// has just spent would be a replay, which revokes the sign-in, so the two
+// never overlap.
+describe("a share window's sign-in", () => {
+  /** A fetch that answers each path when the test says. */
+  function routed() {
+    const { api, fetcher, onTokens, onSignedOut } = client();
+    // Each path's requests on their way, oldest first.
+    const waiting = new Map<string, ((response: Response) => void)[]>();
+    const asked: { path: string; body: unknown }[] = [];
+    fetcher.mockImplementation((input, init) => {
+      const path = new URL(String(input)).pathname.replace(/^\/api\/v1/, "");
+      asked.push({ path, body: init?.body ? JSON.parse(String(init.body)) : null });
+      return new Promise<Response>((answer) => waiting.set(path, [...(waiting.get(path) ?? []), answer]));
+    });
+    const answer = async (path: string, response: Response) => {
+      await vi.waitFor(() => expect(waiting.get(path)?.length).toBeGreaterThan(0));
+      waiting.get(path)?.shift()?.(response);
+    };
+    return { api, asked, answer, onTokens, onSignedOut };
+  }
+
+  it("asks with the refresh token as it is, and doesn't spend it", async () => {
+    const { api, asked, answer, onTokens } = routed();
+    const share = api.shareSignIn();
+    await answer("/auth/share-sign-in", Response.json({ refresh_token: "share-1" }));
+    await expect(share).resolves.toBe("share-1");
+    expect(asked).toEqual([{ path: "/auth/share-sign-in", body: { refresh_token: "old-refresh" } }]);
+    expect(api.refreshToken).toBe("old-refresh");
+    expect(onTokens).not.toHaveBeenCalled();
+  });
+
+  it("waits for a renewal on its way, and asks with the token it brought", async () => {
+    const { api, asked, answer } = routed();
+    const me = api.me();
+    await answer("/me", refusal(401, "UNAUTHENTICATED"));
+    await vi.waitFor(() => expect(asked.map((one) => one.path)).toContain("/auth/refresh"));
+    const share = api.shareSignIn();
+    await new Promise((settle) => setTimeout(settle, 10));
+    expect(asked.map((one) => one.path)).not.toContain("/auth/share-sign-in");
+    await answer("/auth/refresh", Response.json(FRESH));
+    await answer("/auth/share-sign-in", Response.json({ refresh_token: "share-1" }));
+    await expect(share).resolves.toBe("share-1");
+    expect(asked.find((one) => one.path === "/auth/share-sign-in")?.body).toEqual({ refresh_token: "new-refresh" });
+    await answer("/me", Response.json({}));
+    await me;
+  });
+
+  it("holds a renewal until an ask on its way is answered", async () => {
+    const { api, asked, answer } = routed();
+    const share = api.shareSignIn();
+    await vi.waitFor(() => expect(asked.map((one) => one.path)).toContain("/auth/share-sign-in"));
+    const me = api.me();
+    await answer("/me", refusal(401, "UNAUTHENTICATED"));
+    await new Promise((settle) => setTimeout(settle, 10));
+    expect(asked.map((one) => one.path)).not.toContain("/auth/refresh");
+    await answer("/auth/share-sign-in", Response.json({ refresh_token: "share-1" }));
+    await share;
+    await answer("/auth/refresh", Response.json(FRESH));
+    expect(asked.find((one) => one.path === "/auth/refresh")?.body).toEqual({ refresh_token: "old-refresh" });
+    await answer("/me", Response.json({}));
+    await me;
+  });
+
+  it("asks one at a time, and a renewal waits for every ask on its way, not just the newest", async () => {
+    const { api, asked, answer } = routed();
+    const paths = () => asked.map((one) => one.path);
+    const first = api.shareSignIn();
+    await vi.waitFor(() => expect(paths()).toContain("/auth/share-sign-in"));
+    const second = api.shareSignIn();
+    const me = api.me();
+    await answer("/me", refusal(401, "UNAUTHENTICATED"));
+    await new Promise((settle) => setTimeout(settle, 10));
+    // The second waits for the first. Sent together, the second could be
+    // answered first, the renewal spend the token, and the first, arriving
+    // with it, be taken for a replay that ends this sign-in (#822).
+    expect(paths()).toEqual(["/auth/share-sign-in", "/me"]);
+    await answer("/auth/share-sign-in", Response.json({ refresh_token: "share-1" }));
+    await expect(first).resolves.toBe("share-1");
+    await vi.waitFor(() => expect(paths()).toEqual(["/auth/share-sign-in", "/me", "/auth/share-sign-in"]));
+    await new Promise((settle) => setTimeout(settle, 10));
+    expect(paths()).not.toContain("/auth/refresh");
+    await answer("/auth/share-sign-in", Response.json({ refresh_token: "share-2" }));
+    await expect(second).resolves.toBe("share-2");
+    await answer("/auth/refresh", Response.json(FRESH));
+    expect(asked.filter((one) => one.path === "/auth/share-sign-in").map((one) => one.body)).toEqual([
+      { refresh_token: "old-refresh" },
+      { refresh_token: "old-refresh" },
+    ]);
+    await answer("/me", Response.json({}));
+    await me;
+  });
+
+  it("an old server, which doesn't know it, says NOT_FOUND and the sign-in carries on", async () => {
+    const { api, answer, onSignedOut } = routed();
+    const share = api.shareSignIn();
+    await answer("/auth/share-sign-in", refusal(404, "NOT_FOUND"));
+    await expect(share).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(onSignedOut).not.toHaveBeenCalled();
+  });
+});

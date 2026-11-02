@@ -147,6 +147,17 @@ under Display), which Linger follows, or choose a bigger **Text size** in
 Linger's **Settings → Appearance**, which goes on top of it. Together they
 go up to twice the usual size.
 
+**Sharing to Linger.** In another app (your photos, a file), tap Share and
+pick **Linger**. On Android, Linger opens on your conversations: tap one, and
+what you shared waits in its message box until you send it. On an iPhone,
+Linger's own window rises inside the share sheet, and you stay where you were:
+add a message if you like, tap a room or a person (the ones you shared to last
+are at the top, and the box above them finds the rest), and tap **Send**. It's
+posted there and then, and the window closes once it's sent. If Linger isn't
+in the row of apps, scroll to the end, tap **More** and turn it on. Linger
+takes pictures, videos and files, up to ten at a time; words and links can't
+be shared to it, so copy and paste those instead.
+
 1. On the phone, open the
    [latest release](https://github.com/itsMattGuenther/Linger/releases/latest)
    in Chrome, scroll to **Assets** (tap it if it's folded up), and tap the file

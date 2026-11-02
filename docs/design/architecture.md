@@ -660,7 +660,24 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   them for that conversation's tab key, and opens it, unless the sheet was
   closed or a newer share took it meanwhile; `useFileDrafts` takes them into
   the box as if picked with +, and `Composer` says why any were left out.
-  Nothing is sent from here.
+  Nothing is sent from here. That's Android's path; an iPhone's share
+  extension writes no inbox since #820.
+- **The iPhone's share window** (#820, SPEC §4.15). On an iPhone the share
+  extension is a window of its own in the share sheet that picks a
+  conversation and posts there itself (`gen/apple/ShareExtension/`). The page
+  keeps what it needs: `app/list/useShareWindow.ts` asks each server for the
+  window's own sign-in (`AuthedApi.shareSignIn`, never while a renewal is on
+  its way), renews it once it's 14 days old and signs it out with the server,
+  and writes the list it picks from with Linger's colours read from the design
+  tokens (`core/shareWindow.ts`). The shell keeps both where the extension
+  reads them: the sign-ins in one Keychain entry in the App Group's access
+  group, changed by either side only while holding `share-window/sign-ins.lock`
+  so neither writes over the other's change, and the list in the App Group's
+  folder (`src-tauri/src/share_window.rs`). The app asks for one sign-in at a
+  time, one run after another, so a sign-out always comes after a sign-in
+  still being asked for, and ends it.
+  The extension's `ShareSender.swift` uploads and posts, and runs on Linux in
+  `client/tests/share-sender` against a real server.
 - **The phone's bars.** The page is drawn under the phone's status bar and
   gesture bar; `styles/phone.css` pads it by the safe areas the phone reports,
   and `--window-height`, the whole window on a computer, is what's left

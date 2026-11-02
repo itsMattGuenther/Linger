@@ -345,10 +345,18 @@ memory, calls, the share sheet, sleep.
   Apple asks a reason for (#779). Each run prints which of those calls the
   built app makes ("the calls the privacy manifest answers for"), so one in a
   new category is seen there and declared in the manifest.
-- **The share extension** (#785) is a second program inside the app, with its
+- **The share extension** (#785, #820) is the share window, a second program
+  inside the app that picks a conversation and posts there with a sign-in of
+  its own, kept in a Keychain entry under the App Group's access group: the
+  App Group capability covers that, with nothing more to register.
+  `share-window.yml` builds it for the iPhone Simulator on every pull request
+  that changes it, and runs its sender against a real server, so a release
+  isn't the first time its Swift compiles. It has its
   own identifier, `io.github.itsmattguenther.linger.share`, and both belong to
-  the App Group `group.io.github.itsmattguenther.linger`, whose folder is how
-  a share reaches the app. Both are registered in the Apple account, by hand
+  the App Group `group.io.github.itsmattguenther.linger`, whose folder and
+  Keychain group are how the app hands the window its list and sign-ins (an
+  App Group's name can be a Keychain access group, so the App Group capability
+  covers that). Both are registered in the Apple account, by hand
   (2026-11-02): automatic signing through the API key makes certificates and
   profiles, but can't register a new identifier or turn on a capability, and
   the first build with the extension failed at export with "Automatic signing

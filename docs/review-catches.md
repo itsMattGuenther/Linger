@@ -392,3 +392,71 @@ on a world that has changed.
   nothing blocks the reactor. Awaiting `tokio::fs` there would mean starting
   a runtime only to wait on it on the same thread, and the marking has to be
   done before the web view writes anything. Kept as it is.
+
+## Code only one platform compiles
+
+Code behind `#[cfg(target_os = "ios")]` (or Android's) is compiled only when
+the app is built for that phone, and the checks a pull request runs build the
+shell for Linux.
+
+- **#822: the share window's Keychain half didn't compile for the iPhone.** It
+  imported `kSecMatchLimitOne` from `security-framework-sys`, which names the
+  key but not that value, so no iPhone build could be made from the branch.
+  Caught by the iPhone Simulator check on a branch stacked on it (#821), not
+  by a reviewer. *Missed because* the Rust iPhone build (`desktop.yml`) runs
+  by hand and nightly, never on a pull request, and `share-window.yml` built
+  only the Swift extension. *Changed:* the value is declared beside
+  `kSecAttrAccessible`, and `share-window.yml` builds the app's Rust for the
+  iPhone on every pull request that changes it.
+
+## Two at once
+
+Something that's right when it runs alone, and wrong when a second copy of
+it, or another program, runs at the same time.
+
+- **#822: two share sign-ins asked at once could sign the app out.** The
+  renewal waited only for the newest ask, so with two out, it could spend
+  the token the older one still carried, which the server then took for a
+  replay. *Missed because* the tests had one ask on its way at a time.
+  *Changed:* asks go one at a time, so the newest settles after every one
+  still out, with a test of two at once (`api.test.ts`).
+- **#822: a sign-out could leave the share window's sign-in kept.** A run
+  still asking for one saved it after the sign-out's run had already found
+  nothing to end. *Missed because* the tests ran one keeping at a time.
+  *Changed:* runs queue (`oneAtATime`, `core/shareWindow.ts`), so the
+  sign-out's comes after and ends it, with a test of a sign-out mid-ask.
+- **#822: the app and the share window could write over each other's
+  sign-ins.** Both read the whole table from the Keychain, change one server
+  and write it all back, so a write could undo the other program's renewal.
+  *Missed because* each side's tests have one program. *Changed:* both
+  change it only holding a lock on `share-window/sign-ins.lock`
+  (`while_locked` in `share_window.rs`, `whileLocked` in `ShareList.swift`),
+  each with a test that holds the lock as the other program would. Rule: a
+  file or entry two programs change is changed under a lock they share.
+
+## Counted after the work it limits
+
+- **#822: a share sign-in over the limit still stored a new family.** The
+  limit was checked after the row went in, then the row was revoked, so a
+  client looping one token grew the table. *Missed because* the test checked
+  the answer (429), not what was stored. *Changed:* `share_family` asks the
+  limiter once the person is known and before writing, and the test counts
+  the rows.
+
+## A retry key kept after what it keys changed
+
+- **#822: a retry with edited words said Sent and posted nothing new.** The
+  share window used one nonce for the whole share, so after a failure whose
+  answer was lost, sending edited words (or to another conversation) got the
+  first message back. *Missed because* the retry test sent the same words.
+  *Changed:* a new nonce when the words or the conversation change
+  (`ShareNonces`, `ShareSender.swift`), with a test.
+
+## Files left behind
+
+- **#822: every share left its copies in the extension's temporary folder**,
+  up to 5 GB, until iOS cleared it. *Missed because* nothing looked at what a
+  finished share leaves. *Changed:* `ShareCopies` owns the folder and the
+  window removes it when it closes, sent, cancelled or swiped away, with a
+  test that closing removes it. The controller's wiring runs only inside the
+  share sheet, so it's checked by reading, and by the TestFlight check.

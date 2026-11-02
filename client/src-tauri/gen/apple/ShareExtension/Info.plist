@@ -28,6 +28,9 @@
 	<string>0.0.0</string>
 	<key>CFBundleVersion</key>
 	<string>0</string>
+	<!-- As the app says it (Info.ios.plist): a server on the home network (#820). -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Linger uses your local network only to reach a Linger server you've added on it, such as one at home.</string>
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionAttributes</key>

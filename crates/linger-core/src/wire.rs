@@ -271,6 +271,16 @@ pub struct RefreshResponse {
     pub expires_in: u64,
 }
 
+/// A sign-in of its own for the iPhone's share window (PROTOCOL §2, #820):
+/// the refresh token of a new family for the same person, which the window
+/// renews with `POST /auth/refresh` like any other. Its own family, so the
+/// window and the app never spend each other's token.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ShareSignInResponse {
+    pub refresh_token: String,
+}
+
 /// First-run setup (PROTOCOL §2.1): creates the host account and names the server.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]

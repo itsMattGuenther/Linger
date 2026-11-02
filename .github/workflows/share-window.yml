@@ -1,0 +1,118 @@
+name: share window
+
+# The iPhone's share window (#820): the share extension inside the share
+# sheet that picks a conversation and posts to it. Its Swift only compiles on
+# a Mac, and ios.yml builds it only from main, at release time, so a change
+# to it is built here first, for the iPhone Simulator, which needs no signing
+# and so works on a branch. Its sender, which only needs Foundation, runs on
+# Linux against a real server built from the same commit
+# (scripts/share-sender-test.sh, client/tests/share-sender). And the app's
+# Rust is built for the iPhone, since code only an iPhone compiles
+# (`#[cfg(target_os = "ios")]`, as the share window's Keychain half is) is
+# built by nothing else on a pull request (#822).
+on:
+  pull_request:
+    paths:
+      - client/src-tauri/gen/apple/**
+      - client/src-tauri/src/**
+      - client/src-tauri/build.rs
+      - client/src-tauri/capabilities/**
+      - client/src-tauri/Cargo.toml
+      - client/src-tauri/Cargo.lock
+      - client/tests/share-sender/**
+      - client/tests/share-window-preview/**
+      - scripts/share-window-shots.sh
+      - scripts/share-sender-test.sh
+      - crates/**
+      - .github/workflows/share-window.yml
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: share-window-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  extension:
+    name: the share extension builds for the iPhone
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The Xcode the release builds with (ios.yml, #779).
+      - name: Xcode 26
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app
+      # The extension alone: it doesn't need the app's Rust library. Unsigned,
+      # so its build phase signs it ad hoc with its App Group (#811), as a
+      # release build does.
+      - name: build the share extension
+        run: |
+          set -o pipefail
+          xcodebuild -project client/src-tauri/gen/apple/linger-client.xcodeproj \
+            -target LingerShare -sdk iphonesimulator -configuration debug \
+            CODE_SIGNING_ALLOWED=NO build | tee "$RUNNER_TEMP/build.log" | grep -E "error:|warning:|BUILD (SUCCEEDED|FAILED)" || true
+          grep -q "BUILD SUCCEEDED" "$RUNNER_TEMP/build.log"
+
+  # The app's Rust, for the iPhone, as desktop.yml's nightly build does: the
+  # code only an iPhone compiles is checked before it merges, not the morning
+  # after. Build, not check: as desktop.yml says, linking is where
+  # platform-specific breakage shows up.
+  rust:
+    name: the app's Rust builds for the iPhone
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - run: corepack enable
+      # The app's build reads the page it carries, so it's built first.
+      - name: build the page
+        working-directory: client
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec vite build
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master, 2026-10-09
+        with:
+          toolchain: stable
+          targets: aarch64-apple-ios
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: client/src-tauri
+      - name: build the app's Rust for the iPhone
+        run: cargo build --manifest-path client/src-tauri/Cargo.toml --target aarch64-apple-ios
+
+  screens:
+    name: the share window's screens, on the iPhone Simulator
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Xcode 26
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app
+      # The real window with sample conversations, in each state and at the
+      # biggest text size, to look at before anybody installs it.
+      - name: screenshots
+        run: scripts/share-window-shots.sh "$RUNNER_TEMP/screens"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: share-window-screens
+          path: ${{ runner.temp }}/screens
+          retention-days: 14
+
+  sender:
+    name: the share window's sender, against a real server
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master, 2026-10-09
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: the sender's tests, in Swift's image, against linger-server
+        run: scripts/share-sender-test.sh

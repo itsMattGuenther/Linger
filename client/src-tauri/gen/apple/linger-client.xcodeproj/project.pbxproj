@@ -22,6 +22,11 @@
 		E18C0CF53EEDAC716D748051 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DEF53FF665AF224362271456 /* CoreGraphics.framework */; };
 		5A4E0C11D2B34F6E8A9B0C02 /* LingerShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5A4E0C11D2B34F6E8A9B0C06 /* LingerShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		5A4E0C11D2B34F6E8A9B0C01 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A4E0C11D2B34F6E8A9B0C03 /* ShareViewController.swift */; };
+		5A4E0C11D2B34F6E8A9B0C40 /* ShareSender.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A4E0C11D2B34F6E8A9B0C30 /* ShareSender.swift */; };
+		5A4E0C11D2B34F6E8A9B0C41 /* ShareList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A4E0C11D2B34F6E8A9B0C31 /* ShareList.swift */; };
+		5A4E0C11D2B34F6E8A9B0C42 /* ShareStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A4E0C11D2B34F6E8A9B0C32 /* ShareStore.swift */; };
+		5A4E0C11D2B34F6E8A9B0C43 /* ShareModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A4E0C11D2B34F6E8A9B0C33 /* ShareModel.swift */; };
+		5A4E0C11D2B34F6E8A9B0C44 /* ShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A4E0C11D2B34F6E8A9B0C34 /* ShareView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -102,6 +107,11 @@
 		5A4E0C11D2B34F6E8A9B0C05 /* ShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ShareExtension.entitlements; sourceTree = "<group>"; };
 		5A4E0C11D2B34F6E8A9B0C04 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		5A4E0C11D2B34F6E8A9B0C03 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
+		5A4E0C11D2B34F6E8A9B0C30 /* ShareSender.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSender.swift; sourceTree = "<group>"; };
+		5A4E0C11D2B34F6E8A9B0C31 /* ShareList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareList.swift; sourceTree = "<group>"; };
+		5A4E0C11D2B34F6E8A9B0C32 /* ShareStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareStore.swift; sourceTree = "<group>"; };
+		5A4E0C11D2B34F6E8A9B0C33 /* ShareModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareModel.swift; sourceTree = "<group>"; };
+		5A4E0C11D2B34F6E8A9B0C34 /* ShareView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -274,6 +284,11 @@
 				5A4E0C11D2B34F6E8A9B0C04 /* Info.plist */,
 				5A4E0C11D2B34F6E8A9B0C05 /* ShareExtension.entitlements */,
 				5A4E0C11D2B34F6E8A9B0C03 /* ShareViewController.swift */,
+				5A4E0C11D2B34F6E8A9B0C30 /* ShareSender.swift */,
+				5A4E0C11D2B34F6E8A9B0C31 /* ShareList.swift */,
+				5A4E0C11D2B34F6E8A9B0C32 /* ShareStore.swift */,
+				5A4E0C11D2B34F6E8A9B0C33 /* ShareModel.swift */,
+				5A4E0C11D2B34F6E8A9B0C34 /* ShareView.swift */,
 			);
 			path = ShareExtension;
 			sourceTree = "<group>";
@@ -454,6 +469,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				5A4E0C11D2B34F6E8A9B0C01 /* ShareViewController.swift in Sources */,
+				5A4E0C11D2B34F6E8A9B0C40 /* ShareSender.swift in Sources */,
+				5A4E0C11D2B34F6E8A9B0C41 /* ShareList.swift in Sources */,
+				5A4E0C11D2B34F6E8A9B0C42 /* ShareStore.swift in Sources */,
+				5A4E0C11D2B34F6E8A9B0C43 /* ShareModel.swift in Sources */,
+				5A4E0C11D2B34F6E8A9B0C44 /* ShareView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

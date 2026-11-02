@@ -29,7 +29,9 @@ jobs:
     # build/test jobs. Job-level skips report success even when checks become
     # required; skipping the entire workflow can leave them pending.
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Its work is seconds, but GitHub can take minutes to close a job after
+    # its last step, and that counts toward the limit (#823).
+    timeout-minutes: 15
     outputs:
       rust: ${{ steps.classify.outputs.rust }}
       s3: ${{ steps.classify.outputs.s3 }}
@@ -364,7 +366,9 @@ jobs:
     # The AGENTS.md hard rules a grep can catch: no AI attribution in commits,
     # identities, or the tree, and the dropped vocabulary stays dropped (SPEC §1).
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Its steps take about 30 seconds, but GitHub has taken five minutes to
+    # close it after them, and that counts toward the limit (#823).
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -459,7 +463,8 @@ jobs:
     if: always()
     needs: [changes, coturn, rust, s3, web, web-browser, new-tests, tauri-shell, rules]
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Room for GitHub's close after the last step, as above (#823).
+    timeout-minutes: 15
     steps:
       - name: every job passed, or had nothing to check
         env:

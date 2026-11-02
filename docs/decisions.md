@@ -1968,3 +1968,31 @@ change loudness. Android's engine honours it.
 - **Possible later:** playing each voice through Web Audio with a gain of its
   own. That changes how the iPhone routes call audio and what its echo
   cancelling hears, so it would need a tester round on speaker first.
+
+## Decided — the iPhone shares inside the share sheet (#820)
+
+**Matt, 2026-11-02, holding 0.5.4 for it.** The first iPhone share (#785)
+dropped the files off and opened the Linger app to pick a conversation. A
+TestFlight tester found it clunky: opening the app from a share extension uses
+a way Apple doesn't give extensions, and iOS threw people back to the app they
+had shared from after they picked. Matt: it should work the way it does in
+every other app.
+
+- **On an iPhone, the share extension is Linger's own window inside the share
+  sheet**: what's shared, Add a message, search, the conversations shared to
+  last, then every server's, and Send, which posts there and then. Android
+  stays as it is: opening into the app with the picker is Android's own way.
+- **The window posts with a sign-in of its own** on each server
+  (`POST /auth/share-sign-in`, PROTOCOL §2), not the app's: two programs
+  renewing one refresh token would spend it twice, which revokes it and signs
+  you out. Asked with the app's refresh token, which isn't spent, rather than
+  an access token, so a leaked 15-minute token can't become a 30-day sign-in.
+  What ends every sign-in ends it too.
+- **The app keeps it, and the list the window picks from, where the window can
+  read them**: the Keychain under the App Group, this device only, and the App
+  Group's folder, out of backups. Linger's colours go with the list, read from
+  the design tokens at run time, rather than copied into Swift.
+- **Not done:** sharing to somebody you have no DM with yet, a "send to
+  several" choice, and the iPhone's own suggestions row of people at the top of
+  the share sheet, which would mean telling iOS who you talk to.
+
