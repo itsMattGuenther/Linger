@@ -494,7 +494,10 @@ pub async fn rotate_refresh(db: &SqlitePool, token: &str) -> anyhow::Result<Refr
 /// first, as presenting it to `rotate_refresh` does. One transaction on the
 /// writer, so a password change can't land between the check and the new
 /// family and leave a sign-in it meant to end (#496).
-pub async fn share_family(db: &SqlitePool, token: &str) -> anyhow::Result<Option<(UserId, String)>> {
+pub async fn share_family(
+    db: &SqlitePool,
+    token: &str,
+) -> anyhow::Result<Option<(UserId, String)>> {
     // (user_id, family_id, expires_at, revoked_at)
     type Row = (Vec<u8>, Vec<u8>, i64, Option<i64>);
 

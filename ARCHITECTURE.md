@@ -24,6 +24,10 @@ Companion to `SPEC.md`. Wire protocol is in `PROTOCOL.md`. Agent working rules a
 │    voice (WebRTC, microphone, speakers)          │
 │    chimes, tray, updates, the push-to-talk key   │
 │    on Linux, screen capture (PipeWire)           │
+│                                                  │
+│  iPhone share window — Swift (§4.15, #820)       │
+│    picks a conversation, uploads and posts       │
+│    with a sign-in of its own                     │
 └──────────────────────────────────────────────────┘
        │ HTTPS + WSS                  │ voice: UDP 3479
        ▼                              │ (TURN relay if
@@ -713,7 +717,11 @@ E2EE launders a false promise, which is worse than an honest limitation.
    signed out by it. Since #790 the shell writes each iPhone entry itself, as
    `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`, which the crate can't ask
    for, so no backup can restore a sign-in onto another phone; an older build's
-   entries are moved over in place the first time they're read.
+   entries are moved over in place the first time they're read. The iPhone's share
+   window (#820) posts with a sign-in of its own on each server (PROTOCOL §2), kept
+   in one Keychain entry in the App Group's access group, this device only, so the
+   share extension can read it and write back what it renews
+   (`src-tauri/src/share_window.rs`).
 4. **No open registration.** Invite code required, always. Codes are 12 chars from a
    CSPRNG, single-use by default.
 5. **Rate limits:** login 5/min/IP, sign-up 60/hour/IP by default (all sixty at once,

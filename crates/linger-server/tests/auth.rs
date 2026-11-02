@@ -521,7 +521,14 @@ async fn refreshed(server: &common::TestServer, token: &str) -> (u16, Option<Ref
         .await
         .unwrap();
     let status = resp.status().as_u16();
-    (status, if status == 200 { Some(resp.json().await.unwrap()) } else { None })
+    (
+        status,
+        if status == 200 {
+            Some(resp.json().await.unwrap())
+        } else {
+            None
+        },
+    )
 }
 
 async fn share_sign_in(server: &common::TestServer, token: &str) -> reqwest::Response {
@@ -565,8 +572,16 @@ async fn a_share_sign_in_is_a_family_of_its_own() {
 
     // Replaying the window's spent token kills the window's family only.
     assert_eq!(refreshed(&server, &share.refresh_token).await.0, 401);
-    assert_eq!(refreshed(&server, &window.refresh_token).await.0, 401, "the window's family lives on");
-    assert_eq!(refreshed(&server, &app.refresh_token).await.0, 200, "the app's family went with the window's");
+    assert_eq!(
+        refreshed(&server, &window.refresh_token).await.0,
+        401,
+        "the window's family lives on"
+    );
+    assert_eq!(
+        refreshed(&server, &app.refresh_token).await.0,
+        200,
+        "the app's family went with the window's"
+    );
 }
 
 /// Asking with a token already spent is a replay, as at `POST /auth/refresh`:
@@ -582,7 +597,11 @@ async fn a_spent_token_gets_no_share_sign_in_and_loses_its_family() {
     assert_eq!(resp.status(), 401);
     let body: ErrorEnvelope = resp.json().await.unwrap();
     assert_eq!(body.error.code, ErrorCode::Unauthenticated);
-    assert_eq!(refreshed(&server, &next.refresh_token).await.0, 401, "a replay must revoke the family");
+    assert_eq!(
+        refreshed(&server, &next.refresh_token).await.0,
+        401,
+        "a replay must revoke the family"
+    );
 
     assert_eq!(share_sign_in(&server, "not-a-token").await.status(), 401);
 }
@@ -592,7 +611,11 @@ async fn a_spent_token_gets_no_share_sign_in_and_loses_its_family() {
 async fn a_password_change_ends_the_share_sign_in() {
     let server = common::spawn_server().await;
     let host = common::bootstrap_host(&server).await;
-    let share: ShareSignInResponse = share_sign_in(&server, &host.refresh_token).await.json().await.unwrap();
+    let share: ShareSignInResponse = share_sign_in(&server, &host.refresh_token)
+        .await
+        .json()
+        .await
+        .unwrap();
 
     let changed = reqwest::Client::new()
         .patch(server.url("/me/password"))
@@ -614,7 +637,10 @@ async fn share_sign_ins_are_limited_per_person() {
     let server = common::spawn_server().await;
     let host = common::bootstrap_host(&server).await;
     for _ in 0..RATE_SHARE_SIGN_IN.0 {
-        assert_eq!(share_sign_in(&server, &host.refresh_token).await.status(), 200);
+        assert_eq!(
+            share_sign_in(&server, &host.refresh_token).await.status(),
+            200
+        );
     }
     let refused = share_sign_in(&server, &host.refresh_token).await;
     assert_eq!(refused.status(), 429);
