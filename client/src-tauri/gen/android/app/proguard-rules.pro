@@ -25,3 +25,11 @@
 # shrinking would otherwise be free to change (T-1604).
 -keep class io.crates.keyring.Keyring { *; }
 -keep class io.crates.keyring.Keyring$Companion { *; }
+
+# The call bar (#429): Rust calls VoiceCallService.update by its Java name,
+# through JNI (src-tauri/src/phone_call.rs). Without this the release build
+# removed it, and the call bar never showed (#834). scripts/android-jni.mjs
+# checks a release build keeps it, and that every class Rust names has a
+# rule here.
+-keep class io.github.itsmattguenther.linger.VoiceCallService { *; }
+-keep class io.github.itsmattguenther.linger.VoiceCallService$Companion { *; }
