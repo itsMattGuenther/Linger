@@ -32,8 +32,11 @@ default.
 share straight to it.** The notes are `docs/releases/0.5.4.md`, and its one
 line is in `client/src/next/core/release-line.json`. From it on, installed
 copies update themselves (#772); it's installed the old way itself. Before
-it's tagged, a TestFlight tester shares from Photos on a real iPhone to a
-throwaway server running the same code (#820, #825). Owed after it
+it was tagged, a TestFlight tester ran every iPhone check on build 8.1, a
+real iPhone against a throwaway server running the same code, and all
+passed (2026-11-02): sharing from Photos a minute after leaving Linger,
+three photos as one message, a screenshot, search, an older server greyed
+out, Cancel, and no volume slider (#820, #825, #816). Owed after it
 ships: the checks on installed clients in its notes, the iPhone's iCloud
 backup change confirmed by the TestFlight testers (#790), a real drop in a
 busy call (#678), and a real share line in a call of three (#746).
