@@ -469,6 +469,16 @@ it, or another program, runs at the same time.
   Caught by the iPhone Simulator share flow (#821), not by a reviewer.
   *Missed because* the tests gave the list connected servers only, and
   nothing ran the app into the background before sharing. *Changed:* a
-  server not connected right now is written as it last was, and nothing is
-  written until every server has been connected to (`shareListings`, with
-  tests), and the simulator flow shares with Linger in the background.
+  server not connected right now is written as it last was, which the page
+  keeps between launches, and only signing out takes one off
+  (`shareWindowServers`, with tests); the simulator flow shares with Linger
+  in the background.
+- **#826: the first fix for it held back too much, and dropped too much.**
+  It wrote nothing until every server had connected, so signing out of one
+  while another was down left the signed-out server's conversations in the
+  list, and it left out servers still being reached or waiting for a newer
+  app. Caught by Greptile. *Missed because* the tests had servers that were
+  either connected or not, never one down while another changed. *Changed:*
+  the list is always written, from the last one written for any server not
+  connected, with tests of a server down while another connects and while
+  one is signed out of.

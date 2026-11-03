@@ -8,11 +8,14 @@ import {
   nameColor,
   oneAtATime,
   readTheme,
+  connected,
   type ShareListing,
   type ShareShell,
   type ShareStatus,
-  shareListings,
+  type ShareWindowServer,
   shareWindowList,
+  shareWindowServers,
+  writtenServers,
 } from "../../core/shareWindow";
 
 /** The shell's half (`share_window.rs`). */
@@ -101,12 +104,24 @@ export function useShareSignIns(on: boolean, sessions: Sessions): ReadonlyMap<st
   return status;
 }
 
+/** Where the page keeps the servers it last wrote, between launches (#825). */
+const WRITTEN_KEY = "linger.next.share-window";
+
+function pageStore(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * On an iPhone, write the list the share window picks from (#820) whenever
  * the list or a server's sign-in changes, a moment after, so a burst of
  * changes is written once. `signedIn` is every server signed in here, in the
- * list's order: one the app isn't connected to right now is written as it
- * last was (`shareListings`, #822).
+ * list's order, those still being reached and waiting for a newer app too:
+ * one the app isn't connected to right now is written as it last was, and
+ * only signing out takes one off (`shareWindowServers`, #825).
  */
 export function useShareWindowList(
   on: boolean,
@@ -114,16 +129,22 @@ export function useShareWindowList(
   listings: readonly ShareListing[],
   status: ReadonlyMap<string, ShareStatus>,
 ): void {
-  const kept = useRef(new Map<string, ShareListing>());
+  const last = useRef<ShareWindowServer[] | null>(null);
   useEffect(() => {
     if (!on) return undefined;
-    // Now, not when the write comes round: every connected listing is kept.
-    const servers = shareListings(signedIn, listings, kept.current);
-    if (servers === null) return undefined;
     const timer = window.setTimeout(() => {
+      const store = pageStore();
+      last.current ??= writtenServers(store?.getItem(WRITTEN_KEY) ?? null);
       const reader = colorReader(document);
       try {
-        const list = shareWindowList(servers, status, readTheme(reader), (key) => nameColor(reader, key), Date.now());
+        const now = shareWindowList(listings.filter(connected), status, readTheme(reader), (key) => nameColor(reader, key), Date.now());
+        const list = { ...now, servers: shareWindowServers(signedIn, now.servers, last.current, status) };
+        last.current = list.servers;
+        try {
+          store?.setItem(WRITTEN_KEY, JSON.stringify(list.servers));
+        } catch {
+          // Storage refused: it's kept for as long as the app is open.
+        }
         void shell.writeList(list).catch(() => undefined);
       } finally {
         reader.done();

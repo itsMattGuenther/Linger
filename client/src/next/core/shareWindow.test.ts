@@ -4,10 +4,13 @@ import { ApiError } from "../../lib/api";
 import type { ListModel, PersonRow } from "./list";
 import {
   hexOf,
+  connected,
   keepShareSignIns,
   oneAtATime,
-  type ShareListing,
-  shareListings,
+  type ShareStatus,
+  type ShareWindowServer,
+  shareWindowServers,
+  writtenServers,
   RENEW_AFTER_MS,
   SHARE_LIST_VERSION,
   type ShareShell,
@@ -122,49 +125,59 @@ describe("the list the share window picks from", () => {
   });
 });
 
-describe("the servers the list is written from (#822)", () => {
-  const eli = person("u-eli", "Eli", "azure");
-  const connected = (id: string, room: string): ShareListing => ({
-    id,
+describe("the servers the list is written with (#825)", () => {
+  const server = (id: string, room: string, share: ShareStatus = "ready"): ShareWindowServer => ({
+    base_url: id,
     name: id,
-    model: model({ me: row(eli, null), rooms: [{ id: room, name: room, fresh: false, people: [], voice: false, screen: false }] }),
+    share,
+    conversations: [{ room_id: room, kind: "room", name: room, colors: [] }],
   });
-  // What a server the app has let go of, or is connecting to, looks like: nobody yet.
-  const unconnected = (id: string): ShareListing => ({ id, name: id, model: model({}) });
+  const GOOD_ONE = "https://good.example";
+  const DOWN = "https://down.example";
+  const ready = new Map<string, ShareStatus>([[GOOD_ONE, "ready"], [DOWN, "ready"]]);
 
-  it("a server the app has let go of, a while in the background, keeps its conversations", () => {
-    const kept = new Map<string, ShareListing>();
-    const good = connected("https://good.example", "r-general");
-    expect(shareListings(["https://good.example"], [good], kept)).toEqual([good]);
-    // Thirty seconds in the background: the app has no state for it at all.
-    expect(shareListings(["https://good.example"], [], kept)).toEqual([good]);
-    // Connecting again, nothing heard yet.
-    expect(shareListings(["https://good.example"], [unconnected("https://good.example")], kept)).toEqual([good]);
-    // Connected: what it says now.
-    const later = connected("https://good.example", "r-new");
-    expect(shareListings(["https://good.example"], [later], kept)).toEqual([later]);
+  it("a server the app isn't connected to right now is written as it last was", () => {
+    const good = server(GOOD_ONE, "r-general");
+    // A while in the background: the app holds nothing for it.
+    expect(shareWindowServers([GOOD_ONE], [], [good], ready)).toEqual([good]);
+    // Connected again: as it is now.
+    const later = server(GOOD_ONE, "r-new");
+    expect(shareWindowServers([GOOD_ONE], [later], [good], ready)).toEqual([later]);
   });
 
-  it("signing out of a server takes it off", () => {
-    const kept = new Map<string, ShareListing>();
-    const good = connected("https://good.example", "r-general");
-    const other = connected("https://other.example", "r-x");
-    shareListings(["https://good.example", "https://other.example"], [good, other], kept);
-    expect(shareListings(["https://other.example"], [], kept)).toEqual([other]);
-    expect(kept.has("https://good.example")).toBe(false);
-    // Signed out of every one: an empty list, to say so.
-    expect(shareListings([], [], kept)).toEqual([]);
+  it("one still being reached, or waiting for a newer app, stays; one connected while another is down is written", () => {
+    const down = server(DOWN, "r-x");
+    const good = server(GOOD_ONE, "r-general");
+    expect(shareWindowServers([GOOD_ONE, DOWN], [good], [down], ready)).toEqual([good, down]);
+    // Neither connected to nor written yet: left out until it's connected.
+    expect(shareWindowServers([GOOD_ONE, DOWN], [good], [], ready)).toEqual([good]);
   });
 
-  it("writes nothing until every server signed in has been connected to since the app started", () => {
-    const kept = new Map<string, ShareListing>();
-    const good = connected("https://good.example", "r-general");
-    // Just opened: connecting to both, nothing heard. The list on file stays.
-    expect(shareListings(["https://good.example", "https://down.example"], [unconnected("https://good.example")], kept)).toBeNull();
-    // One connected, the other down: still the list on file, which has both.
-    expect(shareListings(["https://good.example", "https://down.example"], [good, unconnected("https://down.example")], kept)).toBeNull();
-    const down = connected("https://down.example", "r-x");
-    expect(shareListings(["https://good.example", "https://down.example"], [good, down], kept)).toEqual([good, down]);
+  it("signing out takes a server off at once, whatever else isn't connected", () => {
+    const good = server(GOOD_ONE, "r-general");
+    const down = server(DOWN, "r-x");
+    expect(shareWindowServers([DOWN], [], [good, down], ready)).toEqual([down]);
+    expect(shareWindowServers([], [], [good, down], ready)).toEqual([]);
+  });
+
+  it("says whether the window can send there as things are now", () => {
+    const good = server(GOOD_ONE, "r-general", "none");
+    expect(shareWindowServers([GOOD_ONE], [], [good], ready)[0]?.share).toBe("ready");
+  });
+
+  it("reads back what it kept, and nothing it can't", () => {
+    const good = server(GOOD_ONE, "r-general");
+    expect(writtenServers(JSON.stringify([good]))).toEqual([good]);
+    expect(writtenServers(null)).toEqual([]);
+    expect(writtenServers("not json")).toEqual([]);
+    expect(writtenServers(JSON.stringify([{ ...good, share: "maybe" }, good]))).toEqual([good]);
+    expect(writtenServers(JSON.stringify({ servers: [good] }))).toEqual([]);
+  });
+
+  it("a listing is connected once the server has said who you are", () => {
+    const eli = person("u-eli", "Eli", "azure");
+    expect(connected({ id: GOOD_ONE, name: "G", model: model({ me: row(eli, null) }) })).toBe(true);
+    expect(connected({ id: GOOD_ONE, name: "G", model: model({}) })).toBe(false);
   });
 });
 

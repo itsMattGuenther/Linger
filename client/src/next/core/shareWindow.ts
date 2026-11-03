@@ -163,32 +163,76 @@ export interface ShareServer {
   shareSignIn(): Promise<string>;
 }
 
+/** Whether the app is connected to the server a listing is of: the server has said who you are. */
+export function connected(listing: ShareListing): boolean {
+  return listing.model.me !== null;
+}
+
 /**
- * The listings the share window's list is written from (#822): every server
- * signed in here, in order, as it is now if the app is connected to it, or as
- * it was the last time it was. The app lets go of a server's rooms and people
- * while it's a while in the background or offline, and has none of them yet
- * while connecting, and the list written from that had no servers: sharing
- * from Photos a minute after leaving Linger said to sign in. Only signing out
- * of a server takes it off. `null`, and nothing to write, while a server
- * signed in hasn't been connected to since the app started (just opened,
- * offline, or that server down): the list already written has it as it last
- * was, which is better than without it. `kept` holds each server's last
- * connected listing, and is brought up to date.
+ * The servers the share window's list is written with (#825): every server
+ * signed in here (`signedIn`, in the list's order, with those still being
+ * reached and those waiting for a newer app), each as it is now if the app
+ * is connected to it (`now`), or else as it was last written (`last`). The
+ * app lets go of a server's rooms and people a while into the background and
+ * offline, and has none while connecting; written from that, the list had no
+ * servers, and sharing from Photos a minute after leaving Linger said to sign
+ * in. So only signing out takes a server off, and at once. One neither
+ * connected to nor written yet is left out until it's connected. Each says
+ * whether the window can send there as `status` has it now.
  */
-export function shareListings(signedIn: readonly string[], now: readonly ShareListing[], kept: Map<string, ShareListing>): ShareListing[] | null {
-  const current = new Map(now.map((listing) => [listing.id, listing]));
-  for (const id of [...kept.keys()]) if (!signedIn.includes(id)) kept.delete(id);
-  const servers: ShareListing[] = [];
-  for (const id of signedIn) {
-    const listing = current.get(id);
-    // Connected: the server has said who you are.
-    if (listing && listing.model.me !== null) kept.set(id, listing);
-    const known = kept.get(id);
-    if (!known) return null;
-    servers.push(known);
+export function shareWindowServers(
+  signedIn: readonly string[],
+  now: readonly ShareWindowServer[],
+  last: readonly ShareWindowServer[],
+  status: ReadonlyMap<string, ShareStatus>,
+): ShareWindowServer[] {
+  const fresh = new Map(now.map((server) => [server.base_url, server]));
+  const before = new Map(last.map((server) => [server.base_url, server]));
+  return [...new Set(signedIn)].flatMap((id) => {
+    const server = fresh.get(id) ?? before.get(id);
+    return server ? [{ ...server, share: status.get(id) ?? server.share }] : [];
+  });
+}
+
+/**
+ * The servers of a list as written before (`shareWindowServers`' `last`),
+ * kept by the page between launches; none when there's nothing it can read.
+ */
+export function writtenServers(text: string | null): ShareWindowServer[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text ?? "null");
+  } catch {
+    return [];
   }
-  return servers;
+  return Array.isArray(parsed) ? parsed.filter(isWrittenServer) : [];
+}
+
+const SHARE_STATUSES: readonly unknown[] = ["ready", "old", "none"] satisfies ShareStatus[];
+const KINDS: readonly unknown[] = ["room", "group", "dm"] satisfies ShareWindowConversation["kind"][];
+
+function isWrittenServer(value: unknown): value is ShareWindowServer {
+  if (typeof value !== "object" || value === null) return false;
+  const server: Record<string, unknown> = { ...value };
+  return (
+    typeof server.base_url === "string" &&
+    typeof server.name === "string" &&
+    SHARE_STATUSES.includes(server.share) &&
+    Array.isArray(server.conversations) &&
+    server.conversations.every(isWrittenConversation)
+  );
+}
+
+function isWrittenConversation(value: unknown): value is ShareWindowConversation {
+  if (typeof value !== "object" || value === null) return false;
+  const conversation: Record<string, unknown> = { ...value };
+  return (
+    typeof conversation.room_id === "string" &&
+    KINDS.includes(conversation.kind) &&
+    typeof conversation.name === "string" &&
+    Array.isArray(conversation.colors) &&
+    conversation.colors.every((color) => typeof color === "string")
+  );
 }
 
 /**
