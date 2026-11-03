@@ -14,10 +14,19 @@ import { fileURLToPath } from "node:url";
 const DIR = fileURLToPath(new URL("../client/tests/ios/", import.meta.url));
 const GUIDE = fileURLToPath(new URL("../docs/development.md", import.meta.url));
 
-/** The names under executionOrder.flowsOrder, failing on anything else in the list. */
+/**
+ * The names under executionOrder.flowsOrder, failing on anything else in the
+ * list. Only under executionOrder: a flowsOrder anywhere else is one Maestro
+ * doesn't read (#841's review).
+ */
 export function flowsOrder(text) {
   const lines = text.split("\n");
-  const start = lines.findIndex((line) => /^ {2}flowsOrder:\s*$/.test(line));
+  const parent = lines.findIndex((line) => /^executionOrder:\s*$/.test(line));
+  let start = -1;
+  for (let i = parent + 1; parent >= 0 && i < lines.length; i++) {
+    if (/^\S/.test(lines[i]) && !/^#/.test(lines[i])) break;
+    if (/^ {2}flowsOrder:\s*$/.test(lines[i])) { start = i; break; }
+  }
   assert(start >= 0, "config.yaml has no executionOrder.flowsOrder");
   const names = [];
   for (const line of lines.slice(start + 1)) {
@@ -72,4 +81,8 @@ test("the order is read strictly", () => {
   assert.deepEqual(flowsOrder("executionOrder:\n  flowsOrder:\n    - a\n    # a note\n    - b-c\n\nother: 1\n"), ["a", "b-c"]);
   assert.throws(() => flowsOrder("executionOrder:\n  flowsOrder:\n    - a\n      - nested\n"), /can't read/);
   assert.throws(() => flowsOrder("executionOrder:\n  continueOnFailure: false\n"), /no executionOrder\.flowsOrder/);
+  assert.deepEqual(flowsOrder("executionOrder:\n  continueOnFailure: false\n# a note\n  flowsOrder:\n    - a\n"), ["a"]);
+  // #841's review: a list under another key isn't the order Maestro reads.
+  assert.throws(() => flowsOrder("settings:\n  flowsOrder:\n    - a\nexecutionOrder:\n  continueOnFailure: false\n"), /no executionOrder\.flowsOrder/);
+  assert.throws(() => flowsOrder("executionOrder:\n  continueOnFailure: false\nsettings:\n  flowsOrder:\n    - a\n"), /no executionOrder\.flowsOrder/);
 });

@@ -500,16 +500,20 @@ Use [the 0.5.4 checklist](releases/0.5.4.md#checks-on-installed-clients) for thi
 package type, previous/new version, interface size and reproduction steps when
 reporting a failure. Do not capture private conversations in evidence.
 
-**Updating from the release before** is checked by hand, on a draft
-release, before it's published: install the previous version, then let it
-update to the draft (the Windows installer, the AppImage, the Arch
-package). An installed copy takes only an update signed with the release
-key, which only `main` and `v*` tags can use (#652), so no branch build can
-show it, and CI can't either until the release itself is built.
+**Updating from the release before** is checked by hand in the day after
+publishing, before any copy installs it on its own ([releasing.md](releasing.md),
+step 4): on a computer where the setup.exe installed the previous version,
+and one with its AppImage, press Restart now and check the new version
+starts. If it doesn't, mark the release a pre-release before the day is out,
+and no copy sees it. It can't be checked sooner: an installed copy reads
+only the published release's `latest.json`, so it never sees a draft, and
+it takes only an update signed with the release key, which only `main` and
+`v*` tags can use (#652). The Arch package comes from its own job once the
+release is published, so it's checked after that has run.
 `windows-update-check.ps1` installs over an old version with the installer,
-which is a different path from the updater. It matters most when Tauri's
-updater changes, as it does in 2.12 (#788): if updating from the version
-before fails, everybody stays on it.
+a different path from the updater. It matters most when Tauri's updater
+changes, as it does in 2.12 (#788): if updating from the version before
+fails, everybody stays on it.
 
 The real-world checks in [release-checks.md](tasks/release-checks.md) are
 closed only by people using the published app on real computers and networks.
