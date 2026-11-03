@@ -494,6 +494,122 @@ over a release (or the other way round): uninstall first, which signs you out.
   `pnpm tauri android build --target aarch64 --apk`. Without a
   `keystore.properties` the release build comes out unsigned.
 
+## The iPhone in the simulator
+
+Nobody on the project has an iPhone to test on, and a round trip through
+TestFlight to a friend's phone takes the best part of an hour. So
+`.github/workflows/ios-simulator.yml` builds the iPhone app for the iOS
+Simulator on one of GitHub's Macs, starts it on a simulated iPhone, and
+drives it with [Maestro](https://maestro.dev), which taps and types the way a
+person does. It runs on every pull request that touches the app
+(`client/src`, `client/src-tauri`, the flows; `scripts/ci-scope.mjs` says
+exactly), every night on `main`, and by hand:
+
+```bash
+gh workflow run ios-simulator.yml --ref <your-branch>   # whatever the branch changed
+gh run download <run-id> -n iphone-simulator            # the pictures and logs
+```
+
+**What it does**, in `client/tests/ios/` (`config.yaml` has the order; each
+flow carries on from where the last left the app):
+
+1. `first-screen.yaml`: the app starts and shows the screen for joining a
+   server.
+2. `plain-http.yaml`: a server's plain `http://` address is refused with
+   "Couldn't reach …", as in every installed app: their CSP
+   (`tauri.conf.json`) allows only `https:` and `wss:`. So the check doesn't
+   sign in that way.
+3. `set-up.yaml`: a real server, built from the branch as a host runs it
+   (a release build: a debug one hashes passwords too slowly for the app's
+   30-second wait) and running on the same Mac with a temporary data folder,
+   is set up from its setup link, through the app's form, and the app lands
+   on its empty list.
+4. `room.yaml`: a room made on the server (`seed.js`, through the server's
+   API) shows up in the list without a reload, opens with the message in it,
+   and takes a message typed on the phone; `sent.js` asks the server that it
+   arrived.
+5. `share-photo.yaml`: a photo shared from Photos, through its share sheet,
+   into Linger's share window, which picks #evenings, adds a message and
+   sends. The server then has the message with the photo attached
+   (`shared.js`), and the room in Linger shows both. Linger stays in the
+   background for 35 seconds first: after 30 it closes its connections, and
+   that once emptied the list the window picks from, so sharing said to sign
+   in (#825). The photo is the porch artwork the workflow adds to the
+   library (`xcrun simctl addmedia`).
+
+**The share window is out of Maestro's sight.** It runs in a process of its
+own, and Maestro reads the screen through the app in front, Photos. So
+inside the window the flow taps by position, measured on the iPhone 17 the
+workflow picks (from `14-share-window.png`; measure again if the workflow
+ever picks another model), and records the screen
+(`screens/share-window.mp4`, where the 0.9 seconds of "Sent" can be seen).
+Whether the share worked is read from the server and from Linger, which
+Maestro can see. The step "the App Group and the Keychain, as the app left
+them" prints what the app left the window: the list in the App Group's
+folder, and which access groups the Keychain's entries are in. Two things
+about Photos that cost a run each: its "What's New" sheet can take 15
+seconds to arrive and ignores a Continue pressed while it does, and iOS
+writes a photo's time with a narrow no-break space before AM.
+
+**The server is reached over https**, as a real one is behind Caddy:
+`scripts/https-front.mjs` stands in for Caddy, with a certificate
+`scripts/test-certs.sh` makes for `127.0.0.1`. The simulator is told to trust
+the certificate's authority twice, once for each half of the app: the web
+page's requests trust the simulator's keychain (`xcrun simctl keychain …
+add-root-cert`), and the gateway, which is the shell's Rust and its own TLS
+(rustls), reads `SSL_CERT_FILE`, which simctl hands the app as
+`SIMCTL_CHILD_SSL_CERT_FILE`. Both scripts are tested on Linux in the rules
+job (`scripts/https-front.test.mjs`).
+
+**Reading a run.** The `iphone-simulator` artifact has `screens/`, a picture
+of each screen the flows stop at, numbered in order, and `last.png`, the
+screen when the run ended; `report.xml`, which flow passed; `maestro/`,
+Maestro's own record, with a picture before every step and, for a step that
+failed, what it could see on the screen; `app.log`, what the app logged; and
+`server/`, the server's and the front's logs. Look at the pictures, not just
+the tick: a screen can pass every step and still be wrong.
+
+**Finding things on screen.** Maestro reads the iPhone's accessibility tree,
+what VoiceOver reads, so a flow finds a control by its words or its
+`aria-label` ("Message in #evenings", "Send"). A control a flow can't find by
+name is one VoiceOver can't name either. Maestro matches the whole of an
+element's words, whatever their case, so give what a flow makes a name
+nothing else on the screen has: a room called porch matched the server's
+name, Porch, in the title bar, and the tap went there. And match what the
+tree says, which isn't always what's drawn: a room's row reads `#evenings`,
+the # and the name together. When a flow can't find something, the failed
+step's `screen-hierarchy/*.json` in the artifact has every element's words.
+
+**Wait for anything that arrives on its own** with `extendedWaitUntil` and
+a timeout; `assertVisible` looks once, and suits only what's drawn with
+something the flow already waited for. After setting up, the list arrived
+first and the server's name a moment later, and a one-look check for the
+name failed in one of the three runs that got that far.
+
+**On a Mac of your own**, with Xcode 26, Java 17 or later and
+[Maestro](https://docs.maestro.dev/getting-started/installing-maestro):
+
+```bash
+rustup target add aarch64-apple-ios-sim
+cd client && pnpm tauri ios build --target aarch64-sim --debug
+xcrun simctl boot "iPhone 17" && open -a Simulator
+xcrun simctl install booted src-tauri/gen/apple/build/arm64-sim/Linger.app
+```
+
+Then start a server, the front and the trust as the workflow's "a server on
+this Mac, behind https" step does, and run
+`SIMCTL_CHILD_SSL_CERT_FILE=<certs>/ca.pem maestro test -e SERVER=… -e
+SETUP_LINK=… -e HOST_USERNAME=… -e HOST_PASSWORD=… tests/ios` from
+`client/`. `maestro studio` shows what Maestro sees on the screen, for
+writing a new flow.
+
+**What it can't tell you:** how the app does with a real phone's memory (a
+simulator has the Mac's, so a photo decoded whole that crashed phones, #817,
+wouldn't crash here), the microphone, camera and calls, sleep and waking
+(beyond the 35 seconds in the background the share flow waits), real
+networks, and Apple's own signing, which `ios.yml` checks what it can of.
+Those still need TestFlight and a person.
+
 ## Things that catch people out
 
 How the rest fits together is [ARCHITECTURE.md](../ARCHITECTURE.md).

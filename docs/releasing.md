@@ -313,6 +313,15 @@ App Store Connect takes a few minutes to process the build. It then shows
 under TestFlight, ready to give to testers, and on the app's page, ready to
 submit for review.
 
+**Before a build goes to TestFlight,** the iPhone simulator check should be
+green on what it's built from: it runs on every pull request that touches
+the app and every night on `main` (`ios-simulator.yml`; docs/development.md,
+"The iPhone in the simulator"), and its pictures show each screen it went
+through. It catches what breaks before a person would see it: the app not
+starting, a screen drawn wrong, signing in or the gateway failing. The
+testers' time is then for what a simulator can't show: a real phone's
+memory, calls, the share sheet, sleep.
+
 - **Signing is automatic.** Xcode makes the distribution certificate and
   profile, and keeps them in the Apple account, through the App Store Connect
   API key: `APPLE_API_KEY_P8` (the `.p8` file's text), `APPLE_API_KEY_ID` and

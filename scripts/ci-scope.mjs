@@ -6,7 +6,9 @@ import { appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 
-const domains = ["rust", "s3", "web", "shell", "coturn", "packages"];
+// `ios` is the iPhone app in the simulator (ios-simulator.yml): the app's
+// shell and page, and the flows and helpers that drive it.
+const domains = ["rust", "s3", "web", "shell", "coturn", "packages", "ios"];
 export function classify(paths) {
   const selected = new Set();
   const add = (...names) => names.forEach((name) => selected.add(name));
@@ -18,9 +20,11 @@ export function classify(paths) {
     if (/^scripts\/startup-time(\.test)?\.mjs$/.test(path)) continue;
     if (path.startsWith("crates/linger-core/") || path.startsWith("client/src/generated/")) add(...domains);
     else if (path.startsWith("crates/linger-server/")) add("rust", "s3");
-    else if (path.startsWith("client/src-tauri/")) add("shell", "packages");
+    else if (path.startsWith("client/src-tauri/")) add("shell", "packages", "ios");
     else if (path.startsWith("client/tests/browser/")) add("web");
-    else if (path.startsWith("client/")) add("web", "packages");
+    else if (path.startsWith("client/tests/ios/")) add("ios");
+    else if (/^scripts\/(https-front(\.test)?\.mjs|test-certs\.sh)$/.test(path)) add("ios");
+    else if (path.startsWith("client/")) add("web", "packages", "ios");
     else if (path.startsWith("assets/logo/")) add("web", "packages");
     else if (/^scripts\/(.*audio.*|.*icon.*|windows-update-check\.ps1|video-runtime-probe\.js|fixtures\/tone-h264-aac\.mp4|appimage-.*)$/.test(path)) add("packages");
     else if (path.startsWith("deploy/")) add("rust", "s3", "coturn");

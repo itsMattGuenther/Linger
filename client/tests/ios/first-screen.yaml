@@ -1,0 +1,11 @@
+# The app starts, and its first screen is the one for joining a server: the
+# web page loaded in the iPhone's web view, as the phone (?shell=phone).
+appId: io.github.itsmattguenther.linger
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Join your people."
+    timeout: 120000
+- assertVisible: "Server or link"
+- assertVisible: "Continue"
+- takeScreenshot: 01-first-screen

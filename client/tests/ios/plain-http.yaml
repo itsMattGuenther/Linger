@@ -1,0 +1,15 @@
+# A server's plain http address, even one on this machine, can't be reached
+# from the installed app: its CSP (tauri.conf.json) allows https and wss
+# only, as the server says when it prints a setup link with no domain. The
+# app says it couldn't reach it, in words, and stays on this screen.
+appId: io.github.itsmattguenther.linger
+---
+- tapOn: "Server or link"
+- inputText: ${SERVER}
+- takeScreenshot: 02-typing-an-address
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: "Couldn.t reach ${SERVER}.*"
+    timeout: 45000
+- assertVisible: "Join your people."
+- takeScreenshot: 03-plain-http-refused

@@ -418,6 +418,10 @@ jobs:
         # It runs only on a Mac after the build, so its reading is tested here
         # (#811, #812).
         run: node --test scripts/ios-app-group.test.mjs
+      - name: the iPhone simulator check's https front passes requests and the gateway through
+        # It runs only on a Mac, in front of the server the simulator signs
+        # in to, so it and its certificates are tested here.
+        run: node --test scripts/https-front.test.mjs
       - name: the Windows checks wait for WebView2 by the clock, not by counting tries
         # A refused try fails at once, so 60 tries were 15 seconds, and a busy
         # runner's WebView2 took longer (#813).

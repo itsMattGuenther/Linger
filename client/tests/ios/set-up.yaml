@@ -1,0 +1,32 @@
+# A new server's setup link, pasted where the address went, opens the form
+# that makes its host; set up, the app is in, on the list of an empty server.
+# The server is reached over https (and its gateway over wss), as a real one.
+appId: io.github.itsmattguenther.linger
+---
+- tapOn: "Server or link"
+- eraseText: 80
+- inputText: ${SETUP_LINK}
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: "Nobody has set this server up yet.*"
+    timeout: 45000
+- takeScreenshot: 04-set-up-form
+- tapOn: "Server name"
+- inputText: "Porch"
+- tapOn: "Username"
+- inputText: ${HOST_USERNAME}
+- tapOn: "Display name"
+- inputText: "Matt"
+- tapOn: "Password"
+- inputText: ${HOST_PASSWORD}
+- takeScreenshot: 05-set-up-filled
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: "No rooms yet."
+    timeout: 60000
+# The server's name comes in its own request, after the list: the title says
+# "Linger" until it does. Waited for, not looked for once.
+- extendedWaitUntil:
+    visible: "Porch"
+    timeout: 30000
+- takeScreenshot: 06-list-empty-server

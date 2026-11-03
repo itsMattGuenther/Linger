@@ -1,0 +1,134 @@
+# Sharing a photo from Photos into a room, end to end (#820): Photos, its
+# share sheet, Linger's share window picking evenings and adding a message,
+# Send, and then the photo and the message in the room in the app, and on
+# the server. The window reads what the app left it in the App Group: the
+# list it picks from, and a sign-in of its own in the Keychain. So it runs
+# after the app has been set up and opened on a room (set-up.yaml,
+# room.yaml).
+#
+# The photo is the porch artwork the workflow puts in the library
+# (`xcrun simctl addmedia`): the only one dated this year, so its label has
+# no year in it ("Photo, November 03, 1:02 AM"); the simulator's own sample
+# photos all do. iOS puts a narrow no-break space before AM, so the pattern
+# takes any character there.
+#
+# Maestro can't see inside the share window: it reads the screen through
+# the app in front, Photos, and the window runs in a process of its own.
+# So inside it, the flow taps by position, measured on the iPhone 17 the
+# workflow picks, and records the screen; whether it worked is read from
+# the server (shared.js) and from the room in Linger, which Maestro can see.
+appId: com.apple.mobileslideshow
+---
+- launchApp:
+    appId: com.apple.mobileslideshow
+# Photos' first-run sheet, "What's New in Photos": it can take 15 seconds
+# to come up, and a Continue pressed while it's still arriving doesn't
+# close it. So it's waited for, and Continue pressed until it's gone.
+- extendedWaitUntil:
+    visible: "What.s New in Photos"
+    timeout: 30000
+    optional: true
+- repeat:
+    while:
+      visible: "Continue"
+    times: 5
+    commands:
+      - waitForAnimationToEnd:
+          timeout: 5000
+      - tapOn:
+          text: "Continue"
+          optional: true
+- extendedWaitUntil:
+    visible: "Photo, [A-Za-z]+.[0-9]+, [0-9]+:[0-9]+.[AP]M"
+    timeout: 30000
+- takeScreenshot: 11-photos
+- tapOn: "Photo, [A-Za-z]+.[0-9]+, [0-9]+:[0-9]+.[AP]M"
+- extendedWaitUntil:
+    visible: "Share"
+    timeout: 15000
+- takeScreenshot: 12-the-photo
+# Linger stays in the background past its 30-second grace
+# (BACKGROUND_GRACE_MS), when it closes its connections. The list it left
+# the window must still offer evenings: once, it was rewritten empty then,
+# and the window said to sign in (#825). The words waited for never show;
+# the wait is the point, and it's how long, not a guess at a delay.
+- extendedWaitUntil:
+    visible: "Linger has been in the background for 35 seconds"
+    timeout: 35000
+    optional: true
+- tapOn: "Share"
+- extendedWaitUntil:
+    visible: "Linger"
+    timeout: 20000
+    optional: true
+# Not among the apps shown first: it's under More.
+- runFlow:
+    when:
+      notVisible: "Linger"
+    commands:
+      - tapOn: "More"
+- takeScreenshot: 13-share-sheet
+- startRecording: share-window
+- tapOn: "Linger"
+# The window takes a few seconds to start and rise, and Maestro can't see it
+# arrive, so this is the one wait in these flows that's a length of time,
+# not the thing itself: 6 seconds, then until the screen holds still. Waiting
+# for stillness alone returned before the window had begun to move. A tap
+# that still misses fails the flow (the server never gets the message); it
+# can't pass it.
+- extendedWaitUntil:
+    visible: "The share window has had 6 seconds to come up"
+    timeout: 6000
+    optional: true
+- waitForAnimationToEnd:
+    timeout: 15000
+- takeScreenshot: 14-share-window
+# Its one row, # evenings, under "Find a room or person".
+- tapOn:
+    point: "23%,36%"
+- waitForAnimationToEnd:
+    timeout: 5000
+# "Add a message", beside the photo.
+- tapOn:
+    point: "45%,19%"
+- inputText: "From the share sheet."
+- waitForAnimationToEnd:
+    timeout: 5000
+- takeScreenshot: 15-share-window-ready
+# Send, top right. The window says Sent for under a second and closes,
+# so three pictures straight after, and the recording.
+- tapOn:
+    point: "86%,12%"
+- takeScreenshot: 16-sending-1
+- takeScreenshot: 16-sending-2
+- takeScreenshot: 16-sending-3
+# The server has it: the message, with one picture attached.
+- runScript:
+    file: shared.js
+- assertTrue: ${output.shared}
+- takeScreenshot: 16-after-send
+- stopRecording
+# Back in Linger, still on evenings from room.yaml, where the photo arrives.
+# Coming forward took 16 seconds once, so the page is waited for first: the
+# room's message box, or the list's row for it if it opened on the list.
+- launchApp:
+    appId: io.github.itsmattguenther.linger
+    stopApp: false
+- extendedWaitUntil:
+    visible: "(Message in #evenings|#evenings)"
+    timeout: 45000
+- runFlow:
+    when:
+      notVisible: "Message in #evenings"
+    commands:
+      - tapOn: "#evenings"
+- extendedWaitUntil:
+    visible: "From the share sheet."
+    timeout: 30000
+# The message box still has the keyboard from room.yaml, over the message's
+# words: put it away for the picture.
+- hideKeyboard:
+    optional: true
+- waitForAnimationToEnd:
+    timeout: 10000
+- takeScreenshot: 17-room-with-the-photo

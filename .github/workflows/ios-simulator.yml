@@ -1,0 +1,310 @@
+name: iphone simulator
+
+# The iPhone app, built for the iOS Simulator on GitHub's Macs and driven
+# there by Maestro (client/tests/ios/): it starts on the screen for joining a
+# server, refuses a plain http address as the installed app does, sets up a
+# real Linger server running on the same Mac and reached over https, opens
+# a room there and sends a message, and shares a photo from Photos into the
+# room through the share window. Every screen is kept as a picture in the
+# run's `iphone-simulator` artifact, with a recording of the share, Maestro's
+# report, and the app's and server's logs.
+#
+# A simulator build needs no Apple account and nothing is signed for a
+# phone, so this uses no secrets and runs on any pull request: those that
+# touch the app or what it runs (scripts/ci-scope.mjs, `ios`). The signed
+# build for TestFlight is ios.yml's. docs/development.md, "The iPhone in the
+# simulator", says how to run the flows.
+on:
+  pull_request:
+  workflow_dispatch:
+  # nightly.yml runs it on main every night, whatever changed.
+  workflow_call:
+    inputs:
+      all:
+        description: Run it whatever changed
+        type: boolean
+        default: false
+
+concurrency:
+  group: iphone-simulator-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      ios: ${{ steps.classify.outputs.ios }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: classify changed files
+        id: classify
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CI_SCOPE_ALL: ${{ inputs.all }}
+        run: node scripts/ci-scope.mjs
+
+  simulator:
+    name: the iPhone app in the simulator
+    needs: changes
+    if: ${{ needs.changes.outputs.ios == 'true' }}
+    # The Mac and Xcode ios.yml builds the TestFlight app with (#779).
+    runs-on: macos-26
+    timeout-minutes: 75
+    env:
+      # Maestro, pinned by version and checksum (its release's
+      # checksums_sha256.txt). It talks to the simulator through Apple's
+      # XCTest, so nothing else is installed for it but Java.
+      MAESTRO_VERSION: 2.11.0
+      MAESTRO_SHA256: 5384593cb4e7a106489e75a821d157dd43f4e438df6bc308b72e82c685e1283a
+      MAESTRO_CLI_NO_ANALYTICS: "1"
+      MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED: "true"
+      # How long Maestro waits for its driver, the XCTest runner it puts on
+      # the iPhone, to answer: it gives up after 2 minutes unless told, and
+      # on a freshly booted simulator here the driver took 2 min 40 s.
+      MAESTRO_DRIVER_STARTUP_TIMEOUT: "600000"
+      # Where everything kept goes: the artifact.
+      OUT: ${{ github.workspace }}/iphone-simulator
+      # The server on this Mac: plain http on SERVER_PORT, and https on
+      # FRONT_PORT through scripts/https-front.mjs.
+      SERVER_PORT: 8080
+      FRONT_PORT: 8443
+      HOST_USERNAME: matt
+      HOST_PASSWORD: a porch light left on
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - run: corepack enable
+      - name: install frontend deps
+        working-directory: client
+        run: pnpm install --frozen-lockfile
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master, 2026-10-09
+        with:
+          toolchain: stable
+          targets: aarch64-apple-ios-sim
+      # Kept even when the flows fail: the builds are most of the run, and a
+      # failed flow is when it's run again.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: |
+            client/src-tauri
+            .
+          cache-on-failure: true
+      # The same Xcode as ios.yml, for the reasons there (#779).
+      - name: Xcode 26
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app
+      - name: what this Mac builds and runs with
+        run: |
+          xcodebuild -version
+          xcodebuild -showsdks | grep -i 'iphonesimulator'
+          xcrun simctl list runtimes
+
+      # The newest iOS this Xcode runs, and on it the plain iPhone (not a
+      # Pro, Plus or Max) where there is one: the size most people have.
+      # Started now and waited for after the builds: a first boot here takes
+      # about three minutes.
+      - name: an iPhone, starting
+        run: |
+          set -euo pipefail
+          xcrun simctl list devices available --json > "$RUNNER_TEMP/devices.json"
+          read -r udid runtime name < <(node -e '
+            const { devices } = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+            const version = (key) => (/iOS-(\d+)-(\d+)/.exec(key) ?? [0, 0, 0]).slice(1).map(Number);
+            const iphones = (key) => devices[key].filter((device) => /^iPhone/.test(device.name));
+            const runtime = Object.keys(devices)
+              .filter((key) => /SimRuntime\.iOS-/.test(key) && iphones(key).length > 0)
+              .sort((a, b) => version(a)[0] - version(b)[0] || version(a)[1] - version(b)[1])
+              .at(-1);
+            if (!runtime) { console.error("no iPhone simulator on this Mac"); process.exit(1); }
+            const phone = iphones(runtime).find((device) => /^iPhone \d+$/.test(device.name)) ?? iphones(runtime)[0];
+            console.log(phone.udid, runtime, phone.name);
+          ' "$RUNNER_TEMP/devices.json")
+          echo "an $name on $runtime: $udid"
+          echo "UDID=$udid" >> "$GITHUB_ENV"
+          mkdir -p "$OUT"
+          printf '%s\n%s\n' "$name" "$runtime" > "$OUT/device.txt"
+          xcrun simctl boot "$udid"
+
+      # Release, as a host runs it (deploy/Dockerfile). Its password
+      # hashing unoptimized took 23 to over 30 seconds a sign-in here, past
+      # the 30 the app waits for an answer. Without the link-time
+      # optimisation the image has, which changes how fast it runs, not
+      # what it does: with it, this build took 14 minutes here.
+      - name: build the server
+        env:
+          CARGO_PROFILE_RELEASE_LTO: "false"
+        run: cargo build --locked --release -p linger-server
+      # Debug, for the build's speed. `tauri ios build` builds the page,
+      # then the app with the page inside it, as for a phone, and puts the
+      # app in gen/apple/build/arm64-sim.
+      - name: build the iPhone app for the simulator
+        working-directory: client
+        run: pnpm tauri ios build --ci --target aarch64-sim --debug
+      # macOS's bash is 3.2: no mapfile.
+      - name: the app, as built
+        run: |
+          set -euo pipefail
+          found="$(find client/src-tauri/gen/apple/build -name 'Linger.app' -type d -prune)"
+          [ -n "$found" ] && [ "$(printf '%s\n' "$found" | wc -l)" -eq 1 ] ||
+            { echo "::error::expected one Linger.app, found: $found"; exit 1; }
+          echo "APP=$PWD/$found" >> "$GITHUB_ENV"
+          plist="$found/Info.plist"
+          for key in CFBundleIdentifier CFBundleShortVersionString CFBundleVersion DTPlatformName DTSDKName MinimumOSVersion; do
+            printf '%s: %s\n' "$key" "$(plutil -extract "$key" raw "$plist")"
+          done
+          [ "$(plutil -extract DTPlatformName raw "$plist")" = iphonesimulator ] ||
+            { echo "::error::not built for the simulator"; exit 1; }
+          # Share to Linger (#785): the extension is in the app, with its version.
+          share="$found/PlugIns/LingerShare.appex/Info.plist"
+          [ -f "$share" ] || { echo "::error::the share extension isn't in the app"; exit 1; }
+          for key in CFBundleIdentifier CFBundleShortVersionString CFBundleVersion; do
+            printf 'share extension %s: %s\n' "$key" "$(plutil -extract "$key" raw "$share")"
+          done
+          for key in CFBundleShortVersionString CFBundleVersion; do
+            [ "$(plutil -extract "$key" raw "$share")" = "$(plutil -extract "$key" raw "$plist")" ] ||
+              { echo "::error::the share extension's $key isn't the app's"; exit 1; }
+          done
+          codesign -dv "$found" 2>&1 | grep -E '^(Identifier|Signature|TeamIdentifier)=' || true
+          # What each part may do as signed for the simulator: the share
+          # window needs the App Group in both, for its folder and the
+          # Keychain entry the app leaves it (#820).
+          for bundle in "$found" "$found/PlugIns/LingerShare.appex"; do
+            echo "== ${bundle##*/} entitlements"
+            codesign -d --entitlements - --xml "$bundle" 2>/dev/null | plutil -convert xml1 -o - - 2>/dev/null || echo "(none in its signature)"
+          done
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Maestro
+        run: |
+          set -euo pipefail
+          zip="$RUNNER_TEMP/maestro.zip"
+          curl -fL --no-progress-meter --retry 5 --retry-all-errors --connect-timeout 30 --max-time 300 \
+            -o "$zip" "https://github.com/mobile-dev-inc/maestro/releases/download/cli-$MAESTRO_VERSION/maestro.zip"
+          echo "$MAESTRO_SHA256  $zip" | shasum -a 256 -c -
+          unzip -q "$zip" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/maestro/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/maestro/bin/maestro" --version
+
+      - name: the iPhone, booted
+        run: |
+          set -euo pipefail
+          xcrun simctl bootstatus "$UDID" -b
+          # Auto-correction and predictions asked off, so the keyboard types
+          # what a flow says. On iOS 26.5 the bar of suggestions still shows;
+          # what's typed has come out as typed in every run, and the
+          # pictures show it.
+          for key in KeyboardAutocorrection KeyboardPrediction KeyboardShowPredictionBar; do
+            xcrun simctl spawn "$UDID" defaults write com.apple.Preferences "$key" -bool NO
+          done
+          # The first-use tip about sliding to type, marked seen: it covered
+          # the bottom of the screen in the pictures until this.
+          for domain in com.apple.Preferences com.apple.keyboard.preferences; do
+            xcrun simctl spawn "$UDID" defaults write "$domain" DidShowContinuousPathIntroduction -bool YES
+          done
+          # The same status bar in every picture.
+          xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4
+          # A photo in the library, for share-photo.yaml: the porch artwork.
+          xcrun simctl addmedia "$UDID" "assets/logo/Linger Pixel Porch Icon Square.png"
+
+      # A real server, as a host runs one, with Caddy's part (https) done by
+      # scripts/https-front.mjs and a certificate the simulator is told to
+      # trust: the installed app reaches no server over plain http.
+      - name: a server on this Mac, behind https
+        run: |
+          set -euo pipefail
+          certs="$RUNNER_TEMP/certs"
+          scripts/test-certs.sh "$certs"
+          echo "CERTS=$certs" >> "$GITHUB_ENV"
+          mkdir -p "$OUT/server"
+          LINGER_DATA_DIR="$RUNNER_TEMP/linger-data" LINGER_BIND="127.0.0.1:$SERVER_PORT" RUST_LOG=info \
+            nohup target/release/linger-server > "$OUT/server/server.log" 2>&1 &
+          # It prints its one-time setup link once it's ready.
+          deadline=$((SECONDS + 60))
+          token=""
+          while [ -z "$token" ]; do
+            token="$(sed -n 's|.*/setup?token=\([0-9a-f]*\).*|\1|p' "$OUT/server/server.log" | head -n 1)"
+            [ -n "$token" ] && break
+            [ "$SECONDS" -lt "$deadline" ] || { cat "$OUT/server/server.log"; echo "::error::the server printed no setup link in 60 s"; exit 1; }
+            sleep 1
+          done
+          nohup node scripts/https-front.mjs "$certs/cert.pem" "$certs/key.pem" "$FRONT_PORT" "$SERVER_PORT" > "$OUT/server/front.log" 2>&1 &
+          deadline=$((SECONDS + 30))
+          until grep -q '^listening' "$OUT/server/front.log"; do
+            [ "$SECONDS" -lt "$deadline" ] || { cat "$OUT/server/front.log"; echo "::error::the https front didn't start"; exit 1; }
+            sleep 1
+          done
+          curl -fsS --cacert "$certs/ca.pem" -o /dev/null "https://127.0.0.1:$FRONT_PORT/api/v1/health"
+          echo "SETUP_LINK=https://127.0.0.1:$FRONT_PORT/setup?token=$token" >> "$GITHUB_ENV"
+          # The web view's requests trust the simulator's keychain.
+          xcrun simctl keychain "$UDID" add-root-cert "$certs/ca.pem"
+
+      - name: the app, installed
+        run: xcrun simctl install "$UDID" "$APP"
+
+      # The gateway is the app's own (Rust, rustls), which doesn't read the
+      # keychain: SSL_CERT_FILE points it at the test authority. simctl
+      # hands a SIMCTL_CHILD_ variable to the app it launches, and Maestro
+      # launches it with simctl.
+      - name: Maestro's flows
+        env:
+          SIMCTL_CHILD_SSL_CERT_FILE: ${{ runner.temp }}/certs/ca.pem
+        run: |
+          set -euo pipefail
+          xcrun simctl spawn "$UDID" log stream --level info --style compact \
+            --predicate 'process == "Linger" OR process == "LingerShare"' > "$OUT/app.log" 2>&1 &
+          maestro test --device "$UDID" --test-output-dir "$OUT/maestro" \
+            --format junit --output "$OUT/report.xml" \
+            -e "SERVER=http://127.0.0.1:$SERVER_PORT" -e "SETUP_LINK=$SETUP_LINK" \
+            -e "HOST_USERNAME=$HOST_USERNAME" -e "HOST_PASSWORD=$HOST_PASSWORD" \
+            client/tests/ios
+
+      # What the app left the share window (#820), seen from outside the
+      # simulator: the App Group's folder and what's in it, and the access
+      # groups of the Keychain entries on this iPhone. Never fails itself.
+      - name: the App Group and the Keychain, as the app left them
+        if: always()
+        run: |
+          set +e
+          [ -n "${UDID:-}" ] || exit 0
+          group="$(xcrun simctl get_app_container "$UDID" io.github.itsmattguenther.linger group.io.github.itsmattguenther.linger 2>&1)"
+          echo "App Group folder: $group"
+          if [ -d "$group" ]; then
+            find "$group" -maxdepth 3 -not -path '*/Library/*' -exec ls -ld {} \;
+            if [ -f "$group/share-window/list.json" ]; then cp "$group/share-window/list.json" "$OUT/share-window-list.json"; head -c 2000 "$OUT/share-window-list.json"; echo; fi
+          fi
+          keychain="$HOME/Library/Developer/CoreSimulator/Devices/$UDID/data/Library/Keychains/keychain-2-debug.db"
+          echo "Keychain entries' access groups:"
+          sqlite3 "$keychain" 'SELECT agrp, count(*) FROM genp GROUP BY agrp;'
+          exit 0
+
+      # Never fails itself: it runs after a failure too, when some of this
+      # may not be there. (GitHub runs a step's bash with -e.) Maestro keeps
+      # each flow's pictures in <run>/<flow>/takeScreenshot/.
+      - name: the screen at the end, and every picture in one place
+        if: always()
+        run: |
+          set +e
+          mkdir -p "$OUT/screens"
+          if [ -n "${UDID:-}" ]; then xcrun simctl io "$UDID" screenshot "$OUT/screens/last.png"; fi
+          if [ -d "$OUT/maestro" ]; then
+            find "$OUT/maestro" \( -path '*/takeScreenshot/*.png' -o -path '*/startRecording/*' \) -type f -exec cp {} "$OUT/screens/" \;
+          fi
+          ls -la "$OUT/screens"
+          exit 0
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: iphone-simulator
+          path: iphone-simulator
+          retention-days: 14

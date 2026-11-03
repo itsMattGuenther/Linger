@@ -249,7 +249,9 @@ linger/
 │  │                          #   styles/ tokens (docs/design/architecture.md)
 │  ├─ src/lib/                # logic the windows share (.ts only)
 │  ├─ src/generated/          # wire types from linger-core, never edited by hand
-│  └─ tests/browser/          # the browser tests (Playwright)
+│  ├─ tests/browser/          # the browser tests (Playwright)
+│  └─ tests/ios/              # the iPhone app's flows (Maestro), run in the
+│                             #   iOS Simulator by ios-simulator.yml
 ├─ deploy/                    # Dockerfile, compose.yaml, Caddyfile, .env.example,
 │                             #   setup.sh, update.sh, entrypoint.sh
 ├─ packaging/arch/            # the Arch and Omarchy package and its repository
