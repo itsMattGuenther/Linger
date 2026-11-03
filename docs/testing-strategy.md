@@ -109,12 +109,14 @@ the comment together. Dependabot does that once a month
 release at least a week old, and it is merged like any other.
 `dtolnay/rust-toolchain` has no version tags, so Dependabot leaves it alone:
 move it by hand to a commit from its `master` branch, and pass
-`toolchain: stable`. `tauri-apps/tauri-action` builds the release and writes
-`latest.json`, and no pull request runs it, so a major version of it is worth
-a practice draft release before it's merged, as 1.0 got (#597). Its 1.0 writes
-`latest.json`'s links as GitHub API links; `release.yml`'s `updater-json` job
-puts the normal download links back (`scripts/updater-urls.mjs`, tested in the
-rules job).
+`toolchain: stable`. `tauri-apps/tauri-action` builds the release, and no
+pull request runs it, so a major version of it is worth a practice draft
+release before it's merged, as 1.0 got (#597). It adds to the draft
+`release.yml`'s `draft` job made, by its id, and never makes a release or
+writes `latest.json` itself: two builds finishing together each made a draft
+(#828). `scripts/release-draft.test.mjs` fails if a workflow lets one, and
+the `updater-json` job writes `latest.json` once from the builds' signatures
+(`scripts/updater-urls.mjs`); both are tested in the rules job.
 
 `scripts/check.sh --all` runs everything whatever changed. So does a branch
 with nothing to compare against. `scripts/check.sh <base>` compares against
@@ -187,7 +189,10 @@ rules that came out of them.
   quoted and unquoted, with and without spaces, several commands on a line,
   a command continued over lines, and every way to write what it looks for:
   every form the language has, not only the ones in use today (Markdown
-  links come plain, in angle brackets, as references and as HTML; #771).
+  links come plain, in angle brackets, as references and as HTML; #771),
+  and every way the code it reads is reached: a path written through a
+  variable, code called from code it calls, however deep, and an option
+  implied by another (gh sends POST once given a field; #831).
   `scripts/workflow-downloads.test.mjs` took three rounds of review to get
   there (#763). And it **fails on an input it can't read**, naming it,
   rather than passing over it: a form nobody listed then shows up as a

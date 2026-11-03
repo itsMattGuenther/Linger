@@ -9,8 +9,9 @@ name: release
 #      client/src-tauri/tauri.conf.json and the root Cargo.toml — all four,
 #      `scripts/version-check.sh` says so if you miss one
 #   2. commit, then `git tag v0.2.0 && git push origin v0.2.0`
-#   3. this runs every CI check on the tagged commit, then builds Linux and
-#      Windows bundles and opens a **draft** release with `latest.json`
+#   3. this runs every CI check on the tagged commit, then opens a **draft**
+#      release, builds the Linux and Windows bundles onto it, and writes its
+#      `latest.json` once both are there
 #   4. read it, then publish it — publishing is what ships the update, and it is
 #      a human's click on purpose
 #
@@ -84,9 +85,87 @@ jobs:
         # an APK won't install over the Linger a phone already has.
         run: scripts/android-signing.sh check
 
+  # The one draft release every job below adds to, made before any of them
+  # starts (#828). Each build used to look for a draft with the tag's name and
+  # make one if it found none: releasing 0.5.4, Linux and Windows finished in
+  # the same second, each found none, and each made its own, so the files and
+  # latest.json were split across two drafts. Now only this job makes one,
+  # and the builds are handed its id. scripts/release-draft.test.mjs fails if
+  # any other job could make a release.
+  draft:
+    name: one draft release for every build
+    needs: [preflight, tests]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Two runs for one tag at the same time would each find none too.
+    concurrency:
+      group: release-draft-${{ github.ref_name }}
+    outputs:
+      id: ${{ steps.draft.outputs.id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: make the draft, or find the one an earlier run made
+        id: draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TITLE: Linger ${{ github.ref_name }}
+          # Draft on purpose: publishing is what ships the update to everyone,
+          # and that is a decision, not a side effect of pushing a tag. The
+          # text is set only when the draft is made, so a run again keeps
+          # edits made since.
+          BODY: |
+            **This is the Linger app** — the thing you install on your own
+            computer to join a server somebody else runs.
+
+            **It is not the server.** If you want to *host* a Linger, nothing on
+            this page is for you: the server is a container image, and the
+            [host guide](https://github.com/${{ github.repository }}/blob/main/docs/host-guide.md)
+            walks through setting one up.
+
+            ### Which file do I want?
+
+            | Your computer | Download the file ending in |
+            |---|---|
+            | Windows | `-setup.exe` |
+            | Debian, Ubuntu or Mint | `.deb` |
+            | Fedora, RHEL or openSUSE | `.rpm` |
+            | Any other Linux | `.AppImage` — make it executable and run it |
+            | macOS | Not built yet — see [decisions.md](https://github.com/${{ github.repository }}/blob/main/docs/decisions.md) |
+            | Android phone | `_android-arm64.apk` — download it on the phone |
+            | iPhone | Not yet |
+
+            The `.msi` is for companies rolling it out to many machines at once.
+            If you are not sure, you want the `.exe`.
+
+            The `.sig` files and `latest.json` are how an installed copy checks
+            that an update is genuine. You do not need to download them.
+
+            **Windows will warn you.** You get *"Windows protected your PC"*, and
+            *Run anyway* is behind the small *More info* link. That is Windows
+            saying the installer has not been through a paid signing process. It
+            has not — that is a
+            [known decision](https://github.com/${{ github.repository }}/blob/main/docs/decisions.md),
+            not a broken download.
+
+            **Android will ask before installing.** The phone says it won't
+            install apps from your browser until you allow it: tap *Settings*,
+            turn on *Allow from this source*, and go back. That is Android's
+            rule for any app that isn't from the Play Store. The phone app
+            doesn't update itself: install each new one from its release page,
+            right over the old one, and you stay signed in.
+
+            New here? The
+            [user guide](https://github.com/${{ github.repository }}/blob/main/docs/user-guide.md)
+            covers installing and using Linger in plain language.
+        run: node scripts/release-draft.mjs "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+
   bundle:
     name: ${{ matrix.label }}
-    needs: [preflight, tests]
+    needs: [preflight, tests, draft]
     # A manual run is a check, not a release. Only a tag builds and publishes.
     if: github.ref_type == 'tag'
     environment: release
@@ -210,64 +289,15 @@ jobs:
           projectPath: client
           tauriScript: pnpm tauri
           args: ${{ matrix.args }}
-          tagName: ${{ github.ref_name }}
-          releaseName: Linger ${{ github.ref_name }}
-          releaseBody: |
-            **This is the Linger app** — the thing you install on your own
-            computer to join a server somebody else runs.
-
-            **It is not the server.** If you want to *host* a Linger, nothing on
-            this page is for you: the server is a container image, and the
-            [host guide](https://github.com/${{ github.repository }}/blob/main/docs/host-guide.md)
-            walks through setting one up.
-
-            ### Which file do I want?
-
-            | Your computer | Download the file ending in |
-            |---|---|
-            | Windows | `-setup.exe` |
-            | Debian, Ubuntu or Mint | `.deb` |
-            | Fedora, RHEL or openSUSE | `.rpm` |
-            | Any other Linux | `.AppImage` — make it executable and run it |
-            | macOS | Not built yet — see [decisions.md](https://github.com/${{ github.repository }}/blob/main/docs/decisions.md) |
-            | Android phone | `_android-arm64.apk` — download it on the phone |
-            | iPhone | Not yet |
-
-            The `.msi` is for companies rolling it out to many machines at once.
-            If you are not sure, you want the `.exe`.
-
-            The `.sig` files and `latest.json` are how an installed copy checks
-            that an update is genuine. You do not need to download them.
-
-            **Windows will warn you.** You get *"Windows protected your PC"*, and
-            *Run anyway* is behind the small *More info* link. That is Windows
-            saying the installer has not been through a paid signing process. It
-            has not — that is a
-            [known decision](https://github.com/${{ github.repository }}/blob/main/docs/decisions.md),
-            not a broken download.
-
-            **Android will ask before installing.** The phone says it won't
-            install apps from your browser until you allow it: tap *Settings*,
-            turn on *Allow from this source*, and go back. That is Android's
-            rule for any app that isn't from the Play Store. The phone app
-            doesn't update itself: install each new one from its release page,
-            right over the old one, and you stay signed in.
-
-            New here? The
-            [user guide](https://github.com/${{ github.repository }}/blob/main/docs/user-guide.md)
-            covers installing and using Linger in plain language.
-          # Draft on purpose: publishing is what ships the update to everyone,
-          # and that is a decision, not a side effect of pushing a tag. Since
-          # 1.0 a run for a release that's already published fails rather
-          # than changing it, and every run sets the draft's name and text
-          # again, so hand edits to the text wait until the jobs are done.
-          releaseDraft: true
-          prerelease: false
-          # `latest.json` — the manifest the updater reads. Every matrix job
-          # merges its platform into the same file on the same release. 1.0
-          # writes its links as GitHub API links; `updater-json` below puts
-          # the normal download links back once every job has added its own.
-          uploadUpdaterJson: true
+          # The `draft` job's release, by its id, and never a tag name: given
+          # a tag and no id, tauri-action makes a release when it finds none,
+          # and two builds finishing together each made one (#828).
+          releaseId: ${{ needs.draft.outputs.id }}
+          # The files and their .sig files only. `updater-json` writes
+          # latest.json once both builds are done: each build adding its own
+          # platforms to the file could leave the other's out, if they
+          # finished at the same moment (#828).
+          uploadUpdaterJson: false
 
       # Check the signed packages too, while the release is still a draft.
       # A successful compile is not proof that native media plugins shipped.
@@ -339,17 +369,19 @@ jobs:
           retention-days: 7
 
   # latest.json is the file every installed copy reads to find an update.
-  # tauri-action 1.0 writes each platform's link as a GitHub API link, which
-  # GitHub answers 60 times an hour per address without a token: a household
-  # with several copies behind one connection could miss an update. This
-  # puts the normal download links back (as 0.x wrote them), after every
-  # desktop job has merged its platforms in, and checks the files kept the
-  # names the website, the Arch job and the docs look for (#597). It runs
-  # after a partial build too, so a missing platform fails here, not quietly.
+  # This writes it once, from every desktop build's files and signatures,
+  # after both have added theirs (#828), with normal download links: the
+  # GitHub API links tauri-action 1.0 wrote are answered 60 times an hour per
+  # address without a token, so a household with several copies behind one
+  # connection could miss an update (#597). It checks the files kept the names
+  # the website, the Arch job and the docs look for, and runs after a partial
+  # build too, so a missing platform fails here, not quietly. Only on the
+  # `draft` job's release: when that job stopped, there is no telling which
+  # release this would change.
   updater-json:
     name: latest.json links to the downloads
-    needs: [bundle]
-    if: ${{ !cancelled() && github.ref_type == 'tag' }}
+    needs: [draft, bundle]
+    if: ${{ !cancelled() && github.ref_type == 'tag' && needs.draft.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -363,16 +395,16 @@ jobs:
         run: |
           set -euo pipefail
           dir="$RUNNER_TEMP/updater"
-          mkdir -p "$dir"
-          gh release download "$GITHUB_REF_NAME" --pattern latest.json --dir "$dir"
+          mkdir -p "$dir/signatures"
           # Its draft state too: a run after publishing keeps the publishing date (#772).
           gh release view "$GITHUB_REF_NAME" --json assets,isDraft,publishedAt > "$dir/assets.json"
+          gh release download "$GITHUB_REF_NAME" --pattern '*.sig' --dir "$dir/signatures"
           # The one line about what's in it (#772), from the release pull request.
-          node scripts/updater-urls.mjs "$dir/latest.json" "$dir/assets.json" "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" client/src/next/core/release-line.json
+          node scripts/updater-urls.mjs "$dir/latest.json" "$dir/assets.json" "$dir/signatures" "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" client/src/next/core/release-line.json
           gh release upload "$GITHUB_REF_NAME" "$dir/latest.json" --clobber
 
   # The Android phone app (SPEC §4.15, T-1604): one signed APK for 64-bit
-  # phones, added to the draft the desktop bundles opened. Until there is a
+  # phones, added to the `draft` job's release. Until there is a
   # store listing, Android friends install this file. Every release is signed
   # with the same key, or it won't install over the last one, so the key is
   # checked against the committed fingerprint before the build and the APK
