@@ -341,6 +341,13 @@ on a world that has changed.
   item that looks like an entry fails rather than being guessed at, with a
   table of line sequences in its test. The question, and the rule in
   `docs/testing-strategy.md`, now say to leave a reader no quiet path.
+- **#846: the keep-rule reader counted any `-keep` as keeping a class
+  whole.** `-keepclassmembers` and `-keep,allowobfuscation` let the class
+  be renamed, and Rust finds it by name, so a weakened rule passed the check
+  that every crossing is kept. Caught by Greptile. *Missed because* the
+  forms tried were the ones in the file, not the ones that look the same
+  and mean less. *Changed:* only `-keep class <name> { *; }` counts; a
+  table of weaker rules doesn't.
 - **#841 (2 catches): two readers in the Tauri 2.12 checks still had quiet
   paths.** The lockfile reader (`scripts/tauri-versions.mjs`) passed over a
   section it didn't know and an entry with no version, so a misspelled
@@ -511,6 +518,14 @@ it, or another program, runs at the same time.
   window removes it when it closes, sent, cancelled or swiped away, with a
   test that closing removes it. The controller's wiring runs only inside the
   share sheet, so it's checked by reading, and by the TestFlight check.
+- **#846: a failed release-build check left the app's extracted code
+  behind.** `scripts/android-jni.mjs` called `process.exit(1)` inside a
+  `try`, and Node exits without running the `finally` that removes the
+  temporary folder. Caught by Greptile. *Missed because* the question for
+  this kind was asked, and answered by the path that passes. *Changed:* it
+  sets `process.exitCode`, and the test runs it in a temporary folder of
+  its own and checks nothing is left there, failing or passing; the
+  question now names this trap.
 
 ## A doc step nobody tried
 

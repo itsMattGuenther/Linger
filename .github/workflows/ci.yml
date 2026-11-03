@@ -469,6 +469,10 @@ jobs:
         # Cargo drops a pin that stops fitting with only a warning, and the
         # fix it carries would go with it (#836).
         run: node --test scripts/upstream-fixes.test.mjs
+      - name: every name Rust and the Android app's Kotlin cross by has a keep rule, and the check reads a release build
+        # The release build's shrinking dropped the call bar's method, which
+        # only Rust calls (#834); desktop.yml checks a real release build.
+        run: node --test scripts/android-jni.test.mjs
       - name: the startup measurement reads the screen and /proc right
         # It runs by hand on a desktop (docs/performance.md), so this is the
         # only place its arithmetic is checked.
