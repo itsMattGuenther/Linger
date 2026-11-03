@@ -406,7 +406,13 @@ mod ios {
             // SAFETY: asked for one entry's data, the framework hands back a
             // CFData the caller owns (Apple's "Create Rule" for Copy functions).
             let data = unsafe { CFData::wrap_under_create_rule(found as CFDataRef) };
-            Some(data.bytes().to_vec())
+            // Empty data has no bytes to point at, and core-foundation 0.9
+            // makes that a slice from a null pointer (#844).
+            Some(if data.len() == 0 {
+                Vec::new()
+            } else {
+                data.bytes().to_vec()
+            })
         }
 
         fn write(&self, bytes: &[u8]) -> bool {
