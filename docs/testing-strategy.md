@@ -18,7 +18,7 @@ what CI adds on top.
 | A pull request | Every push | `ci.yml`: the same selection, plus S3 against MinIO, the relay and a real server update in Docker, the WebKit browser tests, and the browser tests the PR added or edited ten times in both engines; `package-check.yml` builds the desktop packages on Linux and Windows; `ios-simulator.yml` builds the iPhone app for the simulator on a Mac and drives it with Maestro, when the PR touches the app | About 5 minutes; the packages about 10; the iPhone about 25 |
 | A pull request that changes the iPhone app's Xcode project, the app's Rust or the server | Every push | `share-window.yml`: the iPhone's share extension builds for the iPhone Simulator on GitHub's Mac, the app's Rust builds for the iPhone (code only an iPhone compiles is built by nothing else on a pull request, #822), and the share window's sender (`ShareSender.swift`) runs on Linux against a real server (`scripts/share-sender-test.sh`, which needs Docker and runs the same locally) | About 10 minutes |
 | `main` | Every merge | `ci.yml` for what the merge changed. A run still waiting is cancelled when a newer merge lands, since the newer run covers it | As a PR |
-| `main`, nightly | 08:23 UTC | `nightly.yml`: every CI check, the package checks, the Windows and macOS shell builds, the iPhone app in the simulator, and every browser test three times with no retries. A failure opens an issue | About 40 minutes |
+| `main`, nightly | 08:23 UTC | `nightly.yml`: every CI check, the package checks, the Windows and macOS shell builds, the iPhone app in the simulator, every browser test three times with no retries, and whether a fix Linger pins has come out upstream. A failure opens an issue | About 40 minutes |
 | A release | A `v*` tag | `release.yml` and `image.yml` each run every CI check on the tagged commit first and build nothing unless it passes; then the signed packages, their audio, the Buddy list starting on Linux, the Windows shortcuts, and the server image | About 25 minutes |
 | A branch, by hand | `gh workflow run ios-simulator.yml --ref <branch> -f xcode=27.1` | The Xcode 27 canary: the iPhone simulator check built with Xcode 27 and the iOS 27 SDK, on GitHub's `xcode-27` image. Apple's rule that such an app use the scene life cycle shows only at launch, so it runs the same flows. Not required, and not nightly, until the scene life cycle lands (#788, #838) | As the iPhone check |
 | Real computers | Before a release, when an area changes | The [release checks](tasks/release-checks.md): several computers, real networks, audio devices, installs | By hand |
@@ -131,7 +131,12 @@ iPhone build merges in, declares the `linger://` scheme: the deep-link
 plugin writes it only when its build script runs, and a cached build skips
 that (#835). The Windows installer files (`main.wxs`, `installer-hooks.nsh`)
 name the Tauri CLI whose templates they were checked against, and a test
-fails until they're checked again after an upgrade.
+fails until they're checked again after an upgrade. A crate Linger takes from its own copy while a fix waits upstream
+(`[patch.crates-io]` in `client/src-tauri/Cargo.toml`, #836) names the pull
+request it waits for, and the same script fails if `Cargo.lock` doesn't
+build it from the pin: Cargo drops a pin that stops fitting with only a
+warning. The nightly run's `upstream` job (`scripts/upstream-fixes.mjs`)
+opens an issue once the fix is released, so the copy goes the day it can.
 
 `scripts/check.sh --all` runs everything whatever changed. So does a branch
 with nothing to compare against. `scripts/check.sh <base>` compares against

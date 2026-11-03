@@ -465,6 +465,10 @@ jobs:
         # A cached build skips the plugin's build script that writes it, and
         # the simulator's build came out without it (#835).
         run: node --test scripts/ios-plist.test.mjs
+      - name: a pinned crate is built from its pin, and says what it waits for
+        # Cargo drops a pin that stops fitting with only a warning, and the
+        # fix it carries would go with it (#836).
+        run: node --test scripts/upstream-fixes.test.mjs
       - name: the startup measurement reads the screen and /proc right
         # It runs by hand on a desktop (docs/performance.md), so this is the
         # only place its arithmetic is checked.

@@ -243,3 +243,17 @@ tauri-plugin-updater = { version = "2.14.1", default-features = false, features 
 minisign-verify = "0.2"
 base64 = "0.22"
 semver = "1"
+
+# tao, the part of Tauri that talks to each system about windows, is taken
+# from Linger's own copy for now: tao 0.37.2 with tauri-apps/tao#1376
+# applied. Without it, an iPhone on iOS 26 or later loses a linger:// link
+# that starts Linger, because tao 0.37 hands that link to the scene and never
+# passes it on (tauri-apps/tao#1248). The change is in tao's iPhone code only;
+# every other platform builds the same tao. Matt's call (#836, #838): don't
+# wait on tao's release. The nightly run opens an issue once tao has released
+# the fix, and then this goes: delete it, run `cargo update -p tao`, and the
+# simulator's link-closed flow proves tao's own release.
+# scripts/tauri-versions.mjs fails if Cargo.lock stops building tao from here.
+# upstream: tauri-apps/tao#1376
+[patch.crates-io]
+tao = { git = "https://github.com/itsMattGuenther/tao", rev = "10e79e36ab73ac7f631b5c97783d99130414073d" }

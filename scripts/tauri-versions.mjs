@@ -18,6 +18,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const CARGO_LOCK = "client/src-tauri/Cargo.lock";
+export const CARGO_TOML = "client/src-tauri/Cargo.toml";
 export const PNPM_LOCK = "client/pnpm-lock.yaml";
 
 /** Every package in a Cargo.lock, as name → its versions. */
@@ -135,16 +136,72 @@ export function problems(cargo, pnpm) {
   return found;
 }
 
+/**
+ * The crates Cargo.toml takes from Linger's own copy rather than crates.io
+ * (`[patch.crates-io]`): each as name, git address and commit, and the
+ * upstream pull request its comment names (`# upstream: owner/repo#N`, just
+ * above the section), which the nightly run watches
+ * (`scripts/upstream-fixes.mjs`). A pin with no upstream, or a line in the
+ * section in any other form, fails, naming the line.
+ */
+export function patches(text, file = CARGO_TOML) {
+  const found = [];
+  let inPatch = false;
+  let upstream = null;
+  text.split("\n").forEach((line, i) => {
+    const header = /^\s*\[([^\]]+)\]\s*$/.exec(line);
+    if (header) {
+      inPatch = header[1].trim() === "patch.crates-io";
+      if (!inPatch) upstream = null;
+      return;
+    }
+    const named = /^#\s*upstream:\s*(.*?)\s*$/.exec(line);
+    if (named) {
+      if (!/^[\w.-]+\/[\w.-]+#\d+$/.test(named[1])) throw new Error(`${file}:${i + 1}: an upstream is owner/repo#number, not ${JSON.stringify(named[1])}`);
+      upstream = named[1];
+      return;
+    }
+    if (!inPatch || !line.trim() || /^\s*#/.test(line)) return;
+    const entry = /^([\w-]+)\s*=\s*\{\s*git\s*=\s*"(https:\/\/[^"]+)"\s*,\s*rev\s*=\s*"([0-9a-f]{40})"\s*\}\s*$/.exec(line);
+    if (!entry) throw new Error(`${file}:${i + 1}: a pin is name = { git = "https://...", rev = "<the whole commit>" }, not ${JSON.stringify(line.trim())}`);
+    if (!upstream) throw new Error(`${file}:${i + 1}: ${entry[1]}'s pin names no "# upstream: owner/repo#N" above [patch.crates-io]`);
+    found.push({ name: entry[1], git: entry[2], rev: entry[3], upstream });
+  });
+  return found;
+}
+
+/**
+ * Each pin Cargo.lock doesn't build from. Cargo leaves a pin unused, with
+ * only a warning, when it no longer fits the version Tauri asks for, and the
+ * fix it carries would then go without a word.
+ */
+export function unusedPatches(pins, lock) {
+  const sources = new Map();
+  for (const block of lock.split(/^\[\[package\]\][ \t]*$/m).slice(1)) {
+    const name = /^name = "([^"]+)"$/m.exec(block)?.[1];
+    const source = /^source = "([^"]+)"$/m.exec(block)?.[1] ?? "";
+    if (name) sources.set(name, [...(sources.get(name) ?? []), source]);
+  }
+  return pins.flatMap(({ name, git, rev }) => {
+    const want = `git+${git}?rev=${rev}#${rev}`;
+    const have = sources.get(name) ?? [];
+    return have.length === 1 && have[0] === want ? []
+      : [`${CARGO_LOCK} doesn't build ${name} from the pin (${git} at ${rev.slice(0, 8)}); it has ${have.length ? have.join(", ") : "none"}. Cargo drops a pin that no longer fits, and the fix goes with it`];
+  });
+}
+
 function run() {
   const root = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
   const cargo = cargoPackages(readFileSync(join(root, CARGO_LOCK), "utf8"));
   const pnpm = pnpmDependencies(readFileSync(join(root, PNPM_LOCK), "utf8"));
-  const found = problems(cargo, pnpm);
+  const pins = patches(readFileSync(join(root, CARGO_TOML), "utf8"));
+  const found = [...problems(cargo, pnpm), ...unusedPatches(pins, readFileSync(join(root, CARGO_LOCK), "utf8"))];
   if (found.length) {
     for (const problem of found) console.error(problem);
     process.exit(1);
   }
   console.log(`Tauri's crates and packages match: tauri ${cargo.get("tauri")[0]}, @tauri-apps/api ${pnpm.get("@tauri-apps/api")}, @tauri-apps/cli ${pnpm.get("@tauri-apps/cli")}.`);
+  for (const pin of pins) console.log(`${pin.name} is built from its pin, ${pin.git} at ${pin.rev.slice(0, 8)}, until ${pin.upstream} is released.`);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) run();
