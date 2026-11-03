@@ -528,6 +528,28 @@ flow carries on from where the last left the app):
    API) shows up in the list without a reload, opens with the message in it,
    and takes a message typed on the phone; `sent.js` asks the server that it
    arrived.
+5. `share-photo.yaml`: a photo shared from Photos, through its share sheet,
+   into Linger's share window, which picks #evenings, adds a message and
+   sends. The server then has the message with the photo attached
+   (`shared.js`), and the room in Linger shows both. Linger stays in the
+   background for 35 seconds first: after 30 it closes its connections, and
+   that once emptied the list the window picks from, so sharing said to sign
+   in (#825). The photo is the porch artwork the workflow adds to the
+   library (`xcrun simctl addmedia`).
+
+**The share window is out of Maestro's sight.** It runs in a process of its
+own, and Maestro reads the screen through the app in front, Photos. So
+inside the window the flow taps by position, measured on the iPhone 17 the
+workflow picks (from `14-share-window.png`; measure again if the workflow
+ever picks another model), and records the screen
+(`screens/share-window.mp4`, where the 0.9 seconds of "Sent" can be seen).
+Whether the share worked is read from the server and from Linger, which
+Maestro can see. The step "the App Group and the Keychain, as the app left
+them" prints what the app left the window: the list in the App Group's
+folder, and which access groups the Keychain's entries are in. Two things
+about Photos that cost a run each: its "What's New" sheet can take 15
+seconds to arrive and ignores a Continue pressed while it does, and iOS
+writes a photo's time with a narrow no-break space before AM.
 
 **The server is reached over https**, as a real one is behind Caddy:
 `scripts/https-front.mjs` stands in for Caddy, with a certificate
@@ -562,7 +584,7 @@ step's `screen-hierarchy/*.json` in the artifact has every element's words.
 a timeout; `assertVisible` looks once, and suits only what's drawn with
 something the flow already waited for. After setting up, the list arrived
 first and the server's name a moment later, and a one-look check for the
-name failed one run in two.
+name failed in one of the three runs that got that far.
 
 **On a Mac of your own**, with Xcode 26, Java 17 or later and
 [Maestro](https://docs.maestro.dev/getting-started/installing-maestro):
@@ -583,9 +605,10 @@ writing a new flow.
 
 **What it can't tell you:** how the app does with a real phone's memory (a
 simulator has the Mac's, so a photo decoded whole that crashed phones, #817,
-wouldn't crash here), the microphone, camera and calls, the share sheet,
-sleep and waking, real networks, and Apple's own signing, which `ios.yml`
-checks what it can of. Those still need TestFlight and a person.
+wouldn't crash here), the microphone, camera and calls, sleep and waking
+(beyond the 35 seconds in the background the share flow waits), real
+networks, and Apple's own signing, which `ios.yml` checks what it can of.
+Those still need TestFlight and a person.
 
 ## Things that catch people out
 

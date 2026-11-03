@@ -3,10 +3,11 @@ name: iphone simulator
 # The iPhone app, built for the iOS Simulator on GitHub's Macs and driven
 # there by Maestro (client/tests/ios/): it starts on the screen for joining a
 # server, refuses a plain http address as the installed app does, sets up a
-# real Linger server running on the same Mac and reached over https, and
-# opens a room there and sends a message. Every screen is kept as a picture
-# in the run's `iphone-simulator` artifact, with Maestro's report and the
-# app's and server's logs.
+# real Linger server running on the same Mac and reached over https, opens
+# a room there and sends a message, and shares a photo from Photos into the
+# room through the share window. Every screen is kept as a picture in the
+# run's `iphone-simulator` artifact, with a recording of the share, Maestro's
+# report, and the app's and server's logs.
 #
 # A simulator build needs no Apple account and nothing is signed for a
 # phone, so this uses no secrets and runs on any pull request: those that
@@ -172,6 +173,13 @@ jobs:
               { echo "::error::the share extension's $key isn't the app's"; exit 1; }
           done
           codesign -dv "$found" 2>&1 | grep -E '^(Identifier|Signature|TeamIdentifier)=' || true
+          # What each part may do as signed for the simulator: the share
+          # window needs the App Group in both, for its folder and the
+          # Keychain entry the app leaves it (#820).
+          for bundle in "$found" "$found/PlugIns/LingerShare.appex"; do
+            echo "== ${bundle##*/} entitlements"
+            codesign -d --entitlements - --xml "$bundle" 2>/dev/null | plutil -convert xml1 -o - - 2>/dev/null || echo "(none in its signature)"
+          done
 
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
@@ -206,6 +214,8 @@ jobs:
           done
           # The same status bar in every picture.
           xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4
+          # A photo in the library, for share-photo.yaml: the porch artwork.
+          xcrun simctl addmedia "$UDID" "assets/logo/Linger Pixel Porch Icon Square.png"
 
       # A real server, as a host runs one, with Caddy's part (https) done by
       # scripts/https-front.mjs and a certificate the simulator is told to
@@ -259,6 +269,25 @@ jobs:
             -e "HOST_USERNAME=$HOST_USERNAME" -e "HOST_PASSWORD=$HOST_PASSWORD" \
             client/tests/ios
 
+      # What the app left the share window (#820), seen from outside the
+      # simulator: the App Group's folder and what's in it, and the access
+      # groups of the Keychain entries on this iPhone. Never fails itself.
+      - name: the App Group and the Keychain, as the app left them
+        if: always()
+        run: |
+          set +e
+          [ -n "${UDID:-}" ] || exit 0
+          group="$(xcrun simctl get_app_container "$UDID" io.github.itsmattguenther.linger group.io.github.itsmattguenther.linger 2>&1)"
+          echo "App Group folder: $group"
+          if [ -d "$group" ]; then
+            find "$group" -maxdepth 3 -not -path '*/Library/*' -exec ls -ld {} \;
+            if [ -f "$group/share-window/list.json" ]; then cp "$group/share-window/list.json" "$OUT/share-window-list.json"; head -c 2000 "$OUT/share-window-list.json"; echo; fi
+          fi
+          keychain="$HOME/Library/Developer/CoreSimulator/Devices/$UDID/data/Library/Keychains/keychain-2-debug.db"
+          echo "Keychain entries' access groups:"
+          sqlite3 "$keychain" 'SELECT agrp, count(*) FROM genp GROUP BY agrp;'
+          exit 0
+
       # Never fails itself: it runs after a failure too, when some of this
       # may not be there. (GitHub runs a step's bash with -e.) Maestro keeps
       # each flow's pictures in <run>/<flow>/takeScreenshot/.
@@ -269,7 +298,7 @@ jobs:
           mkdir -p "$OUT/screens"
           if [ -n "${UDID:-}" ]; then xcrun simctl io "$UDID" screenshot "$OUT/screens/last.png"; fi
           if [ -d "$OUT/maestro" ]; then
-            find "$OUT/maestro" -path '*/takeScreenshot/*.png' -exec cp {} "$OUT/screens/" \;
+            find "$OUT/maestro" \( -path '*/takeScreenshot/*.png' -o -path '*/startRecording/*' \) -type f -exec cp {} "$OUT/screens/" \;
           fi
           ls -la "$OUT/screens"
           exit 0

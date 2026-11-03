@@ -17,3 +17,4 @@ executionOrder:
     - plain-http
     - set-up
     - room
+    - share-photo
