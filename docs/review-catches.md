@@ -460,3 +460,33 @@ it, or another program, runs at the same time.
   window removes it when it closes, sent, cancelled or swiped away, with a
   test that closing removes it. The controller's wiring runs only inside the
   share sheet, so it's checked by reading, and by the TestFlight check.
+
+## Written from what's connected right now
+
+- **#825: sharing a minute after leaving Linger said to sign in.** The app
+  lets go of a server's rooms 30 seconds into the background, and the share
+  window's list was written from what it held, so it was written empty.
+  Caught by the iPhone Simulator share flow (#821), not by a reviewer.
+  *Missed because* the tests gave the list connected servers only, and
+  nothing ran the app into the background before sharing. *Changed:* a
+  server not connected right now is written as it last was, read back from
+  the file when the app starts, and only signing out takes one off
+  (`shareWindowServers`, with tests); the simulator flow shares with Linger
+  in the background.
+- **#826: the first fix for it held back too much, and dropped too much.**
+  It wrote nothing until every server had connected, so signing out of one
+  while another was down left the signed-out server's conversations in the
+  list, and it left out servers still being reached or waiting for a newer
+  app. Caught by Greptile. *Missed because* the tests had servers that were
+  either connected or not, never one down while another changed. *Changed:*
+  the list is always written, from the last one written for any server not
+  connected, with tests of a server down while another connects and while
+  one is signed out of.
+- **#826: the second fix kept its own copy of the list in the page.** The
+  first launch after updating had no copy yet, so a server down then was
+  dropped, and signing out of the last server left the copy behind, where
+  another account on the same server could see the first one's
+  conversations. Caught by Greptile. *Missed because* a second copy of
+  state has its own life, and the tests only had the one. *Changed:* no
+  copy: the page reads back the file the window reads
+  (`share_window_list_read`), which signing out of every server empties.

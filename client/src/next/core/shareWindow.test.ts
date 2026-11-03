@@ -4,8 +4,13 @@ import { ApiError } from "../../lib/api";
 import type { ListModel, PersonRow } from "./list";
 import {
   hexOf,
+  connected,
   keepShareSignIns,
   oneAtATime,
+  type ShareStatus,
+  type ShareWindowServer,
+  shareWindowServers,
+  writtenServers,
   RENEW_AFTER_MS,
   SHARE_LIST_VERSION,
   type ShareShell,
@@ -120,6 +125,64 @@ describe("the list the share window picks from", () => {
   });
 });
 
+describe("the servers the list is written with (#825)", () => {
+  const server = (id: string, room: string, share: ShareStatus = "ready"): ShareWindowServer => ({
+    base_url: id,
+    name: id,
+    share,
+    conversations: [{ room_id: room, kind: "room", name: room, colors: [] }],
+  });
+  const GOOD_ONE = "https://good.example";
+  const DOWN = "https://down.example";
+  const ready = new Map<string, ShareStatus>([[GOOD_ONE, "ready"], [DOWN, "ready"]]);
+
+  it("a server the app isn't connected to right now is written as it last was", () => {
+    const good = server(GOOD_ONE, "r-general");
+    // A while in the background: the app holds nothing for it.
+    expect(shareWindowServers([GOOD_ONE], [], [good], ready)).toEqual([good]);
+    // Connected again: as it is now.
+    const later = server(GOOD_ONE, "r-new");
+    expect(shareWindowServers([GOOD_ONE], [later], [good], ready)).toEqual([later]);
+  });
+
+  it("one still being reached, or waiting for a newer app, stays; one connected while another is down is written", () => {
+    const down = server(DOWN, "r-x");
+    const good = server(GOOD_ONE, "r-general");
+    expect(shareWindowServers([GOOD_ONE, DOWN], [good], [down], ready)).toEqual([good, down]);
+    // Neither connected to nor written yet: left out until it's connected.
+    expect(shareWindowServers([GOOD_ONE, DOWN], [good], [], ready)).toEqual([good]);
+  });
+
+  it("signing out takes a server off at once, whatever else isn't connected", () => {
+    const good = server(GOOD_ONE, "r-general");
+    const down = server(DOWN, "r-x");
+    expect(shareWindowServers([DOWN], [], [good, down], ready)).toEqual([down]);
+    expect(shareWindowServers([], [], [good, down], ready)).toEqual([]);
+  });
+
+  it("says whether the window can send there as things are now", () => {
+    const good = server(GOOD_ONE, "r-general", "none");
+    expect(shareWindowServers([GOOD_ONE], [], [good], ready)[0]?.share).toBe("ready");
+  });
+
+  it("reads back the list as written, and nothing it can't", () => {
+    const good = server(GOOD_ONE, "r-general");
+    const written = (servers: unknown[]) => JSON.stringify({ version: SHARE_LIST_VERSION, written_at: 0, theme: THEME, servers });
+    expect(writtenServers(written([good]))).toEqual([good]);
+    expect(writtenServers(null)).toEqual([]);
+    expect(writtenServers("not json")).toEqual([]);
+    expect(writtenServers(written([{ ...good, share: "maybe" }, good]))).toEqual([good]);
+    expect(writtenServers(JSON.stringify({ version: SHARE_LIST_VERSION + 1, servers: [good] }))).toEqual([]);
+    expect(writtenServers(JSON.stringify([good]))).toEqual([]);
+  });
+
+  it("a listing is connected once the server has said who you are", () => {
+    const eli = person("u-eli", "Eli", "azure");
+    expect(connected({ id: GOOD_ONE, name: "G", model: model({ me: row(eli, null) }) })).toBe(true);
+    expect(connected({ id: GOOD_ONE, name: "G", model: model({}) })).toBe(false);
+  });
+});
+
 /** A shell keeping sign-ins in memory, as the Keychain would. */
 function memoryShell(kept: Record<string, { token: string; at: number }> = {}) {
   const store = new Map(Object.entries(kept));
@@ -137,6 +200,7 @@ function memoryShell(kept: Record<string, { token: string; at: number }> = {}) {
     },
     kept: async () => [...store.keys()],
     writeList: async () => undefined,
+    readList: async () => null,
   };
   return { shell, store };
 }
