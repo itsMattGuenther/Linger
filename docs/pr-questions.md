@@ -210,7 +210,8 @@ Gaps: Files left behind
 Every share left its copies in a temporary folder until iOS cleared it
 (#822), and a copy the phone stopped partway stayed (#792). Look for the
 files, timers, listeners and entries it makes, after it succeeds, fails and
-is cancelled.
+is cancelled; trace the failing path too: Node's `process.exit` skips
+`finally` (#846).
 
 ## Kinds a check covers
 

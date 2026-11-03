@@ -74,10 +74,18 @@ test("every external fun in Linger's own Kotlin is a crossing", () => {
     "add these to CROSSINGS in scripts/android-jni.mjs, with a keep rule");
 });
 
-test("a keep rule it can't read fails, naming the line", () => {
-  assert.deepEqual([...keptClasses("# a note\n-keep class a.B { *; }\n-keepclassmembers class a.C$D { public *; }\n")], ["a.B", "a.C$D"]);
+test("only a rule that keeps a class whole counts, and one it can't read fails, naming the line", () => {
+  assert.deepEqual([...keptClasses("# a note\n-keep class a.B { *; }\n-keep interface a.I { *; }\n-keepattributes SourceFile\n")], ["a.B", "a.I"]);
+  // #846's review: these let the class or its members be renamed, and a
+  // name Rust and Kotlin cross by needs both kept.
+  for (const weaker of ["-keepclassmembers class a.C { *; }", "-keepnames class a.C", "-keep,allowobfuscation class a.C { *; }",
+    "-keep,allowshrinking,allowobfuscation class a.C { *; }", "-keepclasseswithmembers class a.C { native <methods>; }", "-keep class a.C { public void f(); }"]) {
+    let kept;
+    try { kept = keptClasses(`${weaker}\n`); } catch { kept = null; }
+    assert(!kept || !kept.has("a.C"), `${weaker} doesn't keep a.C whole`);
+  }
   assert.throws(() => keptClasses("-keep class a.B\n"), /:1: can't read "-keep class a\.B"/);
-  assert.throws(() => keptClasses("-keepattributes SourceFile\n-keep,allowobfuscation class a.B {\n *;\n}\n"), /:1: can't read/);
+  assert.throws(() => keptClasses("-keepattributes SourceFile\n-keep,allowobfuscation class a.B {\n *;\n}\n"), /:2: can't read/);
 });
 
 test("rust names are found dotted and slashed, and nothing else is", () => {
@@ -95,6 +103,7 @@ function standIns(t, dump) {
   const dir = mkdtempSync(join(tmpdir(), "android-jni-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   mkdirSync(join(dir, "bin"));
+  mkdirSync(join(dir, "tmp"));
   writeFileSync(join(dir, "dump.txt"), dump);
   writeFileSync(join(dir, "bin/unzip"), `#!/bin/sh
 out=""; while [ $# -gt 0 ]; do [ "$1" = -d ] && out="$2"; shift; done
@@ -105,20 +114,27 @@ case "$1" in */classes.dex) cat "${join(dir, "dump.txt")}";; *) echo "Class #1 -
 `);
   for (const name of ["unzip", "dexdump"]) chmodSync(join(dir, "bin", name), 0o755);
   writeFileSync(join(dir, "app.apk"), "PK");
-  return () => spawnSync("node", [SCRIPT, join(dir, "app.apk")], {
-    encoding: "utf8", env: { ...process.env, PATH: `${join(dir, "bin")}:${process.env.PATH}`, DEXDUMP: join(dir, "bin/dexdump") },
+  const run = () => spawnSync("node", [SCRIPT, join(dir, "app.apk")], {
+    encoding: "utf8", env: { ...process.env, PATH: `${join(dir, "bin")}:${process.env.PATH}`, DEXDUMP: join(dir, "bin/dexdump"), TMPDIR: join(dir, "tmp") },
   });
+  run.leftBehind = () => readdirSync(join(dir, "tmp"));
+  return run;
 }
 
-test("run: a release app that dropped update fails, naming it and who needs it", (t) => {
-  const out = standIns(t, RELEASED)();
+test("run: a release app that dropped update fails, naming it and who needs it, and leaves nothing behind", (t) => {
+  const run = standIns(t, RELEASED);
+  const out = run();
   assert.equal(out.status, 1, out.stdout);
+  // #846's review: process.exit skipped the cleanup on a failure.
+  assert.deepEqual(run.leftBehind(), []);
   assert.match(out.stderr, /dropped io\.github\.itsmattguenther\.linger\.VoiceCallService\.update \(Landroid\/content\/Context;Ljava\/lang\/String;ZZ\)V, which client\/src-tauri\/src\/phone_call\.rs needs/);
 });
 
 test("run: one that kept everything passes, reading every classes.dex", (t) => {
-  const out = standIns(t, KEPT)();
+  const run = standIns(t, KEPT);
+  const out = run();
   assert.equal(out.status, 0, out.stderr);
+  assert.deepEqual(run.leftBehind(), []);
   assert.match(out.stdout, /keeps all 2 names Rust and Kotlin cross by/);
 });
 

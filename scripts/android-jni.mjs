@@ -98,13 +98,21 @@ export function rustNamedClasses(text) {
   return found;
 }
 
-/** The classes `-keep class <name> { ... }` rules keep, whole or in part. */
+/**
+ * The classes kept whole, name and members, by `-keep class <name> { *; }`:
+ * a name crossing needs both. A weaker rule (`-keepclassmembers`,
+ * `-keepnames`, or `-keep` with an `allow…` option) lets the class or its
+ * members be renamed, so it isn't counted (#846's review); any other line
+ * starting `-keep` that isn't read as one of these fails, naming it.
+ */
 export function keptClasses(text) {
   const found = new Set();
   text.split("\n").forEach((line, i) => {
-    const rule = /^\s*-keep\S*\s+(?:class|interface)\s+([\w.$]+)\s*\{.*\}\s*$/.exec(line);
-    if (rule) found.add(rule[1]);
-    else if (/^\s*-keep/.test(line)) throw new Error(`${PROGUARD}:${i + 1}: can't read ${JSON.stringify(line.trim())}`);
+    const whole = /^\s*-keep\s+(?:class|interface)\s+([\w.$]+)\s*\{\s*\*;\s*\}\s*$/.exec(line);
+    if (whole) return found.add(whole[1]);
+    if (/^\s*-keep(?:classmembers|classeswithmembers|names|classmembernames|classeswithmembernames|,\w[\w,]*)\s+(?:class|interface)\s+[\w.$*]+\s*(?:\{.*\})?\s*$/.test(line)) return;
+    if (/^\s*-keepattributes\s/.test(line)) return;
+    if (/^\s*-keep/.test(line)) throw new Error(`${PROGUARD}:${i + 1}: can't read ${JSON.stringify(line.trim())}`);
   });
   return found;
 }
@@ -130,11 +138,11 @@ function run([apk]) {
     if (!dexes.length) throw new Error(`${apk}: no classes.dex in it`);
     const text = dexes.map((dex) => execFileSync(dexdump(), [join(work, dex)], { encoding: "utf8", maxBuffer: 1 << 30 })).join("\n");
     const gone = missing(dexMethods(text));
-    if (gone.length) {
-      for (const each of gone) console.error(`${apk}: the release build dropped ${each.class}.${each.method} ${each.type}, which ${each.from} needs`);
-      process.exit(1);
-    }
-    console.log(`${apk} keeps all ${CROSSINGS.length} names Rust and Kotlin cross by.`);
+    for (const each of gone) console.error(`${apk}: the release build dropped ${each.class}.${each.method} ${each.type}, which ${each.from} needs`);
+    // Not process.exit: it would skip the finally below and leave the
+    // extracted code behind (#846's review).
+    if (gone.length) process.exitCode = 1;
+    else console.log(`${apk} keeps all ${CROSSINGS.length} names Rust and Kotlin cross by.`);
   } finally {
     rmSync(work, { recursive: true, force: true });
   }
