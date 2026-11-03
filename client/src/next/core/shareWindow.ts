@@ -147,6 +147,8 @@ export interface ShareShell {
   kept(): Promise<string[]>;
   /** Write the list the window reads. */
   writeList(list: ShareWindowList): Promise<void>;
+  /** The list as last written, as written; null when there's none. */
+  readList(): Promise<string | null>;
 }
 
 /**
@@ -161,6 +163,83 @@ export interface ShareServer {
   baseUrl: string;
   /** Ask for a sign-in of the window's own (`AuthedApi.shareSignIn`). */
   shareSignIn(): Promise<string>;
+}
+
+/** Whether the app is connected to the server a listing is of: the server has said who you are. */
+export function connected(listing: ShareListing): boolean {
+  return listing.model.me !== null;
+}
+
+/**
+ * The servers the share window's list is written with (#825): every server
+ * signed in here (`signedIn`, in the list's order, with those still being
+ * reached and those waiting for a newer app), each as it is now if the app
+ * is connected to it (`now`), or else as it was last written (`last`, read
+ * from the file when the app starts, then what it wrote since). The
+ * app lets go of a server's rooms and people a while into the background and
+ * offline, and has none while connecting; written from that, the list had no
+ * servers, and sharing from Photos a minute after leaving Linger said to sign
+ * in. So only signing out takes a server off, and at once. One neither
+ * connected to nor written yet is left out until it's connected. Each says
+ * whether the window can send there as `status` has it now.
+ */
+export function shareWindowServers(
+  signedIn: readonly string[],
+  now: readonly ShareWindowServer[],
+  last: readonly ShareWindowServer[],
+  status: ReadonlyMap<string, ShareStatus>,
+): ShareWindowServer[] {
+  const fresh = new Map(now.map((server) => [server.base_url, server]));
+  const before = new Map(last.map((server) => [server.base_url, server]));
+  return [...new Set(signedIn)].flatMap((id) => {
+    const server = fresh.get(id) ?? before.get(id);
+    return server ? [{ ...server, share: status.get(id) ?? server.share }] : [];
+  });
+}
+
+/**
+ * The servers of the list as last written (`shareWindowServers`' `last`),
+ * read back from the file when the app starts; none when there's nothing
+ * there it can read. Signing out of every server writes an empty list, so
+ * nothing of an account signed out of comes back from it.
+ */
+export function writtenServers(text: string | null): ShareWindowServer[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text ?? "null");
+  } catch {
+    return [];
+  }
+  if (typeof parsed !== "object" || parsed === null) return [];
+  const list: Record<string, unknown> = { ...parsed };
+  return list.version === SHARE_LIST_VERSION && Array.isArray(list.servers) ? list.servers.filter(isWrittenServer) : [];
+}
+
+const SHARE_STATUSES: readonly unknown[] = ["ready", "old", "none"] satisfies ShareStatus[];
+const KINDS: readonly unknown[] = ["room", "group", "dm"] satisfies ShareWindowConversation["kind"][];
+
+function isWrittenServer(value: unknown): value is ShareWindowServer {
+  if (typeof value !== "object" || value === null) return false;
+  const server: Record<string, unknown> = { ...value };
+  return (
+    typeof server.base_url === "string" &&
+    typeof server.name === "string" &&
+    SHARE_STATUSES.includes(server.share) &&
+    Array.isArray(server.conversations) &&
+    server.conversations.every(isWrittenConversation)
+  );
+}
+
+function isWrittenConversation(value: unknown): value is ShareWindowConversation {
+  if (typeof value !== "object" || value === null) return false;
+  const conversation: Record<string, unknown> = { ...value };
+  return (
+    typeof conversation.room_id === "string" &&
+    KINDS.includes(conversation.kind) &&
+    typeof conversation.name === "string" &&
+    Array.isArray(conversation.colors) &&
+    conversation.colors.every((color) => typeof color === "string")
+  );
 }
 
 /**
