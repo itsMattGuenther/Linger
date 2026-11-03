@@ -2020,3 +2020,10 @@ thing a new person on an iPhone does.
 - **Not chosen:** waiting (no date, and a deadline), or Linger reading the
   launch link itself (new iPhone code, written without an iPhone, when a
   reviewed fix exists).
+- **The same tao reports a scene iOS lets go of as the window closed**
+  (tauri-apps/tao#1261): iOS discards a scene left in the background when it
+  wants the memory, and Tauri then quit the app, so coming back started
+  Linger over. On a phone Linger now stays, and opens its window again when
+  the scene comes back (`phone_scene.rs`); the page loads again, while the
+  sign-ins, connections and any call carry on. Found by the simulator's share
+  flow, which leaves Linger in the background while it shares.

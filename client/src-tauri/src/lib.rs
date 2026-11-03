@@ -34,6 +34,10 @@ mod phone_backup;
 // The phone's call bar (#429): voice runs in its page, and this holds it up.
 #[cfg(any(mobile, test))]
 mod phone_call;
+// The iPhone's scenes on Tauri 2.12 (#836): its window outlives iOS letting
+// go of the scene. Tests read the answers here too.
+#[cfg(any(target_os = "ios", test))]
+mod phone_scene;
 // Downloads on an iPhone (#703): fetched by the app and offered in its share sheet.
 #[cfg(any(mobile, test))]
 mod phone_save;
@@ -325,14 +329,30 @@ pub fn run() {
     let app = desktop_app();
     #[cfg(mobile)]
     let app = phone_app();
-    if let Err(error) = app.run(tauri::generate_context!()) {
-        // A second copy started for a link ends here when it can't hand the
-        // link to the copy already running: single-instance 2.5.5 reports
-        // that as an error, where 2.4 exited quietly (#836). Like any start
-        // that fails, it says why on one line and exits, not with a panic.
-        eprintln!("Linger couldn't start: {error}");
-        std::process::exit(1);
-    }
+    let app = match app.build(tauri::generate_context!()) {
+        Ok(app) => app,
+        Err(error) => {
+            // A second copy started for a link ends here when it can't hand
+            // the link to the copy already running: single-instance 2.5.5
+            // reports that as an error, where 2.4 exited quietly (#836). Like
+            // any start that fails, it says why on one line and exits, not
+            // with a panic.
+            eprintln!("Linger couldn't start: {error}");
+            std::process::exit(1);
+        }
+    };
+    app.run(on_run_event);
+}
+
+/// What the running app does with Tauri's events. Only the iPhone has
+/// anything to do: keep going when iOS lets go of its window's scene, and
+/// open the window again when the scene comes back (`phone_scene.rs`, #836).
+#[allow(clippy::needless_pass_by_value)]
+fn on_run_event(app: &AppHandle, event: tauri::RunEvent) {
+    #[cfg(target_os = "ios")]
+    phone_scene::handle(app, event);
+    #[cfg(not(target_os = "ios"))]
+    let _ = (app, event);
 }
 
 /// Everything the desktop app registers. `src/acl.rs` checks that this
