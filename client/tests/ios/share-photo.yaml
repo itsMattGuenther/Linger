@@ -109,9 +109,14 @@ appId: com.apple.mobileslideshow
 - takeScreenshot: 16-after-send
 - stopRecording
 # Back in Linger, still on evenings from room.yaml, where the photo arrives.
+# Coming forward took 16 seconds once, so the page is waited for first: the
+# room's message box, or the list's row for it if it opened on the list.
 - launchApp:
     appId: io.github.itsmattguenther.linger
     stopApp: false
+- extendedWaitUntil:
+    visible: "(Message in #evenings|#evenings)"
+    timeout: 45000
 - runFlow:
     when:
       notVisible: "Message in #evenings"
