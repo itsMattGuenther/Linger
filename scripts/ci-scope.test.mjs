@@ -43,6 +43,10 @@ test("the questions before a pull request and the catch count are run by hand, a
     "scripts/review-catches.mjs", "scripts/review-catches.test.mjs"]), []);
   assert.equal(active(["scripts/pr-questions.sh"]).length, 7);
 });
+test("the Tauri version check and the iPhone flows' own test run only in the rules job (#835)", () => {
+  assert.deepEqual(active(["scripts/tauri-versions.mjs", "scripts/tauri-versions.test.mjs", "scripts/ios-flows.test.mjs"]), []);
+  assert.deepEqual(active(["client/tests/ios/link-open.yaml"]), ["ios"]);
+});
 test("the Windows hidden-window check runs for the shell, the list window and its own files (#594)", () => {
   for (const path of ["client/src-tauri/src/window.rs", "client/src/next/app/list/ListWindow.tsx",
     "client/scripts/windows-hidden-check.mjs", "client/scripts/windows-window.ps1"])

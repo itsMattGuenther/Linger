@@ -1,0 +1,12 @@
+# "Open in Linger" (#607) with Linger open: a linger:// link, opened the way
+# iOS opens one (Maestro's openLink is `xcrun simctl openurl`), lands in the
+# first screen's box, which says it came from a link. The scene life cycle
+# (#788) changes how iOS hands a link to the app, so this proves it still
+# arrives. Nothing is contacted: the server is a name that doesn't exist.
+appId: io.github.itsmattguenther.linger
+---
+- openLink: "linger://invite?server=linger.example&code=open2345"
+- extendedWaitUntil:
+    visible: "From the link you opened.*"
+    timeout: 30000
+- takeScreenshot: 01b-link-while-open

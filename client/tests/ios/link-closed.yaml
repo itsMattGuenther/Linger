@@ -1,0 +1,20 @@
+# "Open in Linger" (#607) with Linger closed: the link starts the app, and
+# still lands in the first screen's box. Under the scene life cycle iOS
+# hands a starting link to the scene, not the app, and tao 0.37 doesn't
+# pass that one on (tauri-apps/tao#1248), so this is the check that fails
+# if an invite opened from a closed Linger is lost (#788).
+appId: io.github.itsmattguenther.linger
+---
+- stopApp
+- openLink: "linger://invite?server=linger.example&code=closed2345"
+- extendedWaitUntil:
+    visible: "From the link you opened.*"
+    timeout: 120000
+- takeScreenshot: 01c-link-from-closed
+# The flows after this one start from an empty box: Linger started again,
+# with no link.
+- launchApp
+- extendedWaitUntil:
+    visible: "Join your people."
+    timeout: 120000
+- assertNotVisible: "From the link you opened.*"
