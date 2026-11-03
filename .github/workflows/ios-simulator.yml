@@ -236,6 +236,14 @@ jobs:
           for domain in com.apple.Preferences com.apple.keyboard.preferences; do
             xcrun simctl spawn "$UDID" defaults write "$domain" DidShowContinuousPathIntroduction -bool YES
           done
+          # linger:// links from simctl (how Maestro's openLink opens them)
+          # go to Linger without iOS asking "Open in "Linger"?" first:
+          # approved ahead, as answering Open once would be. While XCUITest
+          # drove the simulator, iOS sometimes held that question, or the
+          # link after it, until the driver let go, and a link flow timed
+          # out (#847). The flows still tap Open if iOS asks anyway.
+          xcrun simctl spawn "$UDID" defaults write com.apple.launchservices.schemeapproval \
+            "com.apple.CoreSimulator.CoreSimulatorBridge-->linger" -string io.github.itsmattguenther.linger
           # The same status bar in every picture.
           xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4
           # A photo in the library, for share-photo.yaml: the porch artwork.

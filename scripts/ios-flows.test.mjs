@@ -65,7 +65,9 @@ test("docs/development.md lists the flows in config.yaml's order", () => {
 
 // iOS asks before an app opens a link from outside it ("Open in "Linger"?"),
 // and the link only arrives once somebody taps Open. The link flows' first
-// run waited for a link that was still waiting on that question (#835).
+// run waited for a link that was still waiting on that question (#835). The
+// workflow approves linger:// ahead so iOS doesn't ask (#847), and the tap
+// stays for when it asks anyway.
 test("every linger:// link a flow opens answers iOS's question about opening it", () => {
   for (const name of flows) {
     const commands = readFileSync(join(DIR, `${name}.yaml`), "utf8").split(/^---$/m)[1].split(/^- /m).slice(1);
@@ -85,4 +87,21 @@ test("the order is read strictly", () => {
   // #841's review: a list under another key isn't the order Maestro reads.
   assert.throws(() => flowsOrder("settings:\n  flowsOrder:\n    - a\nexecutionOrder:\n  continueOnFailure: false\n"), /no executionOrder\.flowsOrder/);
   assert.throws(() => flowsOrder("executionOrder:\n  continueOnFailure: false\nsettings:\n  flowsOrder:\n    - a\n"), /no executionOrder\.flowsOrder/);
+});
+
+// While XCUITest drove the simulator, iOS sometimes held its question, or
+// the link after it, until the driver let go, and a link flow timed out
+// (#847). The workflow approves the scheme ahead, for the app, the way
+// answering Open once does; this keeps that approval naming the scheme
+// and the app the iPhone build has.
+test("the simulator approves the app's own scheme for the app, before the flows open a link", () => {
+  const workflow = readFileSync(fileURLToPath(new URL("../.github/workflows/ios-simulator.yml", import.meta.url)), "utf8");
+  const tauri = (name) => JSON.parse(readFileSync(fileURLToPath(new URL(`../client/src-tauri/${name}`, import.meta.url)), "utf8"));
+  const schemes = tauri("tauri.conf.json").plugins["deep-link"].mobile.flatMap((entry) => entry.scheme);
+  const app = tauri("tauri.ios.conf.json").identifier;
+  assert.deepEqual(schemes, ["linger"], "tauri.conf.json's phone schemes, as this test knows them");
+  const approvals = [...workflow.matchAll(/defaults write com\.apple\.launchservices\.schemeapproval \\\n\s*"com\.apple\.CoreSimulator\.CoreSimulatorBridge-->([\w.+-]+)" -string ([\w.-]+)\n/g)];
+  assert.deepEqual(approvals.map((match) => [match[1], match[2]]), schemes.map((scheme) => [scheme, app]), "one approval per scheme, for the iPhone app's identifier");
+  const at = (text) => workflow.indexOf(text);
+  assert(at("schemeapproval") > at("simctl bootstatus") && at("schemeapproval") < at("maestro test"), "after the iPhone has booted, before the flows");
 });

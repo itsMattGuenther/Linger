@@ -126,8 +126,10 @@ a command the shell doesn't have. `scripts/tauri-versions.mjs` reads both
 lockfiles and fails on a mismatch, or on anything it can't read; `check.sh`
 and the rules job run it (#835). The iPhone flows run only on a Mac, so
 `scripts/ios-flows.test.mjs` checks here that each is in `config.yaml`'s
-order, and `scripts/ios-plist.test.mjs` that `Info.ios.plist`, which every
-iPhone build merges in, declares the `linger://` scheme: the deep-link
+order, and that the run approves `linger://` for the app ahead, so iOS
+doesn't hold a link behind its "Open in Linger?" question (#847); and
+`scripts/ios-plist.test.mjs` that `Info.ios.plist`, which every iPhone
+build merges in, declares the `linger://` scheme: the deep-link
 plugin writes it only when its build script runs, and a cached build skips
 that (#835). The Windows installer files (`main.wxs`, `installer-hooks.nsh`)
 name the Tauri CLI whose templates they were checked against, and a test
