@@ -23,7 +23,7 @@
  * (`the_title_bar_tests_know_the_tauri_they_copy`, src-tauri/src/window.rs)
  * fails until the version here matches `client/src-tauri/Cargo.lock`.
  */
-export const TAURI_DRAG_VERSION = "2.11.5";
+export const TAURI_DRAG_VERSION = "2.12.5";
 
 declare global {
   interface Window {

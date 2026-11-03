@@ -43,11 +43,11 @@ name = "linger_client_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "2.7.4", features = [] }
 
 [dependencies]
 linger-core = { path = "../../crates/linger-core" }
-tauri = { version = "2", features = ["tray-icon"] }
+tauri = { version = "2.12.5", features = ["tray-icon"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
@@ -74,14 +74,14 @@ rand = "0.9"
 # Windows being the one that is easy to get subtly wrong. The capability in
 # `capabilities/default.json` narrows this to http and https, so it cannot be
 # talked into launching a local file or a program.
-tauri-plugin-opener = "2.5.4"
+tauri-plugin-opener = "2.7.2"
 
 # "Open in Linger" on an invite page (#607): the computer hands Linger a
 # `linger://` link. The plugin is what each platform's registration answers
 # to (the installers, the .desktop files and Android's intent filter declare
 # the scheme from `plugins.deep-link` in tauri.conf.json); `deep_link.rs`
 # reads the link, strictly, and the page never sees the plugin's own commands.
-tauri-plugin-deep-link = "2"
+tauri-plugin-deep-link = "2.6.3"
 
 # OS keyring for the refresh token (ARCHITECTURE §7.3). Features are picked per
 # platform on purpose:
@@ -196,17 +196,17 @@ windows-core = { version = "0.62", default-features = false, features = ["std"] 
 # notification differently and none of it is worth hand-rolling. On Linux it
 # talks to the freedesktop notification service over zbus, so it adds no system
 # package to anybody's build.
-tauri-plugin-notification = "2"
+tauri-plugin-notification = "2.8.0"
 # Window positions and sizes, remembered on this computer (T-1808), for the
 # Buddy list client's windows only (`window::remembered_windows`).
-tauri-plugin-window-state = "2"
+tauri-plugin-window-state = "2.5.0"
 
 # Launching Linger while it's already running (its list hidden in the tray,
 # say) brings that one forward instead of starting a second copy, which would
 # fight the first over the sign-ins in the keyring.
 # With `deep-link`, a second launch carrying a `linger://` link (Windows and
 # Linux start a new process for it) hands the link to the running one (#607).
-tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+tauri-plugin-single-instance = { version = "2.5.5", features = ["deep-link"] }
 # Already used by that plugin. Direct access requests silent desktop banners,
 # so the one app sound player owns mute/quiet-hours on every desktop platform.
 notify-rust = "4"
@@ -234,7 +234,7 @@ thiserror = "2"
 # unpacks the NSIS bundle on Windows. Both are the crate's defaults today —
 # named explicitly so a future default flip to native-tls can't quietly put
 # OpenSSL back into everyone's build.
-tauri-plugin-updater = { version = "2.10.1", default-features = false, features = ["rustls-tls", "zip"] }
+tauri-plugin-updater = { version = "2.14.1", default-features = false, features = ["rustls-tls", "zip"] }
 # A downloaded update waits on disk until Linger next starts (#772), so it's
 # checked against the signing key again right before it's installed, the same
 # check the updater makes when it downloads. Both are already in the build,

@@ -27,7 +27,7 @@ history of the reporting computer. HC-1 remains open.
 ## Installer change
 
 The MSI template in `client/src-tauri/windows/main.wxs` is Tauri CLI v2.11.4's
-template under its MIT license, with two additions: a file search for the
+template (unchanged in v2.12.4) under its MIT license, with two additions: a file search for the
 canonical desktop shortcut and a condition on its component. Fresh installs
 create the shortcut. Major upgrades create it only if the canonical shortcut
 still exists; ordinary maintenance of the installed product remains allowed.
