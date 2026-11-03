@@ -69,6 +69,16 @@ test("the lockfiles are read in every shape they take", () => {
   assert.deepEqual([...pnpm], [["@tauri-apps/api", "2.12.4"], ["react", "19.2.0"], ["@tauri-apps/plugin-opener", "2.7.2"], ["@tauri-apps/cli", "2.12.4"]]);
 });
 
+test("the importer's sections that hold no versions are read past, and only those", () => {
+  const lock = pnpmLock(today.pnpm, today.dev).replace("\npackages:", `    dependenciesMeta:
+      linger-core:
+        injected: true
+    publishDirectory: dist
+
+packages:`);
+  assert.deepEqual([...pnpmDependencies(lock).keys()], ["@tauri-apps/api", "@tauri-apps/plugin-notification", "@tauri-apps/plugin-opener", "@tauri-apps/cli"]);
+});
+
 test("the repository's own lockfiles match", () => {
   const cargo = cargoPackages(readFileSync(join(ROOT, CARGO_LOCK), "utf8"));
   const pnpm = pnpmDependencies(readFileSync(join(ROOT, PNPM_LOCK), "utf8"));
@@ -120,9 +130,16 @@ test("what it can't read fails, naming it, rather than being passed over", () =>
     () => pnpmDependencies(lock.replace("\n  .:\n", "\n  client:\n")),
     () => pnpmDependencies(lock.replace("        version: 2.11.1\n", "        version: 2.11.1\n        resolution: x\n")),
     () => pnpmDependencies(lock.replace("      '@tauri-apps/api':\n", "      - '@tauri-apps/api':\n")),
+    // #841's review: a section it doesn't know, and an entry with no version,
+    // dropped every package in them and passed.
+    () => pnpmDependencies(lock.replace("    dependencies:\n", "    dependenciez:\n")),
+    () => pnpmDependencies(lock.replace("        version: 2.11.1\n", "")),
+    () => pnpmDependencies(lock.replace("  .:\n", "  .:\n      '@tauri-apps/api':\n")),
   ];
   const errors = [/no \[\[package\]\]/, /without a name and a version/, /lockfile version 6\.0/, /no importers/, /no "\." importer/,
-    /:\d+: can't read "resolution: x"/, /:\d+: can't read "- '@tauri-apps\/api':"/];
+    /:\d+: can't read "resolution: x"/, /:\d+: can't read "- '@tauri-apps\/api':"/,
+    /:\d+: the "\." importer has "dependenciez:", which this doesn't know/, /:\d+: @tauri-apps\/api has no version/,
+    /:\d+: can't read "'@tauri-apps\/api':"/];
   cases.forEach((read, i) => assert.throws(read, errors[i], String(read)));
 });
 

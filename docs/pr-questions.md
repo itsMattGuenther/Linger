@@ -157,11 +157,21 @@ passes broken code.
 For: ci
 Gaps: Tests written from the case in mind, not from the ways things fail
 
-Every form the language has, not only the ones in use today: how a thing is
-written, where its line may start, and every way the code is reached. Checks
-took several reviews each, a form a round (#763, #771, #831, #833). Start
-from a table of tricky inputs, and give the reader no quiet path: each line
-is something it knows, or a failure (#807).
+Every form the language has: how a thing is written, where its line may
+start, and every way the code is reached. Checks took a review a form
+(#763, #771, #831, #833). Start from a table of tricky inputs. Then list
+every place the reader skips a line, a section or a field, and justify
+each: one you can't is a quiet path, as two were in #841.
+
+### Does every step a doc tells somebody to take work as written?
+
+For: ci, deploy
+Gaps: A doc step nobody tried
+
+Try it, or check it against the code and the docs that already cover it.
+#841 said to check an update on a draft release, but an installed copy
+never sees a draft; `docs/releasing.md` already said to use the day after
+publishing.
 
 ### Does it assume this machine, or run only on another one?
 

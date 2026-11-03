@@ -35,10 +35,17 @@ export function cargoPackages(text, file = CARGO_LOCK) {
   return packages;
 }
 
+/** The `.` importer's sections that list packages, and the ones that hold no versions. */
+const LISTS = new Set(["dependencies", "devDependencies", "optionalDependencies"]);
+const NOT_LISTS = new Set(["dependenciesMeta", "publishDirectory"]);
+
 /**
  * The client's own dependencies in a pnpm-lock.yaml (lockfile version 9), as
  * name → version: the `.` importer's dependencies, devDependencies and
  * optionalDependencies. A peer suffix (`2.12.4(react@19.2.0)`) is dropped.
+ * Every line under the importer is one it knows or a failure: a section it
+ * doesn't know, or an entry without a version, fails rather than dropping
+ * the packages in it (#841's review).
  */
 export function pnpmDependencies(text, file = PNPM_LOCK) {
   const lines = text.split("\n");
@@ -50,23 +57,44 @@ export function pnpmDependencies(text, file = PNPM_LOCK) {
   if (dot < 0) throw new Error(`${file}: no "." importer`);
   const found = new Map();
   let section = null;
-  let name = null;
+  let entry = null;
+  const finish = () => {
+    if (entry && entry.version === undefined) throw new Error(`${file}:${entry.line}: ${entry.name} has no version`);
+    entry = null;
+  };
   for (let i = dot + 1; i < lines.length; i++) {
     const line = lines[i];
     if (!line.trim()) continue;
+    // Two spaces in or fewer: the next importer, or the next top-level key.
     if (/^ {0,2}\S/.test(line)) break;
-    const heading = /^ {4}(\w+):\s*$/.exec(line);
-    if (heading) { section = heading[1]; name = null; continue; }
-    if (!/^(dependencies|devDependencies|optionalDependencies)$/.test(section ?? "")) continue;
+    const key = /^ {4}(\w+):(.*)$/.exec(line);
+    if (key) {
+      finish();
+      section = key[1];
+      if (LISTS.has(section) && !key[2].trim()) continue;
+      // How packages are installed, not which version: read past them.
+      if (NOT_LISTS.has(section)) continue;
+      throw new Error(`${file}:${i + 1}: the "." importer has ${JSON.stringify(line.trim())}, which this doesn't know`);
+    }
+    if (NOT_LISTS.has(section)) continue;
+    if (!LISTS.has(section)) throw new Error(`${file}:${i + 1}: can't read ${JSON.stringify(line.trim())}`);
     const dependency = /^ {6}(?:'([^']+)'|"([^"]+)"|([^\s'":]+)):\s*$/.exec(line);
-    if (dependency) { name = dependency[1] ?? dependency[2] ?? dependency[3]; continue; }
+    if (dependency) {
+      finish();
+      entry = { name: dependency[1] ?? dependency[2] ?? dependency[3], line: i + 1 };
+      continue;
+    }
     const field = /^ {8}(specifier|version): (.+)$/.exec(line);
-    if (field && name) {
-      if (field[1] === "version") found.set(name, field[2].replace(/^'|'$/g, "").replace(/\(.*$/, ""));
+    if (field && entry) {
+      if (field[1] === "version") {
+        entry.version = field[2].replace(/^'|'$/g, "").replace(/\(.*$/, "");
+        found.set(entry.name, entry.version);
+      }
       continue;
     }
     throw new Error(`${file}:${i + 1}: can't read ${JSON.stringify(line.trim())}`);
   }
+  finish();
   return found;
 }
 
