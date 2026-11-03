@@ -1,0 +1,16 @@
+# Linger quit and started again, with a sign-in kept: it comes back signed
+# in, on evenings or its list. Every start with a sign-in kept lists the
+# Keychain's entries, and reading their attributes once made a slice from a
+# null pointer, which the simulator's debug build aborts on (#844). The
+# flows before this one never started Linger again after signing in.
+appId: io.github.itsmattguenther.linger
+---
+- stopApp
+- launchApp:
+    appId: io.github.itsmattguenther.linger
+    stopApp: true
+- extendedWaitUntil:
+    visible: "(Message in #evenings|#evenings)"
+    timeout: 120000
+- assertNotVisible: "Join your people."
+- takeScreenshot: 18-started-again

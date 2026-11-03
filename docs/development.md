@@ -549,6 +549,9 @@ flow carries on from where the last left the app):
    that once emptied the list the window picks from, so sharing said to sign
    in (#825). The photo is the porch artwork the workflow adds to the
    library (`xcrun simctl addmedia`).
+8. `restart.yaml`: Linger quit and started again, with a sign-in kept,
+   comes back signed in. Each start with a sign-in lists the Keychain's
+   entries, and that once crashed the simulator's debug build (#844).
 
 **The share window is out of Maestro's sight.** It runs in a process of its
 own, and Maestro reads the screen through the app in front, Photos. So

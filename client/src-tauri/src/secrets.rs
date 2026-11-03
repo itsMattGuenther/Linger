@@ -349,7 +349,9 @@ fn to_move<'a>(held: &'a [Kept], this_phone_only: &str) -> Vec<&'a str> {
 /// an iPhone. Every `unsafe` is here, each with what makes it sound.
 #[cfg(target_os = "ios")]
 mod ios {
-    use core_foundation::base::{CFType, OSStatus, TCFType};
+    use std::collections::HashMap;
+
+    use core_foundation::base::{CFGetTypeID, CFType, OSStatus, TCFType};
     use core_foundation::data::CFData;
     use core_foundation::dictionary::CFDictionary;
     use core_foundation::string::{CFString, CFStringRef};
@@ -498,7 +500,7 @@ mod ios {
         };
         Ok(results
             .iter()
-            .filter_map(SearchResult::simplify_dict)
+            .filter_map(words)
             .filter_map(|attributes| {
                 Some(Kept {
                     account: attributes.get(&account)?.clone(),
@@ -506,6 +508,39 @@ mod ios {
                 })
             })
             .collect())
+    }
+
+    /// The attributes of one search result that are words (CFStrings), read
+    /// without touching the rest. `SearchResult::simplify_dict` reads every
+    /// attribute, and some are data that can be empty: iOS gives `musr` as
+    /// empty data on every entry. core-foundation 0.9 makes empty data a
+    /// slice from a null pointer, which a debug build aborts on, and that
+    /// was every start with a sign-in kept (#844). What's needed here, the
+    /// account and its protection, are words.
+    fn words(result: &SearchResult) -> Option<HashMap<String, String>> {
+        let SearchResult::Dict(attributes) = result else {
+            return None;
+        };
+        let (keys, values) = attributes.get_keys_and_values();
+        Some(
+            keys.iter()
+                .zip(values.iter())
+                .filter_map(|(key, value)| {
+                    // SAFETY: an entry's attributes, alive for the call. Their
+                    // keys are CFStrings, as `simplify_dict` reads them too,
+                    // and a value is read as one only once its type says so.
+                    unsafe {
+                        if CFGetTypeID(*value) != CFString::type_id() {
+                            return None;
+                        }
+                        Some((
+                            CFString::wrap_under_get_rule((*key).cast()).to_string(),
+                            CFString::wrap_under_get_rule((*value).cast()).to_string(),
+                        ))
+                    }
+                })
+                .collect(),
+        )
     }
 
     /// Move each entry an older build wrote to this phone only, where it

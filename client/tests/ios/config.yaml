@@ -20,3 +20,4 @@ executionOrder:
     - set-up
     - room
     - share-photo
+    - restart
