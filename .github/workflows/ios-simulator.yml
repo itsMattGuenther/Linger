@@ -251,7 +251,9 @@ jobs:
           scripts/test-certs.sh "$certs"
           echo "CERTS=$certs" >> "$GITHUB_ENV"
           mkdir -p "$OUT/server"
-          LINGER_DATA_DIR="$RUNNER_TEMP/linger-data" LINGER_BIND="127.0.0.1:$SERVER_PORT" RUST_LOG=info \
+          # tower_http at debug: each request the server answers, and how
+          # long it took, beside the front's own log (#848).
+          LINGER_DATA_DIR="$RUNNER_TEMP/linger-data" LINGER_BIND="127.0.0.1:$SERVER_PORT" RUST_LOG=info,tower_http=debug \
             nohup target/release/linger-server > "$OUT/server/server.log" 2>&1 &
           # It prints its one-time setup link once it's ready.
           deadline=$((SECONDS + 60))
@@ -285,8 +287,10 @@ jobs:
           SIMCTL_CHILD_SSL_CERT_FILE: ${{ runner.temp }}/certs/ca.pem
         run: |
           set -euo pipefail
+          # WebKit's network process makes the page's connections, so a
+          # request that never comes back shows there (#848).
           xcrun simctl spawn "$UDID" log stream --level info --style compact \
-            --predicate 'process == "Linger" OR process == "LingerShare"' > "$OUT/app.log" 2>&1 &
+            --predicate 'process == "Linger" OR process == "LingerShare" OR process == "com.apple.WebKit.Networking"' > "$OUT/app.log" 2>&1 &
           maestro test --device "$UDID" --test-output-dir "$OUT/maestro" \
             --format junit --output "$OUT/report.xml" \
             -e "SERVER=http://127.0.0.1:$SERVER_PORT" -e "SETUP_LINK=$SETUP_LINK" \
