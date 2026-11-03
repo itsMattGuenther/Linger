@@ -117,10 +117,12 @@ Check again right before acting, and test the state changing in between.
 For: page, shell, phone, server, ci, deploy
 Gaps: Tests written from the case in mind, not from the ways things fail
 
-Stopped or overtaken while it waits, part of it failing, and a network that
-refuses, drops, cuts off half way or never answers. A share turned down
-while its files were read was sent anyway (#792). The cases are in
-`docs/testing-strategy.md`, "What reviews have taught".
+Stopped or overtaken while it waits, still under way when somebody looks,
+part of it failing, and a network that refuses, drops, cuts off half way or
+never answers. A share turned down while its files were read was sent anyway
+(#792), and a log that named a request only once it ended couldn't show one
+still waiting (#849). The cases are in `docs/testing-strategy.md`, "What
+reviews have taught".
 
 ### Is each screen tried at its limits?
 

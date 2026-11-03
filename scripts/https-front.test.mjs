@@ -172,6 +172,8 @@ test("the log follows a request from its connection to its answer, naming its pa
   const answered = await line(/^GET \/api\/v1\/setup from :\d+: 201 in \d+ ms$/);
   const from = /from (:\d+)/.exec(answered)[1];
   assert.ok(lines.includes(`connection from ${from}`), "the connection, by the same port");
+  const arrived = lines.indexOf(`GET /api/v1/setup from ${from}`);
+  assert.ok(arrived >= 0 && arrived < lines.indexOf(answered), "the request as it arrived, before its answer");
   assert.ok(lines.includes(`TLS done with ${from}`), "its handshake, by the same port");
   await line(new RegExp(`^connection from ${from} closed after \\d+ ms$`));
   assert.ok(!lines.some((each) => each.includes("0123secret")), "the query never");
@@ -182,13 +184,16 @@ test("a request the app gives up on before the server answers is logged as that"
   const held = createServer(() => {});
   await new Promise((done) => held.listen(0, "127.0.0.1", done));
   t.after(() => shut(held));
-  const { log, line } = logged();
+  const { lines, log, line } = logged();
   const port = await front(t, held.address().port, log);
   const outgoing = request({ host: "127.0.0.1", port, path: "/api/v1/setup?token=0123", ca, agent: false });
   outgoing.on("error", () => undefined);
   outgoing.end();
-  await line(/^TLS done with :\d+$/);
-  setTimeout(() => outgoing.destroy(), 200);
+  // Named while it waits, before anything has ended it: a run that stops
+  // here still says the request reached the front (#849's review).
+  const arrived = await line(/^GET \/api\/v1\/setup from :\d+$/);
+  assert.ok(!lines.some((each) => each.startsWith(`${arrived}:`)), "not ended yet");
+  outgoing.destroy();
   await line(/^GET \/api\/v1\/setup from :\d+: the app went away unanswered after \d+ ms$/);
 });
 

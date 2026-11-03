@@ -54,7 +54,8 @@ export function named(method, url) {
  * is the port, which is the one asked for unless that was 0.
  *
  * `log` hears each connection, each TLS handshake done or failed, and each
- * request with how it ended and how long it took, each naming the app's end
+ * request as it arrives and again with how it ended and how long it took,
+ * each naming the app's end
  * of the connection (`:port`), so a request that never comes back says how
  * far it got (#848).
  */
@@ -63,6 +64,10 @@ export function startFront({ cert, key, port, serverPort, log = () => {} }) {
     const started = Date.now();
     const what = `${named(incoming.method, incoming.url)} from :${incoming.socket.remotePort}`;
     let why = "";
+    // Said as it arrives, not only once it ends: a request still waiting for
+    // the server when the run stops would otherwise look like a connection
+    // that never sent one (#849's review).
+    log(what);
     outgoing.on("close", () => {
       const took = `${Date.now() - started} ms`;
       if (outgoing.writableFinished) log(`${what}: ${outgoing.statusCode}${why} in ${took}`);
