@@ -212,6 +212,23 @@ test("a pin is read with what it waits for, and nothing else is", () => {
     /names no "# upstream/, "an upstream line above another section isn't the pin's");
 });
 
+test("[patch.crates-io] is read however TOML writes it, and any other patch form fails", () => {
+  const want = patches(pinned);
+  for (const header of ['[patch."crates-io"]', "[patch.'crates-io']", "[ patch . crates-io ]", "[patch.crates-io] # until tao releases it"]) {
+    assert.deepEqual(patches(pinned.replace("[patch.crates-io]", header)), want, header);
+  }
+  // Each of these is a patch Cargo would build from, in a form this doesn't
+  // read: it fails rather than seeing no pins (#850's review).
+  for (const text of [
+    pinned.replace("[patch.crates-io]\ntao = {", "[patch.crates-io.tao]\nx = {"),
+    pinned.replace("[patch.crates-io]\ntao = {", "[patch]\ncrates-io.tao = {"),
+    pinned.replace("[patch.crates-io]", '[patch."https://github.com/tauri-apps/tao"]'),
+    pinned.replace("[patch.crates-io]", "[[patch.crates-io]]"),
+    pinned.replace("[patch.crates-io]\ntao = {", "patch.crates-io.tao = {"),
+    `[package]\nname = "x"\n${'"patch"'}.crates-io.tao = { git = "https://x", rev = "${REV}" }\n`,
+  ]) assert.throws(() => patches(text), /pins are read from \[patch\.crates-io\] only/, text);
+});
+
 test("a pin it can't read, or one that names nothing to wait for, fails", () => {
   const cases = [
     [pinned.replace("# upstream: tauri-apps/tao#1376\n", ""), /names no "# upstream: owner\/repo#N"/],
