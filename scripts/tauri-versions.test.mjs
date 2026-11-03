@@ -141,3 +141,21 @@ test("run: in a repository whose lockfiles don't match, it fails and says what",
   assert.equal(passed.status, 0, passed.stderr);
   assert.match(passed.stdout, /^Tauri's crates and packages match: tauri 2\.11\.5, @tauri-apps\/api 2\.11\.1, @tauri-apps\/cli 2\.11\.4\.\n$/);
 });
+
+// The Windows installers are built on Tauri's own templates: main.wxs is a
+// copy of one, and installer-hooks.nsh hooks into the other at named places.
+// Each says which Tauri CLI it was checked against, and after an upgrade this
+// fails until somebody has compared it with the new CLI's template. Tauri
+// 2.12's NSIS template changed (Restart Manager), and only the Windows package
+// check on GitHub noticed (#836).
+test("the Windows installer files name the Tauri CLI they were checked against", () => {
+  const cli = pnpmDependencies(readFileSync(join(ROOT, PNPM_LOCK), "utf8")).get("@tauri-apps/cli");
+  for (const [path, pattern] of [
+    ["client/src-tauri/windows/main.wxs", /Based on Tauri CLI v(\d+\.\d+\.\d+)/],
+    ["client/src-tauri/windows/installer-hooks.nsh", /Hooks into Tauri CLI v(\d+\.\d+\.\d+)'s NSIS installer template/],
+  ]) {
+    const named = pattern.exec(readFileSync(join(ROOT, path), "utf8"))?.[1];
+    assert.equal(named, cli,
+      `${path} was checked against Tauri CLI ${named}, and the CLI is ${cli}: compare it with that CLI's template, then change the version it names`);
+  }
+});

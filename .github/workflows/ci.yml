@@ -461,6 +461,10 @@ jobs:
       - name: every iPhone simulator flow is in its order, and drives an app
         # They run only on a Mac, after a 30-minute build (#835).
         run: node --test scripts/ios-flows.test.mjs
+      - name: the iPhone app's Info.plist declares the linger:// scheme
+        # A cached build skips the plugin's build script that writes it, and
+        # the simulator's build came out without it (#835).
+        run: node --test scripts/ios-plist.test.mjs
       - name: the startup measurement reads the screen and /proc right
         # It runs by hand on a desktop (docs/performance.md), so this is the
         # only place its arithmetic is checked.

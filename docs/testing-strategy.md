@@ -126,7 +126,12 @@ a command the shell doesn't have. `scripts/tauri-versions.mjs` reads both
 lockfiles and fails on a mismatch, or on anything it can't read; `check.sh`
 and the rules job run it (#835). The iPhone flows run only on a Mac, so
 `scripts/ios-flows.test.mjs` checks here that each is in `config.yaml`'s
-order.
+order, and `scripts/ios-plist.test.mjs` that `Info.ios.plist`, which every
+iPhone build merges in, declares the `linger://` scheme: the deep-link
+plugin writes it only when its build script runs, and a cached build skips
+that (#835). The Windows installer files (`main.wxs`, `installer-hooks.nsh`)
+name the Tauri CLI whose templates they were checked against, and a test
+fails until they're checked again after an upgrade.
 
 `scripts/check.sh --all` runs everything whatever changed. So does a branch
 with nothing to compare against. `scripts/check.sh <base>` compares against
