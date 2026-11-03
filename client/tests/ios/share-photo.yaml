@@ -70,7 +70,16 @@ appId: com.apple.mobileslideshow
 - takeScreenshot: 13-share-sheet
 - startRecording: share-window
 - tapOn: "Linger"
-# The window, settled: waited for by the screen holding still.
+# The window takes a few seconds to start and rise, and Maestro can't see it
+# arrive, so this is the one wait in these flows that's a length of time,
+# not the thing itself: 6 seconds, then until the screen holds still. Waiting
+# for stillness alone returned before the window had begun to move. A tap
+# that still misses fails the flow (the server never gets the message); it
+# can't pass it.
+- extendedWaitUntil:
+    visible: "The share window has had 6 seconds to come up"
+    timeout: 6000
+    optional: true
 - waitForAnimationToEnd:
     timeout: 15000
 - takeScreenshot: 14-share-window
@@ -111,6 +120,10 @@ appId: com.apple.mobileslideshow
 - extendedWaitUntil:
     visible: "From the share sheet."
     timeout: 30000
+# The message box still has the keyboard from room.yaml, over the message's
+# words: put it away for the picture.
+- hideKeyboard:
+    optional: true
 - waitForAnimationToEnd:
     timeout: 10000
 - takeScreenshot: 17-room-with-the-photo
