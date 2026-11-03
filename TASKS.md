@@ -26,80 +26,17 @@ default.
 
 ## How to run a task
 
-**Next release — what its notes owe so far.** Everybody in voice hears a screen
-share start and stop, Watch stays lit, the voice bar offers it, and a line in
-the chat says who's sharing (#746); hosts: that line needs the server updated
-(migration 0026). The voice strip shows as many people as fit (#745). The
-iPhone app needs iOS 15 or later, which every iPhone that ran it before has
-(#743). On Linux with NVIDIA, a video in a conversation shows its picture
-again, not solid green, a regression from 0.5.3 (#756). A long message you
-send is on screen whole, not left below the bottom with only your name
-showing, and "you left off here" no longer sits above it (#750). A
-reaction or an edit on the newest message keeps the conversation at its very
-end, not a few pixels short, and messages arriving in a burst no longer leave
-the newest below the bottom (#760). In a call, a click on somebody on the
-conversation's voice line opens their volume, as in the voice bar; on a phone it
-rises from the bottom, and the people there are easier to tap (#747). A
-room's topic or a friend's status cut short with "…" in the header opens whole
-with a click or a tap, in a card, or a sheet on a phone (#778). The
-phone app's words can be made bigger in Settings → Appearance, with a Text size
-of its own on top of the phone's, and the iPhone app now follows the iPhone's
-Text Size, as the Android app follows its Font size (#690). When storage won't
-keep an Appearance choice (full, or switched off in a browser), Settings says
-"Couldn't save that here." and the setting stays as it was, rather than
-showing a choice no window used; in the installed app it hardly ever happens
-(#782). Settings → Account
-& App has **Privacy**, which opens the privacy page, and **Report a problem**,
-which opens GitHub's forms for a new issue (#779). On an iPhone, Linger says
-why it wants the local network when your server is on your home network
-(#779). **Linger updates itself (#772)**, starting from this release: a day
-after a release is published, the setup.exe and the AppImage download it and
-install it at the next start, or after half an hour with nobody using Linger,
-never in voice or while sharing; the .deb, .rpm and .msi download it and ask
-with Update, since they need a password; the foot of the list says "You're on
-…" once after. This release itself is installed the old way (Settings → Account
-& App → Install and restart in 0.5.3), and the notes must say so. A host whose
-server is behind sees it at the foot of the list, with How to update, and the
-disk and backup lines say Server settings instead of Hosting…. A server now
-says the oldest app it works with: an app older than that says so on that
-server's row and offers Update now, and its other servers keep working. That's
-0.4.1 today, so nobody is turned away (#793). On an iPhone, Linger stays out of iCloud backups and its sign-in stays on
-that phone; nobody is signed out by the update, and TestFlight testers
-confirm both (#790). Linger is in the phone's share sheet (#785). On Android,
-sharing a picture or a file to Linger opens it on your conversations, and what
-you shared waits in the one you pick, unsent. On an iPhone, Linger's own window
-rises inside the share sheet: add a message, pick a room or a person, and Send
-posts it there and then, without leaving the app you shared from (#820). Hosts:
-the iPhone's share needs the server updated, for its sign-in of its own; an
-older server says so in the window. TestFlight and Play testers confirm both on
-a real phone. A photo an iPhone keeps as HEIC arrives as a JPEG at
-most 4,096 pixels on its longest side, since the share program has too little
-memory to read a recent iPhone's photo whole (#817). Sending several pictures at once to a busy server,
-one that waits its turn goes up after all, or offers Try again, rather than
-leaving a red line with nothing to do but take it out (#801). An iPhone has no
-per-person volume any more: iOS doesn't let Linger set one voice's volume, so
-the slider moved and did nothing; there a person's name in a call opens only
-the host's Take out (#816). Android keeps its slider. The server
-keeps the last two minutes of what somebody missed while their connection was
-down, not only the last 500 things, so somebody back from a drop of a minute or
-two in a busy call is still in it; when even that isn't enough, they start
-afresh at once and the call sees them leave then, rather than a silent seat
-staying in it for up to two more minutes (#678). That's the server's part,
-updated anyway for the share line. Write the
-release's one line in `client/src/next/core/release-line.json`
-(`docs/releasing.md`); Matt chose it on 2026-11-02: "Linger now updates
-itself, and phones can share pictures and files straight to it." **Thanks** (`docs/releasing.md`): @Gleasonmt for the iPhone app's iOS
-15 minimum (#749), bigger text on the phone and the iPhone following its Text
-Size (#690), Settings saying when an Appearance choice couldn't be saved
-(#782), and the Privacy and Report a problem buttons and getting the
-iPhone app ready for the App Store (#779), and @eGGnogSC for sharing to
-Linger from the phone's share sheet (#792) and pictures that wait out a busy
-server rather than fail (#801), and for messages that show the
-moment they're sent (#133) and the sidebar that no longer scrolls sideways
-(#84). #133 and #84
-shipped back in September, before the notes thanked contributors, so they're
-thanked here once; from now on everybody is thanked in the release their work
-ships in.
+**Next release — what its notes owe so far.** Nothing yet.
+
+**0.5.4 release — prepared 2026-11-02: Linger updates itself, and phones
+share straight to it.** The notes are `docs/releases/0.5.4.md`, and its one
+line is in `client/src/next/core/release-line.json`. From it on, installed
+copies update themselves (#772); it's installed the old way itself. Before
+it's tagged, a TestFlight tester shares from Photos on a real iPhone to a
+throwaway server running the same code (#820, #825). Owed after it
+ships: the checks on installed clients in its notes, the iPhone's iCloud
+backup change confirmed by the TestFlight testers (#790), a real drop in a
+busy call (#678), and a real share line in a call of three (#746).
 
 **0.5.3 release — prepared 2026-10-27, screen sharing fixed on Linux and with
 sound.** Watching works in the Linux app with NVIDIA's or VA-API's hardware
