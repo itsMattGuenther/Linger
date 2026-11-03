@@ -255,6 +255,8 @@ the iPhone simulator and keeps a picture of each screen (the same doc, "The
 iPhone in the simulator"). **Run `scripts/check.sh` before
 pushing**; it runs what CI runs for your change, and
 [docs/testing-strategy.md](docs/testing-strategy.md) says what runs where.
+Before opening a pull request, `node scripts/pr-questions.mjs` asks what
+past reviews caught in the parts your branch changed.
 
 Start with [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md). The
 docs ([SPEC](SPEC.md), [ARCHITECTURE](ARCHITECTURE.md),

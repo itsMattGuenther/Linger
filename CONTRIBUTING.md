@@ -84,6 +84,10 @@ The repo is arranged so a session reads little and misses nothing:
   suggestion" button, which makes the bot a co-author) and add a test that
   would have caught it; if a comment is wrong, reply saying why. What it has
   caught, and what each catch changed, is in `docs/review-catches.md`.
+- Before you open a pull request, run `node scripts/pr-questions.mjs`. It
+  prints the questions those catches taught, for the parts of the project
+  your branch changed. Answer them, and say what you checked in the pull
+  request, in a line or two.
 - Changes to `SPEC.md`, `ARCHITECTURE.md`, `PROTOCOL.md`, or `AGENTS.md` need
   Matt's review — CODEOWNERS enforces this. Those files are the source of
   truth, so they change deliberately or not at all.

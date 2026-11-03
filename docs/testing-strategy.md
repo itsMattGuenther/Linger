@@ -176,7 +176,9 @@ was cheap to test, and the tests only came after.
 Every real catch a reviewer makes is a gap in these checks, so each one comes
 with a change that would have caught it first (`AGENTS.md`). The catches and
 what they changed are in [review-catches.md](review-catches.md); these are the
-rules that came out of them.
+rules that came out of them. The kinds of mistake no check can find yet are
+asked of every pull request before it opens, as questions
+([pr-questions.md](pr-questions.md)).
 
 - **Anything that talks over a network is tested through the ways a network
   fails:** a refused connection, one dropped before any bytes, one cut off

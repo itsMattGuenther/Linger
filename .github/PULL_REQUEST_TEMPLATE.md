@@ -14,7 +14,8 @@
 <!-- What rule does this change, and which test proves it? For a bug fix: the
      test that fails without the fix. Name the test, and say what still needs
      a real computer to confirm. docs/testing-strategy.md says which kind of
-     test fits. -->
+     test fits. Then a line or two on what you checked from the questions
+     `node scripts/pr-questions.mjs` prints for this change. -->
 
 ## Checklist
 
@@ -23,6 +24,8 @@
 - [ ] **No AI attribution anywhere** — commits, comments, metadata, or this PR.
       Every commit's author is me, under my own git identity.
 - [ ] `scripts/check.sh` passes locally
+- [ ] I answered the questions `node scripts/pr-questions.mjs` prints, and
+      Tests says what I checked
 - [ ] The rule this changes has a test that proves it, or the bug fix has a
       test that fails without the fix
 - [ ] The task's acceptance criteria all pass

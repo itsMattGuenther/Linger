@@ -144,6 +144,10 @@ pass.
   Describe the remaining checks explicitly; missing acceptance evidence is not a
   reason to leave an issue looking unclaimed. Linked issues close on merge when
   repository auto-closing is enabled, so finish their acceptance checks before merging.
+- **Before opening a pull request, run `node scripts/pr-questions.mjs`** and
+  answer the questions it prints for your change: the kinds of mistake
+  reviews have caught, for the parts of the project your branch changed. Say
+  what you checked in the pull request's Tests section, in a line or two.
 - **A real review catch strengthens the project, not only the code it was on.**
   When a reviewer (Greptile, which reviews every pull request but a `docs/…`
   branch's, or a person) finds a real problem, fix it, then say in the pull
@@ -151,6 +155,11 @@ pass.
   that would have caught it, code shaped so the mistake is hard to make
   again, or a rule in the docs. Do it in the same pull request, or file an
   issue for it before merging, and add the catch to `docs/review-catches.md`.
+  **Automate first:** a check in CI costs no tokens, so close the gap with a
+  test or a lint whenever one can find that kind of mistake. Only a kind no
+  check can find gets a question in `docs/pr-questions.md`, and a question a
+  check comes to cover comes off it. `node scripts/review-catches.mjs` counts
+  real catches per pull request, week by week, to show whether they fall.
   A comment that's wrong gets a reply saying why, and a line there too. Never
   take a reviewer's fix with GitHub's one-click "commit suggestion": it makes
   the bot a co-author (hard rule 1).

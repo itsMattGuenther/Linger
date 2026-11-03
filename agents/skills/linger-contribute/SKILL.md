@@ -92,15 +92,20 @@ commits that carry them (`scripts/lint-rules.sh`).
   **every** issue the PR resolves; a bare mention doesn't link it. Afterwards,
   check the link took:
   `gh pr view <n> --json closingIssuesReferences`.
+- Before opening it, run `node scripts/pr-questions.mjs`. It prints the
+  questions past reviews taught, for the parts of the project your branch
+  changed. Answer each for your change, and say what you checked in the Tests
+  section, in a line or two.
 - Explain the change the way `AGENTS.md` asks: short, plain sentences for a
   smart friend who didn't read the code. Say what was wrong, what changed, how
   it was tested, and what still needs a real computer to confirm.
 - Greptile reviews every pull request but a `docs/...` branch's. When it, or
   a person, finds a real problem, fix it by hand (never GitHub's "commit
   suggestion" button: that makes the bot a co-author), and add a test that
-  would have caught it. Say in the pull request why the tests missed it; the
-  maintainer adds the catch to `docs/review-catches.md`. If a comment is
-  wrong, reply saying why.
+  would have caught it; a check that finds that kind of mistake beats a
+  question somebody has to answer. Say in the pull request why the tests
+  missed it; the maintainer adds the catch to `docs/review-catches.md`. If a
+  comment is wrong, reply saying why.
 
 Only push and open the PR when the user says so, under their own GitHub
 account. Never merge it; the maintainer does that. Once it has merged, GitHub
