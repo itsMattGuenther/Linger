@@ -1,62 +1,54 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { datedFor, expectedFiles, missingFiles, NOT_PUBLISHED, publishedAt, rewrite, undated, withLine } from "./updater-urls.mjs";
+import { built, datedFor, expectedFiles, missingFiles, NOT_PUBLISHED, platformFiles, publishedAt, undated, withLine } from "./updater-urls.mjs";
 
 const repo = "itsMattGuenther/Linger";
 const tag = "v0.4.11";
-const api = (id) => `https://api.github.com/repos/${repo}/releases/assets/${id}`;
-const assets = [
-  { apiUrl: api(1), name: "Linger_0.4.11_x64-setup.exe" },
-  { apiUrl: api(2), name: "Linger_0.4.11_x64_en-US.msi" },
-  { apiUrl: api(3), name: "Linger_0.4.11_amd64.AppImage" },
-  { apiUrl: api(4), name: "latest.json" },
-];
-const entry = (url) => ({ signature: "sig", url });
+const download = (name) => `https://github.com/${repo}/releases/download/${tag}/${name}`;
+const files = expectedFiles(tag).map((name) => ({ name, apiUrl: `https://api.github.com/repos/${repo}/releases/assets/1` }));
+const signatures = Object.fromEntries(expectedFiles(tag).filter((name) => name.endsWith(".sig")).map((name) => [name, `signed ${name}`]));
 
-test("tauri-action 1.0's API links become normal download links (#597)", () => {
-  const out = rewrite(
-    { version: "0.4.11", notes: "n", pub_date: "d", platforms: { "windows-x86_64-nsis": entry(api(1)), "linux-x86_64": entry(api(3)) } },
-    assets,
-    repo,
-    tag,
-  );
-  assert.deepEqual(out.platforms, {
-    "windows-x86_64-nsis": entry(`https://github.com/${repo}/releases/download/${tag}/Linger_0.4.11_x64-setup.exe`),
-    "linux-x86_64": entry(`https://github.com/${repo}/releases/download/${tag}/Linger_0.4.11_amd64.AppImage`),
+test("every platform installed copies ask for is there, as 0.5.4's latest.json had them (#828)", () => {
+  // 0.5.4's published latest.json, each platform's file.
+  assert.deepEqual(platformFiles("v0.5.4"), {
+    "windows-x86_64": "Linger_0.5.4_x64_en-US.msi",
+    "windows-x86_64-msi": "Linger_0.5.4_x64_en-US.msi",
+    "windows-x86_64-nsis": "Linger_0.5.4_x64-setup.exe",
+    "linux-x86_64": "Linger_0.5.4_amd64.AppImage",
+    "linux-x86_64-appimage": "Linger_0.5.4_amd64.AppImage",
+    "linux-x86_64-deb": "Linger_0.5.4_amd64.deb",
+    "linux-x86_64-rpm": "Linger-0.5.4-1.x86_64.rpm",
   });
-  assert.equal(out.version, "0.4.11", "the rest of the file is kept");
-  assert.equal(out.platforms["linux-x86_64"].signature, "sig");
 });
 
-test("links that are already right stay as they are, as 0.x wrote them", () => {
-  const url = `https://github.com/${repo}/releases/download/${tag}/Linger_0.4.11_x64_en-US.msi`;
-  assert.equal(rewrite({ platforms: { "windows-x86_64": entry(url) } }, assets, repo, tag).platforms["windows-x86_64"].url, url);
+test("latest.json is made from the release's files and their signatures, with normal download links (#828, #597)", () => {
+  const out = built(tag, repo, files, signatures);
+  assert.equal(out.version, "0.4.11");
+  assert.equal(Object.keys(out.platforms).length, 7);
+  assert.deepEqual(out.platforms["windows-x86_64-nsis"], {
+    signature: "signed Linger_0.4.11_x64-setup.exe.sig",
+    url: download("Linger_0.4.11_x64-setup.exe"),
+  });
+  assert.equal(out.platforms["linux-x86_64-rpm"].url, download("Linger-0.4.11-1.x86_64.rpm"));
+  assert.ok(!JSON.stringify(out).includes("api.github.com"), "no API link, which GitHub allows 60 times an hour (#597)");
+  assert.equal(out.pub_date, NOT_PUBLISHED, "not dated until datedFor says so");
+  // A .sig file's line ending isn't part of the signature.
+  assert.equal(built(tag, repo, files, { ...signatures, "Linger_0.4.11_amd64.deb.sig": "abc==\n" }).platforms["linux-x86_64-deb"].signature, "abc==");
 });
 
-test("a link to a file this release hasn't got fails, naming the platform", () => {
-  assert.throws(() => rewrite({ platforms: { "linux-x86_64-deb": entry(api(99)) } }, assets, repo, tag), /linux-x86_64-deb/);
-  assert.throws(
-    () => rewrite({ platforms: { "linux-x86_64": entry(`https://github.com/${repo}/releases/download/v0.4.10/Linger_0.4.11_amd64.AppImage`) } }, assets, repo, tag),
-    /linux-x86_64/,
-    "another release's link",
-  );
-  assert.throws(() => rewrite({ platforms: { "linux-x86_64": { signature: "s" } } }, assets, repo, tag), /no url/);
-});
-
-test("an empty latest.json fails rather than shipping no update", () => {
-  assert.throws(() => rewrite({ platforms: {} }, assets, repo, tag), /no platforms/);
-});
-
-test("no api.github.com link is left anywhere in the file", () => {
-  assert.throws(
-    () => rewrite({ notes: `see ${api(1)}`, platforms: { "linux-x86_64": entry(api(3)) } }, assets, repo, tag),
-    /api\.github\.com/,
-  );
+test("a platform whose file or signature is missing fails, naming it, rather than leaving copies without the update (#828)", () => {
+  const noDeb = files.filter((file) => file.name !== "Linger_0.4.11_amd64.deb");
+  assert.throws(() => built(tag, repo, noDeb, signatures), /^Error: linux-x86_64-deb: v0\.4\.11 hasn't got Linger_0\.4\.11_amd64\.deb$/);
+  const { "Linger_0.4.11_x64-setup.exe.sig": _, ...noExeSignature } = signatures;
+  assert.throws(() => built(tag, repo, files, noExeSignature), /windows-x86_64-nsis/);
+  assert.throws(() => built(tag, repo, files, { ...signatures, "Linger_0.4.11_x64_en-US.msi.sig": " " }), /windows-x86_64: /);
+  const noMsiSigFile = files.filter((file) => file.name !== "Linger_0.4.11_x64_en-US.msi.sig");
+  assert.throws(() => built(tag, repo, noMsiSigFile, signatures), /windows-x86_64: .*msi\.sig/, "a signature not on the release isn't one copies can check");
 });
 
 test("the desktop files keep the names the site, the Arch job and the docs look for", () => {
   const names = expectedFiles("v0.4.10");
-  assert.equal(names.length, 11, "five bundles, five signatures, latest.json");
+  assert.equal(names.length, 10, "five bundles and their signatures; latest.json is written after");
   // v0.4.10's release, less its Android file, which isn't tauri-action's.
   const released = [
     "latest.json",
