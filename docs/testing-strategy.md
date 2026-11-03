@@ -65,9 +65,9 @@ only changes documentation.
 |---|---|---|
 | Only docs: `docs/`, any `*.md`, `LICENSE` | The rules lint and version check | Nothing |
 | The server, `crates/linger-server/` | fmt, clippy, the Rust tests, bindings drift | S3 against a real MinIO |
-| The client, `client/` | Typecheck, unit tests, the browser tests in Chromium and (with Docker) WebKit, the production build's CSP check | The packages on Linux and Windows, the iPhone app in the simulator, and WebKit when `check.sh` couldn't run it |
+| The client, `client/` | Typecheck, unit tests, the browser tests in Chromium and (with Docker) WebKit, the production build's CSP check, and that the app icons are what the pinned Tauri CLI makes (`scripts/app-icons.mjs --check`, #836) | The packages on Linux and Windows, the iPhone app in the simulator, and WebKit when `check.sh` couldn't run it |
 | Only browser tests, `client/tests/browser/` | As the client | WebKit when `check.sh` couldn't run it (no packages) |
-| The desktop shell, `client/src-tauri/` | Its clippy and tests, when the GUI libraries are installed | The packages, and the iPhone app in the simulator |
+| The desktop shell, `client/src-tauri/` | Its clippy and tests, when the GUI libraries are installed, and the app icons check | The packages, and the iPhone app in the simulator |
 | Only the iPhone flows, `client/tests/ios/`, or their https front (`scripts/https-front.mjs`, `scripts/test-certs.sh`) | The rules lint, the version check and the front's tests | The iPhone app in the simulator |
 | `deploy/` | The Rust checks and the update script's test | S3, the relay and a real server update in Docker |
 | The startup measurement, `scripts/startup-time.mjs` | Its own tests (below); the measuring itself is run by hand ([performance.md](performance.md)) | Nothing more |

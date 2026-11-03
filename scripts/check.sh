@@ -108,6 +108,14 @@ if on web; then
   (cd client && pnpm exec vite build --logLevel warn && node ../scripts/csp-assets.mjs dist)
 fi
 
+if on packages; then
+  # The icons are what the pinned Tauri CLI makes from the approved artwork.
+  # CI's package check asked this alone, so a Tauri upgrade that draws them
+  # differently only showed there (#836).
+  echo "== the app icons are the pinned Tauri CLI's, from the approved artwork =="
+  icons="$(node scripts/app-icons.mjs --check 2>&1)" || { grep -v " Creating " <<<"$icons"; exit 1; }
+fi
+
 if on shell; then
   echo "== desktop shell (outside the workspace, needs GUI deps) =="
   if pkg-config --exists webkit2gtk-4.1 2>/dev/null; then
