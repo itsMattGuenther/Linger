@@ -301,6 +301,21 @@ on a world that has changed.
   code and not into its tests or its promise. *Changed:* they're checked
   like the others, with a test that `.github` is among them, and both
   layouts list them.
+- **#831: the release check (#828) passed over three ways to reach a
+  release.** A script's JavaScript calling `gh api …/releases -f …` wasn't
+  counted, though gh sends a POST once it's given a field, and the shell
+  form was. A repository action that used another of ours wasn't followed
+  into it. And a script named through a folder variable
+  (`"$GITHUB_WORKSPACE/scripts/apt-install.sh"`, in our own apt-install
+  action) wasn't read at all, and said nothing. Caught by Greptile. *Missed
+  because* the table of tricky inputs listed how each command is written,
+  not how the code running it is reached: one level of calls, and paths
+  written plainly. *Changed:* gh's words from JavaScript are read by what
+  they send, as the shell's are; actions are followed however deep; a
+  path through `$GITHUB_WORKSPACE`, `$PWD` or `$GITHUB_ACTION_PATH` is read,
+  and through any other variable it fails, naming it. Tables for each in
+  `scripts/release-draft.test.mjs`, and the rule in
+  `docs/testing-strategy.md` now names how code is reached as a form too.
 - **#774: an open volume card held its own level until it closed.** A change
   made in the voice bar or another window didn't show on it, and its next
   step undid that change. *Missed because* the tests only ever changed a

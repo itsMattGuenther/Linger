@@ -67,11 +67,30 @@ const MAKES = {
         /\s(?:-X|--request)(?:\s*|=)["']?post\b|\s(?:-d|-F|--data[\w-]*|--json|--form|--post-data)\b/i.test(line),
     ),
   "octokit's createRelease": (code) => /\bcreateRelease\b/.test(code),
-  // gh called from JavaScript: the words are an array's strings.
+  // gh called from JavaScript: the words are an array's strings, over one
+  // line or several, and a field implies POST here too (#831 review).
   "gh, from a script's own code": (code) =>
-    /["'`]release["'`]\s*,\s*["'`](?:create|new)["'`]/.test(code) ||
-    (/["'`](?:--method|-X)["'`]\s*,\s*["'`]post["'`]/i.test(code) && RELEASES.test(code)),
+    ghArrays(code).some(
+      (words) => follows(words, "release", /^(?:create|new)$/) || (words.includes("api") && words.some((word) => RELEASES.test(word)) && arrayWrites(words, /^post$/i)),
+    ),
 };
+
+/** The strings of each array in some JavaScript, in order: how a script hands gh its words. */
+function ghArrays(code) {
+  return [...code.matchAll(/\[([^[\]]*)\]/g)].map(([, inside]) => [...inside.matchAll(/(["'`])((?:\\.|(?!\1)[^\\])*)\1/g)].map((string) => string[2]));
+}
+
+/** Whether `first` is followed by a word `then` matches. */
+const follows = (words, first, then) => words.some((word, at) => word === first && then.test(words[at + 1] ?? ""));
+
+/** Whether gh's words send a write: a `method` said, or a field given (gh's POST). */
+function arrayWrites(words, method) {
+  return (
+    words.some((word, at) => /^(?:-i?X|--method)$/.test(word) && method.test(words[at + 1] ?? "")) ||
+    words.some((word) => /^(?:-i?X|--method=)(.+)$/.test(word) && method.test(word.replace(/^(?:-i?X|--method=)/, ""))) ||
+    words.some((word) => /^(?:-i?[fF]|--field|--raw-field|--input)(?:$|=|\S)/.test(word))
+  );
+}
 
 /** Each way code can add to or change a release. */
 const WRITES = {
@@ -84,7 +103,12 @@ const WRITES = {
         (/\s(?:-i?X|--method)(?:\s*|=)["']?(?:post|patch|put|delete)\b/i.test(line) || /\s(?:-i?[fF]|--field|--raw-field|--input)/.test(line)),
     ),
   "an upload": (code) => /uploads\.github\.com|\buploadReleaseAsset\b|\bupdateRelease\b/.test(code),
-  "gh, from a script's own code": (code) => /["'`]release["'`]\s*,\s*["'`](?:upload|edit|delete|delete-asset)["'`]/.test(code),
+  "gh, from a script's own code": (code) =>
+    ghArrays(code).some(
+      (words) =>
+        follows(words, "release", /^(?:upload|edit|delete|delete-asset)$/) ||
+        (words.includes("api") && words.some((word) => /\/releases\/./.test(word)) && arrayWrites(words, /^(?:post|patch|put|delete)$/i)),
+    ),
 };
 
 const TAURI_ACTION = /^\s*(?:-\s+)?uses:\s*["']?tauri-apps\/tauri-action@/;
@@ -165,21 +189,36 @@ export function tauriActionSteps(stepLines) {
   return out;
 }
 
-/** The scripts some code runs, as paths from the repository (or a working directory). */
+/** A folder a variable names at the start of a script's path, as the runner sets it (#831 review). */
+const FOLDERS = [
+  [/^(?:\$\{?GITHUB_WORKSPACE\}?|\$\{\{\s*github\.workspace\s*\}\}|\$\{?PWD\}?|\$\(pwd\))$/, "workspace"],
+  [/^(?:\$\{?GITHUB_ACTION_PATH\}?|\$\{\{\s*github\.action_path\s*\}\})$/, "action"],
+];
+
+/**
+ * The scripts some code runs: each one's path, and where it's from: the
+ * repository (or a working directory), the action's own folder, or a
+ * variable this can't follow (`via`).
+ */
 function scriptPaths(code) {
-  const found = new Set();
-  const pattern = /(?:^|[\s"'=(:`])(?:\.\/)?((?:[\w.-]+\/)*scripts\/[\w./-]+?\.(?:sh|bash|mjs|cjs|js|py|ps1))(?=$|[\s"'`);:,])/gm;
-  for (const match of code.matchAll(pattern)) found.add(match[1]);
-  return [...found];
+  const found = new Map();
+  const pattern =
+    /(?:^|[\s"'=(:`])(?:(\$\{\{\s*github\.\w+\s*\}\}|\$\{?[A-Za-z_]\w*\}?|\$\(pwd\)|~)\/)?(?:\.\/)?((?:[\w.-]+\/)*scripts\/[\w./-]+?\.(?:sh|bash|mjs|cjs|js|py|ps1))(?=$|[\s"'`);:,])/gm;
+  for (const [, folder, path] of code.matchAll(pattern)) {
+    const from = folder === undefined ? "workspace" : FOLDERS.find(([named]) => named.test(folder))?.[1];
+    found.set(`${folder ?? ""}/${path}`, { path, from: from ?? "unknown", via: folder });
+  }
+  return [...found.values()];
 }
 
 /**
  * What a job's code does to releases: what it makes one with, whether it
  * adds to one, its tauri-action steps, and what it couldn't read. Its code
  * is its lines, every script they run, the repository's own actions and the
- * workflows it calls.
+ * workflows it calls. `fileAt` reads a repository file (null when it isn't
+ * there); the tests hand it files of their own.
  */
-export function releaseWork(job, seen = new Set()) {
+export function releaseWork(job, seen = new Set(), fileAt = repoFile) {
   const work = { makes: [], writes: false, tauri: [], unreadable: [] };
   const dirs = job.lines.map((line) => /^\s*(?:-\s+)?working-directory:\s*(\S.*?)\s*$/.exec(line)?.[1]).filter(Boolean).map(bare);
   // Folders a checkout put the repository in (`path:`): a script there is the repository's.
@@ -189,31 +228,41 @@ export function releaseWork(job, seen = new Set()) {
   // for what it does to releases, but the paths in it aren't followed: they
   // are mostly data. A test is skipped: it checks, and never releases, and
   // its tables name the very commands this looks for.
-  const read = (code, where, from = "") => {
+  // `action` is the folder of the action `code` is from, if it is one: its
+  // `$GITHUB_ACTION_PATH`. The repository's own actions it uses are read the
+  // same way, however deep (#831 review), and workflows a job calls job by job.
+  const read = (code, where, from = "", action = "") => {
     for (const [name, makes] of Object.entries(MAKES)) if (makes(code)) work.makes.push(`${name}${where}`);
     if (Object.values(WRITES).some((writes) => writes(code))) work.writes = true;
-    const action = /^\s*(?:-\s+)?uses:\s*["']?([\w.-]+\/[\w./-]+)@/gm;
-    for (const [, name] of code.matchAll(action)) {
+    const marketplace = /^\s*(?:-\s+)?uses:\s*["']?([\w.-]+\/[\w./-]+)@/gm;
+    for (const [, name] of code.matchAll(marketplace)) {
       if (/release/i.test(name) && name !== "tauri-apps/tauri-action") {
         work.unreadable.push(`uses ${name}${where}, which may make a release: read it, and add it to MAKES or WRITES`);
       }
     }
-    for (const path of scriptPaths(code)) {
+    for (const { path, from: base, via } of scriptPaths(code)) {
       if (/\.test\.\w+$|-test\.(?:sh|bash)$/.test(path)) continue;
-      const places = [
-        path,
-        ...dirs.map((dir) => `${dir}/${path}`),
-        ...(from ? [`${from}/${path}`] : []),
-        ...checkouts.filter((folder) => path.startsWith(`${folder}/`)).map((folder) => path.slice(folder.length + 1)),
-      ];
-      const found = places.map((place) => new URL(place, root).pathname.slice(new URL(root).pathname.length)).find((place) => repoFile(place) !== null);
+      if (base === "unknown" || (base === "action" && !action)) {
+        work.unreadable.push(`runs ${path} from ${via}${where}, a folder this can't follow`);
+        continue;
+      }
+      const places =
+        base === "action"
+          ? [`${action}/${path}`]
+          : [
+              path,
+              ...dirs.map((dir) => `${dir}/${path}`),
+              ...(from ? [`${from}/${path}`] : []),
+              ...checkouts.filter((folder) => path.startsWith(`${folder}/`)).map((folder) => path.slice(folder.length + 1)),
+            ];
+      const found = places.map((place) => new URL(place, root).pathname.slice(new URL(root).pathname.length)).find((place) => fileAt(place) !== null);
       if (found === undefined) {
         work.unreadable.push(`runs ${path}${where}, which isn't there to read`);
         continue;
       }
       if (seen.has(found)) continue;
       seen.add(found);
-      const text = codeText(repoFile(found));
+      const text = codeText(fileAt(found));
       const folder = found.replace(/\/[^/]*$/, "");
       if (/\.(?:sh|bash|ps1)$/.test(found)) read(text, ` (in ${found})`, folder);
       else {
@@ -221,31 +270,30 @@ export function releaseWork(job, seen = new Set()) {
         if (Object.values(WRITES).some((writes) => writes(text))) work.writes = true;
       }
     }
-  };
-  const own = codeText(job.lines.join("\n"));
-  read(own, "");
-  for (const step of tauriActionSteps(job.lines)) work.tauri.push(step);
-  // The repository's own actions, and workflows called as a job.
-  for (const [, path] of own.matchAll(/^\s*(?:-\s+)?uses:\s*["']?(\.\/[\w./-]+?)["']?\s*$/gm)) {
-    if (seen.has(path)) continue;
-    seen.add(path);
-    if (/\.ya?ml$/.test(path)) {
-      const text = repoFile(path);
-      if (text === null) work.unreadable.push(`calls ${path}, which isn't there to read`);
-      for (const called of text === null ? [] : jobsOf(text)) {
-        const inner = releaseWork(called, seen);
-        work.makes.push(...inner.makes.map((how) => `${how} (in ${path})`));
-        work.writes ||= inner.writes || inner.tauri.length > 0;
-        work.unreadable.push(...inner.unreadable);
-        if (inner.tauri.length > 0) work.makes.push(`tauri-action (in ${path})`);
+    for (const [, used] of code.matchAll(/^\s*(?:-\s+)?uses:\s*["']?(\.\/[\w./-]+?)["']?\s*(?:#.*)?$/gm)) {
+      const path = used.replace(/^\.\//, "").replace(/\/$/, "");
+      if (seen.has(path)) continue;
+      seen.add(path);
+      if (/\.ya?ml$/.test(path)) {
+        const text = fileAt(path);
+        if (text === null) work.unreadable.push(`calls ${used}${where}, which isn't there to read`);
+        for (const called of text === null ? [] : jobsOf(text)) {
+          const inner = releaseWork(called, seen, fileAt);
+          work.makes.push(...inner.makes.map((how) => `${how} (in ${path})`));
+          work.writes ||= inner.writes || inner.tauri.length > 0;
+          work.unreadable.push(...inner.unreadable);
+          if (inner.tauri.length > 0) work.makes.push(`tauri-action (in ${path})`);
+        }
+      } else {
+        const text = fileAt(`${path}/action.yml`) ?? fileAt(`${path}/action.yaml`);
+        if (text === null) work.unreadable.push(`uses ${used}${where}, which isn't there to read`);
+        else if (/tauri-apps\/tauri-action@/.test(text)) work.unreadable.push(`uses tauri-action inside ${used}, where this can't check its inputs`);
+        else read(codeText(text), ` (in ${used})`, "", path);
       }
-    } else {
-      const text = repoFile(`${path}/action.yml`) ?? repoFile(`${path}/action.yaml`);
-      if (text === null) work.unreadable.push(`uses ${path}, which isn't there to read`);
-      else if (TAURI_ACTION.test(text) || /tauri-apps\/tauri-action@/.test(text)) work.unreadable.push(`uses tauri-action inside ${path}, where this can't check its inputs`);
-      else read(codeText(text), ` (in ${path})`);
     }
-  }
+  };
+  read(codeText(job.lines.join("\n")), "");
+  for (const step of tauriActionSteps(job.lines)) work.tauri.push(step);
   if (work.tauri.length > 0) work.writes = true;
   return work;
 }
@@ -373,6 +421,15 @@ const commands = [
   ["await github.rest.repos.createRelease({ owner, repo, tag_name })", "makes"],
   ['gh(["release", "create", tag])', "makes"],
   ['execFileSync("gh", ["api", "--method", "POST", `repos/${repo}/releases`])', "makes"],
+  // gh's POST implied by a field, from JavaScript too (#831 review).
+  ['execFileSync("gh", ["api", "repos/o/r/releases", "-f", "tag_name=v1"])', "makes"],
+  ['gh(["api", `repos/${repo}/releases`, "-Fdraft=true"])', "makes"],
+  ['gh(["api", "-XPOST", "repos/o/r/releases"])', "makes"],
+  ['gh([\n  "api",\n  "repos/o/r/releases",\n  "--input", "body.json",\n])', "makes"],
+  ['gh(["api", "repos/o/r/releases", "--method=post"])', "makes"],
+  ['gh(["api", "repos/o/r/releases/1", "-X", "PATCH", "-f", "draft=false"])', "writes"],
+  ['gh(["api", "--paginate", "repos/o/r/releases?per_page=100", "--jq", ".[]"])', "neither"],
+  ['gh(["api", "repos/o/r/issues", "-f", "title=x"])', "neither"],
   ["gh release upload v1 a.zip --clobber", "writes"],
   ["gh release edit v1 --draft=false", "writes"],
   ["gh release delete-asset v1 old.zip --yes", "writes"],
@@ -502,6 +559,49 @@ test("a script a job runs is read too, and one that makes a release counts (#828
   // One that isn't there can't be read, and says so.
   const missing = fixed.replace('run: gh release upload "$GITHUB_REF_NAME" app.apk --clobber', "run: bash scripts/not-a-script.sh");
   assert.deepEqual(releaseProblems(missing), ["android: runs scripts/not-a-script.sh, which isn't there to read"]);
+});
+
+// Every way a script's path is written, and where it's read from (#831 review).
+const paths = [
+  ["run: scripts/a.sh", { path: "scripts/a.sh", from: "workspace" }],
+  ["run: ./scripts/a.sh", { path: "scripts/a.sh", from: "workspace" }],
+  ["run: node client/scripts/a.mjs", { path: "client/scripts/a.mjs", from: "workspace" }],
+  ['run: "$GITHUB_WORKSPACE/scripts/a.sh"', { path: "scripts/a.sh", from: "workspace" }],
+  ["run: ${GITHUB_WORKSPACE}/scripts/a.sh", { path: "scripts/a.sh", from: "workspace" }],
+  ["run: ${{ github.workspace }}/scripts/a.sh", { path: "scripts/a.sh", from: "workspace" }],
+  ['run: bash "$PWD/scripts/a.sh"', { path: "scripts/a.sh", from: "workspace" }],
+  ["run: $(pwd)/scripts/a.sh", { path: "scripts/a.sh", from: "workspace" }],
+  ['run: "$GITHUB_ACTION_PATH/scripts/a.sh"', { path: "scripts/a.sh", from: "action" }],
+  ["run: ${{ github.action_path }}/scripts/a.sh", { path: "scripts/a.sh", from: "action" }],
+  ['run: "$dir/scripts/a.sh"', { path: "scripts/a.sh", from: "unknown" }],
+  ["run: ~/scripts/a.sh", { path: "scripts/a.sh", from: "unknown" }],
+];
+
+test("a script's path is read however it's written, and one through a folder it can't follow is a problem (#831 review)", () => {
+  for (const [code, expected] of paths) {
+    const [found] = scriptPaths(code);
+    assert.deepEqual({ path: found?.path, from: found?.from }, expected, code);
+  }
+  // The real one Greptile found: the build's apt-install action runs its script through $GITHUB_WORKSPACE.
+  const seen = new Set();
+  releaseWork(jobsOf(read("release.yml")).find((job) => job.name === "bundle"), seen);
+  assert.ok(seen.has(".github/actions/apt-install") && seen.has("scripts/apt-install.sh"), [...seen].join(", "));
+});
+
+test("an action the repository's own action uses is read too, however deep (#831 review)", () => {
+  const files = new Map([
+    [".github/actions/outer/action.yml", "runs:\n  using: composite\n  steps:\n    - uses: ./.github/actions/inner # nested\n"],
+    [".github/actions/inner/action.yml", 'runs:\n  using: composite\n  steps:\n    - run: bash "$GITHUB_ACTION_PATH/scripts/make.sh"\n      shell: bash\n'],
+    [".github/actions/inner/scripts/make.sh", 'gh release create "$TAG" --draft\n'],
+  ]);
+  const fileAt = (path) => files.get(path) ?? null;
+  const [job] = jobsOf("jobs:\n  bundle:\n    steps:\n      - uses: ./.github/actions/outer\n");
+  assert.deepEqual(releaseWork(job, new Set(), fileAt).makes, ["gh release create (in .github/actions/inner/scripts/make.sh)"]);
+  files.delete(".github/actions/inner/action.yml");
+  assert.deepEqual(releaseWork(job, new Set(), fileAt).unreadable, ["uses ./.github/actions/inner (in ./.github/actions/outer), which isn't there to read"]);
+  // A folder the runner sets for no action, or one this can't know.
+  const [unknown] = jobsOf('jobs:\n  bundle:\n    steps:\n      - run: bash "$TOOLS/scripts/make.sh"\n');
+  assert.deepEqual(releaseWork(unknown, new Set(), fileAt).unreadable, ["runs scripts/make.sh from $TOOLS, a folder this can't follow"]);
 });
 
 test("what it can't read is a problem, never a pass (#828)", () => {

@@ -187,7 +187,10 @@ rules that came out of them.
   quoted and unquoted, with and without spaces, several commands on a line,
   a command continued over lines, and every way to write what it looks for:
   every form the language has, not only the ones in use today (Markdown
-  links come plain, in angle brackets, as references and as HTML; #771).
+  links come plain, in angle brackets, as references and as HTML; #771),
+  and every way the code it reads is reached: a path written through a
+  variable, code called from code it calls, however deep, and an option
+  implied by another (gh sends POST once given a field; #831).
   `scripts/workflow-downloads.test.mjs` took three rounds of review to get
   there (#763). And it **fails on an input it can't read**, naming it,
   rather than passing over it: a form nobody listed then shows up as a
