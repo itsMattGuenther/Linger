@@ -54,6 +54,20 @@ test("docs/development.md lists the flows in config.yaml's order", () => {
   assert.deepEqual(listed.map((match) => Number(match[1])), order.map((_, i) => i + 1), "numbered from 1, in order");
 });
 
+// iOS asks before an app opens a link from outside it ("Open in "Linger"?"),
+// and the link only arrives once somebody taps Open. The link flows' first
+// run waited for a link that was still waiting on that question (#835).
+test("every linger:// link a flow opens answers iOS's question about opening it", () => {
+  for (const name of flows) {
+    const commands = readFileSync(join(DIR, `${name}.yaml`), "utf8").split(/^---$/m)[1].split(/^- /m).slice(1);
+    commands.forEach((command, i) => {
+      if (!/^openLink:\s*"?linger:/.test(command)) return;
+      const next = commands[i + 1] ?? "";
+      assert.match(next, /^tapOn:\s*\n\s+text: "Open"\n\s+optional: true/, `${name}.yaml: the command after opening a linger:// link taps iOS's Open`);
+    });
+  }
+});
+
 test("the order is read strictly", () => {
   assert.deepEqual(flowsOrder("executionOrder:\n  flowsOrder:\n    - a\n    # a note\n    - b-c\n\nother: 1\n"), ["a", "b-c"]);
   assert.throws(() => flowsOrder("executionOrder:\n  flowsOrder:\n    - a\n      - nested\n"), /can't read/);

@@ -6,6 +6,11 @@
 appId: io.github.itsmattguenther.linger
 ---
 - openLink: "linger://invite?server=linger.example&code=open2345"
+# iOS asks first whether to open a link from outside the app in Linger
+# ("Open in "Linger"?"), and the link arrives only once Open is tapped.
+- tapOn:
+    text: "Open"
+    optional: true
 - extendedWaitUntil:
     visible: "From the link you opened.*"
     timeout: 30000

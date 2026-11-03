@@ -114,6 +114,11 @@ jobs:
             client/src-tauri
             .
           cache-on-failure: true
+          # Build scripts' output, kept in the cache, names the Xcode they ran
+          # with: restored on the Xcode 27 canary, the link looked for Xcode
+          # 26.6's libraries and failed (#835). So the canary has a cache of
+          # its own, and Xcode 26.6 keeps the one it had.
+          key: ${{ startsWith(inputs.xcode, '27') && 'xcode-27' || '' }}
       # The same Xcode as ios.yml, for the reasons there (#779), unless run by
       # hand as the Xcode 27 canary (above).
       - name: Xcode ${{ inputs.xcode || '26.6' }}
