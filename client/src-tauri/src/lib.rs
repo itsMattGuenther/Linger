@@ -325,8 +325,14 @@ pub fn run() {
     let app = desktop_app();
     #[cfg(mobile)]
     let app = phone_app();
-    app.run(tauri::generate_context!())
-        .expect("failed to start Linger");
+    if let Err(error) = app.run(tauri::generate_context!()) {
+        // A second copy started for a link ends here when it can't hand the
+        // link to the copy already running: single-instance 2.5.5 reports
+        // that as an error, where 2.4 exited quietly (#836). Like any start
+        // that fails, it says why on one line and exits, not with a panic.
+        eprintln!("Linger couldn't start: {error}");
+        std::process::exit(1);
+    }
 }
 
 /// Everything the desktop app registers. `src/acl.rs` checks that this
