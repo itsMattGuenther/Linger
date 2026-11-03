@@ -71,6 +71,12 @@ test("an entry it can't count fails, naming the line, rather than going uncounte
     [`## ${WRONG}\n\n- Wrong, but which?\n`, /:3: an entry starts/],
     ["## Gap\n\n* A star with no pull request.\n", /:3: an entry starts/],
     ["## Gap\n\n3. **A number, but not a pull request.**\n", /:3: an entry starts/],
+    // #833's review: two or three spaces in, an entry could be one, or a
+    // point under the one above; either way it isn't passed over.
+    ["## Gap\n\n- **#5: a.**\n  - **#796: another catch.**\n", /:4: an entry starts at the start of its line/],
+    ["## Gap\n\nWords about the gap.\n\n  - **#796: another catch.**\n", /:5: an entry starts at the start of its line/],
+    ["## Gap\n\n   - **#796: three in.**\n", /:3: an entry starts at the start of its line/],
+    ["## Gap\n\nWords.\n\n  - A point with no entry above it.\n", /:5: a list item here is an entry/],
     ["## Gap\n\n- **#5: a.**\n\nAn underlined gap\n---\n\n- **#6: b.**\n", /:6: write headings with #s/],
   ];
   for (const [text, error] of cases) assert.throws(() => parseRecord(text), error, text);

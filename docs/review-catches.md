@@ -326,6 +326,21 @@ on a world that has changed.
   any other variable it fails, naming it. Tables for each in
   `scripts/release-draft.test.mjs`, and the rule in `docs/testing-strategy.md`
   now names how code is reached as a form too.
+- **#833: the record's reader passed over entries two or three spaces in.**
+  It took any list item indented two spaces or more for a point under the
+  entry above, but Markdown starts a list up to three spaces in, so
+  `  - **#796: …**` would have gone uncounted, and an indented check in
+  `pr-questions.md` unread. Caught by Greptile. *Missed because* the table of
+  forms listed every list marker but not where a line can start, and the
+  reader had a quiet path: an item it took for a point was skipped. The fifth
+  round of this gap (#763, #771, #807, #831), in the pull request that added
+  the questions: its own question asked for every form, and the answer
+  listed the forms thought of. *Changed:* both docs read their lists through
+  one `listReader` (`scripts/pr-questions.mjs`), where every list item is an
+  entry, part of the one above, or a failure naming its line; an indented
+  item that looks like an entry fails rather than being guessed at, with a
+  table of line sequences in its test. The question, and the rule in
+  `docs/testing-strategy.md`, now say to leave a reader no quiet path.
 - **#774: an open volume card held its own level until it closed.** A change
   made in the voice bar or another window didn't show on it, and its next
   step undid that change. *Missed because* the tests only ever changed a

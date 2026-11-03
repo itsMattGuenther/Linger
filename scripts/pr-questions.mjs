@@ -75,12 +75,40 @@ export function heading(line) {
 }
 
 /**
- * A top-level Markdown list item's words, whatever its marker (`-`, `*`,
- * `+`, `1.`, `1)`); null for any other line, a nested item among them.
+ * Reads a list of entries one line at a time, so that every list item is
+ * an entry, part of the entry above it, or a failure: there is no path
+ * that passes one over (#833's review). It answers `{ entry }` for a new
+ * entry, `{ more }` for a line of the entry above, `{ fail }` with why, or
+ * null for anything else (a blank line, a paragraph).
+ *
+ * An item at the start of its line, or one space in, is an entry, whatever
+ * its marker (`-`, `*`, `+`, `1.`, `1)`). Two or three spaces in, Markdown
+ * makes an item a new entry or a point under the one above depending on
+ * what's around it, so rather than guess, one that `looksLikeEntry` fails,
+ * and so does any with no entry above it. Indented lines and items under an
+ * entry are part of it; a paragraph at the start of a line ends the list.
+ * A leading tab counts as four spaces. Make one reader for each section.
  */
-export function listItem(line) {
-  const match = /^ ?(?:[-*+]|\d{1,9}[.)])[ \t]+(.*)$/.exec(line);
-  return match ? match[1] : null;
+export function listReader(looksLikeEntry) {
+  let open = false;
+  return (raw) => {
+    const line = raw.replace(/^[ \t]+/, (space) => space.replace(/\t/g, "    "));
+    if (!line.trim()) return null;
+    const indent = line.length - line.trimStart().length;
+    const item = /^ *(?:[-*+]|\d{1,9}[.)])(?:[ \t]+(.*))?$/.exec(line);
+    if (!item) {
+      if (indent === 0) open = false;
+      return open ? { more: line.trim() } : null;
+    }
+    const text = (item[1] ?? "").trim();
+    if (indent <= 1) {
+      open = true;
+      return { entry: text };
+    }
+    if (looksLikeEntry(text)) return { fail: "an entry starts at the start of its line; indented, it can read as a point under the one above" };
+    if (indent <= 3 && !open) return { fail: "a list item here is an entry, at the start of its line" };
+    return open ? { more: text } : null;
+  };
 }
 
 /**
@@ -101,11 +129,16 @@ export function parseQuestions(text, file = "docs/pr-questions.md") {
   const questions = [];
   const checked = [];
   let section = null;
+  let list = null;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const head = heading(line);
     if (underline(line)) fail(i, "write headings with #s, not a line of = or -");
-    if (head?.level === 2) { section = head.text; continue; }
+    if (head?.level === 2) {
+      section = head.text;
+      list = listReader((words) => words.startsWith("**"));
+      continue;
+    }
     if (head?.level === 3) {
       if (section !== "Questions") fail(i, `a question outside "## Questions"`);
       const question = head.text;
@@ -129,12 +162,13 @@ export function parseQuestions(text, file = "docs/pr-questions.md") {
       if (!questions.length) fail(i, "words before the first question");
       questions.at(-1).body.push(line.trim());
     } else if (section === CHECKED) {
-      const item = listItem(line);
-      if (item !== null) {
-        const entry = /^\*\*(.+?)\*\*: (.+)$/.exec(item);
+      const read = list(line);
+      if (read?.fail) fail(i, read.fail);
+      if (read?.entry !== undefined) {
+        const entry = /^\*\*(.+?)\*\*: (.+)$/.exec(read.entry);
         if (!entry) fail(i, `a kind a check covers is "- **<gap>**: <the check>"`);
         checked.push({ gap: entry[1].trim(), text: entry[2], line: i + 1 });
-      } else if (/^\s+\S/.test(line) && checked.length) checked.at(-1).text += ` ${line.trim()}`;
+      } else if (read?.more !== undefined) checked.at(-1).text += ` ${read.more}`;
     }
   }
   if (!questions.length) fail(0, `no questions under "## Questions"`);

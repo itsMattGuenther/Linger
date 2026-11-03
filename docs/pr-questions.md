@@ -157,10 +157,11 @@ passes broken code.
 For: ci
 Gaps: Tests written from the case in mind, not from the ways things fail
 
-Every form the language has, not only the ones in use today, and every way
-the code is reached: through a variable, or from code it calls. Three checks
-took several reviews each, a form a round (#763, #771, #831). Start from a
-table of tricky inputs, and fail loudly on anything else (#807).
+Every form the language has, not only the ones in use today: how a thing is
+written, where its line may start, and every way the code is reached. Checks
+took several reviews each, a form a round (#763, #771, #831, #833). Start
+from a table of tricky inputs, and give the reader no quiet path: each line
+is something it knows, or a failure (#807).
 
 ### Does it assume this machine, or run only on another one?
 

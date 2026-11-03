@@ -10,7 +10,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { heading, knownParts, listItem, underline, wrap } from "./pr-questions.mjs";
+import { heading, knownParts, listReader, underline, wrap } from "./pr-questions.mjs";
 
 /** The record's section for comments that were wrong, which aren't catches. */
 export const WRONG = "Comments that were wrong";
@@ -28,17 +28,21 @@ export function parseRecord(text, file = "docs/review-catches.md") {
   const catches = [];
   const wrong = [];
   let gap = null;
+  let list = null;
   text.split("\n").forEach((line, i) => {
     if (underline(line)) throw new Error(`${file}:${i + 1}: write headings with #s, not a line of = or -`);
     const head = heading(line);
     if (head?.level === 2) {
       gap = head.text;
       if (gap !== WRONG) gaps.push(gap);
+      list = listReader((words) => /^\*\*#\d/.test(words));
       return;
     }
-    const item = listItem(line);
-    if (gap === null || item === null) return;
-    const lead = LEAD.exec(item);
+    if (gap === null) return;
+    const read = list(line);
+    if (read?.fail) throw new Error(`${file}:${i + 1}: ${read.fail}`);
+    if (read?.entry === undefined) return;
+    const lead = LEAD.exec(read.entry);
     if (!lead) throw new Error(`${file}:${i + 1}: an entry starts "- **#<pull request>:" or "- **#<pull request> (<n> catches):"`);
     const count = lead[2] === undefined ? 1 : Number(lead[2]);
     if (lead[2] !== undefined && count < 2) throw new Error(`${file}:${i + 1}: an entry with one catch says no count`);

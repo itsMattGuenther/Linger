@@ -198,7 +198,11 @@ asked of every pull request before it opens, as questions
   `scripts/workflow-downloads.test.mjs` took three rounds of review to get
   there (#763). And it **fails on an input it can't read**, naming it,
   rather than passing over it: a form nobody listed then shows up as a
-  failure, not as a quiet pass (#807).
+  failure, not as a quiet pass (#807). Where a line starts is a form too:
+  Markdown starts a list up to three spaces in, and a reader that took an
+  indented item for a point under the one above skipped it (#833). So
+  every line it reads is something it knows or a failure, with no path that
+  passes one over.
 - **State worked out from a room's history, or kept beside it, is tested with
   the history in every shape the app holds it:** older history only, the
   newest not loaded, trimmed, paged back in, replaced by a window around a

@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { CHECKED, MOST, PARTS, format, heading, knownParts, listItem, parseQuestions, partsOf, questionsFor, underline, wrap }
+import { CHECKED, MOST, PARTS, format, heading, knownParts, listReader, parseQuestions, partsOf, questionsFor, underline, wrap }
   from "./pr-questions.mjs";
 import { WRONG, parseRecord } from "./review-catches.mjs";
 
@@ -199,12 +199,35 @@ test("headings and list items are read in every form Markdown writes them", () =
     "Words with ## in them": null,
   };
   for (const [line, expected] of Object.entries(headings)) assert.deepEqual(heading(line), expected, line);
-  const items = {
-    "- dash": "dash", "* star": "star", "+ plus": "plus", "1. one": "one", "12) twelve": "twelve",
-    " - one space": "one space", "-\ttab": "tab",
-    "  - nested": null, "--- rule": null, "**bold** words": null, "-no space": null, "2026 was a year": null,
-  };
-  for (const [line, expected] of Object.entries(items)) assert.equal(listItem(line), expected, line);
+  // Each list read line by line, with entries starting "**": what the
+  // reader makes of every line. No list item is ever passed over (#833).
+  const entryLike = /an entry starts at the start of its line/;
+  const noEntryAbove = /a list item here is an entry/;
+  const lists = [
+    [["- dash", "* star", "+ plus", "1. one", "12) twelve", " - one space", "-\ttab", "-"],
+      [{ entry: "dash" }, { entry: "star" }, { entry: "plus" }, { entry: "one" }, { entry: "twelve" },
+        { entry: "one space" }, { entry: "tab" }, { entry: "" }]],
+    [["- **a**", "  more words", "  - a point", "    - deeper", "", "  after a blank", " lazily one in"],
+      [{ entry: "**a**" }, { more: "more words" }, { more: "a point" }, { more: "deeper" }, null,
+        { more: "after a blank" }, { more: "lazily one in" }]],
+    [["- **a**", "  - **b**"], [{ entry: "**a**" }, entryLike]],
+    [["- **a**", "\t- **b**"], [{ entry: "**a**" }, entryLike]],
+    [["  - **b**"], [entryLike]],
+    [["   1. **b**"], [entryLike]],
+    [["Words.", "  - **b**"], [null, entryLike]],
+    [["Words.", "", "  - a point with nothing above"], [null, null, noEntryAbove]],
+    [["- **a**", "A paragraph ends the list.", "  - a point"], [{ entry: "**a**" }, null, noEntryAbove]],
+    [["    - four in, with no entry above, isn't a list"], [null]],
+    [["--- rule", "**bold** words", "-no space", "2026 was a year", "#5 a number"], [null, null, null, null, null]],
+  ];
+  for (const [lines, expected] of lists) {
+    const read = listReader((words) => words.startsWith("**"));
+    lines.forEach((line, i) => {
+      const got = read(line);
+      if (expected[i] instanceof RegExp) assert.match(got?.fail ?? "", expected[i], JSON.stringify(lines));
+      else assert.deepEqual(got, expected[i], `${JSON.stringify(lines)}, line ${i + 1}`);
+    });
+  }
   for (const line of ["===", "=", "---", "   -----", "-- "]) assert(underline(line), line);
   for (const line of ["- a", "-", "= a", "a ---"]) assert(!underline(line), line);
   const read = parseQuestions(`# Before ##
@@ -241,6 +264,8 @@ test("what the list can't read fails, naming the line, rather than being passed 
     [page(`${one}\n# A bigger one\n`), /only ### headings here/],
     [page(`${one}\nAn underlined heading?\n---\n`), /write headings with #s/],
     [page(one, `## ${CHECKED}\n\n* Docs naming a file: scripts/doc-paths.test.mjs\n`), /is "- \*\*<gap>\*\*: <the check>"/],
+    [page(one, `## ${CHECKED}\n\n  - **Indented**: \`scripts/check.sh\`\n`), /:\d+: an entry starts at the start of its line/],
+    [page(one, `## ${CHECKED}\n\n- **One**: \`scripts/check.sh\`\n  - **Two**: \`scripts/check.sh\`\n`), /an entry starts at the start/],
     [page("Words first.\n\n" + one), /words before the first question/],
     [page("### Is it?\n\nFor: page\nGaps: Two at once\n\n### Next?\n\nFor: page\nGaps: x\n\nLook.\n"), /"Is it\?" says nothing/],
     [page(one, `## ${CHECKED}\n\n- Docs naming a file: scripts/doc-paths.test.mjs\n`), /is "- \*\*<gap>\*\*: <the check>"/],
