@@ -20,6 +20,7 @@ what CI adds on top.
 | `main` | Every merge | `ci.yml` for what the merge changed. A run still waiting is cancelled when a newer merge lands, since the newer run covers it | As a PR |
 | `main`, nightly | 08:23 UTC | `nightly.yml`: every CI check, the package checks, the Windows and macOS shell builds, the iPhone app in the simulator, and every browser test three times with no retries. A failure opens an issue | About 40 minutes |
 | A release | A `v*` tag | `release.yml` and `image.yml` each run every CI check on the tagged commit first and build nothing unless it passes; then the signed packages, their audio, the Buddy list starting on Linux, the Windows shortcuts, and the server image | About 25 minutes |
+| A branch, by hand | `gh workflow run ios-simulator.yml --ref <branch> -f xcode=27.1` | The Xcode 27 canary: the iPhone simulator check built with Xcode 27 and the iOS 27 SDK, on GitHub's `xcode-27` image. Apple's rule that such an app use the scene life cycle shows only at launch, so it runs the same flows. Not required, and not nightly, until the scene life cycle lands (#788, #838) | As the iPhone check |
 | Real computers | Before a release, when an area changes | The [release checks](tasks/release-checks.md): several computers, real networks, audio devices, installs | By hand |
 
 ## Layers
@@ -29,7 +30,7 @@ what CI adds on top.
 | Rust/TypeScript tests | Logic, real HTTP/temp SQLite, forced gateway reconnect, palette contrast, generated types | Desktop rendering or physical audio |
 | Chromium + WebKit browser tests | Real components with synthetic people, keyboard/pointer behavior and geometry | Installed WebView2/WebKitGTK behavior |
 | Linux/Windows package checks | Installation, icons, recorded chimes, Windows shortcut upgrades, the list window starting and drawing at every interface size, a minimized or tray-hidden Windows window stopping its drawing and coming back drawn, nothing the shipped CSP refuses, a shared screen's VP8 and H.264 playing in the packaged app on Ubuntu's WebKit and on Arch's current one (`scripts/linux-arch-check.sh`), and the app refusing to play one, without crashing, where WebKit draws on the CPU (#729); on Windows, the shell's own tests of the computer's sound in a share: Windows' process loopback started and read for a second, where the runner has an audio engine, and the 20 ms packets it makes (#736) | Signed-in use, every distro, physical speakers, real-network voice, a real GPU, the computer's sound heard with somebody talking |
-| The iPhone app in the simulator (`ios-simulator.yml`, `client/tests/ios/`) | The app as a phone builds it, share extension inside, starts on an iPhone (the simulator) and shows the screen for joining a server; it refuses a plain http address, as installed apps do; it sets up a real server on the same Mac, reached over https and wss as a real one is; a room made on the server shows up live, opens with its message, and takes one typed on the phone, which the server then has; a photo shared from Photos through the share window, after Linger has been in the background past its 30-second grace, reaches the room with a message, on the server and in the app (#825). A picture of every screen is kept, and a recording of the share | A real phone's memory and its limits, the camera, the microphone and calls, sleep and waking, real networks, Apple's real signing and TestFlight's build (`ios.yml` checks what it can of that) |
+| The iPhone app in the simulator (`ios-simulator.yml`, `client/tests/ios/`) | The app as a phone builds it, share extension inside, starts on an iPhone (the simulator) and shows the screen for joining a server; a `linger://` invite link reaches that screen's box with the app open and with it closed (#835); it refuses a plain http address, as installed apps do; it sets up a real server on the same Mac, reached over https and wss as a real one is; a room made on the server shows up live, opens with its message, and takes one typed on the phone, which the server then has; a photo shared from Photos through the share window, after Linger has been in the background past its 30-second grace, reaches the room with a message, on the server and in the app (#825). A picture of every screen is kept, and a recording of the share | A real phone's memory and its limits, the camera, the microphone and calls, sleep and waking, real networks, Apple's real signing and TestFlight's build (`ios.yml` checks what it can of that) |
 | GPU check, before every release | The packaged app plays a shared screen on Arch's WebKit with a real computer's GPUs and their hardware decoders installed, and a chat's video shows its picture there, the page drawing on NVIDIA's own EGL too where the computer has it (`scripts/linux-arch-check.sh --gpu`, `docs/releasing.md` step 1, #730, #756) | GPUs that computer doesn't have, Windows' decoders, native Wayland (it runs X11 with GBM forced on, as Wayland has it) |
 | Short two-person release check | Your installed clients, actual update path, listening and interaction | Exhaustive platform coverage |
 
@@ -117,6 +118,20 @@ writes `latest.json` itself: two builds finishing together each made a draft
 (#828). `scripts/release-draft.test.mjs` fails if a workflow lets one, and
 the `updater-json` job writes `latest.json` once from the builds' signatures
 (`scripts/updater-urls.mjs`); both are tested in the rules job.
+
+**Tauri's Rust and JavaScript sides move together.** The `tauri` crate,
+`@tauri-apps/api` and `@tauri-apps/cli` are one release, and each plugin's
+crate and package another; from different minor versions, the page can call
+a command the shell doesn't have. `scripts/tauri-versions.mjs` reads both
+lockfiles and fails on a mismatch, or on anything it can't read; `check.sh`
+and the rules job run it (#835). The iPhone flows run only on a Mac, so
+`scripts/ios-flows.test.mjs` checks here that each is in `config.yaml`'s
+order, and `scripts/ios-plist.test.mjs` that `Info.ios.plist`, which every
+iPhone build merges in, declares the `linger://` scheme: the deep-link
+plugin writes it only when its build script runs, and a cached build skips
+that (#835). The Windows installer files (`main.wxs`, `installer-hooks.nsh`)
+name the Tauri CLI whose templates they were checked against, and a test
+fails until they're checked again after an upgrade.
 
 `scripts/check.sh --all` runs everything whatever changed. So does a branch
 with nothing to compare against. `scripts/check.sh <base>` compares against
@@ -484,6 +499,21 @@ published version tag to fix a failed release; use the next patch version.
 Use [the 0.5.4 checklist](releases/0.5.4.md#checks-on-installed-clients) for this release. Record OS,
 package type, previous/new version, interface size and reproduction steps when
 reporting a failure. Do not capture private conversations in evidence.
+
+**Updating from the release before** is checked by hand in the day after
+publishing, before any copy installs it on its own ([releasing.md](releasing.md),
+step 4): on a computer where the setup.exe installed the previous version,
+and one with its AppImage, press Restart now and check the new version
+starts. If it doesn't, mark the release a pre-release before the day is out,
+and no copy sees it. It can't be checked sooner: an installed copy reads
+only the published release's `latest.json`, so it never sees a draft, and
+it takes only an update signed with the release key, which only `main` and
+`v*` tags can use (#652). The Arch package comes from its own job once the
+release is published, so it's checked after that has run.
+`windows-update-check.ps1` installs over an old version with the installer,
+a different path from the updater. It matters most when Tauri's updater
+changes, as it does in 2.12 (#788): if updating from the version before
+fails, everybody stays on it.
 
 The real-world checks in [release-checks.md](tasks/release-checks.md) are
 closed only by people using the published app on real computers and networks.

@@ -2,7 +2,8 @@ name: iphone simulator
 
 # The iPhone app, built for the iOS Simulator on GitHub's Macs and driven
 # there by Maestro (client/tests/ios/): it starts on the screen for joining a
-# server, refuses a plain http address as the installed app does, sets up a
+# server, takes a linger:// link with the app open and with it closed,
+# refuses a plain http address as the installed app does, sets up a
 # real Linger server running on the same Mac and reached over https, opens
 # a room there and sends a message, and shares a photo from Photos into the
 # room through the share window. Every screen is kept as a picture in the
@@ -14,9 +15,24 @@ name: iphone simulator
 # touch the app or what it runs (scripts/ci-scope.mjs, `ios`). The signed
 # build for TestFlight is ios.yml's. docs/development.md, "The iPhone in the
 # simulator", says how to run the flows.
+#
+# Run by hand, it can build with Xcode 27 instead (`-f xcode=27.1`), on
+# GitHub's `xcode-27` image: the canary for Apple's iOS 27 SDK rule (#788,
+# #835). An app built with that SDK that doesn't use the scene life cycle
+# fails at launch, which only a launch shows, so the canary runs the same
+# flows. It uploads nothing, and isn't required until the scene life cycle
+# lands (#838). Every pull request, and the nightly run, use Xcode 26.6.
 on:
   pull_request:
   workflow_dispatch:
+    inputs:
+      xcode:
+        description: Xcode to build with (27.1 is the canary, on the xcode-27 image)
+        type: choice
+        options:
+          - "26.6"
+          - "27.1"
+        default: "26.6"
   # nightly.yml runs it on main every night, whatever changed.
   workflow_call:
     inputs:
@@ -55,7 +71,7 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.ios == 'true' }}
     # The Mac and Xcode ios.yml builds the TestFlight app with (#779).
-    runs-on: macos-26
+    runs-on: ${{ startsWith(inputs.xcode, '27') && 'xcode-27' || 'macos-26' }}
     timeout-minutes: 75
     env:
       # Maestro, pinned by version and checksum (its release's
@@ -98,9 +114,17 @@ jobs:
             client/src-tauri
             .
           cache-on-failure: true
-      # The same Xcode as ios.yml, for the reasons there (#779).
-      - name: Xcode 26
-        run: sudo xcode-select -s /Applications/Xcode_26.6.app
+          # Build scripts' output, kept in the cache, names the Xcode they ran
+          # with: restored on the Xcode 27 canary, the link looked for Xcode
+          # 26.6's libraries and failed (#835). So the canary has a cache of
+          # its own, and Xcode 26.6 keeps the one it had.
+          key: ${{ startsWith(inputs.xcode, '27') && 'xcode-27' || '' }}
+      # The same Xcode as ios.yml, for the reasons there (#779), unless run by
+      # hand as the Xcode 27 canary (above).
+      - name: Xcode ${{ inputs.xcode || '26.6' }}
+        env:
+          XCODE: ${{ inputs.xcode || '26.6' }}
+        run: sudo xcode-select -s "/Applications/Xcode_$XCODE.app"
       - name: what this Mac builds and runs with
         run: |
           xcodebuild -version

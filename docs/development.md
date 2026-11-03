@@ -509,6 +509,7 @@ exactly), every night on `main`, and by hand:
 
 ```bash
 gh workflow run ios-simulator.yml --ref <your-branch>   # whatever the branch changed
+gh workflow run ios-simulator.yml --ref <your-branch> -f xcode=27.1   # the Xcode 27 canary (#835)
 gh run download <run-id> -n iphone-simulator            # the pictures and logs
 ```
 
@@ -517,20 +518,27 @@ flow carries on from where the last left the app):
 
 1. `first-screen.yaml`: the app starts and shows the screen for joining a
    server.
-2. `plain-http.yaml`: a server's plain `http://` address is refused with
+2. `link-open.yaml`: a `linger://invite` link, opened the way iOS opens one
+   (`xcrun simctl openurl`), lands in that screen's box with Linger open,
+   and the screen says it came from a link (#607).
+3. `link-closed.yaml`: the same with Linger closed, so the link starts it.
+   Under the scene life cycle iOS hands that link to the scene, which tao
+   doesn't pass on yet (tauri-apps/tao#1248), so this is the check that
+   fails if it's lost (#788, #835).
+4. `plain-http.yaml`: a server's plain `http://` address is refused with
    "Couldn't reach …", as in every installed app: their CSP
    (`tauri.conf.json`) allows only `https:` and `wss:`. So the check doesn't
    sign in that way.
-3. `set-up.yaml`: a real server, built from the branch as a host runs it
+5. `set-up.yaml`: a real server, built from the branch as a host runs it
    (a release build: a debug one hashes passwords too slowly for the app's
    30-second wait) and running on the same Mac with a temporary data folder,
    is set up from its setup link, through the app's form, and the app lands
    on its empty list.
-4. `room.yaml`: a room made on the server (`seed.js`, through the server's
+6. `room.yaml`: a room made on the server (`seed.js`, through the server's
    API) shows up in the list without a reload, opens with the message in it,
    and takes a message typed on the phone; `sent.js` asks the server that it
    arrived.
-5. `share-photo.yaml`: a photo shared from Photos, through its share sheet,
+7. `share-photo.yaml`: a photo shared from Photos, through its share sheet,
    into Linger's share window, which picks #evenings, adds a message and
    sends. The server then has the message with the photo attached
    (`shared.js`), and the room in Linger shows both. Linger stays in the

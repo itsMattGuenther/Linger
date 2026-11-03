@@ -27,5 +27,24 @@
 	-->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!--
+	  "Open in Linger" (#607): the linger:// scheme that tauri.conf.json's
+	  deep-link plugin opens. The plugin writes this into gen/apple's
+	  Info.plist itself, but only when its build script runs, which a cached
+	  build skips: the simulator check's build came out without it, and iOS
+	  refused the link (#835). This file is merged into every build.
+	  scripts/ios-plist.test.mjs checks the two agree.
+	-->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>linger</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>linger</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

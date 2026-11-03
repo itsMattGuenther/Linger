@@ -14,6 +14,8 @@ executionOrder:
   continueOnFailure: false
   flowsOrder:
     - first-screen
+    - link-open
+    - link-closed
     - plain-http
     - set-up
     - room

@@ -341,6 +341,18 @@ on a world that has changed.
   item that looks like an entry fails rather than being guessed at, with a
   table of line sequences in its test. The question, and the rule in
   `docs/testing-strategy.md`, now say to leave a reader no quiet path.
+- **#841 (2 catches): two readers in the Tauri 2.12 checks still had quiet
+  paths.** The lockfile reader (`scripts/tauri-versions.mjs`) passed over a
+  section it didn't know and an entry with no version, so a misspelled
+  `dependencies:` dropped every plugin in it and passed. The iPhone flows'
+  order reader (`scripts/ios-flows.test.mjs`) took a `flowsOrder` under any
+  key, not only `executionOrder`. Caught by Greptile. *Missed because* the
+  question for this kind was asked before the pull request opened, and the
+  answer checked the lines inside the sections it read, not the sections
+  and fields it skipped: the next pull request after #833's catch, with the
+  lesson written down. *Changed:* both read only what they know and fail on
+  the rest, with tests of each case; the question now asks for every skip
+  to be listed and justified.
 - **#774: an open volume card held its own level until it closed.** A change
   made in the voice bar or another window didn't show on it, and its next
   step undid that change. *Missed because* the tests only ever changed a
@@ -499,6 +511,18 @@ it, or another program, runs at the same time.
   window removes it when it closes, sent, cancelled or swiped away, with a
   test that closing removes it. The controller's wiring runs only inside the
   share sheet, so it's checked by reading, and by the TestFlight check.
+
+## A doc step nobody tried
+
+- **#841: the check of updating from the release before was written for a
+  draft, which no installed copy can see.** An installed copy reads only the
+  published release's `latest.json`. `docs/releasing.md` step 4 already
+  had the way that works: the day after publishing, before any copy
+  updates on its own. Caught by Greptile. *Missed because* the step was
+  written from how it should go, not tried or checked against the updater
+  and the release doc. *Changed:* `docs/testing-strategy.md` points at that
+  day, and a question asks whether each step a doc tells somebody to take
+  works as written.
 
 ## Written from what's connected right now
 
