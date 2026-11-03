@@ -38,6 +38,11 @@ test("the startup measurement is run by hand, and only its own tests run for it"
   assert.deepEqual(active(["scripts/startup-time.mjs", "scripts/startup-time.test.mjs"]), []);
   assert.equal(active(["scripts/startup-time.sh"]).length, 7);
 });
+test("the questions before a pull request and the catch count are run by hand, and only their own tests run for them", () => {
+  assert.deepEqual(active(["scripts/pr-questions.mjs", "scripts/pr-questions.test.mjs",
+    "scripts/review-catches.mjs", "scripts/review-catches.test.mjs"]), []);
+  assert.equal(active(["scripts/pr-questions.sh"]).length, 7);
+});
 test("the Windows hidden-window check runs for the shell, the list window and its own files (#594)", () => {
   for (const path of ["client/src-tauri/src/window.rs", "client/src/next/app/list/ListWindow.tsx",
     "client/scripts/windows-hidden-check.mjs", "client/scripts/windows-window.ps1"])

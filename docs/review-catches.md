@@ -12,9 +12,19 @@ Greptile reviews every pull request (since 2026-10-29); a catch from a person
 goes here too. A comment that was wrong goes here as well, with why, so it's
 known how often a reviewer is right.
 
+Nobody reads this before a pull request. The kinds of mistake in it are asked
+as questions in [pr-questions.md](pr-questions.md), and
+`node scripts/pr-questions.mjs` prints the ones for what a branch changed.
+
 To add one, put it under the gap it belongs to, or start a new gap. Name the
-pull request, the catch in a sentence, why we missed it, and what changed,
-linking the commit, issue or rule.
+pull request the mistake was made in (not the issue it was reported as), the
+catch in a sentence, why we missed it, and what changed, linking the commit,
+issue or rule. One catch is one entry; an entry that holds several says how
+many after the pull request, as in `#796 (5 catches):`. Then close the gap
+with a check if one can find that kind of mistake. If none can, and no
+question in [pr-questions.md](pr-questions.md) asks about it, add one there
+(`AGENTS.md`). `node scripts/review-catches.mjs` counts the catches per pull
+request, week by week, so we can see whether they fall.
 
 ## State worked out from the history that's loaded, not all of it
 
@@ -203,19 +213,19 @@ on a world that has changed.
   mistake is hard to make: every touch of the update folder from a command
   goes through `Store`, whose methods run off the workers
   (`spawn_blocking`), and installing does too.
-- **#811: the share extension was signed without its App Group.** Caught by
-  @eGGnogSC on TestFlight, not in review: every share to Linger from an
-  iPhone failed. The App Group was in the extension's entitlements file and
-  in its provisioning profile, but not in its signature, because
-  `tauri ios build` signs only the app's own binary with entitlements and the
-  export keeps only what each part was signed with. *Missed because*
-  `ios.yml` checked that the extension was in the app, with the app's
-  version, but not what it was allowed to do, and nothing could run it
-  before a phone did. *Changed:* the extension signs itself with its
-  entitlements when the build doesn't (its last build phase), and `ios.yml`
-  stops before TestFlight unless both the app and the extension are signed
-  with the App Group. The share's alert now says a failure apart from
-  something it can't take, which had pointed the tester at photo types.
+- **#792: the share extension was signed without its App Group (#811).**
+  Caught by @eGGnogSC on TestFlight after #792 merged, not in review: every
+  share to Linger from an iPhone failed. The App Group was in the extension's
+  entitlements file and in its provisioning profile, but not in its signature,
+  because `tauri ios build` signs only the app's own binary with entitlements
+  and the export keeps only what each part was signed with. *Missed because*
+  `ios.yml` checked that the extension was in the app, with the app's version,
+  but not what it was allowed to do, and nothing could run it before a phone
+  did. *Changed:* the extension signs itself with its entitlements when the
+  build doesn't (its last build phase), and `ios.yml` stops before TestFlight
+  unless both the app and the extension are signed with the App Group. The
+  share's alert now says a failure apart from something it can't take, which
+  had pointed the tester at photo types.
 
 ## Tests written from the case in mind, not from the ways things fail
 
@@ -267,24 +277,24 @@ on a world that has changed.
   the line is split as the shell splits it, and the table of tricky commands
   in `scripts/workflow-downloads.test.mjs` grew with each. Rule: a check that
   reads code or commands starts from that table (`docs/testing-strategy.md`).
-- **#771: the docs path check (#770) had three holes.** A directory deleted
-  whole left its names unread, since the directories were read from what was
-  there. A missing file name with spaces was reported cut at the first
-  space. And links in angle brackets, which `docs/development.md` uses for
-  the artwork, weren't read. *Missed because* the same gap as #763: its tests
-  were the forms the docs used that day. *Changed:* the directories are
-  written out, with a test that a new one is added; a spaced name is read
-  whole; angle-bracket links are read. Closing it turned up two more forms
-  nobody had flagged, reference links and the README's HTML tags, read now
-  too. The rule now names a language's forms, not only its spacing.
-  A second round found more of both: HTML attributes quoted with `'` or not
-  at all, and a reference link's target on the next line, still unread; and
-  the test that every top-level directory is listed counted a local server's
-  `data/` and an editor's `.vscode/`, failing `check.sh` on a clean branch.
-  *Changed:* every link form is read by one function from one table
-  (`linkTargets`, 15 forms, a link's title among them, which nobody had
-  flagged), and the directories compared are the ones git tracks. Adding
-  forms one review at a time was the gap itself.
+- **#771 (6 catches): the docs path check (#770) had three holes, then three
+  more.** A directory deleted whole left its names unread, since the
+  directories were read from what was there. A missing file name with spaces
+  was reported cut at the first space. And links in angle brackets, which
+  `docs/development.md` uses for the artwork, weren't read. *Missed because*
+  the same gap as #763: its tests were the forms the docs used that day.
+  *Changed:* the directories are written out, with a test that a new one is
+  added; a spaced name is read whole; angle-bracket links are read. Closing it
+  turned up two more forms nobody had flagged, reference links and the
+  README's HTML tags, read now too. The rule now names a language's forms, not
+  only its spacing. A second round found more of both: HTML attributes quoted
+  with `'` or not at all, and a reference link's target on the next line,
+  still unread; and the test that every top-level directory is listed counted
+  a local server's `data/` and an editor's `.vscode/`, failing `check.sh` on a
+  clean branch. *Changed:* every link form is read by one function from one
+  table (`linkTargets`, 15 forms, a link's title among them, which nobody had
+  flagged), and the directories compared are the ones git tracks. Adding forms
+  one review at a time was the gap itself.
 - **#807: the overview docs check passed over SQL it couldn't read.** Its
   schema reader matched bare table names only, so a migration making
   `"quoted"` (or `main.x`, or a `TEMP` table) would have added a table the
@@ -301,21 +311,36 @@ on a world that has changed.
   code and not into its tests or its promise. *Changed:* they're checked
   like the others, with a test that `.github` is among them, and both
   layouts list them.
-- **#831: the release check (#828) passed over three ways to reach a
-  release.** A script's JavaScript calling `gh api …/releases -f …` wasn't
-  counted, though gh sends a POST once it's given a field, and the shell
-  form was. A repository action that used another of ours wasn't followed
-  into it. And a script named through a folder variable
+- **#831 (3 catches): the release check (#828) passed over three ways to reach
+  a release.** A script's JavaScript calling `gh api …/releases -f …` wasn't
+  counted, though gh sends a POST once it's given a field, and the shell form
+  was. A repository action that used another of ours wasn't followed into it.
+  And a script named through a folder variable
   (`"$GITHUB_WORKSPACE/scripts/apt-install.sh"`, in our own apt-install
   action) wasn't read at all, and said nothing. Caught by Greptile. *Missed
-  because* the table of tricky inputs listed how each command is written,
-  not how the code running it is reached: one level of calls, and paths
-  written plainly. *Changed:* gh's words from JavaScript are read by what
-  they send, as the shell's are; actions are followed however deep; a
-  path through `$GITHUB_WORKSPACE`, `$PWD` or `$GITHUB_ACTION_PATH` is read,
-  and through any other variable it fails, naming it. Tables for each in
-  `scripts/release-draft.test.mjs`, and the rule in
-  `docs/testing-strategy.md` now names how code is reached as a form too.
+  because* the table of tricky inputs listed how each command is written, not
+  how the code running it is reached: one level of calls, and paths written
+  plainly. *Changed:* gh's words from JavaScript are read by what they send,
+  as the shell's are; actions are followed however deep; a path through
+  `$GITHUB_WORKSPACE`, `$PWD` or `$GITHUB_ACTION_PATH` is read, and through
+  any other variable it fails, naming it. Tables for each in
+  `scripts/release-draft.test.mjs`, and the rule in `docs/testing-strategy.md`
+  now names how code is reached as a form too.
+- **#833: the record's reader passed over entries two or three spaces in.**
+  It took any list item indented two spaces or more for a point under the
+  entry above, but Markdown starts a list up to three spaces in, so
+  `  - **#796: …**` would have gone uncounted, and an indented check in
+  `pr-questions.md` unread. Caught by Greptile. *Missed because* the table of
+  forms listed every list marker but not where a line can start, and the
+  reader had a quiet path: an item it took for a point was skipped. The fifth
+  round of this gap (#763, #771, #807, #831), in the pull request that added
+  the questions: its own question asked for every form, and the answer
+  listed the forms thought of. *Changed:* both docs read their lists through
+  one `listReader` (`scripts/pr-questions.mjs`), where every list item is an
+  entry, part of the one above, or a failure naming its line; an indented
+  item that looks like an entry fails rather than being guessed at, with a
+  table of line sequences in its test. The question, and the rule in
+  `docs/testing-strategy.md`, now say to leave a reader no quiet path.
 - **#774: an open volume card held its own level until it closed.** A change
   made in the voice bar or another window didn't show on it, and its next
   step undid that change. *Missed because* the tests only ever changed a
@@ -355,27 +380,26 @@ on a world that has changed.
   make the same promise on a computer, where the windows that apply them
   read storage too; keeping it there needs Settings' announcement to carry
   the choice to them.
-- **#784: keeping a refused choice in step across windows had three
-  holes.** #782's first fix kept the Appearance choices storage refused in
-  each window's memory and passed them between windows. A window reopened
-  while storage refused grew again each time, since the size it was grown
-  for went with the page; a window opened while Settings announced one
-  choice dropped the list's others; and Settings opened as the list's answer
-  came in showed the old choices. *Missed because* the tests opened each
-  window once and had every answer arrive in one order. *Changed:* nothing
-  keeps choices in step between windows. A choice storage refuses isn't
-  made, and Settings says so (#782), so every window reads one place,
-  storage.
-- **#796: a card opened from a cut topic had five holes.** A topic taller
-  than the window lost its end; the card stayed where it opened when the
-  window narrowed; pressing the words again closed and reopened it; words a
-  late font cut stayed plain, with no button; and words that changed under an
-  open card were taken over by it. *Missed because* the tests used one window
-  size, a topic that fitted in the card, one press, fonts already loaded, and
-  nothing changing while it was open: the case in mind. *Changed:* a test for
-  each, failing before its fix (`next-chat-window.spec.ts`). Rule: a card is
-  tested with words taller than the window, the window resized while it's
-  open, its opener pressed again, and what it shows changing under it
+- **#784 (3 catches): keeping a refused choice in step across windows had
+  three holes.** #782's first fix kept the Appearance choices storage refused
+  in each window's memory and passed them between windows. A window reopened
+  while storage refused grew again each time, since the size it was grown for
+  went with the page; a window opened while Settings announced one choice
+  dropped the list's others; and Settings opened as the list's answer came in
+  showed the old choices. *Missed because* the tests opened each window once
+  and had every answer arrive in one order. *Changed:* nothing keeps choices
+  in step between windows. A choice storage refuses isn't made, and Settings
+  says so (#782), so every window reads one place, storage.
+- **#796 (5 catches): a card opened from a cut topic had five holes.** A topic
+  taller than the window lost its end; the card stayed where it opened when
+  the window narrowed; pressing the words again closed and reopened it; words
+  a late font cut stayed plain, with no button; and words that changed under
+  an open card were taken over by it. *Missed because* the tests used one
+  window size, a topic that fitted in the card, one press, fonts already
+  loaded, and nothing changing while it was open: the case in mind. *Changed:*
+  a test for each, failing before its fix (`next-chat-window.spec.ts`). Rule:
+  a card is tested with words taller than the window, the window resized while
+  it's open, its opener pressed again, and what it shows changing under it
   (`docs/testing-strategy.md`).
 - **#814: a wait for the app's page didn't check that the app was still
   running.** The Windows checks' wait for WebView2's port failed at once on
@@ -386,17 +410,17 @@ on a world that has changed.
   `whileRunning` in `client/scripts/webview2-wait.mjs` makes one wait per
   app that always checks it first, and every wait in the four checks is
   that one; `webview2-wait.test.mjs` has an app quit during a page wait.
-- **#819: a card with its one control taken away left the keyboard behind
-  it, and a list of names stayed buttons.** On an iPhone, which lost its
-  per-person volume, the host's card had no slider, and its focus still
+- **#819 (2 catches): a card with its one control taken away left the keyboard
+  behind it, and a list of names stayed buttons.** On an iPhone, which lost
+  its per-person volume, the host's card had no slider, and its focus still
   looked only for one; and the names in everyone's list kept the kit row's
   button though nothing happened to them. *Missed because* the tests were
   written from what the iPhone shows, not from what a keyboard or a screen
   reader meets there, and the kit's Row had no form without a button.
-  *Changed:* the card focuses its first control, whichever it is; a Row
-  with nothing to do is text, not a button (`docs/design/system.md`, Row),
-  which mends the people card's names too; the iPhone tests check the focus
-  and that no name is a button.
+  *Changed:* the card focuses its first control, whichever it is; a Row with
+  nothing to do is text, not a button (`docs/design/system.md`, Row), which
+  mends the people card's names too; the iPhone tests check the focus and that
+  no name is a button.
 
 ## Comments that were wrong
 
@@ -478,30 +502,30 @@ it, or another program, runs at the same time.
 
 ## Written from what's connected right now
 
-- **#825: sharing a minute after leaving Linger said to sign in.** The app
-  lets go of a server's rooms 30 seconds into the background, and the share
-  window's list was written from what it held, so it was written empty.
-  Caught by the iPhone Simulator share flow (#821), not by a reviewer.
-  *Missed because* the tests gave the list connected servers only, and
-  nothing ran the app into the background before sharing. *Changed:* a
-  server not connected right now is written as it last was, read back from
-  the file when the app starts, and only signing out takes one off
-  (`shareWindowServers`, with tests); the simulator flow shares with Linger
-  in the background.
-- **#826: the first fix for it held back too much, and dropped too much.**
-  It wrote nothing until every server had connected, so signing out of one
-  while another was down left the signed-out server's conversations in the
+- **#822: sharing a minute after leaving Linger said to sign in (#825).** The
+  app lets go of a server's rooms 30 seconds into the background, and the
+  share window's list was written from what it held, so it was written empty.
+  Caught by the iPhone Simulator share flow (#821) after #822 merged, not by a
+  reviewer. *Missed because* the tests gave the list connected servers only,
+  and nothing ran the app into the background before sharing. *Changed:* a
+  server not connected right now is written as it last was, read back from the
+  file when the app starts, and only signing out takes one off
+  (`shareWindowServers`, with tests); the simulator flow shares with Linger in
+  the background.
+- **#826 (3 catches): the first fix for it held back too much, and dropped too
+  much.** It wrote nothing until every server had connected, so signing out of
+  one while another was down left the signed-out server's conversations in the
   list, and it left out servers still being reached or waiting for a newer
   app. Caught by Greptile. *Missed because* the tests had servers that were
   either connected or not, never one down while another changed. *Changed:*
   the list is always written, from the last one written for any server not
-  connected, with tests of a server down while another connects and while
-  one is signed out of.
-- **#826: the second fix kept its own copy of the list in the page.** The
-  first launch after updating had no copy yet, so a server down then was
-  dropped, and signing out of the last server left the copy behind, where
-  another account on the same server could see the first one's
-  conversations. Caught by Greptile. *Missed because* a second copy of
-  state has its own life, and the tests only had the one. *Changed:* no
-  copy: the page reads back the file the window reads
-  (`share_window_list_read`), which signing out of every server empties.
+  connected, with tests of a server down while another connects and while one
+  is signed out of.
+- **#826 (2 catches): the second fix kept its own copy of the list in the
+  page.** The first launch after updating had no copy yet, so a server down
+  then was dropped, and signing out of the last server left the copy behind,
+  where another account on the same server could see the first one's
+  conversations. Caught by Greptile. *Missed because* a second copy of state
+  has its own life, and the tests only had the one. *Changed:* no copy: the
+  page reads back the file the window reads (`share_window_list_read`), which
+  signing out of every server empties.

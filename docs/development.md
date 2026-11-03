@@ -45,7 +45,9 @@ runs the rules lint in under a second; a client change adds the typecheck, unit 
 Chromium browser tests (and any the branch added or edited, ten times) and the
 build's CSP check; a server change adds fmt,
 clippy, the Rust tests and bindings drift. `--all` runs everything. Green there
-should mean green in CI. The [testing strategy](testing-strategy.md) has what
+should mean green in CI. Before opening a pull request, run
+`node scripts/pr-questions.mjs` too: it prints the questions past reviews
+taught for the parts your branch changed ([pr-questions.md](pr-questions.md)). The [testing strategy](testing-strategy.md) has what
 runs where, and which kind of test a change needs. Separate checks need
 additional services or browser engines:
 

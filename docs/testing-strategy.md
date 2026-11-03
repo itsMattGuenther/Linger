@@ -176,7 +176,9 @@ was cheap to test, and the tests only came after.
 Every real catch a reviewer makes is a gap in these checks, so each one comes
 with a change that would have caught it first (`AGENTS.md`). The catches and
 what they changed are in [review-catches.md](review-catches.md); these are the
-rules that came out of them.
+rules that came out of them. The kinds of mistake no check can find yet are
+asked of every pull request before it opens, as questions
+([pr-questions.md](pr-questions.md)).
 
 - **Anything that talks over a network is tested through the ways a network
   fails:** a refused connection, one dropped before any bytes, one cut off
@@ -196,7 +198,11 @@ rules that came out of them.
   `scripts/workflow-downloads.test.mjs` took three rounds of review to get
   there (#763). And it **fails on an input it can't read**, naming it,
   rather than passing over it: a form nobody listed then shows up as a
-  failure, not as a quiet pass (#807).
+  failure, not as a quiet pass (#807). Where a line starts is a form too:
+  Markdown starts a list up to three spaces in, and a reader that took an
+  indented item for a point under the one above skipped it (#833). So
+  every line it reads is something it knows or a failure, with no path that
+  passes one over.
 - **State worked out from a room's history, or kept beside it, is tested with
   the history in every shape the app holds it:** older history only, the
   newest not loaded, trimmed, paged back in, replaced by a window around a
