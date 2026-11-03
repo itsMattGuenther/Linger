@@ -165,13 +165,15 @@ describe("the servers the list is written with (#825)", () => {
     expect(shareWindowServers([GOOD_ONE], [], [good], ready)[0]?.share).toBe("ready");
   });
 
-  it("reads back what it kept, and nothing it can't", () => {
+  it("reads back the list as written, and nothing it can't", () => {
     const good = server(GOOD_ONE, "r-general");
-    expect(writtenServers(JSON.stringify([good]))).toEqual([good]);
+    const written = (servers: unknown[]) => JSON.stringify({ version: SHARE_LIST_VERSION, written_at: 0, theme: THEME, servers });
+    expect(writtenServers(written([good]))).toEqual([good]);
     expect(writtenServers(null)).toEqual([]);
     expect(writtenServers("not json")).toEqual([]);
-    expect(writtenServers(JSON.stringify([{ ...good, share: "maybe" }, good]))).toEqual([good]);
-    expect(writtenServers(JSON.stringify({ servers: [good] }))).toEqual([]);
+    expect(writtenServers(written([{ ...good, share: "maybe" }, good]))).toEqual([good]);
+    expect(writtenServers(JSON.stringify({ version: SHARE_LIST_VERSION + 1, servers: [good] }))).toEqual([]);
+    expect(writtenServers(JSON.stringify([good]))).toEqual([]);
   });
 
   it("a listing is connected once the server has said who you are", () => {
@@ -198,6 +200,7 @@ function memoryShell(kept: Record<string, { token: string; at: number }> = {}) {
     },
     kept: async () => [...store.keys()],
     writeList: async () => undefined,
+    readList: async () => null,
   };
   return { shell, store };
 }

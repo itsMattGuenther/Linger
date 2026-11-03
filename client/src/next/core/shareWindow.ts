@@ -147,6 +147,8 @@ export interface ShareShell {
   kept(): Promise<string[]>;
   /** Write the list the window reads. */
   writeList(list: ShareWindowList): Promise<void>;
+  /** The list as last written, as written; null when there's none. */
+  readList(): Promise<string | null>;
 }
 
 /**
@@ -172,7 +174,8 @@ export function connected(listing: ShareListing): boolean {
  * The servers the share window's list is written with (#825): every server
  * signed in here (`signedIn`, in the list's order, with those still being
  * reached and those waiting for a newer app), each as it is now if the app
- * is connected to it (`now`), or else as it was last written (`last`). The
+ * is connected to it (`now`), or else as it was last written (`last`, read
+ * from the file when the app starts, then what it wrote since). The
  * app lets go of a server's rooms and people a while into the background and
  * offline, and has none while connecting; written from that, the list had no
  * servers, and sharing from Photos a minute after leaving Linger said to sign
@@ -195,8 +198,10 @@ export function shareWindowServers(
 }
 
 /**
- * The servers of a list as written before (`shareWindowServers`' `last`),
- * kept by the page between launches; none when there's nothing it can read.
+ * The servers of the list as last written (`shareWindowServers`' `last`),
+ * read back from the file when the app starts; none when there's nothing
+ * there it can read. Signing out of every server writes an empty list, so
+ * nothing of an account signed out of comes back from it.
  */
 export function writtenServers(text: string | null): ShareWindowServer[] {
   let parsed: unknown;
@@ -205,7 +210,9 @@ export function writtenServers(text: string | null): ShareWindowServer[] {
   } catch {
     return [];
   }
-  return Array.isArray(parsed) ? parsed.filter(isWrittenServer) : [];
+  if (typeof parsed !== "object" || parsed === null) return [];
+  const list: Record<string, unknown> = { ...parsed };
+  return list.version === SHARE_LIST_VERSION && Array.isArray(list.servers) ? list.servers.filter(isWrittenServer) : [];
 }
 
 const SHARE_STATUSES: readonly unknown[] = ["ready", "old", "none"] satisfies ShareStatus[];

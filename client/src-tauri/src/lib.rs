@@ -500,6 +500,7 @@ fn phone_app() -> tauri::Builder<tauri::Wry> {
             share_window::share_sign_in_save,
             share_window::share_sign_in_forget,
             share_window::share_sign_ins_kept,
+            share_window::share_window_list_read,
             share_window::share_window_list_save
         ])
 }

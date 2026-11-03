@@ -25,6 +25,7 @@ const shell: ShareShell = {
   forget: (baseUrl) => invoke<string | null>("share_sign_in_forget", { baseUrl }),
   kept: () => invoke<string[]>("share_sign_ins_kept"),
   writeList: (list) => invoke("share_window_list_save", { list: JSON.stringify(list) }),
+  readList: () => invoke<string | null>("share_window_list_read"),
 };
 
 const logout = (baseUrl: string, refreshToken: string) => new PublicApi(baseUrl).logout(refreshToken);
@@ -104,24 +105,15 @@ export function useShareSignIns(on: boolean, sessions: Sessions): ReadonlyMap<st
   return status;
 }
 
-/** Where the page keeps the servers it last wrote, between launches (#825). */
-const WRITTEN_KEY = "linger.next.share-window";
-
-function pageStore(): Storage | null {
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-}
-
 /**
  * On an iPhone, write the list the share window picks from (#820) whenever
  * the list or a server's sign-in changes, a moment after, so a burst of
  * changes is written once. `signedIn` is every server signed in here, in the
  * list's order, those still being reached and waiting for a newer app too:
  * one the app isn't connected to right now is written as it last was, and
- * only signing out takes one off (`shareWindowServers`, #825).
+ * only signing out takes one off (`shareWindowServers`, #825). The list on
+ * file is read back first, so a server not connected to yet since the app
+ * started keeps what it had.
  */
 export function useShareWindowList(
   on: boolean,
@@ -130,26 +122,35 @@ export function useShareWindowList(
   status: ReadonlyMap<string, ShareStatus>,
 ): void {
   const last = useRef<ShareWindowServer[] | null>(null);
+  const [read, setRead] = useState(false);
   useEffect(() => {
     if (!on) return undefined;
+    let live = true;
+    void shell
+      .readList()
+      .catch(() => null)
+      .then((text) => {
+        if (!live) return;
+        last.current ??= writtenServers(text);
+        setRead(true);
+      });
+    return () => {
+      live = false;
+    };
+  }, [on]);
+  useEffect(() => {
+    if (!on || !read) return undefined;
     const timer = window.setTimeout(() => {
-      const store = pageStore();
-      last.current ??= writtenServers(store?.getItem(WRITTEN_KEY) ?? null);
       const reader = colorReader(document);
       try {
         const now = shareWindowList(listings.filter(connected), status, readTheme(reader), (key) => nameColor(reader, key), Date.now());
-        const list = { ...now, servers: shareWindowServers(signedIn, now.servers, last.current, status) };
+        const list = { ...now, servers: shareWindowServers(signedIn, now.servers, last.current ?? [], status) };
         last.current = list.servers;
-        try {
-          store?.setItem(WRITTEN_KEY, JSON.stringify(list.servers));
-        } catch {
-          // Storage refused: it's kept for as long as the app is open.
-        }
         void shell.writeList(list).catch(() => undefined);
       } finally {
         reader.done();
       }
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [on, signedIn, listings, status]);
+  }, [on, read, signedIn, listings, status]);
 }

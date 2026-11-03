@@ -671,8 +671,8 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   and writes the list it picks from with Linger's colours read from the design
   tokens (`core/shareWindow.ts`). A server the app isn't connected to right
   now (a while in the background, offline, still connecting, waiting for a
-  newer app) is written as it last was, which the page keeps between
-  launches; only signing out of it takes it off, at once
+  newer app) is written as it last was, read back from the file when the app
+  starts; only signing out of it takes it off, at once
   (`shareWindowServers`, #825). The shell keeps both where the extension
   reads them: the sign-ins in one Keychain entry in the App Group's access
   group, changed by either side only while holding `share-window/sign-ins.lock`

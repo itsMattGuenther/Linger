@@ -62,6 +62,7 @@ const COMMANDS: &[&str] = &[
     "share_sign_in_save",
     "share_sign_in_forget",
     "share_sign_ins_kept",
+    "share_window_list_read",
     "share_window_list_save",
     "clip_start",
     "clip_stop",

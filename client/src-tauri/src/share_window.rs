@@ -17,7 +17,8 @@
 //!   back a table read before the other's change (#822).
 //! - **The list it picks from**, with Linger's colours, as the page makes it
 //!   (`core/shareWindow.ts`): `share-window/list.json` in the App Group's
-//!   folder, marked "don't back up".
+//!   folder, marked "don't back up". The page reads it back when it starts,
+//!   so a server it hasn't connected to yet is written as it was (#825).
 //!
 //! The page decides when to ask for, renew and drop a sign-in; this only keeps
 //! them. Off an iPhone nothing shares this way, so every command answers as if
@@ -177,6 +178,18 @@ pub fn write_list(folder: &Path, list: &str) -> Result<(), String> {
     std::fs::rename(&partial, folder.join(LIST)).map_err(|err| err.to_string())
 }
 
+/// The list as last written into `folder`, for the app to start from (#825):
+/// a server the app hasn't connected to yet this time is kept as it was.
+/// `None` when there's none, or it's far too big to be one.
+pub fn read_list(folder: &Path) -> Option<String> {
+    let path = folder.join(LIST);
+    let size = std::fs::metadata(&path).ok()?.len();
+    if size > MOST_LIST_BYTES as u64 {
+        return None;
+    }
+    std::fs::read_to_string(path).ok()
+}
+
 fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -245,6 +258,25 @@ pub async fn share_sign_ins_kept() -> Vec<String> {
                 .unwrap_or_default()
         },
         Vec::new,
+    )
+    .await
+}
+
+/// The list the window picks from, as last written. Off an iPhone, none.
+#[tauri::command]
+pub async fn share_window_list_read() -> Option<String> {
+    crate::off_thread(
+        || {
+            #[cfg(target_os = "ios")]
+            {
+                read_list(&ios::folder()?)
+            }
+            #[cfg(not(target_os = "ios"))]
+            {
+                None
+            }
+        },
+        || None,
     )
     .await
 }
@@ -556,6 +588,9 @@ mod tests {
         write_list(&at, r#"{"version":1,"servers":[{"base_url":"x"}]}"#).expect("replaced");
         let read = std::fs::read_to_string(at.join(LIST)).expect("there");
         assert_eq!(read, r#"{"version":1,"servers":[{"base_url":"x"}]}"#);
+        // And read back as written, for the app to start from (#825).
+        assert_eq!(read_list(&at).as_deref(), Some(read.as_str()));
+        assert_eq!(read_list(&folder("none")), None);
         // Nothing half-written is left beside it.
         let names: Vec<_> = std::fs::read_dir(&at)
             .expect("folder")

@@ -469,8 +469,8 @@ it, or another program, runs at the same time.
   Caught by the iPhone Simulator share flow (#821), not by a reviewer.
   *Missed because* the tests gave the list connected servers only, and
   nothing ran the app into the background before sharing. *Changed:* a
-  server not connected right now is written as it last was, which the page
-  keeps between launches, and only signing out takes one off
+  server not connected right now is written as it last was, read back from
+  the file when the app starts, and only signing out takes one off
   (`shareWindowServers`, with tests); the simulator flow shares with Linger
   in the background.
 - **#826: the first fix for it held back too much, and dropped too much.**
@@ -482,3 +482,11 @@ it, or another program, runs at the same time.
   the list is always written, from the last one written for any server not
   connected, with tests of a server down while another connects and while
   one is signed out of.
+- **#826: the second fix kept its own copy of the list in the page.** The
+  first launch after updating had no copy yet, so a server down then was
+  dropped, and signing out of the last server left the copy behind, where
+  another account on the same server could see the first one's
+  conversations. Caught by Greptile. *Missed because* a second copy of
+  state has its own life, and the tests only had the one. *Changed:* no
+  copy: the page reads back the file the window reads
+  (`share_window_list_read`), which signing out of every server empties.
