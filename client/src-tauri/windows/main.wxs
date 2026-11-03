@@ -1,6 +1,6 @@
 <!--
-Based on Tauri CLI v2.11.4:
-https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.11.4/crates/tauri-bundler/src/bundle/windows/msi/main.wxs
+Based on Tauri CLI v2.12.4 (the same file as v2.11.4's):
+https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.12.4/crates/tauri-bundler/src/bundle/windows/msi/main.wxs
 Copyright (c) 2017 - Present Tauri Apps Contributors. MIT license: LICENSE-MIT.
 Local changes: search for the existing desktop shortcut and condition only its
 component on upgrades. Keep this template in sync when updating the Tauri CLI.
