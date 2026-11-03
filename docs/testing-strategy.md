@@ -20,6 +20,7 @@ what CI adds on top.
 | `main` | Every merge | `ci.yml` for what the merge changed. A run still waiting is cancelled when a newer merge lands, since the newer run covers it | As a PR |
 | `main`, nightly | 08:23 UTC | `nightly.yml`: every CI check, the package checks, the Windows and macOS shell builds, the iPhone app in the simulator, and every browser test three times with no retries. A failure opens an issue | About 40 minutes |
 | A release | A `v*` tag | `release.yml` and `image.yml` each run every CI check on the tagged commit first and build nothing unless it passes; then the signed packages, their audio, the Buddy list starting on Linux, the Windows shortcuts, and the server image | About 25 minutes |
+| A branch, by hand | `gh workflow run desktop.yml --ref <branch>` | The shell on Windows and macOS, the iPhone's Rust, and the Android app, both a debug build and a release one: the release build shrinks the app's Kotlin, and `scripts/android-jni.mjs` checks it kept every name Rust and Kotlin cross by (#834). Run it on a branch that changes the Android project; the nightly run runs it too | About 45 minutes |
 | A branch, by hand | `gh workflow run ios-simulator.yml --ref <branch> -f xcode=27.1` | The Xcode 27 canary: the iPhone simulator check built with Xcode 27 and the iOS 27 SDK, on GitHub's `xcode-27` image. Apple's rule that such an app use the scene life cycle shows only at launch, so it runs the same flows. Not required, and not nightly, until the scene life cycle lands (#788, #838) | As the iPhone check |
 | Real computers | Before a release, when an area changes | The [release checks](tasks/release-checks.md): several computers, real networks, audio devices, installs | By hand |
 
@@ -132,6 +133,13 @@ plugin writes it only when its build script runs, and a cached build skips
 that (#835). The Windows installer files (`main.wxs`, `installer-hooks.nsh`)
 name the Tauri CLI whose templates they were checked against, and a test
 fails until they're checked again after an upgrade.
+
+**A name Rust and the Android app's Kotlin cross by survives the release
+build.** The release build shrinks the Kotlin and drops what only Rust uses:
+0.5.4 shipped without the call bar's method (#834). Each such name is listed
+in `scripts/android-jni.mjs` with a keep rule in `proguard-rules.pro`; its
+test fails when a class Rust names, or an `external fun` in Linger's own
+Kotlin, isn't, and `desktop.yml` runs it on a real release build.
 
 `scripts/check.sh --all` runs everything whatever changed. So does a branch
 with nothing to compare against. `scripts/check.sh <base>` compares against

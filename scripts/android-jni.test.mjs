@@ -1,0 +1,137 @@
+// What the Android release build must keep for Rust and Kotlin to find each
+// other by name (#834): read from dexdump's real output (0.5.4's release
+// APK, which dropped VoiceCallService.update), every crossing in the repo
+// listed with a keep rule, and the script run on an app with stand-ins for
+// unzip and dexdump.
+import assert from "node:assert/strict";
+import { execFileSync, spawnSync } from "node:child_process";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+import { CROSSINGS, PROGUARD, dexMethods, keptClasses, missing, rustNamedClasses } from "./android-jni.mjs";
+
+const ROOT = fileURLToPath(new URL("../", import.meta.url));
+const SCRIPT = fileURLToPath(new URL("./android-jni.mjs", import.meta.url));
+const read = (path) => readFileSync(join(ROOT, path), "utf8");
+/** The four classes the crossings are in, cut from 0.5.4's release APK (`dexdump classes*.dex`). */
+const RELEASED = read("scripts/fixtures/dexdump-0.5.4.txt");
+/** The same, with `update` where a release build that kept it has it. */
+const KEPT = RELEASED.replace(
+  /(Class descriptor\s*: 'Lio\/github\/itsmattguenther\/linger\/VoiceCallService;'[\s\S]*?Direct methods\s*-\n)/,
+  "$1    #9              : (in Lio/github/itsmattguenther/linger/VoiceCallService;)\n      name          : 'update'\n      type          : '(Landroid/content/Context;Ljava/lang/String;ZZ)V'\n      access        : 0x0019 (PUBLIC STATIC FINAL)\n",
+);
+
+test("0.5.4's release build dropped the call bar's update, and kept the Keystore's", () => {
+  const classes = dexMethods(RELEASED);
+  assert.deepEqual([...classes.keys()].sort(), [
+    "io.crates.keyring.Keyring", "io.crates.keyring.Keyring$Companion",
+    "io.github.itsmattguenther.linger.VoiceCallService", "io.github.itsmattguenther.linger.VoiceCallService$Companion",
+  ]);
+  assert(classes.get("io.crates.keyring.Keyring$Companion").has("initializeNdkContext (Landroid/content/Context;)V"));
+  assert(classes.get("io.github.itsmattguenther.linger.VoiceCallService").has("onStartCommand (Landroid/content/Intent;II)I"));
+  assert(![...classes.get("io.github.itsmattguenther.linger.VoiceCallService")].some((method) => method.startsWith("d ")),
+    "a field (d) isn't read as a method");
+  assert.deepEqual(missing(classes).map((each) => each.method), ["update"]);
+});
+
+test("a build that keeps update is missing nothing", () => {
+  assert.deepEqual(missing(dexMethods(KEPT)), []);
+});
+
+test("update with another type, or in another class, isn't the one Rust calls", () => {
+  assert.deepEqual(missing(dexMethods(KEPT.replace("(Landroid/content/Context;Ljava/lang/String;ZZ)V", "(Landroid/content/Context;)V"))).map((each) => each.method), ["update"]);
+  assert.deepEqual(missing(dexMethods(KEPT.replace("Class descriptor  : 'Lio/github/itsmattguenther/linger/VoiceCallService;'", "Class descriptor  : 'La/b;'"))).map((each) => each.method), ["update"]);
+});
+
+test("what it can't read as dexdump's output fails, rather than reading as nothing kept", () => {
+  assert.throws(() => dexMethods(""), /no class in it/);
+  assert.throws(() => dexMethods("PK\u0003\u0004 not text"), /no class in it/);
+  assert.throws(() => dexMethods("  Class descriptor  : 'La/B;'\n  Direct methods    -\n      name          : 'x'\n  Virtual methods   -\n"), /the method x has no type/);
+});
+
+test("every class Rust names is a crossing, with a keep rule", () => {
+  const rust = readdirSync(join(ROOT, "client/src-tauri/src"), { recursive: true })
+    .filter((path) => path.endsWith(".rs"))
+    .map((path) => read(join("client/src-tauri/src", path)))
+    .join("\n");
+  const named = rustNamedClasses(rust);
+  assert(named.has("io.github.itsmattguenther.linger.VoiceCallService"), "phone_call.rs names the call bar's class");
+  const crossing = new Set(CROSSINGS.map((each) => each.class.replace(/\$Companion$/, "")));
+  assert.deepEqual([...named].filter((name) => !crossing.has(name.replace(/\$Companion$/, ""))), [], "add these to CROSSINGS in scripts/android-jni.mjs");
+  const kept = keptClasses(read(PROGUARD));
+  assert.deepEqual(CROSSINGS.filter((each) => !kept.has(each.class) || !kept.has(each.class.replace(/\$Companion$/, ""))).map((each) => each.class), [],
+    `a keep rule in ${PROGUARD} for the class and its outer class`);
+});
+
+test("every external fun in Linger's own Kotlin is a crossing", () => {
+  const kotlin = execFileSync("git", ["ls-files", "client/src-tauri/gen/android/app/src/main/java"], { cwd: ROOT, encoding: "utf8" })
+    .split("\n").filter((path) => path.endsWith(".kt"));
+  const external = kotlin.flatMap((path) => [...read(path).matchAll(/\bexternal\s+fun\s+(\w+)/g)].map((match) => `${path} ${match[1]}`));
+  assert(external.length > 0, "Keyring.kt's initializeNdkContext, at least");
+  assert.deepEqual(external.filter((each) => !CROSSINGS.some((crossing) => each === `${crossing.from} ${crossing.method}`)), [],
+    "add these to CROSSINGS in scripts/android-jni.mjs, with a keep rule");
+});
+
+test("a keep rule it can't read fails, naming the line", () => {
+  assert.deepEqual([...keptClasses("# a note\n-keep class a.B { *; }\n-keepclassmembers class a.C$D { public *; }\n")], ["a.B", "a.C$D"]);
+  assert.throws(() => keptClasses("-keep class a.B\n"), /:1: can't read "-keep class a\.B"/);
+  assert.throws(() => keptClasses("-keepattributes SourceFile\n-keep,allowobfuscation class a.B {\n *;\n}\n"), /:1: can't read/);
+});
+
+test("rust names are found dotted and slashed, and nothing else is", () => {
+  assert.deepEqual([...rustNamedClasses(`
+    env.new_string("io.github.itsmattguenther.linger.VoiceCallService")
+    env.find_class("io/crates/keyring/Keyring")
+    const APP_GROUP: &str = "group.io.github.itsmattguenther.linger";
+    "android/os/VibrationEffect"
+  `)], ["io.github.itsmattguenther.linger.VoiceCallService", "io.crates.keyring.Keyring"]);
+});
+
+// The script on an app: stand-ins for unzip (it writes two classes.dex files)
+// and dexdump (it prints a fixture for each), on PATH and in DEXDUMP.
+function standIns(t, dump) {
+  const dir = mkdtempSync(join(tmpdir(), "android-jni-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  mkdirSync(join(dir, "bin"));
+  writeFileSync(join(dir, "dump.txt"), dump);
+  writeFileSync(join(dir, "bin/unzip"), `#!/bin/sh
+out=""; while [ $# -gt 0 ]; do [ "$1" = -d ] && out="$2"; shift; done
+mkdir -p "$out" && echo a > "$out/classes.dex" && echo b > "$out/classes2.dex"
+`);
+  writeFileSync(join(dir, "bin/dexdump"), `#!/bin/sh
+case "$1" in */classes.dex) cat "${join(dir, "dump.txt")}";; *) echo "Class #1 -"; echo "  Class descriptor  : 'La/Other;'";; esac
+`);
+  for (const name of ["unzip", "dexdump"]) chmodSync(join(dir, "bin", name), 0o755);
+  writeFileSync(join(dir, "app.apk"), "PK");
+  return () => spawnSync("node", [SCRIPT, join(dir, "app.apk")], {
+    encoding: "utf8", env: { ...process.env, PATH: `${join(dir, "bin")}:${process.env.PATH}`, DEXDUMP: join(dir, "bin/dexdump") },
+  });
+}
+
+test("run: a release app that dropped update fails, naming it and who needs it", (t) => {
+  const out = standIns(t, RELEASED)();
+  assert.equal(out.status, 1, out.stdout);
+  assert.match(out.stderr, /dropped io\.github\.itsmattguenther\.linger\.VoiceCallService\.update \(Landroid\/content\/Context;Ljava\/lang\/String;ZZ\)V, which client\/src-tauri\/src\/phone_call\.rs needs/);
+});
+
+test("run: one that kept everything passes, reading every classes.dex", (t) => {
+  const out = standIns(t, KEPT)();
+  assert.equal(out.status, 0, out.stderr);
+  assert.match(out.stdout, /keeps all 2 names Rust and Kotlin cross by/);
+});
+
+// The table repeats the method each crossing's file names; if that file moved
+// to another method, the release check would still look for the old one.
+test("each crossing's own file names its method, and Rust's its type too", () => {
+  for (const crossing of CROSSINGS) {
+    const text = read(crossing.from);
+    if (crossing.from.endsWith(".rs")) {
+      assert(text.includes(`"${crossing.method}"`), `${crossing.from} calls ${crossing.method}`);
+      assert(text.includes(`"${crossing.type}"`), `${crossing.from} calls it with ${crossing.type}`);
+    } else {
+      assert.match(text, new RegExp(`\\bexternal\\s+fun\\s+${crossing.method}\\b`), `${crossing.from} declares ${crossing.method}`);
+    }
+  }
+});
