@@ -143,6 +143,28 @@ install, when nothing usually reads the program, and a person can press
 Retry where a runner can't. With the hooks, the update waits instead of
 asking.
 
+## Tauri 2.12 closes whatever holds the program (#836, 2026-11-03)
+
+Tauri CLI 2.12's NSIS template checks for a running app with Windows'
+Restart Manager (tauri-apps/tauri#14479): it asks which processes hold the
+program file, and a silent or passive install, an update among them,
+force-closes every one. 2.11 closed only processes named like the program.
+So the things #568 waits out (Explorer reading the program's icon, the
+compatibility scanner, the app still quitting after it started an update)
+would be closed instead, or make the update fail with "Failed to kill"
+(tauri-apps/tauri#16277, which Tauri treats as expected).
+
+The package check's busy case found it on the first 2.12 build: the process
+holding the program was the check itself, and the uninstaller's check closed
+it, so the step ended without a word.
+
+The hooks now wait for it first. `LINGER_WAIT_WHILE_HELD` asks Restart
+Manager the same question before the template's check, at the start of an
+install and of an uninstall, and waits up to ten seconds while anything
+holds the program. Only a Linger that really is running is left for the
+check, which closes it as it should. A Linger left open during a manual
+install now waits those ten seconds before the installer offers to close it.
+
 ## Fixed-package results, 2026-09-22
 
 [Windows package check](https://github.com/itsMattGuenther/Linger/actions/runs/35766081266/job/106875831477)
