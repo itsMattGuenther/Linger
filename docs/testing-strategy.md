@@ -129,7 +129,8 @@ and the rules job run it (#835). The iPhone flows run only on a Mac, so
 order, and `scripts/ios-plist.test.mjs` that `Info.ios.plist`, which every
 iPhone build merges in, declares the `linger://` scheme: the deep-link
 plugin writes it only when its build script runs, and a cached build skips
-that (#835). The Windows installer files (`main.wxs`, `installer-hooks.nsh`)
+that (#835). It also checks the scene life cycle is declared, run by tao's
+delegate, since an iOS 27 build without it won't launch (#838). The Windows installer files (`main.wxs`, `installer-hooks.nsh`)
 name the Tauri CLI whose templates they were checked against, and a test
 fails until they're checked again after an upgrade. A crate Linger takes from its own copy while a fix waits upstream
 (`[patch.crates-io]` in `client/src-tauri/Cargo.toml`, #836) names the pull
