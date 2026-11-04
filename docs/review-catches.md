@@ -76,6 +76,23 @@ to be right for every shape that window takes.
   no wait) and not against what else writes the same log. *Changed:* the
   test checks the count is taken just before Safari's request and the wait
   is for one more than it; six breakages of the step each fail it.
+- **#864: the sheet's test would pass with nothing closing the sheet.** It
+  checked where the share flow looks for Photos' "What's New" sheet, not
+  that it presses Continue there, so taking out both presses and leaving
+  the looks still passed. Caught by Greptile. *Missed because* the test was
+  written from the change (where the looks went), and not broken the way a
+  later edit would break it. *Changed:* a look counts only if its block
+  presses Continue until the sheet's gone; taking out either press, or
+  both, fails the test.
+- **#865: the typing check's test would pass with its first wait gone.**
+  It checked the typing, the retype and the last wait, but not the wait
+  between them that gives late keys time to land, so without it the subflow
+  would erase and retype at once. Caught by Greptile. *Missed because* the
+  test picked out the parts I thought mattered, by searching for them,
+  rather than reading the whole subflow. *Changed:* the test reads it
+  command by command; removing the first wait, making either wait the other
+  kind, dropping the erase, flipping the condition or adding a third typing
+  each fail it.
 
 - **#757: a workaround in the shell could pass for the fix.** The
   packaged-app check cleared the WebKit settings it knew of, not #756's own
@@ -237,6 +254,16 @@ on a world that has changed.
   had pointed the tester at photo types.
 
 ## Tests written from the case in mind, not from the ways things fail
+
+- **#862: the certificate service's log started too late to explain a
+  stall before the flows.** Its lines went into `app.log`, which starts
+  with the flows, so a stall in the warm-up (the step before, where #848 had
+  shown up) left no log, and "skipping update" from its restart could be
+  missed. Caught by Greptile. *Missed because* the log was added for the
+  stall that had happened, in the flows, not for every step that checks a
+  certificate. *Changed:* `trustd.log` is kept from before the setting and
+  the restart to the end of the run, and `scripts/ios-flows.test.mjs` fails
+  if it starts after them.
 
 - **#859: the check for fakes on `navigator.mediaDevices` read one line at
   a time.** A call split over lines, which is how a formatter writes

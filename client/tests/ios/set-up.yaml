@@ -5,18 +5,30 @@ appId: io.github.itsmattguenther.linger
 ---
 - tapOn: "Server or link"
 - eraseText: 80
-- inputText: ${SETUP_LINK}
+- runFlow:
+    file: subflows/type.yaml
+    env:
+      TEXT: ${SETUP_LINK}
 - pressKey: Enter
 - extendedWaitUntil:
     visible: "Nobody has set this server up yet.*"
     timeout: 45000
 - takeScreenshot: 04-set-up-form
 - tapOn: "Server name"
-- inputText: "Porch"
+- runFlow:
+    file: subflows/type.yaml
+    env:
+      TEXT: "Porch"
 - tapOn: "Username"
-- inputText: ${HOST_USERNAME}
+- runFlow:
+    file: subflows/type.yaml
+    env:
+      TEXT: ${HOST_USERNAME}
 - tapOn: "Display name"
-- inputText: "Matt"
+- runFlow:
+    file: subflows/type.yaml
+    env:
+      TEXT: "Matt"
 - tapOn: "Password"
 - inputText: ${HOST_PASSWORD}
 - takeScreenshot: 05-set-up-filled
