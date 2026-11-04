@@ -122,6 +122,12 @@ test("the simulator's first certificate check is done before the flows, after th
   assert(at("add-root-cert") < warm, "after the test authority is trusted");
   assert(warm < at("maestro test"), "before the flows");
   assert.match(workflow.slice(warm, at("- name: the app, installed")), /xcrun simctl openurl "\$UDID" "https:\/\/127\.0\.0\.1:\$FRONT_PORT\//, "a request from inside the simulator to the https front");
-  assert.match(workflow.slice(warm, at("- name: the app, installed")), /until \[ "\$\(grep -c 'TLS done' "\$OUT\/server\/front\.log"/, "waits until the front has seen a handshake finish");
+  // Waits for one more finished handshake than before Safari's request: the
+  // run's own check from the Mac already finished one (#858's review).
+  const step = workflow.slice(warm, at("- name: the app, installed"));
+  const counted = step.indexOf(`done_before="$(grep -c 'TLS done' "$OUT/server/front.log" || true)"`);
+  const asked = step.indexOf("xcrun simctl openurl");
+  assert(counted >= 0 && counted < asked, "the handshakes counted just before Safari's request");
+  assert(step.includes(`until [ "$(grep -c 'TLS done' "$OUT/server/front.log" || true)" -gt "$done_before" ]; do`), "waits until there's one more than that");
 });
 
