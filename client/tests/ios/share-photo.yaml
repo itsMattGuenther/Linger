@@ -26,9 +26,17 @@ appId: com.apple.mobileslideshow
 # included (#861). So the flow doesn't wait for it once: it closes it before
 # each tap in Photos, whenever it's there. A Continue pressed while it's
 # still arriving doesn't close it, so Continue is pressed until it's gone.
+#
+# Maestro reads the screen of the app iOS counts as in front, and until
+# Photos has drawn its first screen, iOS still counts Linger. Photos usually
+# draws within 3 to 8 seconds of starting. Once, on a slow GitHub Mac, it sat
+# 44 seconds before any of its own code ran and drew at 54, and all that
+# time Maestro was reading Linger's screen (#869). This waits for Photos
+# itself and ends as soon as it shows, so the long limit only costs time
+# when Photos is that slow.
 - extendedWaitUntil:
     visible: "(What.s New in Photos|Photo, [A-Za-z]+.[0-9]+, [0-9]+:[0-9]+.[AP]M)"
-    timeout: 45000
+    timeout: 120000
 - takeScreenshot: 11-photos
 # The photo, opened: tapped until it is, the sheet closed first each time.
 - repeat:
