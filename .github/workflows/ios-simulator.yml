@@ -246,9 +246,13 @@ jobs:
           # here, before the restart, to the end of the run (trustd.log), so
           # a stall in the warm-up before the flows has its lines too. With
           # nsurlsessiond's, which makes trustd's downloads, so the blocked
-          # download of the list ("an iPhone, starting") shows failing.
+          # download of the list ("an iPhone, starting") shows failing. The
+          # phone booted while the server and app built, and that download
+          # is tried at boot, so the lines kept since then come first.
+          predicate='process == "trustd" OR process == "nsurlsessiond"'
+          xcrun simctl spawn "$UDID" log show --style compact --predicate "$predicate" > "$OUT/trustd.log" 2>&1 || true
           nohup xcrun simctl spawn "$UDID" log stream --level info --style compact \
-            --predicate 'process == "trustd" OR process == "nsurlsessiond"' > "$OUT/trustd.log" 2>&1 &
+            --predicate "$predicate" >> "$OUT/trustd.log" 2>&1 &
           xcrun simctl spawn "$UDID" defaults write com.apple.security ValidUpdateEnabled -bool NO
           xcrun simctl spawn "$UDID" defaults -currentHost write com.apple.security ValidUpdateEnabled -bool NO
           xcrun simctl spawn "$UDID" defaults write /Library/Preferences/com.apple.security ValidUpdateEnabled -bool NO || true

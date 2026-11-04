@@ -255,6 +255,16 @@ on a world that has changed.
 
 ## Tests written from the case in mind, not from the ways things fail
 
+- **#870: the log meant to show the blocked download started after it.**
+  `nsurlsessiond`'s lines were added to `trustd.log` so each run would show
+  the revocation list download failing, but the log starts after the server
+  and app builds, and the phone boots before them, when that download is
+  first tried. Caught by Greptile. *Missed because* I checked the log
+  against the order of the steps as written, not against when the phone
+  starts doing things, which is at boot. *Changed:* the lines kept since
+  boot (`log show`) go into `trustd.log` first, and the stream adds to
+  them; `scripts/ios-flows.test.mjs` fails without either.
+
 - **#862: the certificate service's log started too late to explain a
   stall before the flows.** Its lines went into `app.log`, which starts
   with the flows, so a stall in the warm-up (the step before, where #848 had

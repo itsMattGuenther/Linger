@@ -226,8 +226,11 @@ test("the simulator's certificate service has its revocation list update off, be
   assert(restart < workflow.indexOf("add-root-cert") && restart < workflow.indexOf("simctl openurl"), "before the test authority, the warm-up and the flows");
   // Its log starts before the restart, so it has "skipping update", and
   // runs past the warm-up, so a stall there has its lines too.
-  const log = workflow.search(/nohup xcrun simctl spawn "\$UDID" log stream [^\n]*\\\n\s+--predicate 'process == "trustd" OR process == "nsurlsessiond"' > "\$OUT\/trustd\.log" 2>&1 &/);
-  assert(log > workflow.indexOf("simctl bootstatus") && log < off, "trustd's log kept from before the setting and the restart");
+  const predicate = workflow.indexOf(`predicate='process == "trustd" OR process == "nsurlsessiond"'`);
+  const kept = workflow.indexOf('xcrun simctl spawn "$UDID" log show --style compact --predicate "$predicate" > "$OUT/trustd.log"');
+  const log = workflow.search(/nohup xcrun simctl spawn "\$UDID" log stream [^\n]*\\\n\s+--predicate "\$predicate" >> "\$OUT\/trustd\.log" 2>&1 &/);
+  assert(predicate > workflow.indexOf("simctl bootstatus") && kept > predicate, "trustd's and nsurlsessiond's lines since boot first, since the phone booted during the builds");
+  assert(log > kept && log < off, "then trustd's log kept, added to them, from before the setting and the restart");
 });
 
 // The setting comes too late for trustd's first start, which has already
