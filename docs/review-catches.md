@@ -84,6 +84,15 @@ to be right for every shape that window takes.
   later edit would break it. *Changed:* a look counts only if its block
   presses Continue until the sheet's gone; taking out either press, or
   both, fails the test.
+- **#865: the typing check's test would pass with its first wait gone.**
+  It checked the typing, the retype and the last wait, but not the wait
+  between them that gives late keys time to land, so without it the subflow
+  would erase and retype at once. Caught by Greptile. *Missed because* the
+  test picked out the parts I thought mattered, by searching for them,
+  rather than reading the whole subflow. *Changed:* the test reads it
+  command by command; removing the first wait, making either wait the other
+  kind, dropping the erase, flipping the condition or adding a third typing
+  each fail it.
 
 - **#757: a workaround in the shell could pass for the fix.** The
   packaged-app check cleared the WebKit settings it knew of, not #756's own

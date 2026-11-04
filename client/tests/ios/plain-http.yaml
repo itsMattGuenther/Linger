@@ -5,7 +5,10 @@
 appId: io.github.itsmattguenther.linger
 ---
 - tapOn: "Server or link"
-- inputText: ${SERVER}
+- runFlow:
+    file: subflows/type.yaml
+    env:
+      TEXT: ${SERVER}
 - takeScreenshot: 02-typing-an-address
 - pressKey: Enter
 - extendedWaitUntil:

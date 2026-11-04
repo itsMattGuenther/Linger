@@ -79,6 +79,36 @@ test("every linger:// link a flow opens answers iOS's question about opening it"
   }
 });
 
+// Maestro's typing has lost all but its first letter under load (#863), so a
+// flow types through subflows/type.yaml, which waits for the field to hold
+// the text and types once more when it doesn't. Two can't be read back and
+// type directly: a password's field shows dots, and the share window is out
+// of Maestro's sight.
+test("the flows type through the check that the typing arrived, but where it can't be read back", () => {
+  const unread = new Set(["set-up: ${HOST_PASSWORD}", 'share-photo: "From the share sheet."']);
+  const direct = [];
+  let checked = 0;
+  for (const name of flows) {
+    const flow = readFileSync(join(DIR, `${name}.yaml`), "utf8");
+    for (const match of flow.matchAll(/^- inputText: (.+)$/gm)) direct.push(`${name}: ${match[1]}`);
+    checked += [...flow.matchAll(/^- runFlow:\n {4}file: subflows\/type\.yaml\n {4}env:\n {6}TEXT: \S/gm)].length;
+  }
+  assert.deepEqual(direct.sort(), [...unread].sort(), "only the password and the share window's message type directly");
+  assert(checked >= 6, `${checked} typing steps through the check`);
+
+  // The subflow, command by command: type; wait for the field to hold it,
+  // giving late keys time; only if it doesn't, erase and type once more;
+  // then wait again, and fail if it still doesn't.
+  const sub = readFileSync(join(DIR, "subflows/type.yaml"), "utf8").split(/^---$/m)[1];
+  const commands = sub.split(/^- /m).slice(1).map((command) => command.replace(/^\s*#.*\n/gm, "").trimEnd());
+  const holds = "visible:\n      text: \\$\\{TEXT\\}\n      focused: true\n    timeout: \\d+";
+  assert.equal(commands.length, 4, "four commands");
+  assert.match(commands[0], /^inputText: \$\{TEXT\}$/, "types");
+  assert.match(commands[1], new RegExp(`^extendedWaitUntil:\\n    ${holds}\\n    optional: true$`), "waits for the field to hold it, without failing yet");
+  assert.match(commands[2], /^runFlow:\n    when:\n      notVisible:\n        text: \$\{TEXT\}\n        focused: true\n    commands:\n      - eraseText: \d+\n      - inputText: \$\{TEXT\}$/, "erases and types once more, only when it doesn't");
+  assert.match(commands[3], new RegExp(`^extendedWaitUntil:\\n    ${holds}$`), "then waits again, and fails when it still doesn't");
+});
+
 test("the order is read strictly", () => {
   assert.deepEqual(flowsOrder("executionOrder:\n  flowsOrder:\n    - a\n    # a note\n    - b-c\n\nother: 1\n"), ["a", "b-c"]);
   assert.throws(() => flowsOrder("executionOrder:\n  flowsOrder:\n    - a\n      - nested\n"), /can't read/);

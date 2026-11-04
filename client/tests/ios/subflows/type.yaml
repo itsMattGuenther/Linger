@@ -1,0 +1,31 @@
+# Types TEXT into the field that has focus, then waits for the field to hold
+# all of it; when it doesn't, erases the field and types once more (#863).
+# Maestro types at machine speed, in a burst, and under load the simulator
+# has lost all of a burst but its first letter: the field held "h" of an
+# address. The page didn't lose it; the field is a plain one, and a person
+# types a tenth of a second a key or slower. A field that loses typing every
+# time still fails here, on the second try.
+#
+# Not for a password: its field shows dots, not what was typed.
+appId: io.github.itsmattguenther.linger
+---
+- inputText: ${TEXT}
+- extendedWaitUntil:
+    visible:
+      text: ${TEXT}
+      focused: true
+    timeout: 10000
+    optional: true
+- runFlow:
+    when:
+      notVisible:
+        text: ${TEXT}
+        focused: true
+    commands:
+      - eraseText: 120
+      - inputText: ${TEXT}
+- extendedWaitUntil:
+    visible:
+      text: ${TEXT}
+      focused: true
+    timeout: 10000
