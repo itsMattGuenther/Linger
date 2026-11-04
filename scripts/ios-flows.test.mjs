@@ -133,10 +133,20 @@ test("the simulator's first certificate check is done before the flows, after th
 
 // Photos' "What's New" sheet comes up in its own time, past 30 seconds once,
 // over the photo (#861). The share flow closes it before each tap in Photos:
-// inside the loop that opens the photo, and before Share.
+// inside the loop that opens the photo, and before Share. Each place it's
+// looked for presses Continue until it's gone: a look that closes nothing
+// doesn't count.
 test("the share flow closes Photos' What's New sheet before opening the photo and before Share", () => {
   const flow = readFileSync(join(DIR, "share-photo.yaml"), "utf8");
-  const closes = [...flow.matchAll(/when:\n\s+visible: "What\.s New in Photos"/g)].map((match) => match.index);
+  const closes = [...flow.matchAll(/^( *)- runFlow:\n\1 {4}when:\n\1 {6}visible: "What\.s New in Photos"\n/gm)]
+    .filter((match) => {
+      // The block: every line after the condition indented past "- runFlow:".
+      const rest = flow.slice(match.index + match[0].length).split("\n");
+      const end = rest.findIndex((line) => line.trim() !== "" && line.search(/\S/) <= match[1].length);
+      const block = rest.slice(0, end < 0 ? rest.length : end).join("\n");
+      return /- repeat:\n\s+while:\n\s+visible: "Continue"\n(?:\s+.*\n)*?\s+- tapOn:\n\s+text: "Continue"/.test(block);
+    })
+    .map((match) => match.index);
   const opening = flow.indexOf("while:\n      notVisible: \"Share\"");
   const share = flow.indexOf('- tapOn: "Share"');
   assert(opening >= 0 && share >= 0, "the photo-opening loop and the Share tap");
