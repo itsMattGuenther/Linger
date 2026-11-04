@@ -418,3 +418,43 @@ test("the workflow starts share-window-ready on the flows' app.log before the fl
   assert.match(workflow, /\n {6}READY_PORT: \d+\n/, "on a port of its own");
   assert.match(config, /^# {3}WINDOW_READY /m, "config.yaml lists it with what the flows need");
 });
+
+// The flows read settings passed with `maestro test -e NAME=value`, listed in
+// three places: config.yaml, the workflow's command, and the guide's command
+// for a Mac of your own. WINDOW_READY was added to the first two, and the
+// guide's command would have stopped at the share flow (#873's review). Every
+// name a flow reads is in all three. A name a flow sets for another (a
+// subflow's TEXT) is the flows' own.
+test("every setting the flows read is in config.yaml, the workflow's command and the guide's", () => {
+  const files = [...readdirSync(DIR), ...readdirSync(join(DIR, "subflows")).map((name) => `subflows/${name}`)];
+  const read = new Set();
+  const own = new Set();
+  for (const name of files.filter((file) => file !== "config.yaml" && /\.(ya?ml|js)$/.test(file))) {
+    const text = readFileSync(join(DIR, name), "utf8");
+    if (name.endsWith(".js")) {
+      // Without comments and strings: what's left that's all capitals, and
+      // isn't the file's own or followed by `.` or `(`, comes from outside.
+      const code = text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "").replace(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`/g, '""');
+      const declared = new Set([...code.matchAll(/\b(?:const|let|var|function)\s+([A-Z][A-Z0-9_]+)\b/g)].map((match) => match[1]));
+      for (const [, setting] of code.matchAll(/\b([A-Z][A-Z0-9_]{2,})\b(?!\s*[.(])/g)) if (!declared.has(setting)) read.add(setting);
+    } else {
+      for (const [, setting] of text.matchAll(/\$\{([A-Z][A-Z0-9_]*)\}/g)) read.add(setting);
+      for (const [, setting] of text.matchAll(/^\s+([A-Z][A-Z0-9_]*):/gm)) own.add(setting);
+    }
+  }
+  const settings = [...read].filter((setting) => !own.has(setting)).sort();
+  assert(settings.includes("SERVER") && settings.includes("WINDOW_READY"), `found the flows' settings: ${settings}`);
+  const config = readFileSync(join(DIR, "config.yaml"), "utf8");
+  const listed = [...config.matchAll(/^# {3}([A-Z][A-Z0-9_]+) /gm)].map((match) => match[1]).sort();
+  assert.deepEqual(listed, settings, "config.yaml lists exactly the settings the flows read");
+  const workflow = readFileSync(fileURLToPath(new URL("../.github/workflows/ios-simulator.yml", import.meta.url)), "utf8");
+  const command = workflow.slice(workflow.indexOf("maestro test"), workflow.indexOf("client/tests/ios\n", workflow.indexOf("maestro test")));
+  assert.deepEqual([...command.matchAll(/-e "([A-Z][A-Z0-9_]+)=/g)].map((match) => match[1]).sort(), settings, "the workflow passes each of them");
+  const guide = readFileSync(GUIDE, "utf8");
+  const local = guide.slice(guide.indexOf("**On a Mac of your own**"));
+  const run = /maestro test \\\n([\s\S]*?)tests\/ios\n/.exec(local)?.[1];
+  assert(run, "the guide's command for a Mac of your own runs the flows");
+  assert.deepEqual([...run.matchAll(/-e ([A-Z][A-Z0-9_]+)=/g)].map((match) => match[1]).sort(), settings, "and passes each of them");
+  assert.match(local, /node \.\.\/scripts\/share-window-ready\.mjs app\.log 8099 &/, "and starts what WINDOW_READY points at");
+  assert.match(run, /-e WINDOW_READY=http:\/\/127\.0\.0\.1:8099\//, "on the same port");
+});

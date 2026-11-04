@@ -661,11 +661,21 @@ xcrun simctl install booted src-tauri/gen/apple/build/arm64-sim/Linger.app
 ```
 
 Then start a server, the front and the trust as the workflow's "a server on
-this Mac, behind https" step does, and run
-`SIMCTL_CHILD_SSL_CERT_FILE=<certs>/ca.pem maestro test -e SERVER=… -e
-SETUP_LINK=… -e HOST_USERNAME=… -e HOST_PASSWORD=… tests/ios` from
-`client/`. `maestro studio` shows what Maestro sees on the screen, for
-writing a new flow.
+this Mac, behind https" step does. Still in `client/`, keep the simulator's
+log and start the helper that tells the share flow when the share window is
+up (#839), as the workflow's "Maestro's flows" step does, and run the flows:
+
+```bash
+xcrun simctl spawn booted log stream --level info --style compact \
+  --predicate 'process == "Linger" OR process == "LingerShare"' > app.log &
+node ../scripts/share-window-ready.mjs app.log 8099 &
+SIMCTL_CHILD_SSL_CERT_FILE=<certs>/ca.pem maestro test \
+  -e SERVER=… -e SETUP_LINK=… -e HOST_USERNAME=… -e HOST_PASSWORD=… \
+  -e WINDOW_READY=http://127.0.0.1:8099/ tests/ios
+```
+
+`tests/ios/config.yaml` says what each setting is. `maestro studio` shows
+what Maestro sees on the screen, for writing a new flow.
 
 **What it can't tell you:** how the app does with a real phone's memory (a
 simulator has the Mac's, so a photo decoded whole that crashed phones, #817,

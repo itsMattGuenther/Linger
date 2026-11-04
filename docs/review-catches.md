@@ -644,6 +644,16 @@ it, or another program, runs at the same time.
   and the release doc. *Changed:* `docs/testing-strategy.md` points at that
   day, and a question asks whether each step a doc tells somebody to take
   works as written.
+- **#873: the guide's way to run the iPhone flows on your own Mac would have
+  stopped at the share flow.** The flow came to ask a new helper when the
+  share window is up (`WINDOW_READY`), added to `config.yaml` and the
+  workflow, but the guide's command passed the old four settings and started
+  no helper. Caught by Greptile. *Missed because* the flows' settings are
+  listed in three places and nothing compared them; the guide's command runs
+  only on a Mac, never in CI. *Changed:* the guide's command is a code block
+  that starts the helper, and `scripts/ios-flows.test.mjs` fails unless every
+  setting a flow reads is in `config.yaml`, the workflow's command and the
+  guide's.
 
 ## Written from what's connected right now
 
