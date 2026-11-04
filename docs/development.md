@@ -579,7 +579,11 @@ job (`scripts/https-front.test.mjs`). Before the flows, Safari in the
 simulator opens the front's health page, and the run waits until the
 front's log shows that handshake finish: the simulator's certificate service
 sometimes takes over a minute on its first check, longer than the app waits
-for an answer (#848). The step's log says how long it took.
+for an answer (#848). The step's log says how long it took. What held it up
+was its own update of Apple's revocation list ("Valid"), which kept its
+database locked for minutes, so that update is off in the simulator
+(`ValidUpdateEnabled`, set right after boot); `app.log` takes trustd's lines,
+and says "skipping update".
 
 **Reading a run.** The `iphone-simulator` artifact has `screens/`, a picture
 of each screen the flows stop at, numbered in order, and `last.png`, the

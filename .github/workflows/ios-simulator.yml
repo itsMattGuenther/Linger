@@ -224,6 +224,18 @@ jobs:
         run: |
           set -euo pipefail
           xcrun simctl bootstatus "$UDID" -b
+          # The certificate service, trustd, updates Apple's revocation list
+          # ("Valid") in the background, and while it does it holds its
+          # database locked, for minutes: every certificate check waits
+          # behind it, and the app's first request gave up at 30 seconds
+          # (#848). A test phone checking one test certificate doesn't need
+          # it, so it's off: ValidUpdateEnabled in com.apple.security, set
+          # where trustd may read it, then trustd restarted to read it
+          # afresh. Its log then says "skipping update".
+          xcrun simctl spawn "$UDID" defaults write com.apple.security ValidUpdateEnabled -bool NO
+          xcrun simctl spawn "$UDID" defaults -currentHost write com.apple.security ValidUpdateEnabled -bool NO
+          xcrun simctl spawn "$UDID" defaults write /Library/Preferences/com.apple.security ValidUpdateEnabled -bool NO || true
+          xcrun simctl spawn "$UDID" launchctl kill TERM system/com.apple.trustd || true
           # Auto-correction and predictions asked off, so the keyboard types
           # what a flow says. On iOS 26.5 the bar of suggestions still shows;
           # what's typed has come out as typed in every run, and the
@@ -319,9 +331,10 @@ jobs:
         run: |
           set -euo pipefail
           # WebKit's network process makes the page's connections, so a
-          # request that never comes back shows there (#848).
+          # request that never comes back shows there (#848). It hands each
+          # certificate to trustd, whose own lines say if it was held up.
           xcrun simctl spawn "$UDID" log stream --level info --style compact \
-            --predicate 'process == "Linger" OR process == "LingerShare" OR process == "com.apple.WebKit.Networking"' > "$OUT/app.log" 2>&1 &
+            --predicate 'process == "Linger" OR process == "LingerShare" OR process == "com.apple.WebKit.Networking" OR process == "trustd"' > "$OUT/app.log" 2>&1 &
           maestro test --device "$UDID" --test-output-dir "$OUT/maestro" \
             --format junit --output "$OUT/report.xml" \
             -e "SERVER=http://127.0.0.1:$SERVER_PORT" -e "SETUP_LINK=$SETUP_LINK" \
