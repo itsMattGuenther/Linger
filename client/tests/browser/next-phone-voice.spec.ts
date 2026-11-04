@@ -104,8 +104,13 @@ test("a web view whose encoder can't make Opus, as an iPhone's before iOS 26, of
 
 test("a phone that won't give the microphone says so in words, and Record can be tried again", async ({ page }) => {
   await page.addInitScript(() => {
-    if (!navigator.mediaDevices) return;
-    navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException("Permission denied", "NotAllowedError"));
+    if (typeof MediaDevices === "undefined") return;
+    // On the prototype: WebKit may collect `navigator.mediaDevices` and make
+    // it afresh, and a property added to the old one goes with it (#843).
+    Object.defineProperty(MediaDevices.prototype, "getUserMedia", {
+      value: () => Promise.reject(new DOMException("Permission denied", "NotAllowedError")),
+      configurable: true,
+    });
   });
   await inGeneral(page);
   await page.getByRole("button", { name: "Record a voice message" }).click();
