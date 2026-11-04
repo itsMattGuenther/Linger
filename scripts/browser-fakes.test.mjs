@@ -15,18 +15,23 @@ import { fileURLToPath } from "node:url";
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const TESTS = join(ROOT, "client/tests");
 
-/** Every way of putting a property on the wrapper itself, rather than its prototype. */
+/**
+ * The line each way of putting a property on the wrapper itself, rather than
+ * its prototype, starts on. Read across lines, since a formatter splits a
+ * call or an assignment (#859's review). An alias
+ * (`const devices = navigator.mediaDevices`) it can't follow.
+ */
 export function onTheWrapper(text) {
-  const found = [];
   const patterns = [
-    /navigator\s*\.\s*mediaDevices\s*\.\s*\w+\s*=(?!=)/,
-    /navigator\s*\.\s*mediaDevices\s*\[[^\]]+\]\s*=(?!=)/,
-    /Object\s*\.\s*(defineProperty|defineProperties|assign)\s*\(\s*navigator\s*\.\s*mediaDevices\b/,
+    /navigator\s*\.\s*mediaDevices\s*\.\s*\w+\s*=(?![=>])/g,
+    /navigator\s*\.\s*mediaDevices\s*\[[^\]]+\]\s*=(?![=>])/g,
+    /Object\s*\.\s*(defineProperty|defineProperties|assign)\s*\(\s*navigator\s*\.\s*mediaDevices\b/g,
   ];
-  text.split("\n").forEach((line, i) => {
-    if (patterns.some((pattern) => pattern.test(line))) found.push(i + 1);
-  });
-  return found;
+  const lines = new Set();
+  for (const pattern of patterns) {
+    for (const match of text.matchAll(pattern)) lines.add(text.slice(0, match.index).split("\n").length);
+  }
+  return [...lines].sort((a, b) => a - b);
 }
 
 function files(dir) {
@@ -50,11 +55,19 @@ test("each way of putting it on the wrapper is found, and the prototype isn't", 
     'Object.defineProperty(navigator.mediaDevices, "getDisplayMedia", { value });',
     "Object.assign(navigator.mediaDevices, { getUserMedia });",
     "Object.defineProperties(navigator.mediaDevices, {});",
-  ]) assert.deepEqual(onTheWrapper(line), [1], line);
+    // Split by a formatter, across lines: found where it starts.
+    'Object.defineProperty(\n  navigator.mediaDevices,\n  "getDisplayMedia",\n  { value: fake },\n);',
+    "navigator.mediaDevices\n  .getUserMedia = () => null;",
+    "navigator\n  .mediaDevices\n  .getUserMedia\n  = fake;",
+    "Object.assign(\n  navigator.mediaDevices,\n  { getUserMedia },\n);",
+  ]) assert.deepEqual(onTheWrapper(line), [1], JSON.stringify(line));
+  assert.deepEqual(onTheWrapper('const a = 1;\n\nObject.defineProperty(\n  navigator.mediaDevices,\n  "x",\n  {},\n);'), [3], "the line it starts on");
   for (const line of [
     'Object.defineProperty(MediaDevices.prototype, "getDisplayMedia", { value });',
     "if (navigator.mediaDevices.getUserMedia === undefined) return;",
     "const stream = await navigator.mediaDevices.getUserMedia({ audio: true });",
     "if (!navigator.mediaDevices) return;",
-  ]) assert.deepEqual(onTheWrapper(line), [], line);
+    "const same = navigator.mediaDevices.getUserMedia == other;",
+    "Object.defineProperty(\n  MediaDevices.prototype,\n  \"getUserMedia\",\n  { value },\n);",
+  ]) assert.deepEqual(onTheWrapper(line), [], JSON.stringify(line));
 });

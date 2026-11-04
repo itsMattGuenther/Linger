@@ -229,6 +229,14 @@ on a world that has changed.
 
 ## Tests written from the case in mind, not from the ways things fail
 
+- **#859: the check for fakes on `navigator.mediaDevices` read one line at
+  a time.** A call split over lines, which is how a formatter writes
+  `Object.defineProperty(...)` with an object in it, passed. Caught by
+  Greptile. *Missed because* the table of forms had every way of writing
+  it on one line, and none spread over several. *Changed:* it reads the
+  whole file and reports the line each match starts on, with the split
+  forms in its table.
+
 - **#849: the simulator's https front named a request only once it ended.**
   A request still waiting for the server when the run stopped looked like a
   connection that never sent one, the very case the log was added to tell
