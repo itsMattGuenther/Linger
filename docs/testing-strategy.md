@@ -339,7 +339,11 @@ does losing audio twice, and the first recording is kept
    --repeat-each=8 --workers=4` in WebKit, whose browser is in a container
    `taskset` can't reach. A fix that turns 8 failures in 8 into 8 passes is
    proof; a pass on an idle machine isn't.
-4. Fix whichever is wrong. Fixtures deliver events explicitly and in order;
+4. Fix whichever is wrong. A fixture fakes a browser method on its
+   prototype (`MediaDevices.prototype`), never on `navigator.mediaDevices`,
+   which WebKit may make afresh, taking the fake with it: the real picker
+   answered a test of a failed one (#843; `scripts/browser-fakes.test.mjs`
+   checks). Fixtures deliver events explicitly and in order;
    a test waits for the thing itself, never for a fixed time, and by the
    clock, never by counting tries: a try that fails at once makes a count a
    far shorter wait than it looks. The Windows checks gave WebView2 60 tries

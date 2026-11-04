@@ -89,7 +89,12 @@ function fakeScreen(): MediaStream {
  */
 let picker: string | null = null;
 
-Object.defineProperty(navigator.mediaDevices, "getDisplayMedia", {
+// On MediaDevices' prototype, not on `navigator.mediaDevices`: that object is
+// a wrapper WebKit may collect and make afresh while the page runs, and a
+// property added to the old one goes with it. On a busy machine the real
+// picker then answered, refusing as a headless browser does, and a test of
+// a failed picker read nothing said (#843).
+Object.defineProperty(MediaDevices.prototype, "getDisplayMedia", {
   value: async () => {
     if (picker === "blank") return document.createElement("canvas").captureStream(0);
     if (picker !== null) throw new DOMException("the picker failed", picker);

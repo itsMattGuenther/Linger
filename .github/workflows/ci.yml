@@ -478,6 +478,10 @@ jobs:
         # lockfile change it tested the old ones (#852). CI installs afresh,
         # so this is the only place the check itself is tested.
         run: node --test scripts/installed-packages.test.mjs
+      - name: a browser method a test fakes is faked on its prototype
+        # WebKit may make navigator.mediaDevices afresh, and a fake put on the
+        # old one goes with it: the real picker answered instead (#843).
+        run: node --test scripts/browser-fakes.test.mjs
       - name: a failed iPhone run says whether Maestro's driver died, and which app was in front
         # Maestro's runner dies on any failure XCUITest records, failing the
         # flows whatever the app did (#857); this reads its log.

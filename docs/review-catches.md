@@ -265,6 +265,14 @@ on a world that has changed.
   the restart to the end of the run, and `scripts/ios-flows.test.mjs` fails
   if it starts after them.
 
+- **#859: the check for fakes on `navigator.mediaDevices` read one line at
+  a time.** A call split over lines, which is how a formatter writes
+  `Object.defineProperty(...)` with an object in it, passed. Caught by
+  Greptile. *Missed because* the table of forms had every way of writing
+  it on one line, and none spread over several. *Changed:* it reads the
+  whole file and reports the line each match starts on, with the split
+  forms in its table.
+
 - **#860 (2 catches): the simulator's "driver died" step cleared Linger
   when it couldn't.** It said "re-run once" when the app in front wasn't
   known, and when Photos was in front, though Linger's share window runs
