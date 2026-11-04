@@ -231,7 +231,11 @@ jobs:
           # (#848). A test phone checking one test certificate doesn't need
           # it, so it's off: ValidUpdateEnabled in com.apple.security, set
           # where trustd may read it, then trustd restarted to read it
-          # afresh. Its log then says "skipping update".
+          # afresh. Its log then says "skipping update". The log is kept from
+          # here, before the restart, to the end of the run (trustd.log), so
+          # a stall in the warm-up before the flows has its lines too.
+          nohup xcrun simctl spawn "$UDID" log stream --level info --style compact \
+            --predicate 'process == "trustd"' > "$OUT/trustd.log" 2>&1 &
           xcrun simctl spawn "$UDID" defaults write com.apple.security ValidUpdateEnabled -bool NO
           xcrun simctl spawn "$UDID" defaults -currentHost write com.apple.security ValidUpdateEnabled -bool NO
           xcrun simctl spawn "$UDID" defaults write /Library/Preferences/com.apple.security ValidUpdateEnabled -bool NO || true
@@ -332,9 +336,9 @@ jobs:
           set -euo pipefail
           # WebKit's network process makes the page's connections, so a
           # request that never comes back shows there (#848). It hands each
-          # certificate to trustd, whose own lines say if it was held up.
+          # certificate to trustd, whose own lines are in trustd.log, from boot.
           xcrun simctl spawn "$UDID" log stream --level info --style compact \
-            --predicate 'process == "Linger" OR process == "LingerShare" OR process == "com.apple.WebKit.Networking" OR process == "trustd"' > "$OUT/app.log" 2>&1 &
+            --predicate 'process == "Linger" OR process == "LingerShare" OR process == "com.apple.WebKit.Networking"' > "$OUT/app.log" 2>&1 &
           maestro test --device "$UDID" --test-output-dir "$OUT/maestro" \
             --format junit --output "$OUT/report.xml" \
             -e "SERVER=http://127.0.0.1:$SERVER_PORT" -e "SETUP_LINK=$SETUP_LINK" \

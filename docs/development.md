@@ -582,15 +582,17 @@ sometimes takes over a minute on its first check, longer than the app waits
 for an answer (#848). The step's log says how long it took. What held it up
 was its own update of Apple's revocation list ("Valid"), which kept its
 database locked for minutes, so that update is off in the simulator
-(`ValidUpdateEnabled`, set right after boot); `app.log` takes trustd's lines,
-and says "skipping update".
+(`ValidUpdateEnabled`, set right after boot); `trustd.log` has the
+service's own lines from then on, warm-up included, and says "skipping
+update".
 
 **Reading a run.** The `iphone-simulator` artifact has `screens/`, a picture
 of each screen the flows stop at, numbered in order, and `last.png`, the
 screen when the run ended; `report.xml`, which flow passed; `maestro/`,
 Maestro's own record, with a picture before every step and, for a step that
 failed, what it could see on the screen; `app.log`, what the app and
-WebKit's network process (which makes the page's connections) logged; and
+WebKit's network process (which makes the page's connections) logged;
+`trustd.log`, the certificate service's, from boot; and
 `server/`, the server's log, with each request it answered, and the front's,
 with each connection, handshake and request and how long it took. The front
 names each by the app's end of the connection (`:port`), so a request that

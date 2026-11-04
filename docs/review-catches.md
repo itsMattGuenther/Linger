@@ -238,6 +238,16 @@ on a world that has changed.
 
 ## Tests written from the case in mind, not from the ways things fail
 
+- **#862: the certificate service's log started too late to explain a
+  stall before the flows.** Its lines went into `app.log`, which starts
+  with the flows, so a stall in the warm-up (the step before, where #848 had
+  shown up) left no log, and "skipping update" from its restart could be
+  missed. Caught by Greptile. *Missed because* the log was added for the
+  stall that had happened, in the flows, not for every step that checks a
+  certificate. *Changed:* `trustd.log` is kept from before the setting and
+  the restart to the end of the run, and `scripts/ios-flows.test.mjs` fails
+  if it starts after them.
+
 - **#860 (2 catches): the simulator's "driver died" step cleared Linger
   when it couldn't.** It said "re-run once" when the app in front wasn't
   known, and when Photos was in front, though Linger's share window runs
