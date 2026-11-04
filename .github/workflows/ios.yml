@@ -29,9 +29,9 @@ on:
         description: "Xcode to build with: 26.6 only to tell whether a problem is Xcode 27's (#839)"
         type: choice
         options:
-          - "27.2"
+          - "27.1"
           - "26.6"
-        default: "27.2"
+        default: "27.1"
 
 permissions:
   contents: read
@@ -44,10 +44,10 @@ jobs:
     # Named rather than macos-latest, whose image and default Xcode move on
     # by themselves: the Xcode this builds with is chosen below (#779).
     # GitHub's Xcode 27 is on its own image, `xcode-27`.
-    runs-on: ${{ startsWith(inputs.xcode || '27.2', '26') && 'macos-26' || 'xcode-27' }}
+    runs-on: ${{ startsWith(inputs.xcode || '27.1', '26') && 'macos-26' || 'xcode-27' }}
     timeout-minutes: 60
     env:
-      XCODE: ${{ inputs.xcode || '27.2' }}
+      XCODE: ${{ inputs.xcode || '27.1' }}
     steps:
       - name: what to build
         env:
@@ -75,7 +75,7 @@ jobs:
           # Build scripts' output, kept in the cache, names the Xcode they ran
           # with, and restored under another Xcode the link fails (#835): a
           # cache for each.
-          key: ${{ startsWith(inputs.xcode || '27.2', '27') && 'xcode-27' || '' }}
+          key: ${{ startsWith(inputs.xcode || '27.1', '27') && 'xcode-27' || '' }}
       # The Xcode chosen above, not whatever this Mac has as its default
       # (#779). From April 2027 App Store Connect takes only builds made with
       # the iOS 27 SDK, Xcode 27's, and such an app opens only if it declares

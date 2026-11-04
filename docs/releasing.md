@@ -336,13 +336,13 @@ memory, calls, the share sheet, sleep.
 - **The encryption question** is answered in `client/src-tauri/Info.ios.plist`
   (`ITSAppUsesNonExemptEncryption`: only standard, exempt encryption), so it
   isn't asked on each upload.
-- **It builds with Xcode 27.2** and the iOS 27 SDK, on GitHub's `xcode-27`
+- **It builds with Xcode 27.1** and the iOS 27 SDK, on GitHub's `xcode-27`
   Mac (a preview image), chosen in `ios.yml` rather than the Mac's default,
   and the run fails if the built app's SDK isn't that Xcode's (#779, #839).
   From April 2027 App Store Connect takes only builds made with the iOS 27
   SDK, and such an app opens only because it declares UIKit's scene life
-  cycle (#838). Not Xcode 27.1: on that Mac its iOS 27.1 simulator has only
-  the iPhone Duo, without Photos. `-f xcode=26.6` builds with Xcode 26.6 on
+  cycle (#838). Why 27.1 and not 27.2 yet is in `docs/decisions.md` (#839).
+  `-f xcode=26.6` builds with Xcode 26.6 on
   the macOS 26 Mac instead, to tell whether a problem on the testers' phones
   is Xcode 27's; App Store Connect takes that build until April 2027.
 - **The privacy manifest**, `gen/apple/linger-client_iOS/PrivacyInfo.xcprivacy`,

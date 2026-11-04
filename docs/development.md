@@ -506,7 +506,7 @@ TestFlight to a friend's phone takes the best part of an hour. So
 `.github/workflows/ios-simulator.yml` builds the iPhone app for the iOS
 Simulator on one of GitHub's Macs, starts it on a simulated iPhone, and
 drives it with [Maestro](https://maestro.dev), which taps and types the way a
-person does. It builds with Xcode 27.2, as the TestFlight build does, and
+person does. It builds with Xcode 27.1, as the TestFlight build does, and
 runs on the plain iPhone (an iPhone 17) of the newest iOS that has one. It
 runs on every pull request that touches the app
 (`client/src`, `client/src-tauri`, the flows; `scripts/ci-scope.mjs` says

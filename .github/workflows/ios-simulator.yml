@@ -16,7 +16,7 @@ name: iphone simulator
 # build for TestFlight is ios.yml's. docs/development.md, "The iPhone in the
 # simulator", says how to run the flows.
 #
-# It builds with Xcode 27.2 and the iOS 27 SDK, on GitHub's `xcode-27`
+# It builds with Xcode 27.1 and the iOS 27 SDK, on GitHub's `xcode-27`
 # image, as ios.yml does (#839). Run by hand, it can build with Xcode 26.6
 # instead (`-f xcode=26.6`), on the macOS 26 image, to tell whether a
 # problem is Xcode 27's: the TestFlight build can still be made with it until
@@ -29,9 +29,9 @@ on:
         description: Xcode to build with (26.6 only to tell whether a problem is Xcode 27's)
         type: choice
         options:
-          - "27.2"
+          - "27.1"
           - "26.6"
-        default: "27.2"
+        default: "27.1"
   # nightly.yml runs it on main every night, whatever changed.
   workflow_call:
     inputs:
@@ -70,7 +70,7 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.ios == 'true' }}
     # The Mac and Xcode ios.yml builds the TestFlight app with (#779, #839).
-    runs-on: ${{ startsWith(inputs.xcode || '27.2', '26') && 'macos-26' || 'xcode-27' }}
+    runs-on: ${{ startsWith(inputs.xcode || '27.1', '26') && 'macos-26' || 'xcode-27' }}
     timeout-minutes: 75
     env:
       # Maestro, pinned by version and checksum (its release's
@@ -116,12 +116,12 @@ jobs:
           # Build scripts' output, kept in the cache, names the Xcode they ran
           # with: restored under Xcode 27, the link looked for Xcode 26.6's
           # libraries and failed (#835). So each Xcode has a cache of its own.
-          key: ${{ startsWith(inputs.xcode || '27.2', '27') && 'xcode-27' || '' }}
+          key: ${{ startsWith(inputs.xcode || '27.1', '27') && 'xcode-27' || '' }}
       # The same Xcode as ios.yml, for the reasons there (#779, #839), unless
       # run by hand with Xcode 26.6 (above).
-      - name: Xcode ${{ inputs.xcode || '27.2' }}
+      - name: Xcode ${{ inputs.xcode || '27.1' }}
         env:
-          XCODE: ${{ inputs.xcode || '27.2' }}
+          XCODE: ${{ inputs.xcode || '27.1' }}
         run: sudo xcode-select -s "/Applications/Xcode_$XCODE.app"
       - name: what this Mac builds and runs with
         run: |
@@ -131,14 +131,18 @@ jobs:
           # The iPhones each iOS has here: GitHub's images change, and the
           # one the next step picks depends on them (#839).
           xcrun simctl list devices available | grep -E '^-- iOS|^ +iPhone'
+          # Only said, never checked here: ios.yml sends its build to
+          # TestFlight with altool, and fails before building without it.
+          xcrun altool --version || echo "::warning::this Xcode has no altool, which ios.yml uploads with"
 
       # The plain iPhone (not a Pro, Plus, Max, Air or Duo), the size most
       # people have and the one share-photo.yaml's taps inside the share
       # window were measured on, on the newest iOS that has one. Not just the
-      # newest iOS: on GitHub's Xcode 27 Mac, iOS 27.1 is a release for the
-      # iPhone Duo alone, without Photos, and the share flow couldn't start
-      # (#839). Started now and waited for after the builds: a first boot
-      # here takes about three minutes.
+      # newest iOS: on GitHub's Xcode 27 Mac, iOS 27.1, Xcode 27.1's own, is a
+      # release for the iPhone Duo alone, without Photos, and the share flow
+      # couldn't start (#839); this takes iOS 27.0's iPhone 17 there. Started
+      # now and waited for after the builds: a first boot here takes about
+      # three minutes.
       - name: an iPhone, starting
         run: |
           set -euo pipefail

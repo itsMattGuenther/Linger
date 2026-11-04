@@ -2082,7 +2082,7 @@ anything that kept it running in the background.
   the middle, and the window let go of, are the TestFlight testers' (Matt
   has no iPhone).
 
-## Decided — the iPhone app builds with Xcode 27.2 (#839)
+## Decided — the iPhone app builds with Xcode 27.1 (#839)
 
 **2026-11-04, Matt.** From April 2027 App Store Connect takes only builds
 made with the iOS 27 SDK. The iPhone app declares the scene life cycle such a
@@ -2095,11 +2095,17 @@ or the other, not both at once.
   (`share-window.yml`), all on GitHub's `xcode-27` image, a preview. Each
   Xcode keeps a build cache of its own: restored under the other, the link
   fails (#835).
-- **27.2, not 27.1.** On that image Xcode 27.1's iOS 27.1 simulator has only
-  the iPhone Duo, and no Photos, so the share flow couldn't start. The
+- **27.1, the image's default.** Its own simulator, iOS 27.1, has only the
+  iPhone Duo there, and no Photos, so the share flow couldn't start. The
   simulator now takes the plain iPhone (an iPhone 17, the model the share
-  window's taps were measured on) on the newest iOS that has one, and stops
-  at once, saying so, if Photos isn't on it.
+  window's taps were measured on) on the newest iOS that has one, iOS 27.0,
+  and stops at once, saying so, if Photos isn't on it.
+- **Not 27.2 yet.** On 2026-11-04 GitHub was still rolling it out: some of
+  its Xcode 27 Macs had only 27.2's release candidate and no iOS 27.2
+  simulator, and Tauri won't build for the simulator without the one of its
+  own Xcode ("Xcode Simulator SDK 27.2 is not installed", run 41853188953).
+  Move once every Mac has it, all three workflows at once
+  (`scripts/ios-flows.test.mjs` fails when they differ).
 - **Xcode 26.6 stays a choice by hand** (`-f xcode=26.6`, in `ios.yml` and
   `ios-simulator.yml`), to tell whether a problem is Xcode 27's, until April
   2027, when App Store Connect stops taking its builds.
