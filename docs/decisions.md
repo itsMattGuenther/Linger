@@ -1996,3 +1996,36 @@ every other app.
   several" choice, and the iPhone's own suggestions row of people at the top of
   the share sheet, which would mean telling iOS who you talk to.
 
+
+## Decided — Linger takes tao from its own copy until tao releases the cold-start fix (#836, #838)
+
+**Matt, 2026-11-03.** On Tauri 2.12 (tao 0.37), an iPhone on iOS 26 or later
+loses a `linger://` link that starts Linger: iOS hands it to the scene, and
+tao doesn't pass it on (tauri-apps/tao#1248). The simulator's `link-closed`
+flow shows it, and the same flow passes on 2.11. tao's fix,
+tauri-apps/tao#1376, is under review with no date, and the iPhone needs 2.12
+before April 2027 (#779). An invite opened from a closed Linger is the first
+thing a new person on an iPhone does.
+
+- **Linger builds tao from its own copy**: `itsMattGuenther/tao`, tao 0.37.2
+  with #1376's two commits, pinned by commit in `client/src-tauri/Cargo.toml`
+  (`[patch.crates-io]`). The change is in tao's iPhone code only, so every
+  other platform builds the same tao, and the app's size changes by a few
+  kilobytes at most.
+- **It goes the day it can.** The nightly run asks GitHub about #1376
+  (`scripts/upstream-fixes.mjs`) and opens an issue once a tao release has
+  it, or if it's closed without merging. `scripts/tauri-versions.mjs` fails
+  if `Cargo.lock` stops building tao from the pin: Cargo drops a pin that
+  stops fitting with only a warning, and the fix would go with it.
+- **Not chosen:** waiting (no date, and a deadline), or Linger reading the
+  launch link itself (new iPhone code, written without an iPhone, when a
+  reviewed fix exists).
+- **The same tao reports a scene iOS lets go of as the window closed**
+  (tauri-apps/tao#1261): iOS discards a scene left in the background when it
+  wants the memory, and Tauri then quit the app, so coming back started
+  Linger over. On a phone Linger now stays, and opens its window again when
+  the scene comes back (`phone_scene.rs`); the page loads again, while the
+  sign-ins and server connections, which live in Rust, carry on. Voice runs
+  in the page on a phone (`pageVoice.ts`), so it ends with it: staying in
+  voice in the background is #851. Found by the simulator's share flow,
+  which leaves Linger in the background while it shares.

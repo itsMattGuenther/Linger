@@ -90,8 +90,27 @@ jobs:
           path: client/test-results
           retention-days: 7
 
+  upstream:
+    # A fix Linger takes from its own copy while it waits upstream
+    # ([patch.crates-io] in client/src-tauri/Cargo.toml, #836): an issue once
+    # the fix is in a release, or its pull request is closed without it, so
+    # the copy goes the day it can.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: pinned fixes, upstream
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          LINGER_ASSIGNEE: ${{ github.repository_owner }}
+        run: node scripts/upstream-fixes.mjs
+
   report:
-    needs: [tests, packages, desktop, iphone, repeat]
+    needs: [tests, packages, desktop, iphone, repeat, upstream]
     if: ${{ failure() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -115,6 +134,7 @@ jobs:
           | Shell builds on Windows and macOS, and the phone app's | ${{ needs.desktop.result }} |
           | The iPhone app in the simulator | ${{ needs.iphone.result }} |
           | Every browser test, three times | ${{ needs.repeat.result }} |
+          | Pinned fixes, asked upstream | ${{ needs.upstream.result }} |
 
           Only the repeated browser tests failing usually means a test that fails at random. The failed job names it, and [the testing strategy](https://github.com/${{ github.repository }}/blob/main/docs/testing-strategy.md#a-test-that-fails-at-random) says what to do. Close this once the nightly run is green again.
           EOF

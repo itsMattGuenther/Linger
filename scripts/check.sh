@@ -43,7 +43,7 @@ echo "== version check, and the checks' own tests =="
 scripts/version-check.sh
 node --test --test-reporter=dot scripts/ci-scope.test.mjs scripts/ci-gate.test.mjs scripts/changed-tests.test.mjs scripts/action-pins.test.mjs scripts/workflow-downloads.test.mjs
 node --test --test-reporter=dot scripts/csp-assets.test.mjs scripts/doc-paths.test.mjs scripts/overview-docs.test.mjs scripts/ios-app-group.test.mjs scripts/https-front.test.mjs scripts/linux-next-env.test.mjs scripts/package-deps.test.mjs scripts/playwright-image.test.mjs scripts/issue-label.test.mjs scripts/startup-time.test.mjs scripts/updater-urls.test.mjs scripts/release-draft.test.mjs client/scripts/webview2-wait.test.mjs
-node --test --test-reporter=dot scripts/pr-questions.test.mjs scripts/review-catches.test.mjs scripts/tauri-versions.test.mjs scripts/ios-flows.test.mjs scripts/ios-plist.test.mjs scripts/android-jni.test.mjs
+node --test --test-reporter=dot scripts/pr-questions.test.mjs scripts/review-catches.test.mjs scripts/tauri-versions.test.mjs scripts/ios-flows.test.mjs scripts/ios-plist.test.mjs scripts/upstream-fixes.test.mjs scripts/android-jni.test.mjs
 echo "== Tauri's Rust crates and JavaScript packages on one version =="
 node scripts/tauri-versions.mjs
 python3 scripts/linux-audio-check.test.py -q
@@ -106,6 +106,14 @@ if on web; then
   fi
   echo "== client: the build embeds nothing the shipped CSP refuses =="
   (cd client && pnpm exec vite build --logLevel warn && node ../scripts/csp-assets.mjs dist)
+fi
+
+if on packages; then
+  # The icons are what the pinned Tauri CLI makes from the approved artwork.
+  # CI's package check asked this alone, so a Tauri upgrade that draws them
+  # differently only showed there (#836).
+  echo "== the app icons are the pinned Tauri CLI's, from the approved artwork =="
+  icons="$(node scripts/app-icons.mjs --check 2>&1)" || { grep -v " Creating " <<<"$icons"; exit 1; }
 fi
 
 if on shell; then

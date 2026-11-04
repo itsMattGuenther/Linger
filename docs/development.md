@@ -379,7 +379,10 @@ Tauri, compare it with the upstream template named in its header. The NSIS
 installer keeps Tauri's template and adds hooks,
 `client/src-tauri/windows/installer-hooks.nsh`: an update waits up to ten
 seconds for a program file something else has open, instead of asking
-([#568](windows-update-checks.md#a-busy-program-during-an-update-568-2026-10-11)).
+([#568](windows-update-checks.md#a-busy-program-during-an-update-568-2026-10-11)),
+and since Tauri 2.12 an install or uninstall waits for it before the
+template's check, which would close whatever holds it
+([#836](windows-update-checks.md#tauri-212-closes-whatever-holds-the-program-836-2026-11-03)).
 Check the hooks against the template when updating Tauri too. Windows
 package checks install the published 0.3.0 MSI, upgrade to the newly built
 package, and check original, renamed, moved and deleted desktop shortcuts,

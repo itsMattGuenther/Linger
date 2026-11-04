@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { CARGO_LOCK, PNPM_LOCK, cargoPackages, pnpmDependencies, problems } from "./tauri-versions.mjs";
+import { CARGO_LOCK, CARGO_TOML, PNPM_LOCK, cargoPackages, patches, pnpmDependencies, problems, unusedPatches } from "./tauri-versions.mjs";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const SCRIPT = fileURLToPath(new URL("./tauri-versions.mjs", import.meta.url));
@@ -148,6 +148,7 @@ test("run: in a repository whose lockfiles don't match, it fails and says what",
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   execFileSync("git", ["init", "-q"], { cwd: dir });
   const write = (path, text) => { mkdirSync(dirname(join(dir, path)), { recursive: true }); writeFileSync(join(dir, path), text); };
+  write(CARGO_TOML, "[package]\nname = \"linger-client\"\n");
   write(CARGO_LOCK, cargoLock(swap(today.cargo, "tauri", "2.12.5")));
   write(PNPM_LOCK, pnpmLock(today.pnpm, today.dev));
   const failed = spawnSync("node", [SCRIPT], { cwd: join(dir, "client"), encoding: "utf8" });
@@ -175,4 +176,84 @@ test("the Windows installer files name the Tauri CLI they were checked against",
     assert.equal(named, cli,
       `${path} was checked against Tauri CLI ${named}, and the CLI is ${cli}: compare it with that CLI's template, then change the version it names`);
   }
+});
+
+// A pin (#836): Cargo.toml takes tao from Linger's own copy until tao releases
+// tauri-apps/tao#1376. Cargo drops a pin that stops fitting with only a warning,
+// so the lockfile must show the pin in use, and every pin names what it waits for.
+const REV = "10e79e36ab73ac7f631b5c97783d99130414073d";
+const pinned = `[package]
+name = "linger-client"
+
+[dependencies]
+tauri = "2.12.5"
+
+# Why it's pinned.
+# upstream: tauri-apps/tao#1376
+[patch.crates-io]
+tao = { git = "https://github.com/itsMattGuenther/tao", rev = "${REV}" }
+`;
+const lockWith = (source) => `version = 4
+
+[[package]]
+name = "tao"
+version = "0.37.2"
+${source ? `source = "${source}"\n` : ""}
+[[package]]
+name = "tauri"
+version = "2.12.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+`;
+
+test("a pin is read with what it waits for, and nothing else is", () => {
+  assert.deepEqual(patches(pinned), [{ name: "tao", git: "https://github.com/itsMattGuenther/tao", rev: REV, upstream: "tauri-apps/tao#1376" }]);
+  assert.deepEqual(patches("[package]\nname = \"x\"\n\n[dependencies]\ntao = { git = \"https://x\", rev = \"1\" }\n"), []);
+  assert.throws(() => patches(pinned.replace("[patch.crates-io]", "[profile.release]\nlto = true\n\n[patch.crates-io]")),
+    /names no "# upstream/, "an upstream line above another section isn't the pin's");
+});
+
+test("[patch.crates-io] is read however TOML writes it, and any other patch form fails", () => {
+  const want = patches(pinned);
+  for (const header of ['[patch."crates-io"]', "[patch.'crates-io']", "[ patch . crates-io ]", "[patch.crates-io] # until tao releases it"]) {
+    assert.deepEqual(patches(pinned.replace("[patch.crates-io]", header)), want, header);
+  }
+  // Each of these is a patch Cargo would build from, in a form this doesn't
+  // read: it fails rather than seeing no pins (#850's review).
+  for (const text of [
+    pinned.replace("[patch.crates-io]\ntao = {", "[patch.crates-io.tao]\nx = {"),
+    pinned.replace("[patch.crates-io]\ntao = {", "[patch]\ncrates-io.tao = {"),
+    pinned.replace("[patch.crates-io]", '[patch."https://github.com/tauri-apps/tao"]'),
+    pinned.replace("[patch.crates-io]", "[[patch.crates-io]]"),
+    pinned.replace("[patch.crates-io]\ntao = {", "patch.crates-io.tao = {"),
+    `[package]\nname = "x"\n${'"patch"'}.crates-io.tao = { git = "https://x", rev = "${REV}" }\n`,
+  ]) assert.throws(() => patches(text), /pins are read from \[patch\.crates-io\] only/, text);
+});
+
+test("a pin it can't read, or one that names nothing to wait for, fails", () => {
+  const cases = [
+    [pinned.replace("# upstream: tauri-apps/tao#1376\n", ""), /names no "# upstream: owner\/repo#N"/],
+    [pinned.replace("tauri-apps/tao#1376", "the tao fix"), /an upstream is owner\/repo#number/],
+    [pinned.replace(`rev = "${REV}"`, 'branch = "linger"'), /a pin is name = \{ git = "https:\/\/\.\.\.", rev = "<the whole commit>" \}/],
+    [pinned.replace(REV, REV.slice(0, 8)), /a pin is name/],
+    [pinned.replace(/tao = \{.*\}/, 'tao = { path = "../tao" }'), /a pin is name/],
+    [pinned.replace(/tao = \{.*\}/, 'tao = "0.37.3"'), /a pin is name/],
+  ];
+  for (const [text, error] of cases) assert.throws(() => patches(text), error, text);
+});
+
+test("a pin the lockfile doesn't build from is named, so its fix can't go quietly", () => {
+  const pins = patches(pinned);
+  assert.deepEqual(unusedPatches(pins, lockWith(`git+https://github.com/itsMattGuenther/tao?rev=${REV}#${REV}`)), []);
+  for (const lock of [
+    lockWith("registry+https://github.com/rust-lang/crates.io-index"),
+    lockWith(`git+https://github.com/itsMattGuenther/tao?rev=${"0".repeat(40)}#${"0".repeat(40)}`),
+    lockWith(`git+https://github.com/someone/tao?rev=${REV}#${REV}`),
+    lockWith(null).replace(/\[\[package\]\]\nname = "tao"[\s\S]*?\n\n/, ""),
+    lockWith(`git+https://github.com/itsMattGuenther/tao?rev=${REV}#${REV}`) + '\n[[package]]\nname = "tao"\nversion = "0.37.3"\nsource = "registry+x"\n',
+  ]) assert.match(unusedPatches(pins, lock).join(""), /doesn't build tao from the pin/, lock);
+});
+
+test("the repository's own pins are each in use", () => {
+  const pins = patches(readFileSync(join(ROOT, CARGO_TOML), "utf8"));
+  assert.deepEqual(unusedPatches(pins, readFileSync(join(ROOT, CARGO_LOCK), "utf8")), []);
 });
