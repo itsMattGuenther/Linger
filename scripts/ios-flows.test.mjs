@@ -122,6 +122,6 @@ test("the simulator's first certificate check is done before the flows, after th
   assert(at("add-root-cert") < warm, "after the test authority is trusted");
   assert(warm < at("maestro test"), "before the flows");
   assert.match(workflow.slice(warm, at("- name: the app, installed")), /xcrun simctl openurl "\$UDID" "https:\/\/127\.0\.0\.1:\$FRONT_PORT\//, "a request from inside the simulator to the https front");
-  assert.match(workflow.slice(warm, at("- name: the app, installed")), /grep -c 'TLS done'/, "waits for the front to see the handshake finish");
+  assert.match(workflow.slice(warm, at("- name: the app, installed")), /until \[ "\$\(grep -c 'TLS done' "\$OUT\/server\/front\.log"/, "waits until the front has seen a handshake finish");
 });
 
