@@ -50,6 +50,10 @@ mod screen_shell;
 #[cfg(desktop)]
 mod screen_sound;
 mod secrets;
+// Voice when iOS lets go of the window (#851): the shell leaves it on each
+// server, and keeps where for the page that comes back.
+#[cfg(any(mobile, test))]
+mod voice_away;
 // Files shared to Linger from the phone's share sheet (#785).
 #[cfg(any(mobile, test))]
 mod shared;
@@ -76,6 +80,8 @@ use std::sync::Mutex;
 
 use linger_core::gateway::{ClientFrame, ServerFrame};
 use serde::Serialize;
+#[cfg(mobile)]
+use tauri::Manager;
 use tauri::{AppHandle, Emitter, State};
 
 use secrets::{SessionWrite, SessionsLoad, StoredSession};
@@ -198,6 +204,12 @@ impl gateway::Events for WindowEvents {
     }
 
     fn frame(&self, frame: &ServerFrame, replayed: bool) {
+        // A seat the server ended is never said to have ended away (#851).
+        #[cfg(mobile)]
+        if let Some(held) = self.app.try_state::<voice_away::Held>() {
+            let said = voice_away::Said::of(&frame.event);
+            held.with(|seats| seats.heard(&self.server, said));
+        }
         let _ = self.app.emit(
             gateway::FRAME_EVENT,
             FrameEvent {
@@ -249,6 +261,10 @@ fn gateway_connect(
         return false;
     };
     tauri::async_runtime::spawn(task);
+    // A new connection is a new session: a seat the old one had is gone (#851).
+    #[cfg(mobile)]
+    app.state::<voice_away::Held>()
+        .with(|seats| seats.disconnected(&base_url));
     connections.with(|held| {
         if let Some(previous) = held.insert(base_url, handle) {
             previous.shutdown();
@@ -259,7 +275,12 @@ fn gateway_connect(
 
 /// Close one server's connection: signing out of it, or removing it.
 #[tauri::command]
-fn gateway_disconnect(connections: State<'_, Connections>, base_url: String) {
+fn gateway_disconnect(app: AppHandle, connections: State<'_, Connections>, base_url: String) {
+    #[cfg(mobile)]
+    app.state::<voice_away::Held>()
+        .with(|seats| seats.disconnected(&base_url));
+    #[cfg(not(mobile))]
+    let _ = &app;
     connections.with(|held| {
         if let Some(handle) = held.remove(&base_url) {
             handle.shutdown();
@@ -303,8 +324,30 @@ fn gateway_token(
 /// Send one client frame to one server. `false` means there was no connection
 /// to send it on.
 #[tauri::command]
-fn gateway_send(connections: State<'_, Connections>, base_url: String, frame: ClientFrame) -> bool {
-    connections.with(|held| held.get(&base_url).is_some_and(|handle| handle.send(frame)))
+fn gateway_send(
+    app: AppHandle,
+    connections: State<'_, Connections>,
+    base_url: String,
+    frame: ClientFrame,
+) -> bool {
+    // On a phone voice runs in the page and joins and leaves through here:
+    // the shell keeps where, for when iOS lets go of the window (#851).
+    #[cfg(mobile)]
+    let voice = matches!(
+        frame,
+        ClientFrame::VoiceJoin { .. } | ClientFrame::VoiceLeave
+    )
+    .then(|| frame.clone());
+    let sent =
+        connections.with(|held| held.get(&base_url).is_some_and(|handle| handle.send(frame)));
+    #[cfg(mobile)]
+    if let (true, Some(voice)) = (sent, voice) {
+        app.state::<voice_away::Held>()
+            .with(|seats| seats.sent(&base_url, &voice));
+    }
+    #[cfg(not(mobile))]
+    let _ = &app;
+    sent
 }
 
 /// The version this build was compiled as, for the line in settings. Read from
@@ -492,6 +535,7 @@ fn phone_app() -> tauri::Builder<tauri::Wry> {
         .plugin(tauri_plugin_deep_link::init())
         .manage(Connections::default())
         .manage(deep_link::Offered::default())
+        .manage(voice_away::Held::default())
         .setup(|app| {
             deep_link::install(app);
             // Downloads a closed app left for its share sheet (#703).
@@ -527,6 +571,7 @@ fn phone_app() -> tauri::Builder<tauri::Wry> {
             share_window::share_sign_in_forget,
             share_window::share_sign_ins_kept,
             share_window::share_window_list_read,
-            share_window::share_window_list_save
+            share_window::share_window_list_save,
+            voice_away::phone_voice_ended
         ])
 }
