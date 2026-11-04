@@ -393,10 +393,14 @@ const NO_USERS: readonly User[] = [];
 function takeOutOf(takeOut: (id: string) => Promise<string | null>, id: string): () => Promise<string | null> {
   return () => takeOut(id);
 }
-/** Why voice ended here, as the strip says it (`out`). */
+/**
+ * Why voice ended here, as the strip says it (`out`): as short as the strip
+ * has room for on a phone, beside its chips and Join. The list says the
+ * whole of it (#851).
+ */
 export const OUT = {
   "taken-out": "You were taken out of voice.",
-  away: "Voice ended while Linger was in the background.",
+  away: "Voice ended in background.",
 } as const;
 const EVERYBODY: StripFit = { kind: "all" };
 

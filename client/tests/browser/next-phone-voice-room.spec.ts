@@ -144,8 +144,8 @@ test("a phone call takes the microphone: the voice bar says so, and it comes bac
 });
 
 /** The phone's list, every connection in, as the page that came back after iOS let go of the window (#851). */
-async function backAfterAway(page: Page) {
-  await page.goto("/tests/fixtures/next-list-window.html?one&shell=phone&sfu&endedaway");
+async function backAfterAway(page: Page, room = "") {
+  await page.goto(`/tests/fixtures/next-list-window.html?one&shell=phone&sfu&endedaway=${room}`);
   await page.evaluate(() => document.fonts.ready);
   await expect
     .poll(async () => {
@@ -170,14 +170,25 @@ test("voice that ended while the window was gone is said, in the list and the ro
 
   // The room says so too, where its strip's words go, beside its own Join.
   await page.getByRole("list", { name: "Rooms" }).getByRole("button", { name: /^#general\b/ }).click();
-  await expect(strip(page)).toContainText("Voice ended while Linger was in the background.");
+  await expect(strip(page)).toContainText("Voice ended in background.");
   await expect(strip(page).getByRole("button", { name: "Join" })).toBeVisible();
+  // Short enough to be read whole beside a chip and Join on a small Android
+  // phone; the list's line says all of it.
+  await page.setViewportSize({ width: 360, height: 914 });
+  await expect.poll(() => strip(page).locator(".nx-strip-words").evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+  await page.setViewportSize({ width: 411, height: 914 });
   await page.getByRole("button", { name: "Back", exact: true }).click();
 
   await line.getByRole("button", { name: "Join" }).click();
   await expect.poll(() => sfuState(page), { timeout: 10_000 }).toBe("connected");
   await expect(line).toHaveCount(0);
   await expect(page.getByRole("region", { name: /^In voice in #general/ })).toBeVisible();
+});
+
+test("voice that ended in a room deleted while Linger was away says nothing: there's no voice to join again (#851)", async ({ page }) => {
+  await backAfterAway(page, "r-gone");
+  await page.waitForTimeout(500);
+  await expect(page.locator('[data-note="voiceaway"]')).toHaveCount(0);
 });
 
 test("waved off, the line goes, and nothing joins (#851)", async ({ page }) => {
@@ -189,7 +200,7 @@ test("waved off, the line goes, and nothing joins (#851)", async ({ page }) => {
   await page.waitForTimeout(500);
   expect(await sent(page, "voice.join")).toHaveLength(0);
   await page.getByRole("list", { name: "Rooms" }).getByRole("button", { name: /^#general\b/ }).click();
-  await expect(strip(page)).not.toContainText("ended while Linger was in the background");
+  await expect(strip(page)).not.toContainText("ended in background");
 });
 
 test("leaving says so, lets the microphone go, and stops every voice", async ({ page }) => {

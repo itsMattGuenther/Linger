@@ -1421,6 +1421,8 @@ function Servers({
       const state = states[session.baseUrl];
       const out = state?.voiceOut;
       if (!state || out?.why !== "away" || state.myVoice?.roomId === out.roomId) return [];
+      // A room deleted, or left, while Linger was away has no voice to join again.
+      if (![...state.rooms, ...state.dms].some((room) => room.id === out.roomId)) return [];
       return [{ server: session.baseUrl, roomId: out.roomId, where: voiceWhere(state, out.roomId) }];
     }),
   );

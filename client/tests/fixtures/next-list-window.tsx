@@ -1128,9 +1128,9 @@ if (micAudio) {
   });
 }
 // `?endedaway`: iOS had let go of the window while the phone was in voice in
-// #general, and the shell left voice there and kept where (#851), as
-// main.tsx asks it when the phone app starts.
-if (query.has("endedaway")) voiceEndedAwayFrom(async () => [{ server: SERVER, room_id: "r-general" }]);
+// #general (or the room named), and the shell left voice there and kept
+// where (#851), as main.tsx asks it when the phone app starts.
+if (query.has("endedaway")) voiceEndedAwayFrom(async () => [{ server: SERVER, room_id: query.get("endedaway") || "r-general" }]);
 const sfu = query.has("sfu")
   ? new FakeSfu(
       (frame) => window.core?.frame(SERVER, frame as Omit<ServerFrame, "s">),
