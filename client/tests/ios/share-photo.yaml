@@ -21,28 +21,42 @@ appId: com.apple.mobileslideshow
 ---
 - launchApp:
     appId: com.apple.mobileslideshow
-# Photos' first-run sheet, "What's New in Photos": it can take 15 seconds
-# to come up, and a Continue pressed while it's still arriving doesn't
-# close it. So it's waited for, and Continue pressed until it's gone.
+# Photos' first-run sheet, "What's New in Photos", comes up in its own time,
+# from 15 seconds to more than 30, over whatever is showing, the photos
+# included (#861). So the flow doesn't wait for it once: it closes it before
+# each tap in Photos, whenever it's there. A Continue pressed while it's
+# still arriving doesn't close it, so Continue is pressed until it's gone.
 - extendedWaitUntil:
-    visible: "What.s New in Photos"
-    timeout: 30000
-    optional: true
+    visible: "(What.s New in Photos|Photo, [A-Za-z]+.[0-9]+, [0-9]+:[0-9]+.[AP]M)"
+    timeout: 45000
+- takeScreenshot: 11-photos
+# The photo, opened: tapped until it is, the sheet closed first each time.
 - repeat:
     while:
-      visible: "Continue"
-    times: 5
+      notVisible: "Share"
+    times: 4
     commands:
-      - waitForAnimationToEnd:
-          timeout: 5000
+      - runFlow:
+          when:
+            visible: "What.s New in Photos"
+          commands:
+            - repeat:
+                while:
+                  visible: "Continue"
+                times: 5
+                commands:
+                  - waitForAnimationToEnd:
+                      timeout: 5000
+                  - tapOn:
+                      text: "Continue"
+                      optional: true
       - tapOn:
-          text: "Continue"
+          text: "Photo, [A-Za-z]+.[0-9]+, [0-9]+:[0-9]+.[AP]M"
           optional: true
-- extendedWaitUntil:
-    visible: "Photo, [A-Za-z]+.[0-9]+, [0-9]+:[0-9]+.[AP]M"
-    timeout: 30000
-- takeScreenshot: 11-photos
-- tapOn: "Photo, [A-Za-z]+.[0-9]+, [0-9]+:[0-9]+.[AP]M"
+      - extendedWaitUntil:
+          visible: "Share"
+          timeout: 10000
+          optional: true
 - extendedWaitUntil:
     visible: "Share"
     timeout: 15000
@@ -56,6 +70,21 @@ appId: com.apple.mobileslideshow
     visible: "Linger has been in the background for 35 seconds"
     timeout: 35000
     optional: true
+# The sheet again, if it came up over the photo meanwhile (#861).
+- runFlow:
+    when:
+      visible: "What.s New in Photos"
+    commands:
+      - repeat:
+          while:
+            visible: "Continue"
+          times: 5
+          commands:
+            - waitForAnimationToEnd:
+                timeout: 5000
+            - tapOn:
+                text: "Continue"
+                optional: true
 - tapOn: "Share"
 - extendedWaitUntil:
     visible: "Linger"

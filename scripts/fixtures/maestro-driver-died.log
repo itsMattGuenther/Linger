@@ -1,0 +1,21 @@
+2026-11-04 02:57:01.103398+0000 maestro-driver-iosUITests-Runner[35832:99274] Fetch status bar hierarchy - duration 0.23050403594970703
+2026-11-04 02:57:01.104133+0000 maestro-driver-iosUITests-Runner[35832:99274] [ViewHierarchyHandler] Fetch Safari WebView hierarchy - start
+2026-11-04 02:57:01.107071+0000 maestro-driver-iosUITests-Runner[35832:99274] Fetch Safari WebView hierarchy - duration 0.0028290748596191406
+    t =   355.65s Find the Application 'com.apple.springboard'
+2026-11-04 02:57:01.209551+0000 maestro-driver-iosUITests-Runner[35832:99274] [Done] View hierarchy snapshot for Application 'com.apple.mobileslideshow' 
+2026-11-04 02:57:01.297757+0000 maestro-driver-iosUITests-Runner[35832:99904] [FlyingFox] <127.0.0.1> request: GET /isScreenStatic
+2026-11-04 02:57:01.940206+0000 maestro-driver-iosUITests-Runner[35832:101810] [FlyingFox] <127.0.0.1> request: GET /screenshot
+2026-11-04 02:57:02.392883+0000 maestro-driver-iosUITests-Runner[35832:99899] [FlyingFox] <127.0.0.1> request: POST /touch
+2026-11-04 02:57:02.399836+0000 maestro-driver-iosUITests-Runner[35832:99274] Detected running apps: ["com.apple.mobileslideshow"]
+    t =   356.92s Getting device orientation
+2026-11-04 02:57:02.402205+0000 maestro-driver-iosUITests-Runner[35832:99274] Returning cached screen size
+    t =   356.92s Getting device orientation
+2026-11-04 02:57:02.403311+0000 maestro-driver-iosUITests-Runner[35832:99274] Tapping 52.0, 822.0
+    t =   356.92s Getting device orientation
+2026-11-04 02:57:08.216085+0000 maestro-driver-iosUITests-Runner[35832:99274] Tapping took 5.80459201335907
+2026-11-04 02:57:08.239288+0000 maestro-driver-iosUITests-Runner[35832:104019] [FlyingFox] <127.0.0.1> request: GET /isScreenStatic
+<unknown>:0: error: -[maestro_driver_iosUITests.maestro_driver_iosUITests testHttpServer] : Failed to get screenshot: Timed out while requesting screenshot.
+    t =   405.67s Tear Down
+Test Case '-[maestro_driver_iosUITests.maestro_driver_iosUITests testHttpServer]' failed (405.672 seconds).
+2026-11-04 02:57:51.156006+0000 maestro-driver-iosUITests-Runner[35832:99274] [Default] Flushing outgoing messages to the IDE with timeout 600.00s
+2026-11-04 02:57:51.463150+0000 maestro-driver-iosUITests-Runner[35832:104019] [Default] Received confirmation that IDE processed remaining outgoing messages

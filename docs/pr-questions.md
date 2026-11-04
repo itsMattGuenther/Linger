@@ -150,10 +150,11 @@ storage full or gone.
 For: tests
 Gaps: A check its surroundings can fool; A test of the source, not of what it does
 
-Break the code and watch the test fail. A test that reads the source
-(#768), inherits the setting it's there to prove (#757), uses a queue
-roomier than the real one (#809), or stops a wait before it starts (#802)
-passes broken code.
+Break the code the way a later edit would, and watch the test fail: take
+out each part it keeps, one at a time. Tests that read the source (#768),
+inherited the setting they prove (#757), used a roomier queue (#809),
+stopped a wait before it began (#802), or found a step's markers with the
+step gone (#858, #864, #865) passed broken code.
 
 ### Does a check that reads code, commands or docs take every form, and fail on what it can't read?
 

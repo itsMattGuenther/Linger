@@ -563,9 +563,11 @@ Whether the share worked is read from the server and from Linger, which
 Maestro can see. The step "the App Group and the Keychain, as the app left
 them" prints what the app left the window: the list in the App Group's
 folder, and which access groups the Keychain's entries are in. Two things
-about Photos that cost a run each: its "What's New" sheet can take 15
-seconds to arrive and ignores a Continue pressed while it does, and iOS
-writes a photo's time with a narrow no-break space before AM.
+about Photos that cost a run each: its "What's New" sheet comes in its own
+time, once over 30 seconds after the photos showed, so the flow closes it
+before each tap in Photos rather than waiting for it (#861), and it ignores a
+Continue pressed while it's arriving; and iOS writes a photo's time with a
+narrow no-break space before AM.
 
 **The server is reached over https**, as a real one is behind Caddy:
 `scripts/https-front.mjs` stands in for Caddy, with a certificate
@@ -579,19 +581,31 @@ job (`scripts/https-front.test.mjs`). Before the flows, Safari in the
 simulator opens the front's health page, and the run waits until the
 front's log shows that handshake finish: the simulator's certificate service
 sometimes takes over a minute on its first check, longer than the app waits
-for an answer (#848). The step's log says how long it took.
+for an answer (#848). The step's log says how long it took. What held it up
+was its own update of Apple's revocation list ("Valid"), which kept its
+database locked for minutes, so that update is off in the simulator
+(`ValidUpdateEnabled`, set right after boot); `trustd.log` has the
+service's own lines from then on, warm-up included, and says "skipping
+update".
 
 **Reading a run.** The `iphone-simulator` artifact has `screens/`, a picture
 of each screen the flows stop at, numbered in order, and `last.png`, the
 screen when the run ended; `report.xml`, which flow passed; `maestro/`,
 Maestro's own record, with a picture before every step and, for a step that
 failed, what it could see on the screen; `app.log`, what the app and
-WebKit's network process (which makes the page's connections) logged; and
+WebKit's network process (which makes the page's connections) logged;
+`trustd.log`, the certificate service's, from boot; and
 `server/`, the server's log, with each request it answered, and the front's,
 with each connection, handshake and request and how long it took. The front
 names each by the app's end of the connection (`:port`), so a request that
-never comes back shows how far it got (#848). Look at the pictures, not just
-the tick: a screen can pass every step and still be wrong.
+never comes back shows how far it got (#848). A failed run's step "whether
+Maestro's driver died" says if the run stopped because Maestro's own driver
+was torn down (any failure XCUITest records inside it does that, a screenshot
+timing out on a slow simulator, say), which app was in front, and whether
+Linger's share window had opened inside it. It says to re-run once only when
+that rules Linger out; otherwise check Linger didn't freeze first (#857).
+Look at the pictures, not just the tick: a screen can pass every step and
+still be wrong.
 
 **Finding things on screen.** Maestro reads the iPhone's accessibility tree,
 what VoiceOver reads, so a flow finds a control by its words or its
@@ -609,6 +623,15 @@ a timeout; `assertVisible` looks once, and suits only what's drawn with
 something the flow already waited for. After setting up, the list arrived
 first and the server's name a moment later, and a one-look check for the
 name failed in one of the three runs that got that far.
+
+**Type through `subflows/type.yaml`**, not with a bare `inputText`:
+`- runFlow: {file: subflows/type.yaml, env: {TEXT: ...}}`, with the field
+tapped first. Maestro types at machine speed, and once, with the simulator
+busy, the field got the first letter of an address and lost the rest
+(#863). The subflow waits for the field to hold the text, and erases it and
+types once more when it doesn't, so a field that loses typing every time
+still fails. A password types directly (its field shows dots), and so does
+the share window's message (Maestro can't see the window).
 
 **On a Mac of your own**, with Xcode 26, Java 17 or later and
 [Maestro](https://docs.maestro.dev/getting-started/installing-maestro):
