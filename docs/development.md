@@ -575,7 +575,11 @@ page's requests trust the simulator's keychain (`xcrun simctl keychain …
 add-root-cert`), and the gateway, which is the shell's Rust and its own TLS
 (rustls), reads `SSL_CERT_FILE`, which simctl hands the app as
 `SIMCTL_CHILD_SSL_CERT_FILE`. Both scripts are tested on Linux in the rules
-job (`scripts/https-front.test.mjs`).
+job (`scripts/https-front.test.mjs`). Before the flows, Safari in the
+simulator opens the front's health page, and the run waits until the
+front's log shows that handshake finish: the simulator's certificate service
+sometimes takes over a minute on its first check, longer than the app waits
+for an answer (#848). The step's log says how long it took.
 
 **Reading a run.** The `iphone-simulator` artifact has `screens/`, a picture
 of each screen the flows stop at, numbered in order, and `last.png`, the
