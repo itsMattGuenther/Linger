@@ -10,6 +10,19 @@
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Linger uses the microphone only when you record a voice message or join a voice room.</string>
+	<!--
+	  In voice with the phone locked or another app in front (#851, SPEC
+	  §4.15). Voice runs in the web view's WebRTC (pageVoice.ts), and WebKit
+	  mutes a hidden page's microphone unless the app declares audio here;
+	  with it, WebKit keeps the page running while it uses the microphone,
+	  and iOS shows its own recording indicator. Only audio: voip is for
+	  being woken by an incoming call, which needs push, and Linger has none.
+	  scripts/ios-plist.test.mjs checks it.
+	-->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Linger uses the camera only when you take a photo or video to share.</string>
 	<!--
