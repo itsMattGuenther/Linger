@@ -328,6 +328,17 @@ jobs:
             -e "HOST_USERNAME=$HOST_USERNAME" -e "HOST_PASSWORD=$HOST_PASSWORD" \
             client/tests/ios
 
+      # Maestro drives the simulator through an XCUITest runner, and any
+      # failure XCUITest records inside it (a screenshot timing out on a slow
+      # simulator, say) tears it down, failing the flows whatever the app did
+      # (#857). This says whether that's what stopped the run, which app was
+      # in front, and whether Linger's share window had opened (it runs inside
+      # Photos' screen). Never re-run by itself: a frozen Linger times a
+      # screenshot out too, and it says to re-run only with Linger ruled out.
+      - name: whether Maestro's driver died
+        if: failure()
+        run: node scripts/maestro-driver.mjs "$OUT/maestro" "$OUT/app.log"
+
       # What the app left the share window (#820), seen from outside the
       # simulator: the App Group's folder and what's in it, and the access
       # groups of the Keychain entries on this iPhone. Never fails itself.
