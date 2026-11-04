@@ -76,6 +76,14 @@ to be right for every shape that window takes.
   no wait) and not against what else writes the same log. *Changed:* the
   test checks the count is taken just before Safari's request and the wait
   is for one more than it; six breakages of the step each fail it.
+- **#864: the sheet's test would pass with nothing closing the sheet.** It
+  checked where the share flow looks for Photos' "What's New" sheet, not
+  that it presses Continue there, so taking out both presses and leaving
+  the looks still passed. Caught by Greptile. *Missed because* the test was
+  written from the change (where the looks went), and not broken the way a
+  later edit would break it. *Changed:* a look counts only if its block
+  presses Continue until the sheet's gone; taking out either press, or
+  both, fails the test.
 
 - **#757: a workaround in the shell could pass for the fix.** The
   packaged-app check cleared the WebKit settings it knew of, not #756's own
