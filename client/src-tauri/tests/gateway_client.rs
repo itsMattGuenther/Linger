@@ -15,7 +15,7 @@ use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
 use linger_client_lib::gateway::{self, Events, Status, Token};
-use linger_core::gateway::{ReadyData, ServerFrame};
+use linger_core::gateway::{ClientFrame, ReadyData, ServerFrame};
 use linger_core::wire::User;
 use linger_core::UserId;
 use serde_json::{json, Value};
@@ -432,6 +432,67 @@ async fn resume_replays_with_no_gaps_and_no_duplicates() {
         })
         .collect();
     assert_eq!(replayed, vec![4, 5]);
+    handle.shutdown();
+}
+
+/// iOS let go of the phone's window while the connection was between
+/// sockets (#851, Greptile on #856): a plain send would be dropped there, and
+/// the session resume with its voice seat, with no page left to leave it.
+/// `leave_voice` is kept, and goes the moment the session is back.
+#[tokio::test]
+async fn a_voice_leave_asked_for_between_sockets_goes_once_the_session_resumes() {
+    let server = FakeServer::bind().await;
+    let (handle, mut watch) = start(&server, "access-token");
+
+    let mut peer = server.accept().await;
+    peer.hello(30_000).await;
+    assert_eq!(peer.recv().await["op"], "identify");
+    peer.ready("session-1").await;
+    watch.until_ready().await;
+
+    // The socket goes; the client is back on a new one, but the server
+    // hasn't taken it as the session yet when the leave is asked for.
+    peer.kill();
+    let mut peer = server.accept().await;
+    assert!(handle.leave_voice(), "the leave is taken");
+    peer.hello(30_000).await;
+    assert_eq!(peer.recv().await["op"], "resume");
+    peer.send(&json!({"op":"resumed","d":{"replayed":0}})).await;
+    assert_eq!(
+        peer.recv().await["op"],
+        "voice.leave",
+        "the first thing the resumed session hears"
+    );
+    handle.shutdown();
+}
+
+/// Connected, a leave goes at once, and only once.
+#[tokio::test]
+async fn a_voice_leave_while_connected_goes_at_once_and_once() {
+    let server = FakeServer::bind().await;
+    let (handle, mut watch) = start(&server, "access-token");
+
+    let mut peer = server.accept().await;
+    peer.hello(30_000).await;
+    assert_eq!(peer.recv().await["op"], "identify");
+    peer.ready("session-1").await;
+    watch.until_ready().await;
+
+    assert!(handle.leave_voice());
+    assert_eq!(peer.recv().await["op"], "voice.leave");
+
+    // Nothing owed is left behind: a resume after this sends no second leave.
+    peer.kill();
+    let mut peer = server.accept().await;
+    peer.hello(30_000).await;
+    assert_eq!(peer.recv().await["op"], "resume");
+    peer.send(&json!({"op":"resumed","d":{"replayed":0}})).await;
+    assert!(handle.send(ClientFrame::Heartbeat { s: Some(7) }));
+    assert_eq!(
+        peer.recv().await["op"],
+        "heartbeat",
+        "the next thing is what was sent next, not another leave"
+    );
     handle.shutdown();
 }
 

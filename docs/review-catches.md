@@ -229,6 +229,17 @@ on a world that has changed.
 
 ## Tests written from the case in mind, not from the ways things fail
 
+- **#856: the shell's voice.leave, when iOS let go of the window, could be
+  lost.** A connection between sockets drops what it's sent (`Handle::send`
+  says so: the page re-states what matters once it's back), and then
+  resumes the same session, voice seat and all, with no page left to leave
+  it. Caught by Greptile. *Missed because* the tests and my answer to the
+  partway question assumed a connection that's up; I wrote that a server
+  without one would end the session anyway, and it resumes. *Changed:*
+  `Handle::leave_voice` keeps the leave until the session is back, and an
+  integration test asks for it on a fresh socket the server hasn't taken
+  yet and hears it right after `resumed`.
+
 - **#849: the simulator's https front named a request only once it ended.**
   A request still waiting for the server when the run stopped looked like a
   connection that never sent one, the very case the log was added to tell

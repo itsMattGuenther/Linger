@@ -130,6 +130,7 @@ impl Held {
 /// where for the page that comes back (`phone_scene.rs`).
 #[cfg(target_os = "ios")]
 pub fn window_gone(app: &tauri::AppHandle) {
+    use crate::gateway;
     use tauri::Manager;
     let Some(servers) = app.state::<Held>().with(Seats::window_gone) else {
         return;
@@ -139,8 +140,10 @@ pub fn window_gone(app: &tauri::AppHandle) {
         .iter()
         .filter(|server| {
             connections.with(|held| {
+                // Kept through a reconnect, unlike a plain send: there's
+                // no page left to leave again once the session is back.
                 held.get(server.as_str())
-                    .is_some_and(|handle| handle.send(ClientFrame::VoiceLeave))
+                    .is_some_and(gateway::Handle::leave_voice)
             })
         })
         .count();

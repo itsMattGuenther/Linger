@@ -2071,7 +2071,8 @@ anything that kept it running in the background.
   later; it never rejoins by itself.** iOS can discard a background app's
   window to free memory, and the page, and voice, go with it. The seat
   belongs to the gateway session, which lives in the shell and carries on,
-  so the shell leaves voice on each server at once (`voice_away.rs`), and
+  so the shell leaves voice on each server at once (`voice_away.rs`; a
+  connection between sockets keeps the leave until the session is back), and
   the page that comes back shows "Voice in #general ended while Linger was
   in the background" with Join, and ×. Rejoining by itself was the first
   idea, but the page only comes back when Linger is next opened, maybe hours
