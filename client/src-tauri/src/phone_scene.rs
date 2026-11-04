@@ -9,7 +9,9 @@
 //! app from inside it, so Linger stays, and when iOS brings the scene back
 //! (`SceneRequested`) it opens its window again, in that scene: tao gives a
 //! new window to a connected scene that has none. The page loads again; the
-//! sign-ins, connections and any call, which live here in Rust, carry on.
+//! sign-ins and server connections, which live here in Rust, carry on.
+//! Voice doesn't: on a phone it runs in the page (`pageVoice.ts`), and ends
+//! with it. Staying in voice in the background is #851.
 
 /// What happened, as far as the phone's window cares.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

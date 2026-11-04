@@ -95,12 +95,13 @@ older history (#751).
 ### Does it compile, and work, on every platform it runs on?
 
 For: shell, phone
-Gaps: Code only one platform compiles
+Gaps: Code only one platform compiles; Said of one platform from another's design
 
 Code behind `#[cfg(target_os = …)]` is built only for that platform, and
 most of a pull request's checks build Linux. The iPhone half of #822 didn't
 compile. Build every platform the change touches, or say in the pull request
-which you couldn't.
+which you couldn't. And check what's said of a platform against its own
+code: voice is in Rust on a computer and in the page on a phone (#850).
 
 ### Is each guard checked right before what it guards?
 
@@ -117,10 +118,12 @@ Check again right before acting, and test the state changing in between.
 For: page, shell, phone, server, ci, deploy
 Gaps: Tests written from the case in mind, not from the ways things fail
 
-Stopped or overtaken while it waits, part of it failing, and a network that
-refuses, drops, cuts off half way or never answers. A share turned down
-while its files were read was sent anyway (#792). The cases are in
-`docs/testing-strategy.md`, "What reviews have taught".
+Stopped or overtaken while it waits, still under way when somebody looks,
+part of it failing, and a network that refuses, drops, cuts off half way or
+never answers. A share turned down while its files were read was sent anyway
+(#792), and a log that named a request only once it ended couldn't show one
+still waiting (#849). The cases are in `docs/testing-strategy.md`, "What
+reviews have taught".
 
 ### Is each screen tried at its limits?
 
@@ -159,7 +162,7 @@ Gaps: Tests written from the case in mind, not from the ways things fail
 
 Every form the language has: how a thing is written, where its line may
 start, and every way the code is reached. Checks took a review a form
-(#763, #771, #831, #833). Start from a table of tricky inputs. Then list
+(#763, #771, #831, #833, #850). Start from a table of tricky inputs. Then list
 every place the reader skips a line, a section or a field, and justify
 each: one you can't is a quiet path, as two were in #841.
 

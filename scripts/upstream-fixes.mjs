@@ -15,36 +15,41 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CARGO_TOML, patches } from "./tauri-versions.mjs";
 
-/** GitHub's REST API through gh, as JSON. */
-const github = (path) => JSON.parse(execFileSync("gh", ["api", path], { encoding: "utf8" }));
+/** GitHub's REST API through gh, as JSON: `one` for an answer, `all` for every page of a list. */
+const github = {
+  one: (path) => JSON.parse(execFileSync("gh", ["api", path], { encoding: "utf8" })),
+  all: (path) => JSON.parse(execFileSync("gh", ["api", "--paginate", "--slurp", path], { encoding: "utf8" })),
+};
 
 /**
  * Where a pin's fix stands: "waiting" (not merged), "merged" (no release
  * has it yet), "released" (in `tag`), or "closed" (closed without merging).
- * Release tags are the crate's own (`tao-v0.37.3`), walked from the newest
- * version, and a tag has the fix when GitHub's comparison from the merge to
- * the tag is ahead or identical; the oldest that has it is the one named.
+ * Release tags are the crate's own (`tao-v0.37.3`), every page of them:
+ * GitHub lists tags by name, not by date. A tag has the fix when GitHub's
+ * comparison from the merge to the tag is ahead or identical, and each one
+ * is asked: a release from an older line can have it while a newer one,
+ * cut from another branch, doesn't (#850's review). The oldest by version
+ * that has it is the one named. A fix carried to another branch as a copy
+ * of its commits is a different commit, which this can't see.
  */
-export function standing(pin, api = github) {
+export function standing(pin, gh = github) {
   const [repo, number] = pin.upstream.split("#");
-  const pr = api(`repos/${repo}/pulls/${number}`);
+  const pr = gh.one(`repos/${repo}/pulls/${number}`);
   if (typeof pr?.state !== "string") throw new Error(`${pin.upstream}: GitHub's answer has no state`);
   if (!pr.merged_at) return { pin, url: pr.html_url, state: pr.state === "closed" ? "closed" : "waiting" };
-  const tags = api(`repos/${repo}/tags?per_page=100`);
-  if (!Array.isArray(tags)) throw new Error(`${repo}: GitHub's tags aren't a list`);
-  // Newest first by version, not by name: as text, 0.37.9 sorts after 0.37.10.
+  const pages = gh.all(`repos/${repo}/tags?per_page=100`);
+  if (!Array.isArray(pages) || !pages.every(Array.isArray)) throw new Error(`${repo}: GitHub's tags aren't a list of pages`);
+  // By version, not by name: as text, 0.37.9 sorts after 0.37.10.
   const version = (tag) => new RegExp(`^${pin.name}-v(\\d+)\\.(\\d+)\\.(\\d+)$`).exec(tag.name)?.slice(1).map(Number);
-  const own = tags.filter(version).sort((a, b) => {
+  const own = pages.flat().filter(version).sort((a, b) => {
     const [x, y] = [version(a), version(b)];
-    return y[0] - x[0] || y[1] - x[1] || y[2] - x[2];
+    return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
   });
-  let found = null;
-  for (const tag of own) {
-    const { status } = api(`repos/${repo}/compare/${pr.merge_commit_sha}...${tag.commit.sha}`);
-    if (status === "ahead" || status === "identical") found = tag.name;
-    else break;
-  }
-  return found ? { pin, url: pr.html_url, state: "released", tag: found } : { pin, url: pr.html_url, state: "merged" };
+  const found = own.find((tag) => {
+    const { status } = gh.one(`repos/${repo}/compare/${pr.merge_commit_sha}...${tag.commit.sha}`);
+    return status === "ahead" || status === "identical";
+  });
+  return found ? { pin, url: pr.html_url, state: "released", tag: found.name } : { pin, url: pr.html_url, state: "merged" };
 }
 
 /** The issue a standing calls for, or null while there's nothing to do. */

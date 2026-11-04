@@ -2025,5 +2025,7 @@ thing a new person on an iPhone does.
   wants the memory, and Tauri then quit the app, so coming back started
   Linger over. On a phone Linger now stays, and opens its window again when
   the scene comes back (`phone_scene.rs`); the page loads again, while the
-  sign-ins, connections and any call carry on. Found by the simulator's share
-  flow, which leaves Linger in the background while it shares.
+  sign-ins and server connections, which live in Rust, carry on. Voice runs
+  in the page on a phone (`pageVoice.ts`), so it ends with it: staying in
+  voice in the background is #851. Found by the simulator's share flow,
+  which leaves Linger in the background while it shares.
