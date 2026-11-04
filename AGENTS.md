@@ -263,6 +263,9 @@ scripts/minio-test.sh           # the S3 backend, against a throwaway MinIO
 
 Things that trip people up, whatever machine or agent you're on:
 
+- **`check.sh` never installs packages.** After a pull or a branch switch
+  that changes `client/pnpm-lock.yaml`, run `pnpm install` in `client`:
+  `check.sh` stops until you do, rather than testing the old packages (#852).
 - **`pnpm` is a corepack shim and only behaves inside the repo**, where
   `client/package.json` pins the version. Run it from `$HOME` and corepack may
   fetch a newer pnpm your system corepack can't execute.
