@@ -47,7 +47,8 @@ test("the Tauri version check and the iPhone flows' own test run only in the rul
   assert.deepEqual(active(["scripts/tauri-versions.mjs", "scripts/tauri-versions.test.mjs", "scripts/ios-flows.test.mjs", "scripts/ios-plist.test.mjs",
     "scripts/upstream-fixes.mjs", "scripts/upstream-fixes.test.mjs",
     "scripts/android-jni.mjs", "scripts/android-jni.test.mjs", "scripts/fixtures/dexdump-0.5.4.txt",
-    "scripts/installed-packages.mjs", "scripts/installed-packages.test.mjs"]), []);
+    "scripts/installed-packages.mjs", "scripts/installed-packages.test.mjs",
+    "scripts/browser-fakes.test.mjs"]), []);
   assert.deepEqual(active(["client/tests/ios/link-open.yaml"]), ["ios"]);
 });
 test("the Windows hidden-window check runs for the shell, the list window and its own files (#594)", () => {

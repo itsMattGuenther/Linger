@@ -478,6 +478,10 @@ jobs:
         # lockfile change it tested the old ones (#852). CI installs afresh,
         # so this is the only place the check itself is tested.
         run: node --test scripts/installed-packages.test.mjs
+      - name: a browser method a test fakes is faked on its prototype
+        # WebKit may make navigator.mediaDevices afresh, and a fake put on the
+        # old one goes with it: the real picker answered instead (#843).
+        run: node --test scripts/browser-fakes.test.mjs
       - name: the startup measurement reads the screen and /proc right
         # It runs by hand on a desktop (docs/performance.md), so this is the
         # only place its arithmetic is checked.
