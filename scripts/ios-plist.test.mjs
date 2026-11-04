@@ -147,4 +147,6 @@ test("Info.ios.plist declares the scene life cycle, run by tao's delegate, never
   assert(Array.isArray(roles) && roles.length === 1, "one application scene configuration: an empty one crashes at launch on the iOS 27 SDK (tauri-apps/tauri#15719)");
   assert.equal(roles[0].UISceneDelegateClassName, "TaoSceneDelegate", "tao's delegate, by its Objective-C name");
   assert.equal(typeof roles[0].UISceneConfigurationName, "string");
+  // gen/apple's own declares none, so the merged one is this.
+  assert.equal(parsePlist(read("client/src-tauri/gen/apple/linger-client_iOS/Info.plist")).UIApplicationSceneManifest, undefined);
 });
