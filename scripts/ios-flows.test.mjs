@@ -6,7 +6,9 @@
 // docs/development.md's numbered list of them, a second copy of the order,
 // says the same.
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -262,3 +264,80 @@ test("Apple's revocation list server is unreachable before the simulator boots",
   assert.match(between, /sudo killall -HUP mDNSResponder/, "and its resolver told to read the file again");
 });
 
+
+// On GitHub's Xcode 27 Mac, the newest iOS (27.1) had only the iPhone Duo,
+// without Photos, and the share flow failed to open Photos there (#839). The
+// workflow's pick, run here on made-up device lists: the plain iPhone, the
+// model share-photo.yaml's taps were measured on, on the newest iOS that has
+// one.
+test("the simulator picks the plain iPhone on the newest iOS that has one, not a newer iOS without one", () => {
+  const workflow = readFileSync(fileURLToPath(new URL("../.github/workflows/ios-simulator.yml", import.meta.url)), "utf8");
+  const script = /read -r udid runtime name < <\(node -e '\n([\s\S]*?)\n\s*' "\$RUNNER_TEMP\/devices\.json"\)/.exec(workflow)?.[1];
+  assert(script, "the workflow's pick, a node script over devices.json");
+  const dir = mkdtempSync(join(tmpdir(), "ios-pick-"));
+  const pick = (devices) => {
+    const file = join(dir, "devices.json");
+    writeFileSync(file, JSON.stringify({ devices }));
+    return spawnSync(process.execPath, ["-e", script, file], { encoding: "utf8" });
+  };
+  const runtime = (version) => `com.apple.CoreSimulator.SimRuntime.iOS-${version}`;
+  const phones = (...names) => names.map((name) => ({ name, udid: `${name}-udid` }));
+  try {
+    const xcode27 = {
+      [runtime("27-0")]: phones("iPhone 17", "iPhone 17e", "iPhone 18 Pro", "iPhone Air", "iPad (A16)"),
+      [runtime("27-1")]: phones("iPhone Duo"),
+      "com.apple.CoreSimulator.SimRuntime.watchOS-27-0": phones("Apple Watch SE 3 (40mm)"),
+    };
+    assert.equal(pick(xcode27).stdout.trim(), `iPhone 17-udid ${runtime("27-0")} iPhone 17`, "iOS 27.0's iPhone 17, not iOS 27.1's iPhone Duo");
+    const later = { ...xcode27, [runtime("27-2")]: phones("iPhone 18 Pro", "iPhone 17", "iPhone Duo") };
+    assert.equal(pick(later).stdout.trim(), `iPhone 17-udid ${runtime("27-2")} iPhone 17`, "the newest iOS with a plain iPhone");
+    const tens = { [runtime("26-9")]: phones("iPhone 17"), [runtime("26-10")]: phones("iPhone 17") };
+    assert.match(pick(tens).stdout, /iOS-26-10 /, "versions compared as numbers, 26.10 after 26.9");
+    const none = pick({ [runtime("27-1")]: phones("iPhone Duo", "iPhone 18 Pro") });
+    assert.notEqual(none.status, 0, "no plain iPhone anywhere fails");
+    assert.match(none.stderr, /no plain iPhone/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// The share flow starts in Photos. A phone without it fails when it boots,
+// saying so, not minutes later in the last flow (#839).
+test("the simulator stops before the flows when Photos, which the share flow opens, isn't on the iPhone", () => {
+  const workflow = readFileSync(fileURLToPath(new URL("../.github/workflows/ios-simulator.yml", import.meta.url)), "utf8");
+  const flow = readFileSync(join(DIR, "share-photo.yaml"), "utf8");
+  const photos = /^- launchApp:\n {4}appId: ([\w.]+)$/m.exec(flow.split(/^---$/m)[1])?.[1];
+  assert.equal(photos, "com.apple.mobileslideshow", "the share flow opens Photos");
+  const check = workflow.indexOf(`grep -qx ${photos} "$OUT/apps.txt"`);
+  assert(check >= 0, "the workflow looks for Photos among the iPhone's apps");
+  assert(workflow.indexOf('xcrun simctl listapps "$UDID"') < check, "in the list of what's installed");
+  assert(workflow.indexOf("simctl bootstatus") < check && check < workflow.indexOf("maestro test"), "once booted, before the flows");
+});
+
+// The TestFlight build, the simulator's flows and the share window's builds
+// use one Xcode (#779, #839): a check that passes on another Xcode says
+// nothing about the build testers get. Bumped in one place, this fails until
+// it's bumped in all of them.
+test("every iPhone build uses the same Xcode, on the image that has it", () => {
+  const read = (name) => readFileSync(fileURLToPath(new URL(`../.github/workflows/${name}`, import.meta.url)), "utf8");
+  const chosen = {};
+  for (const name of ["ios.yml", "ios-simulator.yml"]) {
+    const workflow = read(name);
+    const input = /\n {6}xcode:\n(?: {8}.*\n)*? {8}default: "([\d.]+)"\n/.exec(workflow)?.[1];
+    assert(input, `${name} takes the Xcode by hand, with a default`);
+    // Where no input reaches (a pull request, the nightly run), the same one.
+    const fallbacks = [...workflow.matchAll(/inputs\.xcode \|\| '([\d.]+)'/g)].map((match) => match[1]);
+    assert(fallbacks.length >= 3, `${name} falls back to its default for the image, the cache and the Xcode`);
+    assert.deepEqual([...new Set(fallbacks)], [input], `${name}'s fallbacks are its default`);
+    assert.match(workflow, /runs-on: \$\{\{ startsWith\(inputs\.xcode \|\| '[\d.]+', '26'\) && 'macos-26' \|\| 'xcode-27' \}\}/, `${name} runs Xcode 27 on the xcode-27 image`);
+    assert.match(workflow, /sudo xcode-select -s "\/Applications\/Xcode_\$XCODE\.app"/, `${name} selects the chosen Xcode`);
+    chosen[name] = input;
+  }
+  const share = read("share-window.yml");
+  const selected = [...share.matchAll(/sudo xcode-select -s \/Applications\/Xcode_([\d.]+)\.app/g)].map((match) => match[1]);
+  const macs = [...share.matchAll(/runs-on: (\S+)/g)].map((match) => match[1]).filter((image) => image !== "ubuntu-latest");
+  assert.equal(selected.length, macs.length, "each of share-window.yml's Mac jobs selects its Xcode");
+  assert(macs.every((image) => image === "xcode-27"), "on the xcode-27 image");
+  chosen["share-window.yml"] = [...new Set(selected)].join(", ");
+  assert.equal(new Set(Object.values(chosen)).size, 1, `one Xcode for every iPhone build: ${JSON.stringify(chosen)}`);
+});

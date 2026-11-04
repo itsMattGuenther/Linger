@@ -2081,3 +2081,32 @@ anything that kept it running in the background.
   simulator's flows have no voice); a real iPhone locked in voice, a call in
   the middle, and the window let go of, are the TestFlight testers' (Matt
   has no iPhone).
+
+## Decided — the iPhone app builds with Xcode 27.2 (#839)
+
+**2026-11-04, Matt.** From April 2027 App Store Connect takes only builds
+made with the iOS 27 SDK. The iPhone app declares the scene life cycle such a
+build needs to open (#838), and Xcode moved once the testers had a build
+with it made by Xcode 26.6, so a problem on their phones points at one change
+or the other, not both at once.
+
+- **Every iPhone build moves together:** the TestFlight build (`ios.yml`),
+  the simulator's flows (`ios-simulator.yml`) and the share window's builds
+  (`share-window.yml`), all on GitHub's `xcode-27` image, a preview. Each
+  Xcode keeps a build cache of its own: restored under the other, the link
+  fails (#835).
+- **27.2, not 27.1.** On that image Xcode 27.1's iOS 27.1 simulator has only
+  the iPhone Duo, and no Photos, so the share flow couldn't start. The
+  simulator now takes the plain iPhone (an iPhone 17, the model the share
+  window's taps were measured on) on the newest iOS that has one, and stops
+  at once, saying so, if Photos isn't on it.
+- **Xcode 26.6 stays a choice by hand** (`-f xcode=26.6`, in `ios.yml` and
+  `ios-simulator.yml`), to tell whether a problem is Xcode 27's, until April
+  2027, when App Store Connect stops taking its builds.
+- **Maestro 2.12.1**, the newest. Its Xcode 27 fix, starting a simulator
+  without Simulator.app, isn't one the workflow needs: it starts the
+  simulator itself, and 2.11 drove the flows on Xcode 27 already.
+- **tauri-apps/tauri#16121**, still open, reports Xcode 27 failing to run a
+  Tauri 2.11 app with `tauri ios dev`. Linger is on Tauri 2.12 and builds
+  with `tauri ios build`; the simulator's flows and the testers' phones are
+  the check.

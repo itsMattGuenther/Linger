@@ -506,13 +506,15 @@ TestFlight to a friend's phone takes the best part of an hour. So
 `.github/workflows/ios-simulator.yml` builds the iPhone app for the iOS
 Simulator on one of GitHub's Macs, starts it on a simulated iPhone, and
 drives it with [Maestro](https://maestro.dev), which taps and types the way a
-person does. It runs on every pull request that touches the app
+person does. It builds with Xcode 27.2, as the TestFlight build does, and
+runs on the plain iPhone (an iPhone 17) of the newest iOS that has one. It
+runs on every pull request that touches the app
 (`client/src`, `client/src-tauri`, the flows; `scripts/ci-scope.mjs` says
 exactly), every night on `main`, and by hand:
 
 ```bash
 gh workflow run ios-simulator.yml --ref <your-branch>   # whatever the branch changed
-gh workflow run ios-simulator.yml --ref <your-branch> -f xcode=27.1   # the Xcode 27 canary (#835)
+gh workflow run ios-simulator.yml --ref <your-branch> -f xcode=26.6   # with Xcode 26.6, to tell whether a problem is Xcode 27's (#839)
 gh run download <run-id> -n iphone-simulator            # the pictures and logs
 ```
 
@@ -644,7 +646,7 @@ types once more when it doesn't, so a field that loses typing every time
 still fails. A password types directly (its field shows dots), and so does
 the share window's message (Maestro can't see the window).
 
-**On a Mac of your own**, with Xcode 26, Java 17 or later and
+**On a Mac of your own**, with Xcode 27, Java 17 or later and
 [Maestro](https://docs.maestro.dev/getting-started/installing-maestro):
 
 ```bash

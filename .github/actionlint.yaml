@@ -1,0 +1,6 @@
+# actionlint's settings (scripts/check.sh, ci.yml).
+self-hosted-runner:
+  labels:
+    # GitHub's own image with Xcode 27, a public preview that actionlint
+    # doesn't know yet. Not a self-hosted runner: GitHub runs it (#839).
+    - xcode-27
