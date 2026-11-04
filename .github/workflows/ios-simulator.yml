@@ -77,8 +77,8 @@ jobs:
       # Maestro, pinned by version and checksum (its release's
       # checksums_sha256.txt). It talks to the simulator through Apple's
       # XCTest, so nothing else is installed for it but Java.
-      MAESTRO_VERSION: 2.11.0
-      MAESTRO_SHA256: 5384593cb4e7a106489e75a821d157dd43f4e438df6bc308b72e82c685e1283a
+      MAESTRO_VERSION: 2.12.1
+      MAESTRO_SHA256: 54dbb0716425626604973cbb374c585ca30272375d9ce15177a1152765ddd9d7
       MAESTRO_CLI_NO_ANALYTICS: "1"
       MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED: "true"
       # How long Maestro waits for its driver, the XCTest runner it puts on
@@ -130,6 +130,22 @@ jobs:
           xcodebuild -version
           xcodebuild -showsdks | grep -i 'iphonesimulator'
           xcrun simctl list runtimes
+          # Each iOS: whether Photos is in it, and the iPhones it runs.
+          xcrun simctl list runtimes --json > "$RUNNER_TEMP/runtimes.json"
+          xcrun simctl list devices available --json > "$RUNNER_TEMP/devices-all.json"
+          node -e '
+            const fs = require("fs");
+            const { runtimes } = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+            const { devices } = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+            for (const r of runtimes.filter((r) => r.platform === "iOS")) {
+              const apps = fs.existsSync(r.runtimeRoot + "/Applications") ? fs.readdirSync(r.runtimeRoot + "/Applications") : [];
+              console.log(`${r.name} (${r.buildversion}) at ${r.runtimeRoot}`);
+              console.log(`  Photos (MobileSlideshow.app): ${apps.includes("MobileSlideshow.app") ? "yes" : "NO"}`);
+              console.log(`  apps: ${apps.join(", ")}`);
+              console.log(`  iPhone types: ${(r.supportedDeviceTypes ?? []).filter((t) => t.productFamily === "iPhone").map((t) => t.name).join(", ")}`);
+              console.log(`  iPhones made: ${(devices[r.identifier] ?? []).map((d) => d.name).join(", ")}`);
+            }
+          ' "$RUNNER_TEMP/runtimes.json" "$RUNNER_TEMP/devices-all.json"
 
       # The newest iOS this Xcode runs, and on it the plain iPhone (not a
       # Pro, Plus or Max) where there is one: the size most people have.
@@ -235,6 +251,8 @@ jobs:
         run: |
           set -euo pipefail
           xcrun simctl bootstatus "$UDID" -b
+          # What's installed on it, by bundle ID.
+          xcrun simctl listapps "$UDID" | sed -n 's/.*CFBundleIdentifier = "\{0,1\}\([^";]*\)"\{0,1\};.*/\1/p' | sort -u | tee "$OUT/apps.txt"
           # The certificate service, trustd, updates Apple's revocation list
           # ("Valid") in the background, and while it does it holds its
           # database locked, for minutes: every certificate check waits
