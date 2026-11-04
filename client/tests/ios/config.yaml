@@ -8,6 +8,8 @@
 #   SETUP_LINK     its setup link, through an https front the simulator trusts
 #   HOST_USERNAME  the host account set-up makes
 #   HOST_PASSWORD  and its password
+#   WINDOW_READY   scripts/share-window-ready.mjs's address, which says when
+#                  the share window is up, http://127.0.0.1:<port>/ (#839)
 flows:
   - "*.yaml"
 executionOrder:

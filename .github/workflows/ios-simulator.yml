@@ -90,6 +90,9 @@ jobs:
       # FRONT_PORT through scripts/https-front.mjs.
       SERVER_PORT: 8080
       FRONT_PORT: 8443
+      # scripts/share-window-ready.mjs, which tells share-photo.yaml when the
+      # share window is up, from app.log (#839).
+      READY_PORT: 8099
       HOST_USERNAME: matt
       HOST_PASSWORD: a porch light left on
     steps:
@@ -370,10 +373,19 @@ jobs:
           # certificate to trustd, whose own lines are in trustd.log, from boot.
           xcrun simctl spawn "$UDID" log stream --level info --style compact \
             --predicate 'process == "Linger" OR process == "LingerShare" OR process == "com.apple.WebKit.Networking"' > "$OUT/app.log" 2>&1 &
+          # Maestro can't see inside the share window, so share-photo.yaml
+          # asks this, which reads app.log, whether it's up yet (#839).
+          node scripts/share-window-ready.mjs "$OUT/app.log" "$READY_PORT" > "$OUT/share-window-ready.log" 2>&1 &
+          started=$SECONDS
+          until grep -q '^listening' "$OUT/share-window-ready.log"; do
+            [ $((SECONDS - started)) -lt 30 ] || { cat "$OUT/share-window-ready.log"; echo "::error::share-window-ready.mjs didn't start"; exit 1; }
+            sleep 1
+          done
           maestro test --device "$UDID" --test-output-dir "$OUT/maestro" \
             --format junit --output "$OUT/report.xml" \
             -e "SERVER=http://127.0.0.1:$SERVER_PORT" -e "SETUP_LINK=$SETUP_LINK" \
             -e "HOST_USERNAME=$HOST_USERNAME" -e "HOST_PASSWORD=$HOST_PASSWORD" \
+            -e "WINDOW_READY=http://127.0.0.1:$READY_PORT/" \
             client/tests/ios
 
       # Maestro drives the simulator through an XCUITest runner, and any

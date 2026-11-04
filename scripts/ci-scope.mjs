@@ -24,7 +24,7 @@ export function classify(paths) {
     else if (path.startsWith("client/src-tauri/")) add("shell", "packages", "ios");
     else if (path.startsWith("client/tests/browser/")) add("web");
     else if (path.startsWith("client/tests/ios/")) add("ios");
-    else if (/^scripts\/(https-front(\.test)?\.mjs|test-certs\.sh)$/.test(path)) add("ios");
+    else if (/^scripts\/(https-front(\.test)?\.mjs|share-window-ready\.mjs|test-certs\.sh)$/.test(path)) add("ios");
     else if (path.startsWith("client/")) add("web", "packages", "ios");
     else if (path.startsWith("assets/logo/")) add("web", "packages");
     else if (/^scripts\/(.*audio.*|.*icon.*|windows-update-check\.ps1|video-runtime-probe\.js|fixtures\/tone-h264-aac\.mp4|appimage-.*)$/.test(path)) add("packages");

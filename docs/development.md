@@ -562,7 +562,11 @@ workflow picks (from `14-share-window.png`; measure again if the workflow
 ever picks another model), and records the screen
 (`screens/share-window.mp4`, where the 0.9 seconds of "Sent" can be seen).
 Whether the share worked is read from the server and from Linger, which
-Maestro can see. The step "the App Group and the Keychain, as the app left
+Maestro can see. When the window is up is read from iOS's log:
+`scripts/share-window-ready.mjs` watches `app.log` for the line iOS writes
+once the window is in place and answers the flow over http
+(`window-up.js`). Its first start took 7 seconds on iOS 26.5 and 42 on iOS
+27.0, with an empty sheet showing meanwhile (#839). The step "the App Group and the Keychain, as the app left
 them" prints what the app left the window: the list in the App Group's
 folder, and which access groups the Keychain's entries are in. Four things
 about Photos that cost a run each: until it has drawn its first screen, iOS

@@ -341,3 +341,80 @@ test("every iPhone build uses the same Xcode, on the image that has it", () => {
   chosen["share-window.yml"] = [...new Set(selected)].join(", ");
   assert.equal(new Set(Object.values(chosen)).size, 1, `one Xcode for every iPhone build: ${JSON.stringify(chosen)}`);
 });
+
+// The share window's first start took 42 seconds to be in place on iOS 27.0
+// against 7 on iOS 26.5, and the 6 seconds the flow gave it let every tap
+// land on the empty sheet (#839, run 41857567919). Maestro can't see inside
+// the window, so the flow asks scripts/share-window-ready.mjs, which reads
+// iOS's log. Real lines from both runs.
+const SET_27 = "2026-11-04 16:06:42.704 Df LingerShare[65788:2bc51] [com.apple.UIKit:ViewServices] <_UIViewServiceRootViewController: 0x106134400>: Set materialized view controller: <ShareViewController: 0x106134000>";
+const INSTALLED_27 = "2026-11-04 16:06:43.108 Df LingerShare[65788:2bc51] [com.apple.UIKit:ViewServices] <_UIViewServiceRootViewController: 0x106134400>: Installed materialized view controller in hierarchy: <ShareViewController: 0x106134000>";
+const INSTALLED_26 = "2026-11-04 09:47:22.011 Df LingerShare[50355:21e35] [com.apple.UIKit:ViewServices] <_UIViewServiceRootViewController: 0x103528c00>: Installed materialized view controller in hierarchy: <ShareViewController: 0x103528800>";
+
+test("the share window counts as up once iOS logs it in place, from its own process", async () => {
+  const { windowUp } = await import("./share-window-ready.mjs");
+  assert.equal(windowUp(""), false, "nothing logged yet");
+  assert.equal(windowUp(SET_27), false, "set, not yet in the hierarchy");
+  assert.equal(windowUp(`${SET_27}\n${INSTALLED_27}\n`), true, "iOS 27.0's line");
+  assert.equal(windowUp(INSTALLED_26), true, "iOS 26.5's line, the same");
+  assert.equal(windowUp(INSTALLED_27.replace("LingerShare[65788:2bc51]", "MobileSlideshow[63074:2bc51]")), false, "only from the share window's own process");
+  assert.equal(windowUp(INSTALLED_27.replace("<ShareViewController", "<SomeOtherController")), false, "only for Linger's window");
+});
+
+test("share-window-ready answers over http, from the log as it is at each question, and fails when it can't read it", async () => {
+  const { server } = await import("./share-window-ready.mjs");
+  const dir = mkdtempSync(join(tmpdir(), "share-window-ready-"));
+  const log = join(dir, "app.log");
+  const running = server(log);
+  await new Promise((done) => running.listen(0, "127.0.0.1", done));
+  const ask = async () => {
+    const answer = await fetch(`http://127.0.0.1:${running.address().port}/`);
+    return [answer.status, await answer.text()];
+  };
+  try {
+    const [status, body] = await ask();
+    assert.equal(status, 500, "no log to read is an error, not a no");
+    assert.match(body, /can't read/);
+    writeFileSync(log, `${SET_27}\n`);
+    assert.deepEqual(await ask(), [200, "not yet"]);
+    writeFileSync(log, `${SET_27}\n${INSTALLED_27}\n`);
+    assert.deepEqual(await ask(), [200, "up"], "read afresh: the line written since is seen");
+  } finally {
+    await new Promise((done) => running.close(done));
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the share flow waits for the share window before its first tap inside it, and fails if it never comes", () => {
+  const flow = readFileSync(join(DIR, "share-photo.yaml"), "utf8");
+  const commands = flow.split(/^---$/m)[1].split(/^- /m).slice(1).map((command) => command.replace(/^\s*#.*\n/gm, "").trimEnd());
+  const linger = commands.findIndex((command) => command === 'tapOn: "Linger"');
+  const firstPoint = commands.findIndex((command) => /^tapOn:\n {4}point: /.test(command));
+  assert(linger >= 0 && firstPoint > linger, "Linger tapped in the share sheet, then taps by position");
+  const between = commands.slice(linger + 1, firstPoint);
+  const asked = between.findIndex((command) => command === "runScript:\n    file: window-up.js");
+  const loop = between.findIndex((command) => /^repeat:\n {4}while:\n {6}true: \$\{!output\.windowUp\}\n {4}times: (\d+)\n/.test(command));
+  const sure = between.findIndex((command) => command === "assertTrue: ${output.windowUp}");
+  assert(asked >= 0 && loop > asked && sure > loop, "asked once, then again while it isn't up, then it must be");
+  const times = Number(/times: (\d+)/.exec(between[loop])[1]);
+  const pause = Number(/timeout: (\d+)/.exec(between[loop])?.[1]);
+  assert.match(between[loop], /runScript:\n {10}file: window-up\.js/, "each time round, it asks again");
+  assert(times * pause >= 90_000 && times * pause <= 300_000, `up to 1.5 to 5 minutes, not ${times * pause} ms`);
+  const script = readFileSync(join(DIR, "window-up.js"), "utf8");
+  assert.match(script, /http\.get\(WINDOW_READY\)/, "window-up.js asks share-window-ready");
+  assert.match(script, /answer\.status !== 200\) throw/, "and fails on anything but an answer");
+});
+
+test("the workflow starts share-window-ready on the flows' app.log before the flows, and tells them where", () => {
+  const workflow = readFileSync(fileURLToPath(new URL("../.github/workflows/ios-simulator.yml", import.meta.url)), "utf8");
+  const config = readFileSync(join(DIR, "config.yaml"), "utf8");
+  const log = workflow.indexOf('--predicate \'process == "Linger" OR process == "LingerShare"');
+  const ready = workflow.indexOf('node scripts/share-window-ready.mjs "$OUT/app.log" "$READY_PORT"');
+  const listening = workflow.indexOf("until grep -q '^listening' \"$OUT/share-window-ready.log\"");
+  const flows = workflow.indexOf("maestro test");
+  assert(log >= 0 && ready > log, "on the log the share window's lines go to, once it's being kept");
+  assert(listening > ready && flows > listening, "ready for questions before the flows start");
+  assert.match(workflow.slice(flows, workflow.indexOf("client/tests/ios\n", flows)), /-e "WINDOW_READY=http:\/\/127\.0\.0\.1:\$READY_PORT\/"/, "its address passed to the flows");
+  assert.match(workflow, /\n {6}READY_PORT: \d+\n/, "on a port of its own");
+  assert.match(config, /^# {3}WINDOW_READY /m, "config.yaml lists it with what the flows need");
+});

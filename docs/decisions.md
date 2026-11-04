@@ -2106,6 +2106,13 @@ or the other, not both at once.
   own Xcode ("Xcode Simulator SDK 27.2 is not installed", run 41853188953).
   Move once every Mac has it, all three workflows at once
   (`scripts/ios-flows.test.mjs` fails when they differ).
+- **The share window's first start is slow on the iOS 27.0 simulator:** in
+  place 42 seconds after Linger was tapped in the share sheet, against 7 on
+  iOS 26.5, with an empty sheet meanwhile (run 41857567919). It then drew
+  as it should, in the same places. The flow gave it 6 seconds, so now it
+  waits for the window itself, read from iOS's log
+  (`scripts/share-window-ready.mjs`). Whether a real iPhone on iOS 27 is
+  slow there too is the testers' to see.
 - **Xcode 26.6 stays a choice by hand** (`-f xcode=26.6`, in `ios.yml` and
   `ios-simulator.yml`), to tell whether a problem is Xcode 27's, until April
   2027, when App Store Connect stops taking its builds.
