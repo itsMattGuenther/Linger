@@ -68,6 +68,15 @@ to be right for every shape that window takes.
 
 ## A check its surroundings can fool
 
+- **#858: the warm-up's test would pass a wait that waited for nothing.**
+  The run's own check from the Mac finishes a handshake at the front before
+  Safari's request, so a wait for more than none finished at once, and the
+  test, which read only the start of the wait, passed it. Caught by Greptile.
+  *Missed because* I broke the step the ways I thought of (moved, no request,
+  no wait) and not against what else writes the same log. *Changed:* the
+  test checks the count is taken just before Safari's request and the wait
+  is for one more than it; six breakages of the step each fail it.
+
 - **#757: a workaround in the shell could pass for the fix.** The
   packaged-app check cleared the WebKit settings it knew of, not #756's own
   workaround (`WEBKIT_GST_DISABLE_GL_SINK`). Set in the caller's shell, the
@@ -236,6 +245,15 @@ on a world that has changed.
   it on one line, and none spread over several. *Changed:* it reads the
   whole file and reports the line each match starts on, with the split
   forms in its table.
+
+- **#860 (2 catches): the simulator's "driver died" step cleared Linger
+  when it couldn't.** It said "re-run once" when the app in front wasn't
+  known, and when Photos was in front, though Linger's share window runs
+  inside Photos' screen. Caught by Greptile. *Missed because* the cases
+  tried were the one that happened (Photos, share window not open) and
+  Linger in front, not what the step couldn't see. *Changed:* it reads
+  `app.log` for the share window too, and says to re-run only with Linger
+  ruled out on both; unknown either way asks for a look.
 
 - **#849: the simulator's https front named a request only once it ended.**
   A request still waiting for the server when the run stopped looked like a

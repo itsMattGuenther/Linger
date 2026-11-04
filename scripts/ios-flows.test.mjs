@@ -105,3 +105,41 @@ test("the simulator approves the app's own scheme for the app, before the flows 
   const at = (text) => workflow.indexOf(text);
   assert(at("schemeapproval") > at("simctl bootstatus") && at("schemeapproval") < at("maestro test"), "after the iPhone has booted, before the flows");
 });
+
+// The simulator's certificate service sometimes took over a minute on its
+// first check of the test certificate, longer than the app waits, and the
+// set-up flow failed with nothing wrong in Linger (#848). The run has
+// Safari ask first and waits for that handshake, between trusting the test
+// authority and the flows; this keeps it there.
+test("the simulator's first certificate check is done before the flows, after the authority is trusted", () => {
+  const workflow = readFileSync(fileURLToPath(new URL("../.github/workflows/ios-simulator.yml", import.meta.url)), "utf8");
+  const at = (text) => {
+    const index = workflow.indexOf(text);
+    assert(index >= 0, `ios-simulator.yml has ${text}`);
+    return index;
+  };
+  const warm = at("- name: the simulator's first certificate check, out of the way");
+  assert(at("add-root-cert") < warm, "after the test authority is trusted");
+  assert(warm < at("maestro test"), "before the flows");
+  assert.match(workflow.slice(warm, at("- name: the app, installed")), /xcrun simctl openurl "\$UDID" "https:\/\/127\.0\.0\.1:\$FRONT_PORT\//, "a request from inside the simulator to the https front");
+  // Waits for one more finished handshake than before Safari's request: the
+  // run's own check from the Mac already finished one (#858's review).
+  const step = workflow.slice(warm, at("- name: the app, installed"));
+  const counted = step.indexOf(`done_before="$(grep -c 'TLS done' "$OUT/server/front.log" || true)"`);
+  const asked = step.indexOf("xcrun simctl openurl");
+  assert(counted >= 0 && counted < asked, "the handshakes counted just before Safari's request");
+  assert(step.includes(`until [ "$(grep -c 'TLS done' "$OUT/server/front.log" || true)" -gt "$done_before" ]; do`), "waits until there's one more than that");
+});
+
+// Maestro's runner dies on any failure XCUITest records inside it, failing
+// the flows whatever the app did (#857). A failed run says whether that's
+// what happened, and which app was in front; this keeps the step there.
+test("a failed run says whether Maestro's driver died, after the flows", () => {
+  const workflow = readFileSync(fileURLToPath(new URL("../.github/workflows/ios-simulator.yml", import.meta.url)), "utf8");
+  const step = workflow.indexOf("- name: whether Maestro's driver died");
+  assert(step > workflow.indexOf("maestro test"), "after the flows");
+  const body = workflow.slice(step, workflow.indexOf("\n      - name:", step + 1));
+  assert.match(body, /\n {8}if: failure\(\)\n/, "only when the run failed");
+  assert.match(body, /run: node scripts\/maestro-driver\.mjs "\$OUT\/maestro" "\$OUT\/app\.log"/, "reading Maestro's output, and the app's log for its share window");
+});
+

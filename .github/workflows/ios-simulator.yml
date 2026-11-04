@@ -283,6 +283,29 @@ jobs:
           # The web view's requests trust the simulator's keychain.
           xcrun simctl keychain "$UDID" add-root-cert "$certs/ca.pem"
 
+      # The simulator's certificate service (trustd) sometimes takes over a
+      # minute on its first check of the test certificate, longer than the
+      # app waits for an answer, and the set-up flow failed with nothing
+      # wrong in Linger (#848). So Safari asks first, and the flows wait
+      # until the front has seen that handshake finish. Stuck for good, it
+      # fails here, saying so, rather than in a flow.
+      - name: the simulator's first certificate check, out of the way
+        run: |
+          set -euo pipefail
+          done_before="$(grep -c 'TLS done' "$OUT/server/front.log" || true)"
+          started=$SECONDS
+          xcrun simctl openurl "$UDID" "https://127.0.0.1:$FRONT_PORT/api/v1/health"
+          until [ "$(grep -c 'TLS done' "$OUT/server/front.log" || true)" -gt "$done_before" ]; do
+            if [ $((SECONDS - started)) -ge 240 ]; then
+              tail -n 20 "$OUT/server/front.log"
+              echo "::error::the simulator's certificate check didn't finish in 4 minutes (#848)"
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "the simulator's first certificate check took about $((SECONDS - started)) s"
+          xcrun simctl terminate "$UDID" com.apple.mobilesafari || true
+
       - name: the app, installed
         run: xcrun simctl install "$UDID" "$APP"
 
@@ -304,6 +327,17 @@ jobs:
             -e "SERVER=http://127.0.0.1:$SERVER_PORT" -e "SETUP_LINK=$SETUP_LINK" \
             -e "HOST_USERNAME=$HOST_USERNAME" -e "HOST_PASSWORD=$HOST_PASSWORD" \
             client/tests/ios
+
+      # Maestro drives the simulator through an XCUITest runner, and any
+      # failure XCUITest records inside it (a screenshot timing out on a slow
+      # simulator, say) tears it down, failing the flows whatever the app did
+      # (#857). This says whether that's what stopped the run, which app was
+      # in front, and whether Linger's share window had opened (it runs inside
+      # Photos' screen). Never re-run by itself: a frozen Linger times a
+      # screenshot out too, and it says to re-run only with Linger ruled out.
+      - name: whether Maestro's driver died
+        if: failure()
+        run: node scripts/maestro-driver.mjs "$OUT/maestro" "$OUT/app.log"
 
       # What the app left the share window (#820), seen from outside the
       # simulator: the App Group's folder and what's in it, and the access

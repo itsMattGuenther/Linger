@@ -575,7 +575,11 @@ page's requests trust the simulator's keychain (`xcrun simctl keychain …
 add-root-cert`), and the gateway, which is the shell's Rust and its own TLS
 (rustls), reads `SSL_CERT_FILE`, which simctl hands the app as
 `SIMCTL_CHILD_SSL_CERT_FILE`. Both scripts are tested on Linux in the rules
-job (`scripts/https-front.test.mjs`).
+job (`scripts/https-front.test.mjs`). Before the flows, Safari in the
+simulator opens the front's health page, and the run waits until the
+front's log shows that handshake finish: the simulator's certificate service
+sometimes takes over a minute on its first check, longer than the app waits
+for an answer (#848). The step's log says how long it took.
 
 **Reading a run.** The `iphone-simulator` artifact has `screens/`, a picture
 of each screen the flows stop at, numbered in order, and `last.png`, the
@@ -586,8 +590,14 @@ WebKit's network process (which makes the page's connections) logged; and
 `server/`, the server's log, with each request it answered, and the front's,
 with each connection, handshake and request and how long it took. The front
 names each by the app's end of the connection (`:port`), so a request that
-never comes back shows how far it got (#848). Look at the pictures, not just
-the tick: a screen can pass every step and still be wrong.
+never comes back shows how far it got (#848). A failed run's step "whether
+Maestro's driver died" says if the run stopped because Maestro's own driver
+was torn down (any failure XCUITest records inside it does that, a screenshot
+timing out on a slow simulator, say), which app was in front, and whether
+Linger's share window had opened inside it. It says to re-run once only when
+that rules Linger out; otherwise check Linger didn't freeze first (#857).
+Look at the pictures, not just the tick: a screen can pass every step and
+still be wrong.
 
 **Finding things on screen.** Maestro reads the iPhone's accessibility tree,
 what VoiceOver reads, so a flow finds a control by its words or its

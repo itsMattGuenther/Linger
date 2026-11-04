@@ -482,6 +482,10 @@ jobs:
         # WebKit may make navigator.mediaDevices afresh, and a fake put on the
         # old one goes with it: the real picker answered instead (#843).
         run: node --test scripts/browser-fakes.test.mjs
+      - name: a failed iPhone run says whether Maestro's driver died, and which app was in front
+        # Maestro's runner dies on any failure XCUITest records, failing the
+        # flows whatever the app did (#857); this reads its log.
+        run: node --test scripts/maestro-driver.test.mjs
       - name: the startup measurement reads the screen and /proc right
         # It runs by hand on a desktop (docs/performance.md), so this is the
         # only place its arithmetic is checked.
