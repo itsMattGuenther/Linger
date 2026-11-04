@@ -72,6 +72,9 @@ times; the desktop shell when its system libraries are
 installed. With Docker it also runs the WebKit browser tests, in a container
 (`scripts/webkit.sh`). `--all` runs everything. The Chromium tests need
 Playwright's browser once: `cd client && pnpm exec playwright install chromium`.
+It never installs packages, and stops if `client`'s were installed from
+another lockfile: after a pull that changes `client/pnpm-lock.yaml`, run
+`pnpm install` in `client` (#852).
 `docs/testing-strategy.md` has what CI adds on top. Report failures honestly;
 never call a failing change done.
 
