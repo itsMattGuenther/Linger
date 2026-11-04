@@ -96,14 +96,17 @@ test("the flows type through the check that the typing arrived, but where it can
   assert.deepEqual(direct.sort(), [...unread].sort(), "only the password and the share window's message type directly");
   assert(checked >= 6, `${checked} typing steps through the check`);
 
+  // The subflow, command by command: type; wait for the field to hold it,
+  // giving late keys time; only if it doesn't, erase and type once more;
+  // then wait again, and fail if it still doesn't.
   const sub = readFileSync(join(DIR, "subflows/type.yaml"), "utf8").split(/^---$/m)[1];
-  const typed = sub.indexOf("- inputText: ${TEXT}");
-  const retype = sub.indexOf("- runFlow:\n    when:\n      notVisible:\n        text: ${TEXT}\n        focused: true\n    commands:\n      - eraseText:");
-  const last = sub.lastIndexOf("- extendedWaitUntil:");
-  assert(typed >= 0 && retype > typed, "types, then erases and types once more only when the field doesn't hold the text");
-  assert.equal(sub.match(/inputText/g)?.length, 2, "once, and once more at most");
-  assert(last > retype, "then waits for the field to hold it");
-  assert.doesNotMatch(sub.slice(last), /optional/, "and fails when it still doesn't");
+  const commands = sub.split(/^- /m).slice(1).map((command) => command.replace(/^\s*#.*\n/gm, "").trimEnd());
+  const holds = "visible:\n      text: \\$\\{TEXT\\}\n      focused: true\n    timeout: \\d+";
+  assert.equal(commands.length, 4, "four commands");
+  assert.match(commands[0], /^inputText: \$\{TEXT\}$/, "types");
+  assert.match(commands[1], new RegExp(`^extendedWaitUntil:\\n    ${holds}\\n    optional: true$`), "waits for the field to hold it, without failing yet");
+  assert.match(commands[2], /^runFlow:\n    when:\n      notVisible:\n        text: \$\{TEXT\}\n        focused: true\n    commands:\n      - eraseText: \d+\n      - inputText: \$\{TEXT\}$/, "erases and types once more, only when it doesn't");
+  assert.match(commands[3], new RegExp(`^extendedWaitUntil:\\n    ${holds}$`), "then waits again, and fails when it still doesn't");
 });
 
 test("the order is read strictly", () => {
