@@ -25,6 +25,13 @@ on:
         description: "Send it to TestFlight"
         type: boolean
         default: true
+      mac:
+        description: "The Mac to build on: macos-26-intel only when GitHub has no Apple-chip Mac free (#839)"
+        type: choice
+        options:
+          - macos-26
+          - macos-26-intel
+        default: macos-26
 
 permissions:
   contents: read
@@ -36,8 +43,13 @@ jobs:
     environment: release
     # Named rather than macos-latest, whose image and default Xcode move on
     # by themselves: the Xcode this builds with is chosen below (#779).
-    runs-on: macos-26
-    timeout-minutes: 60
+    # GitHub's Apple-chip Macs sometimes have none free for hours, and a job
+    # that waits 15 minutes for one is dropped ("not acquired by Runner",
+    # 2026-11-04, #839). Its Intel Mac is another pool, with the same Xcode,
+    # and builds for the iPhone as well, slower and with a build cache of its
+    # own, so it gets longer.
+    runs-on: ${{ inputs.mac || 'macos-26' }}
+    timeout-minutes: ${{ inputs.mac == 'macos-26-intel' && 90 || 60 }}
     steps:
       - name: what to build
         env:

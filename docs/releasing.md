@@ -313,6 +313,12 @@ App Store Connect takes a few minutes to process the build. It then shows
 under TestFlight, ready to give to testers, and on the app's page, ready to
 submit for review.
 
+If the run fails with "The job was not acquired by Runner of type hosted
+even after multiple attempts", GitHub had no Apple-chip Mac free for 15
+minutes, and nothing was built. Run it again later, or on GitHub's Intel Mac,
+another pool with the same Xcode: `-f mac=macos-26-intel`. It's slower, and
+its first build has no saved build to start from (#839).
+
 **Before a build goes to TestFlight,** the iPhone simulator check should be
 green on what it's built from: it runs on every pull request that touches
 the app and every night on `main` (`ios-simulator.yml`; docs/development.md,
