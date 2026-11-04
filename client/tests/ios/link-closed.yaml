@@ -7,8 +7,9 @@ appId: io.github.itsmattguenther.linger
 ---
 - stopApp
 - openLink: "linger://invite?server=linger.example&code=closed2345"
-# iOS asks first whether to open a link from outside the app in Linger
-# ("Open in "Linger"?"), and the link arrives only once Open is tapped.
+# iOS asks before a link from outside the app opens in Linger ("Open in
+# "Linger"?"). ios-simulator.yml approves linger:// ahead, so it shouldn't
+# (#847); if it asks anyway, the link arrives only once Open is tapped.
 - tapOn:
     text: "Open"
     optional: true
