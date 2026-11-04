@@ -8,7 +8,9 @@
 //! foreground service must show a notification. So the page says when it's
 //! in voice and where, and Android's half (`VoiceCallService.kt`) shows the
 //! bar, with Mute and Leave, and holds the call up until the page says it's
-//! over. The iPhone needs no bar: its own call indicator does that job.
+//! over. The iPhone needs no bar: the app declares background audio
+//! (`Info.ios.plist`, #851), which keeps the page's voice going with the
+//! phone locked, and iOS shows its own indicator that the microphone is on.
 
 use serde::Deserialize;
 

@@ -98,6 +98,16 @@ test("Info.ios.plist declares every scheme the deep-link plugin opens on a phone
   assert.deepEqual(wanted.filter((scheme) => !declared.includes(scheme)), [], "schemes missing from Info.ios.plist's CFBundleURLTypes");
 });
 
+// In voice with the phone locked (#851): WebKit mutes a hidden page's
+// microphone unless the app declares background audio, and voice runs in
+// the page on a phone. Only audio: voip asks iOS, and App Review, for
+// waking on an incoming call, which needs push (SPEC §4.15 has none).
+test("Info.ios.plist keeps voice going in the background with audio, and asks for nothing more", () => {
+  assert.deepEqual(parsePlist(read("client/src-tauri/Info.ios.plist")).UIBackgroundModes, ["audio"]);
+  // gen/apple's own Info.plist declares none, so the merged one says only this.
+  assert.equal(parsePlist(read("client/src-tauri/gen/apple/linger-client_iOS/Info.plist")).UIBackgroundModes, undefined);
+});
+
 test("a property list is read in each form Linger's take, and anything else fails", () => {
   const plist = (inner) => `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

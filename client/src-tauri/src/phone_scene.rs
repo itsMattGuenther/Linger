@@ -11,7 +11,8 @@
 //! new window to a connected scene that has none. The page loads again; the
 //! sign-ins and server connections, which live here in Rust, carry on.
 //! Voice doesn't: on a phone it runs in the page (`pageVoice.ts`), and ends
-//! with it. Staying in voice in the background is #851.
+//! with it. So the shell leaves voice on each server it was in, and the page
+//! that comes back says so, with one tap to join again (`voice_away.rs`, #851).
 
 /// What happened, as far as the phone's window cares.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,6 +61,8 @@ pub fn handle(app: &tauri::AppHandle, event: tauri::RunEvent) {
                     "linger: iOS let go of the window's scene; staying for when it comes back"
                 );
                 api.prevent_exit();
+                // Voice went with the page: leave it, so the room sees (#851).
+                crate::voice_away::window_gone(app);
             }
         }
         Answer::OpenWindow => {

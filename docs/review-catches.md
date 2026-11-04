@@ -265,6 +265,17 @@ on a world that has changed.
   boot (`log show`) go into `trustd.log` first, and the stream adds to
   them; `scripts/ios-flows.test.mjs` fails without either.
 
+- **#856: the shell's voice.leave, when iOS let go of the window, could be
+  lost.** A connection between sockets drops what it's sent (`Handle::send`
+  says so: the page re-states what matters once it's back), and then
+  resumes the same session, voice seat and all, with no page left to leave
+  it. Caught by Greptile. *Missed because* the tests and my answer to the
+  partway question assumed a connection that's up; I wrote that a server
+  without one would end the session anyway, and it resumes. *Changed:*
+  `Handle::leave_voice` keeps the leave until the session is back, and an
+  integration test asks for it on a fresh socket the server hasn't taken
+  yet and hears it right after `resumed`.
+
 - **#862: the certificate service's log started too late to explain a
   stall before the flows.** Its lines went into `app.log`, which starts
   with the flows, so a stall in the warm-up (the step before, where #848 had

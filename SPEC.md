@@ -1060,8 +1060,16 @@ microphone and network within seconds unless the app keeps a foreground service,
 a foreground service must show a notification, so the bar is what keeps a call going
 with the phone locked or in a pocket. It never makes a sound or pops up, it says
 nothing about messages or people, and it goes when the call does. Android 13 and
-later ask once before it may show; the call keeps going without it. The iPhone shows
-its own call indicator and needs nothing of Linger's.
+later ask once before it may show; the call keeps going without it. An iPhone needs no
+bar: Linger declares background audio, which keeps it in voice with the phone locked or
+another app in front, and the iPhone shows its own indicator that the microphone is in
+use (#851). A phone call, or Siri, takes the microphone and comes first: the voice bar
+says so, and that it comes back after, and you stay in voice. If iOS lets go of Linger's
+window to free memory while you're in voice in the background, voice goes with it:
+Linger leaves voice at once, so the room sees you go, and when you open it again the list
+says voice ended while Linger was in the background, with Join. It never rejoins by
+itself, which would switch the microphone on whenever Linger is next opened (Matt,
+2026-11-03).
 
 **Its sounds follow the phone** (Matt, 2026-10-03). While the app is open, its chimes
 play as they do on desktop, under the same switches, and then the phone has its say:

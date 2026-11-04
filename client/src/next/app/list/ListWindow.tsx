@@ -23,6 +23,7 @@ import {
   setVoiceVolume,
   takeOutOfVoice,
   canTakeOut,
+  forgetVoiceOut,
   saveTimeZone,
   useGateway,
   useServers,
@@ -44,7 +45,7 @@ import { keepSame, type ListModel, listModel } from "../../core/list";
 import { inOrder, loadServerPrefs, saveServerPrefs, type ServerPrefs } from "../../core/serverPrefs";
 import { moveServer, seatsWords, serverHeader } from "../../core/servers";
 import { keepAsking, type ListedInfo, withInfo } from "../../core/serverInfo";
-import { talkingNow, voiceModel } from "../../core/voice";
+import { talkingNow, voiceModel, voiceWhere } from "../../core/voice";
 import { bankOf, forgetAway, rememberAway, startingBank, withAway, withLine } from "../../core/you";
 import type { YouActions } from "./YouCard";
 import { loadScale } from "../../core/appearance";
@@ -755,6 +756,8 @@ function Servers({
   const intendHere = useCallback(async (intent: Intent) => {
     sharing?.local(intent);
   }, []);
+  // Join again from the line saying voice ended while the window was gone (#851).
+  const joinVoiceAgain = useCallback((server: string, roomId: string) => void intendHere({ kind: "voice.join", server, roomId }), [intendHere]);
 
   // Settings on the phone: drawn over the list, in the phone's one window
   // (SPEC §4.15). On a computer it's a window of its own (`shell.settings`).
@@ -1412,6 +1415,16 @@ function Servers({
       return info?.health ? [{ server: session.baseUrl, name: info.name, health: info.health, runs: runs[session.baseUrl] ?? null }] : [];
     }),
     newest,
+    // Voice that ended while iOS had let go of the phone's window (#851):
+    // its line, with Join, until you join again or wave it off.
+    ordered.flatMap((session) => {
+      const state = states[session.baseUrl];
+      const out = state?.voiceOut;
+      if (!state || out?.why !== "away" || state.myVoice?.roomId === out.roomId) return [];
+      // A room deleted, or left, while Linger was away has no voice to join again.
+      if (![...state.rooms, ...state.dms].some((room) => room.id === out.roomId)) return [];
+      return [{ server: session.baseUrl, roomId: out.roomId, where: voiceWhere(state, out.roomId) }];
+    }),
   );
   // The same lines as last time are the same list, so they aren't drawn again for nothing (#533).
   const notesHeld = useRef(notesNow);
@@ -1573,7 +1586,17 @@ function Servers({
               onSearch={openSearch}
               notices={<KnockCards cards={knocks} onGone={dismissKnock} arrivals={arrivals} onArrivalGone={arrivalGone} />}
               rock={rock}
-              notes={<ListNotes notes={notes} updates={updateActions} onRetry={onRetry} onHost={openServerSettings} onHostGuide={openHostGuide} />}
+              notes={
+                <ListNotes
+                  notes={notes}
+                  updates={updateActions}
+                  onRetry={onRetry}
+                  onHost={openServerSettings}
+                  onHostGuide={openHostGuide}
+                  onJoinVoice={joinVoiceAgain}
+                  onForgetVoiceOut={forgetVoiceOut}
+                />
+              }
               onUnfold={!onPhone() && !unfolded && tabs.open.length > 0 ? unfoldAgain : undefined}
               onClose={unfolded ? undefined : closeList}
             />

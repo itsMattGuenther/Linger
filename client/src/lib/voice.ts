@@ -111,6 +111,9 @@ export function microphoneLine(
       return waitingForKey ? `hold ${talkKey} to talk` : null;
     case "stopped":
       return "the microphone stopped — leave and join again";
+    case "interrupted":
+      // A phone call, or Siri, has it, and gives it back after (#851).
+      return "your phone call has the microphone; it comes back after";
     default:
       return audio.startsWith("encoder") ? "the microphone could not start" : null;
   }

@@ -123,6 +123,86 @@ test("a connection that goes quiet is started afresh, and Eli is heard again", a
   expect(await sent(page, "voice.restart")).toHaveLength(1);
 });
 
+// iOS gives a phone call the microphone and mutes Linger's track until it's
+// over (#851): the call takes priority, and the voice bar says so, rather
+// than "the microphone stopped — leave and join again". Still in voice.
+test("a phone call takes the microphone: the voice bar says so, and it comes back after (#851)", async ({ page }) => {
+  await inGeneral(page);
+  await join(page);
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  const bar = page.getByRole("region", { name: /^In voice in #general/ });
+  await expect(bar).toBeVisible();
+  await expect(bar.getByRole("status")).toHaveCount(0);
+
+  await page.evaluate(() => window.core?.sfu?.call(true));
+  await expect(bar.getByRole("status")).toHaveText("your phone call has the microphone; it comes back after");
+  expect(await sent(page, "voice.leave")).toHaveLength(0);
+
+  await page.evaluate(() => window.core?.sfu?.call(false));
+  await expect(bar.getByRole("status")).toHaveCount(0);
+  await expect.poll(() => packetsOver(page, 1000), { timeout: 8000 }).toBeGreaterThan(30);
+});
+
+/** The phone's list, every connection in, as the page that came back after iOS let go of the window (#851). */
+async function backAfterAway(page: Page, room = "") {
+  await page.goto(`/tests/fixtures/next-list-window.html?one&shell=phone&sfu&endedaway=${room}`);
+  await page.evaluate(() => document.fonts.ready);
+  await expect
+    .poll(async () => {
+      const lines = await did(page);
+      const connects = lines.filter((line) => line.startsWith("connect ")).length;
+      return connects > 0 && lines.filter((line) => line.startsWith("ready ")).length === connects;
+    })
+    .toBe(true);
+}
+
+// iOS let go of the window while the phone was in voice, and the page and
+// its voice went with it (#851): the shell left voice and kept where. The
+// page that comes back says so, with one tap to join again, and never
+// rejoins by itself, which would switch the microphone on unasked.
+test("voice that ended while the window was gone is said, in the list and the room, with Join; never rejoined by itself (#851)", async ({ page }) => {
+  await backAfterAway(page);
+  const line = page.locator('[data-note="voiceaway"]');
+  await expect(line).toContainText("Voice in #general ended while Linger was in the background.");
+  await page.waitForTimeout(500);
+  expect(await sent(page, "voice.join")).toHaveLength(0);
+  expect(await sfuState(page)).toBe("none");
+
+  // The room says so too, where its strip's words go, beside its own Join.
+  await page.getByRole("list", { name: "Rooms" }).getByRole("button", { name: /^#general\b/ }).click();
+  await expect(strip(page)).toContainText("Voice ended in background.");
+  await expect(strip(page).getByRole("button", { name: "Join" })).toBeVisible();
+  // Short enough to be read whole beside a chip and Join on a small Android
+  // phone; the list's line says all of it.
+  await page.setViewportSize({ width: 360, height: 914 });
+  await expect.poll(() => strip(page).locator(".nx-strip-words").evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+  await page.setViewportSize({ width: 411, height: 914 });
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+
+  await line.getByRole("button", { name: "Join" }).click();
+  await expect.poll(() => sfuState(page), { timeout: 10_000 }).toBe("connected");
+  await expect(line).toHaveCount(0);
+  await expect(page.getByRole("region", { name: /^In voice in #general/ })).toBeVisible();
+});
+
+test("voice that ended in a room deleted while Linger was away says nothing: there's no voice to join again (#851)", async ({ page }) => {
+  await backAfterAway(page, "r-gone");
+  await page.waitForTimeout(500);
+  await expect(page.locator('[data-note="voiceaway"]')).toHaveCount(0);
+});
+
+test("waved off, the line goes, and nothing joins (#851)", async ({ page }) => {
+  await backAfterAway(page);
+  const line = page.locator('[data-note="voiceaway"]');
+  await expect(line).toBeVisible();
+  await line.getByRole("button", { name: "Close" }).click();
+  await expect(line).toHaveCount(0);
+  await page.waitForTimeout(500);
+  expect(await sent(page, "voice.join")).toHaveLength(0);
+  await page.getByRole("list", { name: "Rooms" }).getByRole("button", { name: /^#general\b/ }).click();
+  await expect(strip(page)).not.toContainText("ended in background");
+});
+
 test("leaving says so, lets the microphone go, and stops every voice", async ({ page }) => {
   await inGeneral(page);
   await join(page);

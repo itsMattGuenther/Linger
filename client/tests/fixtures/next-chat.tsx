@@ -737,7 +737,7 @@ function Fixture() {
               onPickDevice,
               controls: myVoice === id ? controls : undefined,
               failed: VOICE_FAIL === null ? undefined : { ...voiceStartProblem(VOICE_FAIL, query.has("windows"), ASKED), detail: VOICE_FAIL },
-              takenOut: query.has("takenout") && myVoice !== id,
+              out: myVoice === id ? undefined : query.has("takenout") ? "taken-out" : query.has("endedaway") ? "away" : undefined,
               // Each person's volume from their chip, where you're in voice (#747).
               volume: myVoice === id ? volume : undefined,
             },

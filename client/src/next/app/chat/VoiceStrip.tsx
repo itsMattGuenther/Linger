@@ -79,7 +79,7 @@ export const VoiceStrip = memo(function VoiceStrip({
   onPickDevice,
   controls,
   failed,
-  takenOut,
+  out,
   sharing,
   watch,
   share,
@@ -111,10 +111,12 @@ export const VoiceStrip = memo(function VoiceStrip({
    */
   failed?: StripProblem;
   /**
-   * The host or a co-host took you out of voice here (#423, #424): said where the strip's words
-   * go, until you join again. Join stays, since it isn't a ban.
+   * Why voice ended here without you leaving, said where the strip's words go
+   * until you join again: the host or a co-host took you out (#423, #424), or
+   * iOS let go of the phone's window, and voice with it (#851). Join stays,
+   * one tap to come back.
    */
-  takenOut?: boolean;
+  out?: "taken-out" | "away";
   /** Who's sharing their screen here, by user id (#360): the mark on their chip. */
   sharing?: ReadonlySet<string>;
   /** Watch, for each share here you aren't watching (#360). */
@@ -129,7 +131,7 @@ export const VoiceStrip = memo(function VoiceStrip({
   volume?: StripVolume;
 }) {
   const showFailed = failed && strip.kind !== "mine" ? failed : undefined;
-  const showTakenOut = takenOut === true && strip.kind !== "mine" && !showFailed;
+  const showOut = out !== undefined && strip.kind !== "mine" && !showFailed ? out : undefined;
   const [why, setWhy] = useState<DOMRect | null>(null);
   // Whose volume is open (#747), or everyone's, from "and others", and what
   // opened it, for the card to sit under and the keyboard to go back to.
@@ -194,7 +196,7 @@ export const VoiceStrip = memo(function VoiceStrip({
     if (setTo === null) return;
     if (setTo.id !== volumeOf || (shared !== null && Math.abs(shared - setTo.volume) < 0.001)) setSetTo(null);
   }, [setTo, volumeOf, shared]);
-  const words = stripWords(strip.kind, here.length, showFailed, showTakenOut);
+  const words = stripWords(strip.kind, here.length, showFailed, showOut);
   const { fit, measuring, list, line, ruler } = useStripFit(here, you, words, mics, sharing);
   // A room too big for its chips, that you're in (#197): you first, then
   // whoever just talked, kept still (core/seats.ts). Who's talking is known
@@ -204,9 +206,9 @@ export const VoiceStrip = memo(function VoiceStrip({
   const talkingKey = others.filter((id) => speaking.has(id)).join("\n");
   const talkingHere = useMemo(() => new Set(talkingKey === "" ? [] : talkingKey.split("\n")), [talkingKey]);
   const seats = useTalkSeats(others, talkingHere, fit.kind === "seats" ? fit.seats : 0);
-  const takenOutWords = showTakenOut ? (
+  const outWords = showOut ? (
     <p ref={line} className="nx-strip-words" role="status">
-      {TAKEN_OUT}
+      {OUT[showOut]}
     </p>
   ) : null;
   const lead = showFailed ? `Couldn't start voice. ${startProblemWords(showFailed)}` : "";
@@ -242,7 +244,7 @@ export const VoiceStrip = memo(function VoiceStrip({
     return (
       <div className="nx-strip" data-kind="quiet" role="group" aria-label="Voice in this conversation">
         <VoiceGlyph speaking={false} />
-        {problem ?? takenOutWords ?? <p className="nx-strip-words">Nobody's talking in here.</p>}
+        {problem ?? outWords ?? <p className="nx-strip-words">Nobody's talking in here.</p>}
         {fix}
         <Button size="sm" variant="secondary" icon="mic" onClick={press(onJoin, true)}>
           {strip.action === "move" ? QUIET_MOVE_WORDS : VOICE_ACTION_WORDS[strip.action]}
@@ -282,7 +284,7 @@ export const VoiceStrip = memo(function VoiceStrip({
           </li>
         ))}
       </ul>
-      {problem ?? takenOutWords ?? (
+      {problem ?? outWords ?? (
         <p ref={line} className="nx-strip-words">
           {/* "and others" opens everyone by name, as the voice bar's crowd does (#197). */}
           {volumes && here.length > shown.length && !measuring ? (
@@ -391,7 +393,15 @@ const NO_USERS: readonly User[] = [];
 function takeOutOf(takeOut: (id: string) => Promise<string | null>, id: string): () => Promise<string | null> {
   return () => takeOut(id);
 }
-const TAKEN_OUT = "You were taken out of voice.";
+/**
+ * Why voice ended here, as the strip says it (`out`): as short as the strip
+ * has room for on a phone, beside its chips and Join. The list says the
+ * whole of it (#851).
+ */
+export const OUT = {
+  "taken-out": "You were taken out of voice.",
+  away: "Voice ended in background.",
+} as const;
 const EVERYBODY: StripFit = { kind: "all" };
 
 /** The words after the chips, said with "and others" (`some`) and without (`all`). */
@@ -402,15 +412,15 @@ interface StripWords {
 
 /**
  * What the strip says after its chips (#745): "and others", then who's
- * talking when it isn't your room. A failed start or being taken out of
- * voice says that instead, the same either way.
+ * talking when it isn't your room. A failed start, or voice that ended here
+ * without you leaving, says that instead, the same either way.
  */
-function stripWords(kind: Strip["kind"], count: number, failed: StripProblem | undefined, takenOut: boolean): StripWords {
+function stripWords(kind: Strip["kind"], count: number, failed: StripProblem | undefined, out: "taken-out" | "away" | undefined): StripWords {
   if (failed) {
     const said = `Couldn't start voice. ${failed.line}`;
     return { some: said, all: said };
   }
-  if (takenOut) return { some: TAKEN_OUT, all: TAKEN_OUT };
+  if (out) return { some: OUT[out], all: OUT[out] };
   const talking = kind === "others" ? `${verbFor(count, "is", "are")} talking` : "";
   return { some: talking === "" ? "and others" : `and others ${talking}`, all: talking };
 }

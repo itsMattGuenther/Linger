@@ -113,7 +113,7 @@ import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import type { ServerFrame } from "../../src/generated/ServerFrame";
-import { apply, type GatewayState, type GatewayStatus, serverState } from "../../src/lib/gateway";
+import { apply, type GatewayState, type GatewayStatus, serverState, voiceEndedAwayFrom } from "../../src/lib/gateway";
 import { ListWindow } from "../../src/next/app/list/ListWindow";
 import { loadTextSize, onAppearance } from "../../src/next/core/appearance";
 import { followTextSize } from "../../src/next/core/phone";
@@ -555,7 +555,13 @@ declare global {
       /** The voice engine hears somebody start or stop talking (`peer` null for you). */
       speaking: (server: string, peer: string | null, speaking: boolean) => void;
       /** With `?sfu`, the server's voice forwarding as the phone's engine meets it (#429). */
-      sfu?: { received: () => Promise<Received>; drop: () => void; state: () => string };
+      sfu?: {
+        received: () => Promise<Received>;
+        drop: () => void;
+        state: () => string;
+        /** A phone call takes the microphone (`true`), or gives it back: WebKit mutes the track meanwhile (#851). */
+        call: (on: boolean) => void;
+      };
       /**
        * The session starts over (#453): the server's read positions move
        * first, as reading on another device would, then a fresh `ready`
@@ -624,6 +630,9 @@ window.core = {
     received: async () => (await sfu?.received()) ?? { packets: 0, level: 0 },
     drop: () => sfu?.drop(),
     state: () => sfu?.state ?? "none",
+    call: (on) => {
+      for (const track of microphone?.getAudioTracks() ?? []) track.dispatchEvent(new Event(on ? "mute" : "unmute"));
+    },
   },
   restart: (server, read) => {
     const state = states[server];
@@ -1106,15 +1115,22 @@ if (query.get("shell") === "phone") {
 // (next/sfu.ts): Eli's tone is loud, Jules's silent, and the phone's
 // answers, restarts and leave go to it.
 const micAudio = query.get("shell") === "phone" ? realAudio() : null;
+/** The phone's microphone as last opened, for a phone call to take (`core.sfu.call`). */
+let microphone: MediaStream | null = null;
 if (micAudio) {
   voiceInThePage({
     ...browserWorld(),
     getMicrophone: async () => {
       await micAudio.resume().catch(() => undefined);
-      return fakeMicrophone(micAudio, query.has("micquiet") ? 0 : 0.5);
+      microphone = fakeMicrophone(micAudio, query.has("micquiet") ? 0 : 0.5);
+      return microphone;
     },
   });
 }
+// `?endedaway`: iOS had let go of the window while the phone was in voice in
+// #general (or the room named), and the shell left voice there and kept
+// where (#851), as main.tsx asks it when the phone app starts.
+if (query.has("endedaway")) voiceEndedAwayFrom(async () => [{ server: SERVER, room_id: query.get("endedaway") || "r-general" }]);
 const sfu = query.has("sfu")
   ? new FakeSfu(
       (frame) => window.core?.frame(SERVER, frame as Omit<ServerFrame, "s">),

@@ -44,6 +44,8 @@ export const ListNotes = memo(function ListNotes({
   onRetry,
   onHost,
   onHostGuide,
+  onJoinVoice,
+  onForgetVoiceOut,
 }: {
   notes: readonly ListNote[];
   updates: UpdateActions;
@@ -51,6 +53,10 @@ export const ListNotes = memo(function ListNotes({
   onHost?: (server: string) => void;
   /** The host guide's "Updating the server" (#772). */
   onHostGuide?: () => void;
+  /** Join voice in a room again, from its "ended while in the background" line (#851). */
+  onJoinVoice?: (server: string, roomId: string) => void;
+  /** Wave that line off. */
+  onForgetVoiceOut?: (server: string) => void;
 }) {
   if (notes.length === 0) return null;
   const lines = notes.filter((note): note is Line => !isBlock(note) && !isTooOld(note));
@@ -80,6 +86,14 @@ export const ListNotes = memo(function ListNotes({
                 <Button size="sm" variant="quiet" onClick={() => onRetry(note.server)}>
                   Try now
                 </Button>
+              ) : null}
+              {note.kind === "voiceaway" && onJoinVoice ? (
+                <Button size="sm" icon="mic" onClick={() => onJoinVoice(note.server, note.roomId)}>
+                  Join
+                </Button>
+              ) : null}
+              {note.kind === "voiceaway" && onForgetVoiceOut ? (
+                <IconButton icon="close" label="Close" size="sm" onClick={() => onForgetVoiceOut(note.server)} />
               ) : null}
             </p>
           ))}
@@ -176,7 +190,7 @@ function TooOldBlock({ note, actions }: { note: TooOld; actions: UpdateActions }
 }
 
 /** Each line's mark, where it isn't a spinner. */
-const MARK = { keyring: "key", host: "house" } as const;
+const MARK = { keyring: "key", host: "house", voiceaway: "mic" } as const;
 
 /** One server can have several host lines, so those are told apart by what they're about. */
 function keyOf(note: Line): string {

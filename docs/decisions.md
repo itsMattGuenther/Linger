@@ -2049,3 +2049,35 @@ not what the app does at run time.
   (`phone_scene.rs`, #836), and coming back to the app; the simulator's flows
   open links with the app open and closed, share from Photos with Linger in
   the background, and start it again signed in.
+
+## Decided — a locked phone stays in voice, and voice that ends away says so (#851)
+
+**2026-11-03, Matt, for 0.5.5.** A locked phone, iPhone or Android, stays in
+voice. Android did through its call bar (#429), until 0.5.4's release build
+dropped the method that shows it (#834, fixed in #846). The iPhone never had
+anything that kept it running in the background.
+
+- **The iPhone declares background audio** (`UIBackgroundModes` `audio`,
+  `Info.ios.plist`). Voice runs in the web view's WebRTC (`pageVoice.ts`),
+  and WebKit mutes a hidden page's microphone unless the app declares it;
+  with it, WebKit keeps the page running while it uses the microphone. Not
+  `voip`, which is for being woken by an incoming call and needs push, and
+  not CallKit, which is reported to break the microphone in a web view.
+- **A phone call takes priority.** iOS mutes Linger's microphone during a
+  call, or Siri, and gives it back after; the voice bar says so ("your phone
+  call has the microphone; it comes back after"), never "leave and join
+  again", and you stay in voice.
+- **When iOS lets go of the window in voice, Linger leaves, and says so
+  later; it never rejoins by itself.** iOS can discard a background app's
+  window to free memory, and the page, and voice, go with it. The seat
+  belongs to the gateway session, which lives in the shell and carries on,
+  so the shell leaves voice on each server at once (`voice_away.rs`; a
+  connection between sockets keeps the leave until the session is back), and
+  the page that comes back shows "Voice in #general ended while Linger was
+  in the background" with Join, and ×. Rejoining by itself was the first
+  idea, but the page only comes back when Linger is next opened, maybe hours
+  later, and rejoining then would switch the microphone on unasked.
+- **Checked:** by the shell's, the store's and the browser's tests (the
+  simulator's flows have no voice); a real iPhone locked in voice, a call in
+  the middle, and the window let go of, are the TestFlight testers' (Matt
+  has no iPhone).

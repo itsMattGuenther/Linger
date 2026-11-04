@@ -23,6 +23,11 @@ describe("the microphone line", () => {
     expect(microphoneLine("encoder: boom", false)).toMatch(/could not start/);
   });
 
+  it("says a phone call has the microphone, and that it comes back, never to leave and join again (#851)", () => {
+    expect(microphoneLine("interrupted", false)).toBe("your phone call has the microphone; it comes back after");
+    expect(microphoneLine("interrupted", true, "Right Ctrl")).toBe("your phone call has the microphone; it comes back after");
+  });
+
   it("says when the microphone picked in Settings wouldn't open, ahead of the push-to-talk reminder (#398)", () => {
     const refused = { name: "Headset Microphone (SteelSeries Arctis Nova 5)", why: "the device is in use" };
     const said = "Headset Microphone (SteelSeries Arctis Nova 5) wouldn't open, so you're on the system default (the device is in use)";

@@ -78,8 +78,8 @@ export interface ChatPane {
     controls?: StripControls;
     /** Starting voice here failed last time: why, short, what fixes it, and the whole reason (#261, #273). */
     failed?: StripProblem;
-    /** The host took you out of voice here (#423). */
-    takenOut?: boolean;
+    /** Why voice ended here without you leaving: taken out (#423), or the phone's window let go (#851). */
+    out?: "taken-out" | "away";
     /** Each person's volume from their chip, when you're in voice here (#747). */
     volume?: StripVolume;
   } | null;
@@ -421,7 +421,7 @@ export function ChatView({ tabs, activeId, onSelectTab, onCloseTab, onMoveTab, o
                 controls={pane.voice.controls}
                 volume={pane.voice.volume}
                 failed={pane.voice.failed}
-                takenOut={pane.voice.takenOut}
+                out={pane.voice.out}
                 sharing={pane.screen?.sharing}
                 watch={pane.screen?.watch}
                 share={pane.screen?.share}

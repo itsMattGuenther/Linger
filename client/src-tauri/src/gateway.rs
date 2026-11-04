@@ -156,6 +156,15 @@ impl Handle {
         self.cmd.try_send(Cmd::Send(frame)).is_ok()
     }
 
+    /// Leave voice on this server, even if the connection is between
+    /// sockets right now: unlike `send`, this is kept until the session is
+    /// back, and sent then. For when there's no page left to re-state it:
+    /// iOS let go of the phone's window, and voice with it (#851). Sent after
+    /// a fresh `ready` too, where there's no seat and the server ignores it.
+    pub fn leave_voice(&self) -> bool {
+        self.cmd.try_send(Cmd::LeaveVoice).is_ok()
+    }
+
     /// Close the connection for good.
     pub fn shutdown(&self) {
         let _ = self.cmd.try_send(Cmd::Shutdown);
@@ -174,6 +183,7 @@ impl Handle {
 enum Cmd {
     Token(Token),
     Send(ClientFrame),
+    LeaveVoice,
     Retry,
     Shutdown,
 }
@@ -199,6 +209,7 @@ pub fn client<E: Events>(
         token: Some(token),
         session: None,
         attempt: 0,
+        leave_voice: false,
     };
     Some((Handle { cmd: cmd_tx }, runner.run()))
 }
@@ -253,6 +264,9 @@ struct Runner<E: Events> {
     /// Consecutive failed attempts, reset by every successful handshake. It is
     /// the only input to the reconnect delay.
     attempt: u32,
+    /// A `voice.leave` asked for (`Handle::leave_voice`) and not sent yet:
+    /// there was no session to send it on. Sent once the session is back.
+    leave_voice: bool,
 }
 
 /// A server session we may still be able to resume into.
@@ -409,9 +423,13 @@ impl<E: Events> Runner<E> {
             session,
             token: stored,
             attempt,
+            leave_voice,
             ..
         } = self;
         let mut beat = Beat::new(interval);
+        // Until `ready` or `resumed`, the server hasn't taken this socket as
+        // the session, and a leave waits for it.
+        let mut live = false;
 
         loop {
             tokio::select! {
@@ -421,7 +439,16 @@ impl<E: Events> Runner<E> {
                     };
                     match apply(events, session, &value, &mut beat, opened_at, resuming) {
                         Step::Idle => {}
-                        Step::Ready => *attempt = 0,
+                        Step::Ready => {
+                            *attempt = 0;
+                            live = true;
+                            if *leave_voice {
+                                if !send_frame(&mut tx, &ClientFrame::VoiceLeave).await {
+                                    return Outcome::Dropped("write failed".into());
+                                }
+                                *leave_voice = false;
+                            }
+                        }
                         Step::Out(outcome) => return outcome,
                     }
                 }
@@ -446,6 +473,15 @@ impl<E: Events> Runner<E> {
                     Some(Cmd::Send(frame)) => {
                         if !send_frame(&mut tx, &frame).await {
                             return Outcome::Dropped("write failed".into());
+                        }
+                    }
+                    Some(Cmd::LeaveVoice) => {
+                        *leave_voice = true;
+                        if live {
+                            if !send_frame(&mut tx, &ClientFrame::VoiceLeave).await {
+                                return Outcome::Dropped("write failed".into());
+                            }
+                            *leave_voice = false;
                         }
                     }
                     // Already connected: nothing to try again.
@@ -486,6 +522,8 @@ impl<E: Events> Runner<E> {
                     }
                     // Nothing to send it over. See `Handle::send`.
                     Some(Cmd::Send(_)) => {}
+                    // Kept for when the session is back (`Handle::leave_voice`).
+                    Some(Cmd::LeaveVoice) => self.leave_voice = true,
                     // Between tries: go now, and start the backoff over, so a
                     // try that fails too waits half a second, not half a
                     // minute. Waiting for a token, there's nothing to try with.
