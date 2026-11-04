@@ -316,10 +316,18 @@ export interface GatewayState {
    */
   voiceFailed: { roomId: RoomId; problem: string; devices: VoiceDeviceChoice } | null;
   /**
-   * The host took us out of this room's voice (#423), so its strip can say
-   * so instead of just showing Join. Cleared by the next try at joining.
+   * Why we're out of this room's voice, so its strip, and the list, can say
+   * so instead of just showing Join: the host took us out (#423), or iOS
+   * let go of the phone's window, and the page and its voice with it (#851).
+   * Cleared by the next try at joining, or waved off (`forgetVoiceOut`).
    */
-  voiceTakenOut: RoomId | null;
+  voiceOut: VoiceOut | null;
+}
+
+/** Why voice ended in a room without us leaving it (`GatewayState.voiceOut`). */
+export interface VoiceOut {
+  roomId: RoomId;
+  why: "taken-out" | "away";
 }
 
 /** Everything about being in voice that is this client's alone. */
@@ -425,7 +433,7 @@ const EMPTY: GatewayState = {
   reactions: false,
   myVoice: null,
   voiceFailed: null,
-  voiceTakenOut: null,
+  voiceOut: null,
 };
 
 /**
@@ -759,7 +767,7 @@ function leftDm(current: GatewayState, roomId: RoomId): GatewayState {
     // The server dropped your rules naming it; so does this copy.
     notifyRules: current.notifyRules.some((rule) => rule.room_id === roomId) ? current.notifyRules.filter((rule) => rule.room_id !== roomId) : current.notifyRules,
     voiceFailed: current.voiceFailed?.roomId === roomId ? null : current.voiceFailed,
-    voiceTakenOut: current.voiceTakenOut === roomId ? null : current.voiceTakenOut,
+    voiceOut: current.voiceOut?.roomId === roomId ? null : current.voiceOut,
   };
 }
 
@@ -834,7 +842,7 @@ export function apply(current: GatewayState, frame: ServerFrame): GatewayState {
       // its own; this says why, and ends it now.
       const { room_id } = frame.d;
       const mine = current.myVoice;
-      return { ...current, myVoice: mine !== null && mine.roomId === room_id ? null : mine, voiceTakenOut: room_id };
+      return { ...current, myVoice: mine !== null && mine.roomId === room_id ? null : mine, voiceOut: { roomId: room_id, why: "taken-out" } };
     }
     case "presence.update": {
       const entry = frame.d;
@@ -1473,6 +1481,11 @@ async function open(api: AuthedApi): Promise<void> {
   links.set(server, link);
   publish(server, EMPTY);
   if (!isTauri()) return;
+  // Voice that ended here while iOS had let go of the phone's window (#851):
+  // said by each connection this page opens to the server, since opening
+  // starts its state afresh, until a join there or the line is waved off.
+  const away = await endedAwayOn(server);
+  if (away !== null) publish(server, { ...stateOf(server), voiceOut: { roomId: away, why: "away" } });
 
   await attachListeners();
   // No guard on the way out. Nothing can have disconnected this server while we
@@ -1485,6 +1498,52 @@ async function open(api: AuthedApi): Promise<void> {
     token: token.token,
     expiresAtMs: token.expiresAt,
   });
+}
+
+/**
+ * Where voice ended because iOS let go of the phone's window (#851), as the
+ * shell kept it (src-tauri/src/voice_away.rs): asked once, as the page
+ * starts, and handed to each server's state as its connection opens, until
+ * a join there, or the line waved off, lets it go.
+ */
+let endedAway: Promise<Map<string, RoomId>> | null = null;
+
+/**
+ * The phone app, starting: ask the shell where voice ended while the window
+ * was gone (`phone_voice_ended`, which hands it over once). Anything it
+ * can't read is nothing ended.
+ */
+export function voiceEndedAwayFrom(ask: () => Promise<unknown>): void {
+  endedAway = ask().then(endedAwayFrom, () => new Map());
+}
+
+/** The shell's answer, read strictly: a list of a server and a room each. */
+export function endedAwayFrom(value: unknown): Map<string, RoomId> {
+  const ended = new Map<string, RoomId>();
+  if (!Array.isArray(value)) return ended;
+  const entries: unknown[] = value;
+  for (const entry of entries) {
+    if (typeof entry !== "object" || entry === null || !("server" in entry) || !("room_id" in entry)) continue;
+    const { server, room_id: roomId } = entry;
+    if (typeof server === "string" && server !== "" && typeof roomId === "string" && roomId !== "") ended.set(server, roomId);
+  }
+  return ended;
+}
+
+async function endedAwayOn(server: string): Promise<RoomId | null> {
+  return endedAway === null ? null : ((await endedAway).get(server) ?? null);
+}
+
+/** It was said, and answered: joined there, or waved off. */
+function letEndedAwayGo(server: string): void {
+  void endedAway?.then((ended) => ended.delete(server));
+}
+
+/** Wave off a line saying why voice ended here (`voiceOut`): the list's ×. */
+export function forgetVoiceOut(server: string): void {
+  letEndedAwayGo(server);
+  if (stateOf(server).voiceOut === null) return;
+  publish(server, { ...stateOf(server), voiceOut: null });
 }
 
 /**
@@ -2473,10 +2532,11 @@ export async function joinVoice(
       await leaveVoice(other, false);
     }
   }
+  letEndedAwayGo(server);
   publish(server, {
     ...stateOf(server),
     voiceFailed: null,
-    voiceTakenOut: null,
+    voiceOut: null,
     myVoice: {
       roomId,
       muted: previous?.deafened || previous?.muted || false,

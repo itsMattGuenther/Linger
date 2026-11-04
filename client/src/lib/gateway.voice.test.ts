@@ -52,7 +52,9 @@ const {
   applyFollowed,
   connect,
   disconnect,
+  endedAwayFrom,
   follow,
+  forgetVoiceOut,
   joinVoice,
   leaveVoice,
   OLD_WAY,
@@ -66,6 +68,7 @@ const {
   setVoiceVolumeOf,
   snapshotOf,
   unfollow,
+  voiceEndedAwayFrom,
   voicePeersIn,
 } = await import("./gateway");
 const { startProblemWords, voiceStartProblem } = await import("./voice");
@@ -369,17 +372,17 @@ describe("voice in the store", () => {
 
     arrive(HOME, { s: 3, op: "voice.removed", d: { room_id: "r-garage" } });
     expect(serverState(HOME).myVoice).toBeNull();
-    expect(serverState(HOME).voiceTakenOut).toBe("r-garage");
+    expect(serverState(HOME).voiceOut).toEqual({ roomId: "r-garage", why: "taken-out" });
     expect(invoked.filter((call) => call.cmd === "voice_leave")).toHaveLength(1);
 
     // The room's list without us follows, and lets go of nothing twice.
     arrive(HOME, voiceState("r-garage", [["s-1", "u-amy"]]));
     expect(invoked.filter((call) => call.cmd === "voice_leave")).toHaveLength(1);
-    expect(serverState(HOME).voiceTakenOut).toBe("r-garage");
+    expect(serverState(HOME).voiceOut).toEqual({ roomId: "r-garage", why: "taken-out" });
 
     // Not a ban: joining again is allowed, and clears it.
     await joinVoice(fakeApi(HOME), "r-garage", DEFAULTS, false);
-    expect(serverState(HOME).voiceTakenOut).toBeNull();
+    expect(serverState(HOME).voiceOut).toBeNull();
     expect(serverState(HOME).myVoice?.roomId).toBe("r-garage");
   });
 
@@ -877,5 +880,66 @@ describe("voice in the store", () => {
     expect(serverState(HOME).myVoice).toBeNull();
     const calls = invoked.map((call) => call.cmd).filter((cmd) => cmd.startsWith("voice_"));
     expect(calls.lastIndexOf("voice_leave")).toBeGreaterThan(calls.indexOf("voice_join"));
+  });
+});
+
+// iOS let go of the phone's window, and voice with the page (#851): the
+// shell left voice and kept where, and the page that comes back says so,
+// with Join, and never rejoins by itself.
+describe("voice that ended while the phone's window was gone", () => {
+  beforeEach(async () => {
+    await Promise.all([disconnect(HOME), disconnect(WORK)]);
+    invoked.length = 0;
+  });
+
+  it("reads the shell's answer strictly: a server and a room each, or nothing", () => {
+    expect([...endedAwayFrom([{ server: HOME, room_id: "r-garage" }, { server: WORK, room_id: "r-porch" }])]).toEqual([
+      [HOME, "r-garage"],
+      [WORK, "r-porch"],
+    ]);
+    for (const answer of [null, "r-garage", {}, [null], [{ server: HOME }], [{ room_id: "r-garage" }], [{ server: 1, room_id: "r-garage" }], [{ server: "", room_id: "r-garage" }], [{ server: HOME, room_id: "" }]]) {
+      expect(endedAwayFrom(answer).size, JSON.stringify(answer)).toBe(0);
+    }
+  });
+
+  it("is said by each connection the page opens to that server, outlives its ready, and goes for good when waved off", async () => {
+    voiceEndedAwayFrom(async () => [{ server: HOME, room_id: "r-garage" }]);
+    await connect(fakeApi(HOME));
+    arrive(HOME, ready());
+    expect(serverState(HOME).voiceOut).toEqual({ roomId: "r-garage", why: "away" });
+    expect(serverState(HOME).myVoice, "never rejoined by itself").toBeNull();
+    expect(invoked.some((call) => call.cmd === "gateway_send"), "nothing sent for it").toBe(false);
+    await connect(fakeApi(WORK));
+    expect(serverState(WORK).voiceOut).toBeNull();
+
+    // Opening the connection again (a sign-in again, or the app's own second
+    // start) starts its state afresh, and the line is still true.
+    await connect(fakeApi(HOME));
+    expect(serverState(HOME).voiceOut).toEqual({ roomId: "r-garage", why: "away" });
+
+    forgetVoiceOut(HOME);
+    expect(serverState(HOME).voiceOut).toBeNull();
+    await connect(fakeApi(HOME));
+    expect(serverState(HOME).voiceOut, "waved off for good").toBeNull();
+  });
+
+  it("goes with the next join, which is the one tap back", async () => {
+    voiceEndedAwayFrom(async () => [{ server: HOME, room_id: "r-garage" }]);
+    await connect(fakeApi(HOME));
+    arrive(HOME, ready());
+    await joinVoice(fakeApi(HOME), "r-garage", DEFAULTS, false);
+    expect(serverState(HOME).voiceOut).toBeNull();
+    expect(serverState(HOME).myVoice?.roomId).toBe("r-garage");
+    await leaveVoice(HOME);
+    await connect(fakeApi(HOME));
+    expect(serverState(HOME).voiceOut, "answered by the join, for good").toBeNull();
+  });
+
+  it("a shell that can't answer is nothing ended", async () => {
+    voiceEndedAwayFrom(async () => {
+      throw new Error("no such command");
+    });
+    await connect(fakeApi(HOME));
+    expect(serverState(HOME).voiceOut).toBeNull();
   });
 });

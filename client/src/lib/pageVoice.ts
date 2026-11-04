@@ -285,6 +285,16 @@ export class PageVoice {
       track.addEventListener("ended", () => {
         if (this.calls.get(server)?.mic === mic) this.wire.emit("voice:audio", { server, state: "stopped" });
       });
+      // A phone call, or Siri, takes the microphone, and gives it back once
+      // it's over: the web engine mutes the track meanwhile, and it isn't
+      // ended (#851). The call takes priority; the voice bar says so, so
+      // nobody thinks the room hears them.
+      track.addEventListener("mute", () => {
+        if (this.calls.get(server)?.mic === mic) this.wire.emit("voice:audio", { server, state: "interrupted" });
+      });
+      track.addEventListener("unmute", () => {
+        if (this.calls.get(server)?.mic === mic && track.readyState === "live") this.wire.emit("voice:audio", { server, state: "sending" });
+      });
     }
     this.wire.emit("voice:audio", { server, state: "sending" });
     this.listen(server, call);

@@ -437,7 +437,7 @@ export function useConversationPane({ apis, intend, active, find, show, firstSee
               }
             : undefined,
         // The host took us out of voice here (#423): the strip says so.
-        takenOut: state.voiceTakenOut === room.id && state.myVoice?.roomId !== room.id,
+        out: state.voiceOut?.roomId === room.id && state.myVoice?.roomId !== room.id ? state.voiceOut.why : undefined,
       },
       screen,
       people,

@@ -13,6 +13,7 @@ import { followAppearance, loadTextSize, onAppearance } from "./core/appearance"
 import { followInputMode } from "./core/inputMode";
 import { followKeyboard, followTextSize, onPhone } from "./core/phone";
 import { refuseStrayDrops } from "../lib/drops";
+import { voiceEndedAwayFrom } from "../lib/gateway";
 import { hearShellDrops, takeDropsFromTheShell } from "../lib/shellDrops";
 import { voiceInThePage } from "../lib/ipc";
 import { followMediaKeys } from "../lib/mediaKeys";
@@ -50,6 +51,9 @@ if (onPhone()) {
   // Voice runs in the page on a phone, on the web engine's own WebRTC, with
   // the phone's echo cancelling (#429, lib/pageVoice.ts).
   voiceInThePage();
+  // Voice that ended while iOS had let go of the window, and this page with
+  // it: the shell left it and kept where, and the list says so (#851).
+  if (isTauri()) voiceEndedAwayFrom(() => invoke("phone_voice_ended"));
 }
 
 // The focus ring is for the keyboard: it follows how you last used the

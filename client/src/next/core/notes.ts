@@ -37,6 +37,12 @@ export type ListNote =
   /** The keyring refused: sign-ins last until Linger quits. */
   | { kind: "keyring"; words: string; detail: string }
   /**
+   * Voice that ended in a room while iOS had let go of the phone's window,
+   * and the page and its voice with it (#851): the shell left voice there.
+   * With Join, one tap back, and ×; never rejoined by itself.
+   */
+  | { kind: "voiceaway"; server: string; roomId: string; words: string }
+  /**
    * The host's server needs them (#582): its disk nearly full, its file
    * space nearly used up, no backup for days, or none reaching the host's
    * bucket for days (#614). The host's alone; the server tells nobody else.
@@ -63,6 +69,19 @@ export type ListNote =
    * one comes, when that's known.
    */
   | { kind: "tooold"; servers: string[]; words: string; line: string; detail: string | null; button: boolean; problem: string | null };
+
+/** Where voice ended while the phone's window was gone (#851), for its line. */
+export interface VoiceAway {
+  server: string;
+  roomId: string;
+  /** "#general", or a DM's people, as the voice bar says it. */
+  where: string;
+}
+
+/** The line for voice that ended while the phone's window was gone (#851). */
+export function voiceAwayNote({ server, roomId, where }: VoiceAway): ListNote {
+  return { kind: "voiceaway", server, roomId, words: `Voice in ${where} ended while Linger was in the background.` };
+}
 
 export interface Connection {
   server: string;
@@ -203,6 +222,7 @@ export function listNotes(
   device = "this computer",
   hosted: readonly Hosted[] = [],
   newest: string | null = null,
+  away: readonly VoiceAway[] = [],
 ): ListNote[] {
   const notes: ListNote[] = [];
   for (const connection of connections) {
@@ -210,6 +230,7 @@ export function listNotes(
     if (note) notes.push(note);
   }
   for (const one of waiting) notes.push(waitingNote(one));
+  for (const one of away) notes.push(voiceAwayNote(one));
   if (keyring !== null) notes.push({ kind: "keyring", words: `Sign-ins aren't remembered on ${device}.`, detail: keyring });
   for (const one of hosted) notes.push(...hostNotes(one, now, newest));
   notes.push(...updates);
