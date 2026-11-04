@@ -593,8 +593,9 @@ names each by the app's end of the connection (`:port`), so a request that
 never comes back shows how far it got (#848). A failed run's step "whether
 Maestro's driver died" says if the run stopped because Maestro's own driver
 was torn down (any failure XCUITest records inside it does that, a screenshot
-timing out on a slow simulator, say), and which app was in front: if it
-wasn't Linger, re-run once; if it was, check Linger didn't freeze (#857).
+timing out on a slow simulator, say), which app was in front, and whether
+Linger's share window had opened inside it. It says to re-run once only when
+that rules Linger out; otherwise check Linger didn't freeze first (#857).
 Look at the pictures, not just the tick: a screen can pass every step and
 still be wrong.
 

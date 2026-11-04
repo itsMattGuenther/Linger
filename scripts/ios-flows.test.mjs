@@ -140,6 +140,6 @@ test("a failed run says whether Maestro's driver died, after the flows", () => {
   assert(step > workflow.indexOf("maestro test"), "after the flows");
   const body = workflow.slice(step, workflow.indexOf("\n      - name:", step + 1));
   assert.match(body, /\n {8}if: failure\(\)\n/, "only when the run failed");
-  assert.match(body, /run: node scripts\/maestro-driver\.mjs "\$OUT\/maestro"/, "reading Maestro's output");
+  assert.match(body, /run: node scripts\/maestro-driver\.mjs "\$OUT\/maestro" "\$OUT\/app\.log"/, "reading Maestro's output, and the app's log for its share window");
 });
 
