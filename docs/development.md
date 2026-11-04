@@ -588,7 +588,13 @@ was its own update of Apple's revocation list ("Valid"), which kept its
 database locked for minutes, so that update is off in the simulator
 (`ValidUpdateEnabled`, set right after boot); `trustd.log` has the
 service's own lines from then on, warm-up included, and says "skipping
-update".
+update". The setting comes too late for the service's first start, which
+has already scheduled a download of the whole list by then, so the list's
+server, `valid.apple.com`, is made unreachable in the Mac's hosts file
+before the simulator boots: the download fails at once, with nothing to
+apply. `trustd.log` has `nsurlsessiond`'s lines too, which make the
+download, so it shows failing, and starts with the lines kept since boot,
+since the download is first tried while the server and app build.
 
 **Reading a run.** The `iphone-simulator` artifact has `screens/`, a picture
 of each screen the flows stop at, numbered in order, and `last.png`, the
