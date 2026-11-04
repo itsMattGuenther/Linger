@@ -2029,3 +2029,23 @@ thing a new person on an iPhone does.
   in the page on a phone (`pageVoice.ts`), so it ends with it: staying in
   voice in the background is #851. Found by the simulator's share flow,
   which leaves Linger in the background while it shares.
+
+## Decided — the iPhone app runs on UIKit's scene life cycle (#838)
+
+**2026-11-03, for 0.5.5 (#788).** From April 2027 Apple takes only builds
+made with the iOS 27 SDK, and such a build that doesn't declare UIKit's scene
+life cycle won't launch (Apple's TN3187). iOS checks the Info.plist for it,
+not what the app does at run time.
+
+- **`Info.ios.plist` declares it** (`UIApplicationSceneManifest`): one window,
+  so one scene (`UIApplicationSupportsMultipleScenes` false), run by tao's
+  delegate, `TaoSceneDelegate`, in a configuration named outright. An empty
+  configuration is reported to crash at launch on the iOS 27 SDK
+  (tauri-apps/tauri#15719). `scripts/ios-plist.test.mjs` fails without it.
+- **It comes in while the build still uses Xcode 26** (#781): scenes work with
+  the iOS 26 SDK too, so the testers use it before Xcode moves (#839).
+- **What scenes change, and what checks it:** a link that starts Linger
+  (Linger's copy of tao, #836), Linger staying when iOS lets go of its scene
+  (`phone_scene.rs`, #836), and coming back to the app; the simulator's flows
+  open links with the app open and closed, share from Photos with Linger in
+  the background, and start it again signed in.
