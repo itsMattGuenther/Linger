@@ -238,6 +238,15 @@ on a world that has changed.
 
 ## Tests written from the case in mind, not from the ways things fail
 
+- **#860 (2 catches): the simulator's "driver died" step cleared Linger
+  when it couldn't.** It said "re-run once" when the app in front wasn't
+  known, and when Photos was in front, though Linger's share window runs
+  inside Photos' screen. Caught by Greptile. *Missed because* the cases
+  tried were the one that happened (Photos, share window not open) and
+  Linger in front, not what the step couldn't see. *Changed:* it reads
+  `app.log` for the share window too, and says to re-run only with Linger
+  ruled out on both; unknown either way asks for a look.
+
 - **#849: the simulator's https front named a request only once it ended.**
   A request still waiting for the server when the run stopped looked like a
   connection that never sent one, the very case the log was added to tell

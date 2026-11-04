@@ -144,3 +144,15 @@ test("the share flow closes Photos' What's New sheet before opening the photo an
   assert(closes.some((at) => at > flow.indexOf("12-the-photo") && at < share), "before Share");
 });
 
+// Maestro's runner dies on any failure XCUITest records inside it, failing
+// the flows whatever the app did (#857). A failed run says whether that's
+// what happened, and which app was in front; this keeps the step there.
+test("a failed run says whether Maestro's driver died, after the flows", () => {
+  const workflow = readFileSync(fileURLToPath(new URL("../.github/workflows/ios-simulator.yml", import.meta.url)), "utf8");
+  const step = workflow.indexOf("- name: whether Maestro's driver died");
+  assert(step > workflow.indexOf("maestro test"), "after the flows");
+  const body = workflow.slice(step, workflow.indexOf("\n      - name:", step + 1));
+  assert.match(body, /\n {8}if: failure\(\)\n/, "only when the run failed");
+  assert.match(body, /run: node scripts\/maestro-driver\.mjs "\$OUT\/maestro" "\$OUT\/app\.log"/, "reading Maestro's output, and the app's log for its share window");
+});
+
