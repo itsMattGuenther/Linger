@@ -68,6 +68,15 @@ to be right for every shape that window takes.
 
 ## A check its surroundings can fool
 
+- **#858: the warm-up's test would pass a wait that waited for nothing.**
+  The run's own check from the Mac finishes a handshake at the front before
+  Safari's request, so a wait for more than none finished at once, and the
+  test, which read only the start of the wait, passed it. Caught by Greptile.
+  *Missed because* I broke the step the ways I thought of (moved, no request,
+  no wait) and not against what else writes the same log. *Changed:* the
+  test checks the count is taken just before Safari's request and the wait
+  is for one more than it; six breakages of the step each fail it.
+
 - **#757: a workaround in the shell could pass for the fix.** The
   packaged-app check cleared the WebKit settings it knew of, not #756's own
   workaround (`WEBKIT_GST_DISABLE_GL_SINK`). Set in the caller's shell, the
