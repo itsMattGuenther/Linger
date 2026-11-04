@@ -105,3 +105,23 @@ test("the simulator approves the app's own scheme for the app, before the flows 
   const at = (text) => workflow.indexOf(text);
   assert(at("schemeapproval") > at("simctl bootstatus") && at("schemeapproval") < at("maestro test"), "after the iPhone has booted, before the flows");
 });
+
+// The simulator's certificate service sometimes took over a minute on its
+// first check of the test certificate, longer than the app waits, and the
+// set-up flow failed with nothing wrong in Linger (#848). The run has
+// Safari ask first and waits for that handshake, between trusting the test
+// authority and the flows; this keeps it there.
+test("the simulator's first certificate check is done before the flows, after the authority is trusted", () => {
+  const workflow = readFileSync(fileURLToPath(new URL("../.github/workflows/ios-simulator.yml", import.meta.url)), "utf8");
+  const at = (text) => {
+    const index = workflow.indexOf(text);
+    assert(index >= 0, `ios-simulator.yml has ${text}`);
+    return index;
+  };
+  const warm = at("- name: the simulator's first certificate check, out of the way");
+  assert(at("add-root-cert") < warm, "after the test authority is trusted");
+  assert(warm < at("maestro test"), "before the flows");
+  assert.match(workflow.slice(warm, at("- name: the app, installed")), /xcrun simctl openurl "\$UDID" "https:\/\/127\.0\.0\.1:\$FRONT_PORT\//, "a request from inside the simulator to the https front");
+  assert.match(workflow.slice(warm, at("- name: the app, installed")), /grep -c 'TLS done'/, "waits for the front to see the handshake finish");
+});
+
