@@ -26,7 +26,20 @@ default.
 
 ## How to run a task
 
-**Next release — what its notes owe so far.** Nothing yet.
+**Next release — what its notes owe so far.**
+- **Phones stay in voice when locked or in the background** (#851, PR #856).
+  The iPhone keeps voice going with the screen locked or another app in
+  front, and so does Android. A phone call takes priority. If voice ends
+  while Linger is in the background, the list and the voice strip say so,
+  with one tap to join again; it never rejoins by itself. The app only, no
+  server update. Owed after it ships: the TestFlight testers' iPhone checks
+  (locked a few minutes in voice, another app in front, a phone call in the
+  middle, the window let go of), and a Pixel in voice, locked, on the
+  release build (#834, #846).
+- **Tauri 2.12, and the iPhone app on UIKit's scene life cycle** (#788:
+  #836, #837, #838). Nothing is meant to look different. Owed after it
+  ships: updating from 0.5.4 on Windows and Linux, the testers' iPhone list
+  for #838, and a Pixel on the release build (#837).
 
 **0.5.4 release — prepared 2026-11-02: Linger updates itself, and phones
 share straight to it.** The notes are `docs/releases/0.5.4.md`, and its one
