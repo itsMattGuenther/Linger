@@ -21,7 +21,10 @@ appId: io.github.itsmattguenther.linger
     timeout: 30000
 - takeScreenshot: 08-room
 - tapOn: "Message in #evenings"
-- inputText: "Hello from the iPhone."
+- runFlow:
+    file: subflows/type.yaml
+    env:
+      TEXT: "Hello from the iPhone."
 - takeScreenshot: 09-typing-a-message
 - tapOn: "Send"
 - extendedWaitUntil:

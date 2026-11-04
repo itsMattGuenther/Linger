@@ -616,6 +616,15 @@ something the flow already waited for. After setting up, the list arrived
 first and the server's name a moment later, and a one-look check for the
 name failed in one of the three runs that got that far.
 
+**Type through `subflows/type.yaml`**, not with a bare `inputText`:
+`- runFlow: {file: subflows/type.yaml, env: {TEXT: ...}}`, with the field
+tapped first. Maestro types at machine speed, and once, with the simulator
+busy, the field got the first letter of an address and lost the rest
+(#863). The subflow waits for the field to hold the text, and erases it and
+types once more when it doesn't, so a field that loses typing every time
+still fails. A password types directly (its field shows dots), and so does
+the share window's message (Maestro can't see the window).
+
 **On a Mac of your own**, with Xcode 26, Java 17 or later and
 [Maestro](https://docs.maestro.dev/getting-started/installing-maestro):
 
