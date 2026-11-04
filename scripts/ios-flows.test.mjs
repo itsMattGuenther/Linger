@@ -166,3 +166,20 @@ test("a failed run says whether Maestro's driver died, after the flows", () => {
   assert.match(body, /run: node scripts\/maestro-driver\.mjs "\$OUT\/maestro" "\$OUT\/app\.log"/, "reading Maestro's output, and the app's log for its share window");
 });
 
+// trustd's update of Apple's revocation list held its database locked for
+// minutes, and the app's first request gave up waiting for its certificate
+// check (#848). The run turns the update off right after boot, before
+// anything checks a certificate, and restarts trustd to read it.
+test("the simulator's certificate service has its revocation list update off, before anything checks a certificate", () => {
+  const workflow = readFileSync(fileURLToPath(new URL("../.github/workflows/ios-simulator.yml", import.meta.url)), "utf8");
+  const off = workflow.indexOf("defaults write com.apple.security ValidUpdateEnabled -bool NO");
+  const restart = workflow.indexOf("launchctl kill TERM system/com.apple.trustd");
+  assert(off > workflow.indexOf("simctl bootstatus"), "after the phone has booted");
+  assert(off < restart, "then trustd restarted, to read it");
+  assert(restart < workflow.indexOf("add-root-cert") && restart < workflow.indexOf("simctl openurl"), "before the test authority, the warm-up and the flows");
+  // Its log starts before the restart, so it has "skipping update", and
+  // runs past the warm-up, so a stall there has its lines too.
+  const log = workflow.search(/nohup xcrun simctl spawn "\$UDID" log stream [^\n]*\\\n\s+--predicate 'process == "trustd"' > "\$OUT\/trustd\.log" 2>&1 &/);
+  assert(log > workflow.indexOf("simctl bootstatus") && log < off, "trustd's log kept from before the setting and the restart");
+});
+
