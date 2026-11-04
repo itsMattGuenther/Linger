@@ -131,3 +131,16 @@ test("the simulator's first certificate check is done before the flows, after th
   assert(step.includes(`until [ "$(grep -c 'TLS done' "$OUT/server/front.log" || true)" -gt "$done_before" ]; do`), "waits until there's one more than that");
 });
 
+// Photos' "What's New" sheet comes up in its own time, past 30 seconds once,
+// over the photo (#861). The share flow closes it before each tap in Photos:
+// inside the loop that opens the photo, and before Share.
+test("the share flow closes Photos' What's New sheet before opening the photo and before Share", () => {
+  const flow = readFileSync(join(DIR, "share-photo.yaml"), "utf8");
+  const closes = [...flow.matchAll(/when:\n\s+visible: "What\.s New in Photos"/g)].map((match) => match.index);
+  const opening = flow.indexOf("while:\n      notVisible: \"Share\"");
+  const share = flow.indexOf('- tapOn: "Share"');
+  assert(opening >= 0 && share >= 0, "the photo-opening loop and the Share tap");
+  assert(closes.some((at) => at > opening && at < flow.indexOf('tapOn:\n          text: "Photo, ', opening)), "inside the loop, before tapping the photo");
+  assert(closes.some((at) => at > flow.indexOf("12-the-photo") && at < share), "before Share");
+});
+
