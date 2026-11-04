@@ -178,10 +178,27 @@ test("the share flow closes Photos' What's New sheet before opening the photo an
     })
     .map((match) => match.index);
   const opening = flow.indexOf("while:\n      notVisible: \"Share\"");
-  const share = flow.indexOf('- tapOn: "Share"');
+  const share = flow.indexOf('text: "Share"', flow.indexOf("12-the-photo"));
   assert(opening >= 0 && share >= 0, "the photo-opening loop and the Share tap");
   assert(closes.some((at) => at > opening && at < flow.indexOf('tapOn:\n          text: "Photo, ', opening)), "inside the loop, before tapping the photo");
   assert(closes.some((at) => at > flow.indexOf("12-the-photo") && at < share), "before Share");
+});
+
+// A tap on Share once left the share sheet unopened, and the flow's way to
+// Linger when it's not among the first apps, More, took Photos' own More
+// (#866). Share is tapped until the sheet's title shows, and the flow goes
+// on only once it has.
+test("the share flow taps Share until the share sheet is open, and looks for More only in it", () => {
+  const flow = readFileSync(join(DIR, "share-photo.yaml"), "utf8");
+  const commands = flow.split(/^---$/m)[1].split(/^- /m).slice(1).map((command) => command.replace(/^\s*#.*\n/gm, "").trimEnd());
+  const loop = commands.findIndex((command) => /^repeat:\n    while:\n      notVisible: "1 Photo Selected"\n/.test(command));
+  assert(loop >= 0, "a loop that runs while the sheet isn't open");
+  assert.match(commands[loop], /\n    times: [2-5]\n/, "a few times, not forever");
+  assert.match(commands[loop], /\n    commands:\n      - tapOn:\n          text: "Share"\n          optional: true\n      - extendedWaitUntil:\n          visible: "1 Photo Selected"\n          timeout: \d+\n          optional: true$/, "each time, Share tapped, then a wait for the sheet");
+  assert.match(commands[loop + 1], /^extendedWaitUntil:\n    visible: "1 Photo Selected"\n    timeout: \d+$/, "then the sheet waited for, failing if it never opened");
+  const more = commands.findIndex((command) => /tapOn: "More"/.test(command));
+  assert(more > loop + 1, "More looked for only after the sheet is open");
+  assert.equal(commands.filter((command) => /text: "Share"|tapOn: "Share"/.test(command)).length, 1, "Share tapped only in the loop");
 });
 
 // Maestro's runner dies on any failure XCUITest records inside it, failing

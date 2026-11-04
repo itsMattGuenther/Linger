@@ -544,8 +544,10 @@ test.describe("through the Linux app's shell", () => {
     await page.evaluate(() => window.loop.box());
     const box = page.getByRole("group", { name: "Your screen" });
     const picture = box.locator("img");
-    await expect.poll(() => picture.getAttribute("src"), { timeout: 10_000 }).toMatch(/^blob:/);
-    expect(await picture.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
+    // A picture shown: decoded, whatever comes after it. The stand-in sends
+    // one a frame, and while the next one loads `complete` reads false over
+    // the one still shown, so it isn't read once (#843).
+    await expect.poll(() => picture.evaluate((image: HTMLImageElement) => image.src.startsWith("blob:") && image.naturalWidth > 0), { timeout: 10_000 }).toBe(true);
     await box.getByRole("button", { name: "Show the preview" }).click();
     await expect(picture).toHaveCount(0);
     expect(await page.evaluate(() => window.loop.shell_asked())).toContain("screen_share_preview");
