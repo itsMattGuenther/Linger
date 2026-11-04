@@ -562,12 +562,14 @@ ever picks another model), and records the screen
 Whether the share worked is read from the server and from Linger, which
 Maestro can see. The step "the App Group and the Keychain, as the app left
 them" prints what the app left the window: the list in the App Group's
-folder, and which access groups the Keychain's entries are in. Two things
+folder, and which access groups the Keychain's entries are in. Three things
 about Photos that cost a run each: its "What's New" sheet comes in its own
 time, once over 30 seconds after the photos showed, so the flow closes it
 before each tap in Photos rather than waiting for it (#861), and it ignores a
-Continue pressed while it's arriving; and iOS writes a photo's time with a
-narrow no-break space before AM.
+Continue pressed while it's arriving; a tap on Share once opened nothing, so
+the flow taps it until the share sheet's title, "1 Photo Selected", shows,
+and only then looks for Linger or More in it (#866); and iOS writes a
+photo's time with a narrow no-break space before AM.
 
 **The server is reached over https**, as a real one is behind Caddy:
 `scripts/https-front.mjs` stands in for Caddy, with a certificate
