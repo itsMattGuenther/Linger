@@ -229,6 +229,15 @@ on a world that has changed.
 
 ## Tests written from the case in mind, not from the ways things fail
 
+- **#849: the simulator's https front named a request only once it ended.**
+  A request still waiting for the server when the run stopped looked like a
+  connection that never sent one, the very case the log was added to tell
+  apart (#848). Caught by Greptile. *Missed because* the tests followed
+  requests to an end (answered, refused, given up on), never one still
+  going. *Changed:* each request is logged as it arrives too, and the test
+  of a request the app gives up on checks it was named before anything
+  ended it.
+
 - **#802: a test of stopping a wait stopped it before the wait began.** The
   upload test aborted inside `onWaiting`, which runs before `pause` has a
   timer or a listener, so only the "already stopped" check ran, and it would

@@ -236,6 +236,14 @@ jobs:
           for domain in com.apple.Preferences com.apple.keyboard.preferences; do
             xcrun simctl spawn "$UDID" defaults write "$domain" DidShowContinuousPathIntroduction -bool YES
           done
+          # linger:// links from simctl (how Maestro's openLink opens them)
+          # go to Linger without iOS asking "Open in "Linger"?" first:
+          # approved ahead, as answering Open once would be. While XCUITest
+          # drove the simulator, iOS sometimes held that question, or the
+          # link after it, until the driver let go, and a link flow timed
+          # out (#847). The flows still tap Open if iOS asks anyway.
+          xcrun simctl spawn "$UDID" defaults write com.apple.launchservices.schemeapproval \
+            "com.apple.CoreSimulator.CoreSimulatorBridge-->linger" -string io.github.itsmattguenther.linger
           # The same status bar in every picture.
           xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4
           # A photo in the library, for share-photo.yaml: the porch artwork.
@@ -251,7 +259,9 @@ jobs:
           scripts/test-certs.sh "$certs"
           echo "CERTS=$certs" >> "$GITHUB_ENV"
           mkdir -p "$OUT/server"
-          LINGER_DATA_DIR="$RUNNER_TEMP/linger-data" LINGER_BIND="127.0.0.1:$SERVER_PORT" RUST_LOG=info \
+          # tower_http at debug: each request the server answers, and how
+          # long it took, beside the front's own log (#848).
+          LINGER_DATA_DIR="$RUNNER_TEMP/linger-data" LINGER_BIND="127.0.0.1:$SERVER_PORT" RUST_LOG=info,tower_http=debug \
             nohup target/release/linger-server > "$OUT/server/server.log" 2>&1 &
           # It prints its one-time setup link once it's ready.
           deadline=$((SECONDS + 60))
@@ -285,8 +295,10 @@ jobs:
           SIMCTL_CHILD_SSL_CERT_FILE: ${{ runner.temp }}/certs/ca.pem
         run: |
           set -euo pipefail
+          # WebKit's network process makes the page's connections, so a
+          # request that never comes back shows there (#848).
           xcrun simctl spawn "$UDID" log stream --level info --style compact \
-            --predicate 'process == "Linger" OR process == "LingerShare"' > "$OUT/app.log" 2>&1 &
+            --predicate 'process == "Linger" OR process == "LingerShare" OR process == "com.apple.WebKit.Networking"' > "$OUT/app.log" 2>&1 &
           maestro test --device "$UDID" --test-output-dir "$OUT/maestro" \
             --format junit --output "$OUT/report.xml" \
             -e "SERVER=http://127.0.0.1:$SERVER_PORT" -e "SETUP_LINK=$SETUP_LINK" \
