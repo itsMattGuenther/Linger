@@ -184,6 +184,20 @@ test("the share flow closes Photos' What's New sheet before opening the photo an
   assert(closes.some((at) => at > flow.indexOf("12-the-photo") && at < share), "before Share");
 });
 
+// Until Photos has drawn its first screen, iOS still counts Linger as the
+// app in front, and Maestro reads Linger's screen. On a slow GitHub Mac,
+// Photos drew 54 seconds after it started, past the flow's first wait of 45
+// (#869). That wait is for Photos itself and ends once it shows, so it has
+// room past the slowest seen.
+test("the share flow's first wait for Photos outlasts its slowest start", () => {
+  const flow = readFileSync(join(DIR, "share-photo.yaml"), "utf8");
+  const commands = flow.split(/^---$/m)[1].split(/^- /m).slice(1).map((command) => command.replace(/^\s*#.*\n/gm, "").trimEnd());
+  assert.match(commands[0], /^launchApp:\n {4}appId: com\.apple\.mobileslideshow$/, "the flow starts by opening Photos");
+  const wait = /^extendedWaitUntil:\n {4}visible: "\(What\.s New in Photos\|Photo, .*"\n {4}timeout: (\d+)$/.exec(commands[1]);
+  assert(wait, "then waits for its sheet or its photos");
+  assert(Number(wait[1]) >= 90_000, `for at least 90 seconds, not ${wait[1]} ms`);
+});
+
 // A tap on Share once left the share sheet unopened, and the flow's way to
 // Linger when it's not among the first apps, More, took Photos' own More
 // (#866). Share is tapped until the sheet's title shows, and the flow goes

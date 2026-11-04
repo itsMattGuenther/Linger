@@ -562,8 +562,11 @@ ever picks another model), and records the screen
 Whether the share worked is read from the server and from Linger, which
 Maestro can see. The step "the App Group and the Keychain, as the app left
 them" prints what the app left the window: the list in the App Group's
-folder, and which access groups the Keychain's entries are in. Three things
-about Photos that cost a run each: its "What's New" sheet comes in its own
+folder, and which access groups the Keychain's entries are in. Four things
+about Photos that cost a run each: until it has drawn its first screen, iOS
+still counts Linger as the app in front, so Maestro reads Linger's screen,
+and on a slow Mac that once lasted 54 seconds, so the first wait for Photos
+allows two minutes (#869); its "What's New" sheet comes in its own
 time, once over 30 seconds after the photos showed, so the flow closes it
 before each tap in Photos rather than waiting for it (#861), and it ignores a
 Continue pressed while it's arriving; a tap on Share once opened nothing, so
