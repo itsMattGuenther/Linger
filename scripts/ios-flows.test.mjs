@@ -230,3 +230,18 @@ test("the simulator's certificate service has its revocation list update off, be
   assert(log > workflow.indexOf("simctl bootstatus") && log < off, "trustd's log kept from before the setting and the restart");
 });
 
+// The setting comes too late for trustd's first start, which has already
+// scheduled a download of the whole list; applied when it landed, it held
+// the database again (#848, run 41802536391). The list's server is made
+// unreachable before the simulator boots, for both kinds of address.
+test("Apple's revocation list server is unreachable before the simulator boots", () => {
+  const workflow = readFileSync(fileURLToPath(new URL("../.github/workflows/ios-simulator.yml", import.meta.url)), "utf8");
+  const blocked = workflow.indexOf("printf '127.0.0.1 valid.apple.com\\n::1 valid.apple.com\\n' | sudo tee -a /etc/hosts");
+  const boot = workflow.indexOf('xcrun simctl boot "$udid"');
+  assert(blocked >= 0, "valid.apple.com, by IPv4 and IPv6, in the Mac's hosts file");
+  assert(boot > blocked, "before the simulator boots");
+  const between = workflow.slice(blocked, boot);
+  assert.match(between, /sudo dscacheutil -flushcache\n/, "with the Mac's name cache flushed");
+  assert.match(between, /sudo killall -HUP mDNSResponder/, "and its resolver told to read the file again");
+});
+

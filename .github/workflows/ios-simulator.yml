@@ -155,6 +155,17 @@ jobs:
           echo "UDID=$udid" >> "$GITHUB_ENV"
           mkdir -p "$OUT"
           printf '%s\n%s\n' "$name" "$runtime" > "$OUT/device.txt"
+          # Apple's revocation list server, unreachable from this Mac, and so
+          # from the simulator, which looks names up through it. At its first
+          # start the certificate service (trustd) schedules a download of the
+          # whole list, before the setting that turns its updates off can be
+          # written ("the iPhone, booted"), and when the download lands,
+          # applying it holds trustd's database for minutes while the app's
+          # handshakes wait (#848). Blocked, the download fails at once, with
+          # nothing to apply.
+          printf '127.0.0.1 valid.apple.com\n::1 valid.apple.com\n' | sudo tee -a /etc/hosts > /dev/null
+          sudo dscacheutil -flushcache
+          sudo killall -HUP mDNSResponder || true
           xcrun simctl boot "$udid"
 
       # Release, as a host runs it (deploy/Dockerfile). Its password
