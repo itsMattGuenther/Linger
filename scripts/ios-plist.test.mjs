@@ -145,3 +145,18 @@ test("gen/apple's own Info.plist and the share extension's read too", () => {
   for (const path of ["client/src-tauri/gen/apple/linger-client_iOS/Info.plist", "client/src-tauri/gen/apple/ShareExtension/Info.plist"])
     assert.equal(typeof parsePlist(read(path)), "object", path);
 });
+
+// UIKit's scene life cycle (#838): a build with the iOS 27 SDK that doesn't
+// declare it won't launch, and iOS checks the Info.plist, not what the app
+// does at run time. Tauri merges Info.ios.plist into every build.
+test("Info.ios.plist declares the scene life cycle, run by tao's delegate, never empty", () => {
+  const manifest = parsePlist(read("client/src-tauri/Info.ios.plist")).UIApplicationSceneManifest;
+  assert(manifest, "UIApplicationSceneManifest is declared");
+  assert.equal(manifest.UIApplicationSupportsMultipleScenes, false, "one window, so one scene");
+  const roles = manifest.UISceneConfigurations?.UIWindowSceneSessionRoleApplication;
+  assert(Array.isArray(roles) && roles.length === 1, "one application scene configuration: an empty one crashes at launch on the iOS 27 SDK (tauri-apps/tauri#15719)");
+  assert.equal(roles[0].UISceneDelegateClassName, "TaoSceneDelegate", "tao's delegate, by its Objective-C name");
+  assert.equal(typeof roles[0].UISceneConfigurationName, "string");
+  // gen/apple's own declares none, so the merged one is this.
+  assert.equal(parsePlist(read("client/src-tauri/gen/apple/linger-client_iOS/Info.plist")).UIApplicationSceneManifest, undefined);
+});

@@ -379,7 +379,10 @@ Tauri, compare it with the upstream template named in its header. The NSIS
 installer keeps Tauri's template and adds hooks,
 `client/src-tauri/windows/installer-hooks.nsh`: an update waits up to ten
 seconds for a program file something else has open, instead of asking
-([#568](windows-update-checks.md#a-busy-program-during-an-update-568-2026-10-11)).
+([#568](windows-update-checks.md#a-busy-program-during-an-update-568-2026-10-11)),
+and since Tauri 2.12 an install or uninstall waits for it before the
+template's check, which would close whatever holds it
+([#836](windows-update-checks.md#tauri-212-closes-whatever-holds-the-program-836-2026-11-03)).
 Check the hooks against the template when updating Tauri too. Windows
 package checks install the published 0.3.0 MSI, upgrade to the newly built
 package, and check original, renamed, moved and deleted desktop shortcuts,
@@ -578,8 +581,12 @@ job (`scripts/https-front.test.mjs`).
 of each screen the flows stop at, numbered in order, and `last.png`, the
 screen when the run ended; `report.xml`, which flow passed; `maestro/`,
 Maestro's own record, with a picture before every step and, for a step that
-failed, what it could see on the screen; `app.log`, what the app logged; and
-`server/`, the server's and the front's logs. Look at the pictures, not just
+failed, what it could see on the screen; `app.log`, what the app and
+WebKit's network process (which makes the page's connections) logged; and
+`server/`, the server's log, with each request it answered, and the front's,
+with each connection, handshake and request and how long it took. The front
+names each by the app's end of the connection (`:port`), so a request that
+never comes back shows how far it got (#848). Look at the pictures, not just
 the tick: a screen can pass every step and still be wrong.
 
 **Finding things on screen.** Maestro reads the iPhone's accessibility tree,

@@ -18,7 +18,7 @@ what CI adds on top.
 | A pull request | Every push | `ci.yml`: the same selection, plus S3 against MinIO, the relay and a real server update in Docker, the WebKit browser tests, and the browser tests the PR added or edited ten times in both engines; `package-check.yml` builds the desktop packages on Linux and Windows; `ios-simulator.yml` builds the iPhone app for the simulator on a Mac and drives it with Maestro, when the PR touches the app | About 5 minutes; the packages about 10; the iPhone about 25 |
 | A pull request that changes the iPhone app's Xcode project, the app's Rust or the server | Every push | `share-window.yml`: the iPhone's share extension builds for the iPhone Simulator on GitHub's Mac, the app's Rust builds for the iPhone (code only an iPhone compiles is built by nothing else on a pull request, #822), and the share window's sender (`ShareSender.swift`) runs on Linux against a real server (`scripts/share-sender-test.sh`, which needs Docker and runs the same locally) | About 10 minutes |
 | `main` | Every merge | `ci.yml` for what the merge changed. A run still waiting is cancelled when a newer merge lands, since the newer run covers it | As a PR |
-| `main`, nightly | 08:23 UTC | `nightly.yml`: every CI check, the package checks, the Windows and macOS shell builds, the iPhone app in the simulator, and every browser test three times with no retries. A failure opens an issue | About 40 minutes |
+| `main`, nightly | 08:23 UTC | `nightly.yml`: every CI check, the package checks, the Windows and macOS shell builds, the iPhone app in the simulator, every browser test three times with no retries, and whether a fix Linger pins has come out upstream. A failure opens an issue | About 40 minutes |
 | A release | A `v*` tag | `release.yml` and `image.yml` each run every CI check on the tagged commit first and build nothing unless it passes; then the signed packages, their audio, the Buddy list starting on Linux, the Windows shortcuts, and the server image | About 25 minutes |
 | A branch, by hand | `gh workflow run desktop.yml --ref <branch>` | The shell on Windows and macOS, the iPhone's Rust, and the Android app, both a debug build and a release one: the release build shrinks the app's Kotlin, and `scripts/android-jni.mjs` checks it kept every name Rust and Kotlin cross by (#834). Run it on a branch that changes the Android project; the nightly run runs it too | About 45 minutes |
 | A branch, by hand | `gh workflow run ios-simulator.yml --ref <branch> -f xcode=27.1` | The Xcode 27 canary: the iPhone simulator check built with Xcode 27 and the iOS 27 SDK, on GitHub's `xcode-27` image. Apple's rule that such an app use the scene life cycle shows only at launch, so it runs the same flows. Not required, and not nightly, until the scene life cycle lands (#788, #838) | As the iPhone check |
@@ -66,9 +66,9 @@ only changes documentation.
 |---|---|---|
 | Only docs: `docs/`, any `*.md`, `LICENSE` | The rules lint and version check | Nothing |
 | The server, `crates/linger-server/` | fmt, clippy, the Rust tests, bindings drift | S3 against a real MinIO |
-| The client, `client/` | Typecheck, unit tests, the browser tests in Chromium and (with Docker) WebKit, the production build's CSP check | The packages on Linux and Windows, the iPhone app in the simulator, and WebKit when `check.sh` couldn't run it |
+| The client, `client/` | Typecheck, unit tests, the browser tests in Chromium and (with Docker) WebKit, the production build's CSP check, and that the app icons are what the pinned Tauri CLI makes (`scripts/app-icons.mjs --check`, #836) | The packages on Linux and Windows, the iPhone app in the simulator, and WebKit when `check.sh` couldn't run it |
 | Only browser tests, `client/tests/browser/` | As the client | WebKit when `check.sh` couldn't run it (no packages) |
-| The desktop shell, `client/src-tauri/` | Its clippy and tests, when the GUI libraries are installed | The packages, and the iPhone app in the simulator |
+| The desktop shell, `client/src-tauri/` | Its clippy and tests, when the GUI libraries are installed, and the app icons check | The packages, and the iPhone app in the simulator |
 | Only the iPhone flows, `client/tests/ios/`, or their https front (`scripts/https-front.mjs`, `scripts/test-certs.sh`) | The rules lint, the version check and the front's tests | The iPhone app in the simulator |
 | `deploy/` | The Rust checks and the update script's test | S3, the relay and a real server update in Docker |
 | The startup measurement, `scripts/startup-time.mjs` | Its own tests (below); the measuring itself is run by hand ([performance.md](performance.md)) | Nothing more |
@@ -127,12 +127,20 @@ a command the shell doesn't have. `scripts/tauri-versions.mjs` reads both
 lockfiles and fails on a mismatch, or on anything it can't read; `check.sh`
 and the rules job run it (#835). The iPhone flows run only on a Mac, so
 `scripts/ios-flows.test.mjs` checks here that each is in `config.yaml`'s
-order, and `scripts/ios-plist.test.mjs` that `Info.ios.plist`, which every
-iPhone build merges in, declares the `linger://` scheme: the deep-link
+order, and that the run approves `linger://` for the app ahead, so iOS
+doesn't hold a link behind its "Open in Linger?" question (#847); and
+`scripts/ios-plist.test.mjs` that `Info.ios.plist`, which every iPhone
+build merges in, declares the `linger://` scheme: the deep-link
 plugin writes it only when its build script runs, and a cached build skips
-that (#835). The Windows installer files (`main.wxs`, `installer-hooks.nsh`)
+that (#835). It also checks the scene life cycle is declared, run by tao's
+delegate, since an iOS 27 build without it won't launch (#838). The Windows installer files (`main.wxs`, `installer-hooks.nsh`)
 name the Tauri CLI whose templates they were checked against, and a test
-fails until they're checked again after an upgrade.
+fails until they're checked again after an upgrade. A crate Linger takes from its own copy while a fix waits upstream
+(`[patch.crates-io]` in `client/src-tauri/Cargo.toml`, #836) names the pull
+request it waits for, and the same script fails if `Cargo.lock` doesn't
+build it from the pin: Cargo drops a pin that stops fitting with only a
+warning. The nightly run's `upstream` job (`scripts/upstream-fixes.mjs`)
+opens an issue once the fix is released, so the copy goes the day it can.
 
 **A name Rust and the Android app's Kotlin cross by survives the release
 build.** The release build shrinks the Kotlin and drops what only Rust uses:

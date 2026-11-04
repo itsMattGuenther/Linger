@@ -1996,3 +1996,56 @@ every other app.
   several" choice, and the iPhone's own suggestions row of people at the top of
   the share sheet, which would mean telling iOS who you talk to.
 
+
+## Decided — Linger takes tao from its own copy until tao releases the cold-start fix (#836, #838)
+
+**Matt, 2026-11-03.** On Tauri 2.12 (tao 0.37), an iPhone on iOS 26 or later
+loses a `linger://` link that starts Linger: iOS hands it to the scene, and
+tao doesn't pass it on (tauri-apps/tao#1248). The simulator's `link-closed`
+flow shows it, and the same flow passes on 2.11. tao's fix,
+tauri-apps/tao#1376, is under review with no date, and the iPhone needs 2.12
+before April 2027 (#779). An invite opened from a closed Linger is the first
+thing a new person on an iPhone does.
+
+- **Linger builds tao from its own copy**: `itsMattGuenther/tao`, tao 0.37.2
+  with #1376's two commits, pinned by commit in `client/src-tauri/Cargo.toml`
+  (`[patch.crates-io]`). The change is in tao's iPhone code only, so every
+  other platform builds the same tao, and the app's size changes by a few
+  kilobytes at most.
+- **It goes the day it can.** The nightly run asks GitHub about #1376
+  (`scripts/upstream-fixes.mjs`) and opens an issue once a tao release has
+  it, or if it's closed without merging. `scripts/tauri-versions.mjs` fails
+  if `Cargo.lock` stops building tao from the pin: Cargo drops a pin that
+  stops fitting with only a warning, and the fix would go with it.
+- **Not chosen:** waiting (no date, and a deadline), or Linger reading the
+  launch link itself (new iPhone code, written without an iPhone, when a
+  reviewed fix exists).
+- **The same tao reports a scene iOS lets go of as the window closed**
+  (tauri-apps/tao#1261): iOS discards a scene left in the background when it
+  wants the memory, and Tauri then quit the app, so coming back started
+  Linger over. On a phone Linger now stays, and opens its window again when
+  the scene comes back (`phone_scene.rs`); the page loads again, while the
+  sign-ins and server connections, which live in Rust, carry on. Voice runs
+  in the page on a phone (`pageVoice.ts`), so it ends with it: staying in
+  voice in the background is #851. Found by the simulator's share flow,
+  which leaves Linger in the background while it shares.
+
+## Decided — the iPhone app runs on UIKit's scene life cycle (#838)
+
+**2026-11-03, for 0.5.5 (#788).** From April 2027 Apple takes only builds
+made with the iOS 27 SDK, and such a build that doesn't declare UIKit's scene
+life cycle won't launch (Apple's TN3187). iOS checks the Info.plist for it,
+not what the app does at run time.
+
+- **`Info.ios.plist` declares it** (`UIApplicationSceneManifest`): one window,
+  so one scene (`UIApplicationSupportsMultipleScenes` false), run by tao's
+  delegate, `TaoSceneDelegate`, in a configuration named outright. An empty
+  configuration is reported to crash at launch on the iOS 27 SDK
+  (tauri-apps/tauri#15719). `scripts/ios-plist.test.mjs` fails without it.
+- **It comes in while the build still uses Xcode 26** (#781): scenes work with
+  the iOS 26 SDK too, so the testers use it before Xcode moves (#839).
+- **What scenes change, and what checks it:** a link that starts Linger
+  (Linger's copy of tao, #836), Linger staying when iOS lets go of its scene
+  (`phone_scene.rs`, #836), and coming back to the app; the simulator's flows
+  open links with the app open and closed, share from Photos with Linger in
+  the background, and start it again signed in.

@@ -41,6 +41,33 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<!--
+	  UIKit's scene life cycle (#838). From April 2027 Apple takes only builds
+	  made with the iOS 27 SDK, and such a build that doesn't declare scenes
+	  here won't launch (Apple's TN3187). iOS checks this file, not what the
+	  app does at run time, so it's declared even though tao 0.37 hands iOS
+	  its own configuration anyway. One window, so one scene; tao's delegate
+	  (TaoSceneDelegate) runs it. The configuration is named outright: an
+	  empty one is reported to crash at launch on the iOS 27 SDK
+	  (tauri-apps/tauri#15719). scripts/ios-plist.test.mjs checks it's here.
+	-->
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneConfigurationName</key>
+					<string>Default Configuration</string>
+					<key>UISceneDelegateClassName</key>
+					<string>TaoSceneDelegate</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<!--
 	  "Open in Linger" (#607): the linger:// scheme that tauri.conf.json's
 	  deep-link plugin opens. The plugin writes this into gen/apple's
 	  Info.plist itself, but only when its build script runs, which a cached

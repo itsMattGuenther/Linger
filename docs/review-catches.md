@@ -229,6 +229,15 @@ on a world that has changed.
 
 ## Tests written from the case in mind, not from the ways things fail
 
+- **#849: the simulator's https front named a request only once it ended.**
+  A request still waiting for the server when the run stopped looked like a
+  connection that never sent one, the very case the log was added to tell
+  apart (#848). Caught by Greptile. *Missed because* the tests followed
+  requests to an end (answered, refused, given up on), never one still
+  going. *Changed:* each request is logged as it arrives too, and the test
+  of a request the app gives up on checks it was named before anything
+  ended it.
+
 - **#802: a test of stopping a wait stopped it before the wait began.** The
   upload test aborted inside `onWaiting`, which runs before `pause` has a
   timer or a listener, so only the "already stopped" check ran, and it would
@@ -341,6 +350,18 @@ on a world that has changed.
   item that looks like an entry fails rather than being guessed at, with a
   table of line sequences in its test. The question, and the rule in
   `docs/testing-strategy.md`, now say to leave a reader no quiet path.
+- **#850 (2 catches): the pin readers each had a form they passed over.**
+  `patches` (`scripts/tauri-versions.mjs`) read `[patch.crates-io]` only as
+  written, so the same section written `[patch."crates-io"]`, which Cargo
+  reads alike, gave no pins, and nothing checked them. The nightly release
+  finder (`scripts/upstream-fixes.mjs`) read the first page of tags only,
+  and stopped at the newest release without the fix, so a release on the
+  second page, or from an older line, was missed. Caught by Greptile.
+  *Missed because* the readers were tried with the forms in Linger's own
+  file and the order GitHub happens to list tao's tags in today, not with a
+  table of what TOML and GitHub allow. *Changed:* the section is read in
+  every TOML spelling, and any other patch form fails; every page of tags is
+  read and every release asked, oldest first, with tests of each.
 - **#846: the keep-rule reader counted any `-keep` as keeping a class
   whole.** `-keepclassmembers` and `-keep,allowobfuscation` let the class
   be renamed, and Rust finds it by name, so a weakened rule passed the check
@@ -450,6 +471,17 @@ on a world that has changed.
   nothing blocks the reactor. Awaiting `tokio::fs` there would mean starting
   a runtime only to wait on it on the same thread, and the marking has to be
   done before the web view writes anything. Kept as it is.
+
+## Said of one platform from another's design
+
+- **#850: a comment said a call carries on when the phone's page loads
+  again.** On a computer voice lives in Rust; on a phone it runs in the page
+  (`pageVoice.ts`), so the page loading again ends it. Caught by Greptile.
+  *Missed because* the comment was written from how the computer app is
+  built, and not checked against the phone's code. *Changed:* the comment
+  and `docs/decisions.md` say voice ends, and staying in voice in the
+  background is #851; the platform question asks that what's said of one
+  platform holds there.
 
 ## Code only one platform compiles
 
