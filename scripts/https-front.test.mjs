@@ -63,8 +63,8 @@ function shut(server) {
 const sockets = [];
 process.on("beforeExit", () => sockets.forEach((socket) => socket.destroy()));
 
-async function front(t, serverPort) {
-  const listening = await startFront({ cert, key, port: 0, serverPort });
+async function front(t, serverPort, log) {
+  const listening = await startFront({ cert, key, port: 0, serverPort, log });
   listening.on("connection", (socket) => sockets.push(socket));
   listening.on("secureConnection", (socket) => sockets.push(socket));
   t.after(() => {
@@ -85,6 +85,22 @@ function ask(port, { method = "GET", path = "/", headers = {}, body, trust = ca 
     outgoing.on("error", fail);
     outgoing.end(body);
   });
+}
+
+/** The front's log, and a wait (by the clock) for a line in it. */
+function logged() {
+  const lines = [];
+  const log = (line) => lines.push(line);
+  const line = async (pattern) => {
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline) {
+      const found = lines.find((each) => pattern.test(each));
+      if (found) return found;
+      await new Promise((done) => setTimeout(done, 20));
+    }
+    throw new Error(`no line like ${pattern} in ${JSON.stringify(lines)}`);
+  };
+  return { lines, log, line };
 }
 
 /** Everything that arrives on a socket until `until` matches it. */
@@ -138,11 +154,47 @@ test("a request and its body reach the server, and its answer and headers come b
   assert.equal(server.seen[0].headers.host, `127.0.0.1:${port}`, "the Host the app asked for, as a real proxy keeps it");
 });
 
-test("a client that doesn't trust the authority is refused", async (t) => {
+test("a client that doesn't trust the authority is refused, and the log says the handshake failed", async (t) => {
   const server = await stubServer(t);
-  const port = await front(t, server.port);
+  const { log, line } = logged();
+  const port = await front(t, server.port, log);
   await assert.rejects(ask(port, { trust: null }), /self[- ]signed|unable to (verify|get)/i);
   assert.deepEqual(server.seen, []);
+  await line(/^a TLS handshake failed: \S/);
+  await line(/^connection from :\d+ closed after \d+ ms, its TLS handshake never finished$/);
+});
+
+test("the log follows a request from its connection to its answer, naming its path but never its query", async (t) => {
+  const server = await stubServer(t);
+  const { lines, log, line } = logged();
+  const port = await front(t, server.port, log);
+  await ask(port, { path: "/api/v1/setup?token=0123secret" });
+  const answered = await line(/^GET \/api\/v1\/setup from :\d+: 201 in \d+ ms$/);
+  const from = /from (:\d+)/.exec(answered)[1];
+  assert.ok(lines.includes(`connection from ${from}`), "the connection, by the same port");
+  const arrived = lines.indexOf(`GET /api/v1/setup from ${from}`);
+  assert.ok(arrived >= 0 && arrived < lines.indexOf(answered), "the request as it arrived, before its answer");
+  assert.ok(lines.includes(`TLS done with ${from}`), "its handshake, by the same port");
+  await line(new RegExp(`^connection from ${from} closed after \\d+ ms$`));
+  assert.ok(!lines.some((each) => each.includes("0123secret")), "the query never");
+});
+
+test("a request the app gives up on before the server answers is logged as that", async (t) => {
+  // A server that takes the request and never answers it.
+  const held = createServer(() => {});
+  await new Promise((done) => held.listen(0, "127.0.0.1", done));
+  t.after(() => shut(held));
+  const { lines, log, line } = logged();
+  const port = await front(t, held.address().port, log);
+  const outgoing = request({ host: "127.0.0.1", port, path: "/api/v1/setup?token=0123", ca, agent: false });
+  outgoing.on("error", () => undefined);
+  outgoing.end();
+  // Named while it waits, before anything has ended it: a run that stops
+  // here still says the request reached the front (#849's review).
+  const arrived = await line(/^GET \/api\/v1\/setup from :\d+$/);
+  assert.ok(!lines.some((each) => each.startsWith(`${arrived}:`)), "not ended yet");
+  outgoing.destroy();
+  await line(/^GET \/api\/v1\/setup from :\d+: the app went away unanswered after \d+ ms$/);
 });
 
 test("a WebSocket upgrade goes through, with bytes either way, the first ones sent with it", async (t) => {
@@ -171,14 +223,17 @@ test("with no server behind it, a request is a 502 and an upgrade is closed", as
   await new Promise((done) => gone.listen(0, "127.0.0.1", done));
   const deadPort = gone.address().port;
   await new Promise((done) => gone.close(done));
-  const port = await front(t, deadPort);
+  const { log, line } = logged();
+  const port = await front(t, deadPort, log);
   const answer = await ask(port);
   assert.equal(answer.status, 502);
+  await line(/^GET \/ from :\d+: 502 \(the server didn't answer: ECONNREFUSED\) in \d+ ms$/);
   const socket = connectTls({ host: "127.0.0.1", port, ca });
   t.after(() => socket.destroy());
   await new Promise((done, fail) => socket.once("secureConnect", done).once("error", fail));
   socket.write(`GET /api/v1/gateway HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n`);
   assert.equal(await readUntil(socket, /HTTP/), "");
+  await line(/^GET \/api\/v1\/gateway from :\d+, an upgrade: the server didn't answer: ECONNREFUSED$/);
 });
 
 test("it listens on this machine only", async (t) => {
@@ -192,9 +247,17 @@ test("run as a script, it says the port it listens on", async (t) => {
   const server = await stubServer(t);
   const child = spawn(process.execPath, [script, join(dir, "cert.pem"), join(dir, "key.pem"), "0", String(server.port)]);
   t.after(() => child.kill());
-  const said = await readUntil(child.stdout, /listening \d+\n/);
-  const port = Number(/listening (\d+)/.exec(said)[1]);
+  let said = "";
+  child.stdout.on("data", (chunk) => (said += chunk));
+  const deadline = Date.now() + 5000;
+  while (!/^listening \d+\n/m.test(said) && Date.now() < deadline) await new Promise((done) => setTimeout(done, 20));
+  const port = Number(/^listening (\d+)$/m.exec(said)[1]);
   assert.equal((await ask(port)).status, 201);
+  // Each line after it starts with the time, as the simulator's log does.
+  while (!/: 201 in /.test(said) && Date.now() < deadline) await new Promise((done) => setTimeout(done, 20));
+  const after = said.split("\n").filter((each) => each && !each.startsWith("listening"));
+  assert.ok(after.length >= 3, said);
+  for (const each of after) assert.match(each, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z (connection|TLS done|GET \/ from)/);
 });
 
 test("run as a script with something missing, it says how to run it", () => {

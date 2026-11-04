@@ -69,7 +69,8 @@ jobs:
   shell-android:
     name: phone app builds for Android
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # A debug and a release build, each its own Rust build.
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -96,6 +97,19 @@ jobs:
       - name: build the Android app
         working-directory: client
         run: pnpm tauri android build --debug --target aarch64 --apk
+      # A release build shrinks the app's Kotlin, which a debug build doesn't,
+      # so a name Rust and Kotlin cross by can go only there: 0.5.4 shipped
+      # without the call bar's (#834). Built unsigned (no key here), as the
+      # release builds it otherwise, and checked for each such name.
+      - name: build the Android app as a release builds it
+        working-directory: client
+        run: pnpm tauri android build --target aarch64 --apk
+      - name: the release build keeps every name Rust and Kotlin cross by
+        run: |
+          set -euo pipefail
+          apk="$(find client/src-tauri/gen/android/app/build/outputs/apk -name '*release*.apk' | head -n 1)"
+          [ -n "$apk" ] || { echo "::error::the release build made no APK"; exit 1; }
+          node scripts/android-jni.mjs "$apk"
 
   # Proves the Rust half builds for iOS: the phone-only code paths compile
   # and nothing desktop-only leaks into them. The whole app, signed, is

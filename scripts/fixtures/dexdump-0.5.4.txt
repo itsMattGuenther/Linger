@@ -1,0 +1,1258 @@
+Class #1395            -
+  Class descriptor  : 'Lio/crates/keyring/Keyring$Companion;'
+  Access flags      : 0x0011 (PUBLIC FINAL)
+  Superclass        : 'Ljava/lang/Object;'
+  Interfaces        -
+  Static fields     -
+  Instance fields   -
+  Direct methods    -
+    #0              : (in Lio/crates/keyring/Keyring$Companion;)
+      name          : '<init>'
+      type          : '()V'
+      access        : 0x10002 (PRIVATE CONSTRUCTOR)
+      code          -
+      registers     : 1
+      ins           : 1
+      outs          : 1
+      insns size    : 4 16-bit code units
+      catches       : (none)
+      positions     :
+        0x0000 line=2
+      locals        :
+        0x0000 - 0x0004 reg=0 this Lio/crates/keyring/Keyring$Companion;
+    #1              : (in Lio/crates/keyring/Keyring$Companion;)
+      name          : '<init>'
+      type          : '(LD1/d;)V'
+      access        : 0x11001 (PUBLIC SYNTHETIC CONSTRUCTOR)
+      code          -
+      registers     : 2
+      ins           : 2
+      outs          : 1
+      insns size    : 4 16-bit code units
+      catches       : (none)
+      positions     :
+        0x0000 line=1
+      locals        :
+        0x0000 - 0x0004 reg=0 this Lio/crates/keyring/Keyring$Companion;
+        0x0000 - 0x0004 reg=1 (null) LD1/d;
+  Virtual methods   -
+    #0              : (in Lio/crates/keyring/Keyring$Companion;)
+      name          : 'initializeNdkContext'
+      type          : '(Landroid/content/Context;)V'
+      access        : 0x0111 (PUBLIC FINAL NATIVE)
+      code          : (none)
+  source_file_idx   : 5267 (SourceFile)
+
+Class #1396            -
+  Class descriptor  : 'Lio/crates/keyring/Keyring;'
+  Access flags      : 0x0011 (PUBLIC FINAL)
+  Superclass        : 'Ljava/lang/Object;'
+  Interfaces        -
+  Static fields     -
+    #0              : (in Lio/crates/keyring/Keyring;)
+      name          : 'Companion'
+      type          : 'Lio/crates/keyring/Keyring$Companion;'
+      access        : 0x0019 (PUBLIC STATIC FINAL)
+  Instance fields   -
+  Direct methods    -
+    #0              : (in Lio/crates/keyring/Keyring;)
+      name          : '<clinit>'
+      type          : '()V'
+      access        : 0x10008 (STATIC CONSTRUCTOR)
+      code          -
+      registers     : 2
+      ins           : 0
+      outs          : 2
+      insns size    : 9 16-bit code units
+      catches       : (none)
+      positions     :
+      locals        :
+    #1              : (in Lio/crates/keyring/Keyring;)
+      name          : '<init>'
+      type          : '()V'
+      access        : 0x10001 (PUBLIC CONSTRUCTOR)
+      code          -
+      registers     : 1
+      ins           : 1
+      outs          : 1
+      insns size    : 4 16-bit code units
+      catches       : (none)
+      positions     :
+        0x0000 line=1
+        0x0001 line=2
+        0x0002 line=3
+        0x0003 line=4
+      locals        :
+        0x0000 - 0x0004 reg=0 this Lio/crates/keyring/Keyring;
+  Virtual methods   -
+  source_file_idx   : 5267 (SourceFile)
+
+Class #1429            -
+  Class descriptor  : 'Lio/github/itsmattguenther/linger/VoiceCallService$Companion;'
+  Access flags      : 0x0011 (PUBLIC FINAL)
+  Superclass        : 'Ljava/lang/Object;'
+  Interfaces        -
+  Static fields     -
+  Instance fields   -
+  Direct methods    -
+  Virtual methods   -
+  source_file_idx   : 5267 (SourceFile)
+
+Class #1430            -
+  Class descriptor  : 'Lio/github/itsmattguenther/linger/VoiceCallService;'
+  Access flags      : 0x0011 (PUBLIC FINAL)
+  Superclass        : 'Landroid/app/Service;'
+  Interfaces        -
+  Static fields     -
+    #0              : (in Lio/github/itsmattguenther/linger/VoiceCallService;)
+      name          : 'd'
+      type          : 'I'
+      access        : 0x1019 (PUBLIC STATIC FINAL SYNTHETIC)
+  Instance fields   -
+  Direct methods    -
+    #0              : (in Lio/github/itsmattguenther/linger/VoiceCallService;)
+      name          : '<init>'
+      type          : '()V'
+      access        : 0x10001 (PUBLIC CONSTRUCTOR)
+      code          -
+      registers     : 1
+      ins           : 1
+      outs          : 1
+      insns size    : 4 16-bit code units
+      catches       : (none)
+      positions     :
+        0x0000 line=1
+        0x0001 line=2
+        0x0002 line=3
+        0x0003 line=4
+      locals        :
+        0x0000 - 0x0004 reg=0 this Lio/github/itsmattguenther/linger/VoiceCallService;
+  Virtual methods   -
+    #0              : (in Lio/github/itsmattguenther/linger/VoiceCallService;)
+      name          : 'onBind'
+      type          : '(Landroid/content/Intent;)Landroid/os/IBinder;'
+      access        : 0x0011 (PUBLIC FINAL)
+      code          -
+      registers     : 2
+      ins           : 2
+      outs          : 0
+      insns size    : 2 16-bit code units
+      catches       : (none)
+      positions     :
+      locals        :
+    #1              : (in Lio/github/itsmattguenther/linger/VoiceCallService;)
+      name          : 'onStartCommand'
+      type          : '(Landroid/content/Intent;II)I'
+      access        : 0x0011 (PUBLIC FINAL)
+      code          -
+      registers     : 26
+      ins           : 4
+      outs          : 4
+      insns size    : 1080 16-bit code units
+      catches       : (none)
+      positions     :
+        0x0000 line=1
+        0x0001 line=2
+        0x0002 line=3
+        0x0003 line=4
+        0x0004 line=5
+        0x0005 line=6
+        0x0006 line=7
+        0x0007 line=8
+        0x0008 line=9
+        0x0009 line=10
+        0x000a line=11
+        0x000b line=12
+        0x000c line=13
+        0x000d line=14
+        0x000e line=15
+        0x000f line=16
+        0x0010 line=17
+        0x0011 line=18
+        0x0012 line=19
+        0x0013 line=20
+        0x0014 line=21
+        0x0015 line=22
+        0x0016 line=23
+        0x0017 line=24
+        0x0018 line=25
+        0x0019 line=26
+        0x001a line=27
+        0x001b line=28
+        0x001c line=29
+        0x001d line=30
+        0x001e line=31
+        0x001f line=32
+        0x0020 line=33
+        0x0021 line=34
+        0x0022 line=35
+        0x0023 line=36
+        0x0024 line=37
+        0x0025 line=38
+        0x0026 line=39
+        0x0027 line=40
+        0x0028 line=41
+        0x0029 line=42
+        0x002a line=43
+        0x002b line=44
+        0x002c line=45
+        0x002d line=46
+        0x002e line=47
+        0x002f line=48
+        0x0030 line=49
+        0x0031 line=50
+        0x0032 line=51
+        0x0033 line=52
+        0x0034 line=53
+        0x0035 line=54
+        0x0036 line=55
+        0x0037 line=56
+        0x0038 line=57
+        0x0039 line=58
+        0x003a line=59
+        0x003b line=60
+        0x003c line=61
+        0x003d line=62
+        0x003e line=63
+        0x003f line=64
+        0x0040 line=65
+        0x0041 line=66
+        0x0042 line=67
+        0x0043 line=68
+        0x0044 line=69
+        0x0045 line=70
+        0x0046 line=71
+        0x0047 line=72
+        0x0048 line=73
+        0x0049 line=74
+        0x004a line=75
+        0x004b line=76
+        0x004c line=77
+        0x004d line=78
+        0x004e line=79
+        0x004f line=80
+        0x0050 line=81
+        0x0051 line=82
+        0x0052 line=83
+        0x0053 line=84
+        0x0054 line=85
+        0x0055 line=86
+        0x0056 line=87
+        0x0057 line=88
+        0x0058 line=89
+        0x0059 line=90
+        0x005a line=91
+        0x005b line=92
+        0x005c line=93
+        0x005d line=94
+        0x005e line=95
+        0x005f line=96
+        0x0060 line=97
+        0x0061 line=98
+        0x0062 line=99
+        0x0063 line=100
+        0x0064 line=101
+        0x0065 line=102
+        0x0066 line=103
+        0x0067 line=104
+        0x0068 line=105
+        0x0069 line=106
+        0x006a line=107
+        0x006b line=108
+        0x006c line=109
+        0x006d line=110
+        0x006e line=111
+        0x006f line=112
+        0x0070 line=113
+        0x0071 line=114
+        0x0072 line=115
+        0x0073 line=116
+        0x0074 line=117
+        0x0075 line=118
+        0x0076 line=119
+        0x0077 line=120
+        0x0078 line=121
+        0x0079 line=122
+        0x007a line=123
+        0x007b line=124
+        0x007c line=125
+        0x007d line=126
+        0x007e line=127
+        0x007f line=128
+        0x0080 line=129
+        0x0081 line=130
+        0x0082 line=131
+        0x0083 line=132
+        0x0084 line=133
+        0x0085 line=134
+        0x0086 line=135
+        0x0087 line=136
+        0x0088 line=137
+        0x0089 line=138
+        0x008a line=139
+        0x008b line=140
+        0x008c line=141
+        0x008d line=142
+        0x008e line=143
+        0x008f line=144
+        0x0090 line=145
+        0x0091 line=146
+        0x0092 line=147
+        0x0093 line=148
+        0x0094 line=149
+        0x0095 line=150
+        0x0096 line=151
+        0x0097 line=152
+        0x0098 line=153
+        0x0099 line=154
+        0x009a line=155
+        0x009b line=156
+        0x009c line=157
+        0x009d line=158
+        0x009e line=159
+        0x009f line=160
+        0x00a0 line=161
+        0x00a1 line=162
+        0x00a2 line=163
+        0x00a3 line=164
+        0x00a4 line=165
+        0x00a5 line=166
+        0x00a6 line=167
+        0x00a7 line=168
+        0x00a8 line=169
+        0x00a9 line=170
+        0x00aa line=171
+        0x00ab line=172
+        0x00ac line=173
+        0x00ad line=174
+        0x00ae line=175
+        0x00af line=176
+        0x00b0 line=177
+        0x00b1 line=178
+        0x00b2 line=179
+        0x00b3 line=180
+        0x00b4 line=181
+        0x00b5 line=182
+        0x00b6 line=183
+        0x00b7 line=184
+        0x00b8 line=185
+        0x00b9 line=186
+        0x00ba line=187
+        0x00bb line=188
+        0x00bc line=189
+        0x00bd line=190
+        0x00be line=191
+        0x00bf line=192
+        0x00c0 line=193
+        0x00c1 line=194
+        0x00c2 line=195
+        0x00c3 line=196
+        0x00c4 line=197
+        0x00c5 line=198
+        0x00c6 line=199
+        0x00c7 line=200
+        0x00c8 line=201
+        0x00c9 line=202
+        0x00ca line=203
+        0x00cb line=204
+        0x00cc line=205
+        0x00cd line=206
+        0x00ce line=207
+        0x00cf line=208
+        0x00d0 line=209
+        0x00d1 line=210
+        0x00d2 line=211
+        0x00d3 line=212
+        0x00d4 line=213
+        0x00d5 line=214
+        0x00d6 line=215
+        0x00d7 line=216
+        0x00d8 line=217
+        0x00d9 line=218
+        0x00da line=219
+        0x00db line=220
+        0x00dc line=221
+        0x00dd line=222
+        0x00de line=223
+        0x00df line=224
+        0x00e0 line=225
+        0x00e1 line=226
+        0x00e2 line=227
+        0x00e3 line=228
+        0x00e4 line=229
+        0x00e5 line=230
+        0x00e6 line=231
+        0x00e7 line=232
+        0x00e8 line=233
+        0x00e9 line=234
+        0x00ea line=235
+        0x00eb line=236
+        0x00ec line=237
+        0x00ed line=238
+        0x00ee line=239
+        0x00ef line=240
+        0x00f0 line=241
+        0x00f1 line=242
+        0x00f2 line=243
+        0x00f3 line=244
+        0x00f4 line=245
+        0x00f5 line=246
+        0x00f6 line=247
+        0x00f7 line=248
+        0x00f8 line=249
+        0x00f9 line=250
+        0x00fa line=251
+        0x00fb line=252
+        0x00fc line=253
+        0x00fd line=254
+        0x00fe line=255
+        0x00ff line=256
+        0x0100 line=257
+        0x0101 line=258
+        0x0102 line=259
+        0x0103 line=260
+        0x0104 line=261
+        0x0105 line=262
+        0x0106 line=263
+        0x0107 line=264
+        0x0108 line=265
+        0x0109 line=266
+        0x010a line=267
+        0x010b line=268
+        0x010c line=269
+        0x010d line=270
+        0x010e line=271
+        0x010f line=272
+        0x0110 line=273
+        0x0111 line=274
+        0x0112 line=275
+        0x0113 line=276
+        0x0114 line=277
+        0x0115 line=278
+        0x0116 line=279
+        0x0117 line=280
+        0x0118 line=281
+        0x0119 line=282
+        0x011a line=283
+        0x011b line=284
+        0x011c line=285
+        0x011d line=286
+        0x011e line=287
+        0x011f line=288
+        0x0120 line=289
+        0x0121 line=290
+        0x0122 line=291
+        0x0123 line=292
+        0x0124 line=293
+        0x0125 line=294
+        0x0126 line=295
+        0x0127 line=296
+        0x0128 line=297
+        0x0129 line=298
+        0x012a line=299
+        0x012b line=300
+        0x012c line=301
+        0x012d line=302
+        0x012e line=303
+        0x012f line=304
+        0x0130 line=305
+        0x0131 line=306
+        0x0132 line=307
+        0x0133 line=308
+        0x0134 line=309
+        0x0135 line=310
+        0x0136 line=311
+        0x0137 line=312
+        0x0138 line=313
+        0x0139 line=314
+        0x013a line=315
+        0x013b line=316
+        0x013c line=317
+        0x013d line=318
+        0x013e line=319
+        0x013f line=320
+        0x0140 line=321
+        0x0141 line=322
+        0x0142 line=323
+        0x0143 line=324
+        0x0144 line=325
+        0x0145 line=326
+        0x0146 line=327
+        0x0147 line=328
+        0x0148 line=329
+        0x0149 line=330
+        0x014a line=331
+        0x014b line=332
+        0x014c line=333
+        0x014d line=334
+        0x014e line=335
+        0x014f line=336
+        0x0150 line=337
+        0x0151 line=338
+        0x0152 line=339
+        0x0153 line=340
+        0x0154 line=341
+        0x0155 line=342
+        0x0156 line=343
+        0x0157 line=344
+        0x0158 line=345
+        0x0159 line=346
+        0x015a line=347
+        0x015b line=348
+        0x015c line=349
+        0x015d line=350
+        0x015e line=351
+        0x015f line=352
+        0x0160 line=353
+        0x0161 line=354
+        0x0162 line=355
+        0x0163 line=356
+        0x0164 line=357
+        0x0165 line=358
+        0x0166 line=359
+        0x0167 line=360
+        0x0168 line=361
+        0x0169 line=362
+        0x016a line=363
+        0x016b line=364
+        0x016c line=365
+        0x016d line=366
+        0x016e line=367
+        0x016f line=368
+        0x0170 line=369
+        0x0171 line=370
+        0x0172 line=371
+        0x0173 line=372
+        0x0174 line=373
+        0x0175 line=374
+        0x0176 line=375
+        0x0177 line=376
+        0x0178 line=377
+        0x0179 line=378
+        0x017a line=379
+        0x017b line=380
+        0x017c line=381
+        0x017d line=382
+        0x017e line=383
+        0x017f line=384
+        0x0180 line=385
+        0x0181 line=386
+        0x0182 line=387
+        0x0183 line=388
+        0x0184 line=389
+        0x0185 line=390
+        0x0186 line=391
+        0x0187 line=392
+        0x0188 line=393
+        0x0189 line=394
+        0x018a line=395
+        0x018b line=396
+        0x018c line=397
+        0x018d line=398
+        0x018e line=399
+        0x018f line=400
+        0x0190 line=401
+        0x0191 line=402
+        0x0192 line=403
+        0x0193 line=404
+        0x0194 line=405
+        0x0195 line=406
+        0x0196 line=407
+        0x0197 line=408
+        0x0198 line=409
+        0x0199 line=410
+        0x019a line=411
+        0x019b line=412
+        0x019c line=413
+        0x019d line=414
+        0x019e line=415
+        0x019f line=416
+        0x01a0 line=417
+        0x01a1 line=418
+        0x01a2 line=419
+        0x01a3 line=420
+        0x01a4 line=421
+        0x01a5 line=422
+        0x01a6 line=423
+        0x01a7 line=424
+        0x01a8 line=425
+        0x01a9 line=426
+        0x01aa line=427
+        0x01ab line=428
+        0x01ac line=429
+        0x01ad line=430
+        0x01ae line=431
+        0x01af line=432
+        0x01b0 line=433
+        0x01b1 line=434
+        0x01b2 line=435
+        0x01b3 line=436
+        0x01b4 line=437
+        0x01b5 line=438
+        0x01b6 line=439
+        0x01b7 line=440
+        0x01b8 line=441
+        0x01b9 line=442
+        0x01ba line=443
+        0x01bb line=444
+        0x01bc line=445
+        0x01bd line=446
+        0x01be line=447
+        0x01bf line=448
+        0x01c0 line=449
+        0x01c1 line=450
+        0x01c2 line=451
+        0x01c3 line=452
+        0x01c4 line=453
+        0x01c5 line=454
+        0x01c6 line=455
+        0x01c7 line=456
+        0x01c8 line=457
+        0x01c9 line=458
+        0x01ca line=459
+        0x01cb line=460
+        0x01cc line=461
+        0x01cd line=462
+        0x01ce line=463
+        0x01cf line=464
+        0x01d0 line=465
+        0x01d1 line=466
+        0x01d2 line=467
+        0x01d3 line=468
+        0x01d4 line=469
+        0x01d5 line=470
+        0x01d6 line=471
+        0x01d7 line=472
+        0x01d8 line=473
+        0x01d9 line=474
+        0x01da line=475
+        0x01db line=476
+        0x01dc line=477
+        0x01dd line=478
+        0x01de line=479
+        0x01df line=480
+        0x01e0 line=481
+        0x01e1 line=482
+        0x01e2 line=483
+        0x01e3 line=484
+        0x01e4 line=485
+        0x01e5 line=486
+        0x01e6 line=487
+        0x01e7 line=488
+        0x01e8 line=489
+        0x01e9 line=490
+        0x01ea line=491
+        0x01eb line=492
+        0x01ec line=493
+        0x01ed line=494
+        0x01ee line=495
+        0x01ef line=496
+        0x01f0 line=497
+        0x01f1 line=498
+        0x01f2 line=499
+        0x01f3 line=500
+        0x01f4 line=501
+        0x01f5 line=502
+        0x01f6 line=503
+        0x01f7 line=504
+        0x01f8 line=505
+        0x01f9 line=506
+        0x01fa line=507
+        0x01fb line=508
+        0x01fc line=509
+        0x01fd line=510
+        0x01fe line=511
+        0x01ff line=512
+        0x0200 line=513
+        0x0201 line=514
+        0x0202 line=515
+        0x0203 line=516
+        0x0204 line=517
+        0x0205 line=518
+        0x0206 line=519
+        0x0207 line=520
+        0x0208 line=521
+        0x0209 line=522
+        0x020a line=523
+        0x020b line=524
+        0x020c line=525
+        0x020d line=526
+        0x020e line=527
+        0x020f line=528
+        0x0210 line=529
+        0x0211 line=530
+        0x0212 line=531
+        0x0213 line=532
+        0x0214 line=533
+        0x0215 line=534
+        0x0216 line=535
+        0x0217 line=536
+        0x0218 line=537
+        0x0219 line=538
+        0x021a line=539
+        0x021b line=540
+        0x021c line=541
+        0x021d line=542
+        0x021e line=543
+        0x021f line=544
+        0x0220 line=545
+        0x0221 line=546
+        0x0222 line=547
+        0x0223 line=548
+        0x0224 line=549
+        0x0225 line=550
+        0x0226 line=551
+        0x0227 line=552
+        0x0228 line=553
+        0x0229 line=554
+        0x022a line=555
+        0x022b line=556
+        0x022c line=557
+        0x022d line=558
+        0x022e line=559
+        0x022f line=560
+        0x0230 line=561
+        0x0231 line=562
+        0x0232 line=563
+        0x0233 line=564
+        0x0234 line=565
+        0x0235 line=566
+        0x0236 line=567
+        0x0237 line=568
+        0x0238 line=569
+        0x0239 line=570
+        0x023a line=571
+        0x023b line=572
+        0x023c line=573
+        0x023d line=574
+        0x023e line=575
+        0x023f line=576
+        0x0240 line=577
+        0x0241 line=578
+        0x0242 line=579
+        0x0243 line=580
+        0x0244 line=581
+        0x0245 line=582
+        0x0246 line=583
+        0x0247 line=584
+        0x0248 line=585
+        0x0249 line=586
+        0x024a line=587
+        0x024b line=588
+        0x024c line=589
+        0x024d line=590
+        0x024e line=591
+        0x024f line=592
+        0x0250 line=593
+        0x0251 line=594
+        0x0252 line=595
+        0x0253 line=596
+        0x0254 line=597
+        0x0255 line=598
+        0x0256 line=599
+        0x0257 line=600
+        0x0258 line=601
+        0x0259 line=602
+        0x025a line=603
+        0x025b line=604
+        0x025c line=605
+        0x025d line=606
+        0x025e line=607
+        0x025f line=608
+        0x0260 line=609
+        0x0261 line=610
+        0x0262 line=611
+        0x0263 line=612
+        0x0264 line=613
+        0x0265 line=614
+        0x0266 line=615
+        0x0267 line=616
+        0x0268 line=617
+        0x0269 line=618
+        0x026a line=619
+        0x026b line=620
+        0x026c line=621
+        0x026d line=622
+        0x026e line=623
+        0x026f line=624
+        0x0270 line=625
+        0x0271 line=626
+        0x0272 line=627
+        0x0273 line=628
+        0x0274 line=629
+        0x0275 line=630
+        0x0276 line=631
+        0x0277 line=632
+        0x0278 line=633
+        0x0279 line=634
+        0x027a line=635
+        0x027b line=636
+        0x027c line=637
+        0x027d line=638
+        0x027e line=639
+        0x027f line=640
+        0x0280 line=641
+        0x0281 line=642
+        0x0282 line=643
+        0x0283 line=644
+        0x0284 line=645
+        0x0285 line=646
+        0x0286 line=647
+        0x0287 line=648
+        0x0288 line=649
+        0x0289 line=650
+        0x028a line=651
+        0x028b line=652
+        0x028c line=653
+        0x028d line=654
+        0x028e line=655
+        0x028f line=656
+        0x0290 line=657
+        0x0291 line=658
+        0x0292 line=659
+        0x0293 line=660
+        0x0294 line=661
+        0x0295 line=662
+        0x0296 line=663
+        0x0297 line=664
+        0x0298 line=665
+        0x0299 line=666
+        0x029a line=667
+        0x029b line=668
+        0x029c line=669
+        0x029d line=670
+        0x029e line=671
+        0x029f line=672
+        0x02a0 line=673
+        0x02a1 line=674
+        0x02a2 line=675
+        0x02a3 line=676
+        0x02a4 line=677
+        0x02a5 line=678
+        0x02a6 line=679
+        0x02a7 line=680
+        0x02a8 line=681
+        0x02a9 line=682
+        0x02aa line=683
+        0x02ab line=684
+        0x02ac line=685
+        0x02ad line=686
+        0x02ae line=687
+        0x02af line=688
+        0x02b0 line=689
+        0x02b1 line=690
+        0x02b2 line=691
+        0x02b3 line=692
+        0x02b4 line=693
+        0x02b5 line=694
+        0x02b6 line=695
+        0x02b7 line=696
+        0x02b8 line=697
+        0x02b9 line=698
+        0x02ba line=699
+        0x02bb line=700
+        0x02bc line=701
+        0x02bd line=702
+        0x02be line=703
+        0x02bf line=704
+        0x02c0 line=705
+        0x02c1 line=706
+        0x02c2 line=707
+        0x02c3 line=708
+        0x02c4 line=709
+        0x02c5 line=710
+        0x02c6 line=711
+        0x02c7 line=712
+        0x02c8 line=713
+        0x02c9 line=714
+        0x02ca line=715
+        0x02cb line=716
+        0x02cc line=717
+        0x02cd line=718
+        0x02ce line=719
+        0x02cf line=720
+        0x02d0 line=721
+        0x02d1 line=722
+        0x02d2 line=723
+        0x02d3 line=724
+        0x02d4 line=725
+        0x02d5 line=726
+        0x02d6 line=727
+        0x02d7 line=728
+        0x02d8 line=729
+        0x02d9 line=730
+        0x02da line=731
+        0x02db line=732
+        0x02dc line=733
+        0x02dd line=734
+        0x02de line=735
+        0x02df line=736
+        0x02e0 line=737
+        0x02e1 line=738
+        0x02e2 line=739
+        0x02e3 line=740
+        0x02e4 line=741
+        0x02e5 line=742
+        0x02e6 line=743
+        0x02e7 line=744
+        0x02e8 line=745
+        0x02e9 line=746
+        0x02ea line=747
+        0x02eb line=748
+        0x02ec line=749
+        0x02ed line=750
+        0x02ee line=751
+        0x02ef line=752
+        0x02f0 line=753
+        0x02f1 line=754
+        0x02f2 line=755
+        0x02f3 line=756
+        0x02f4 line=757
+        0x02f5 line=758
+        0x02f6 line=759
+        0x02f7 line=760
+        0x02f8 line=761
+        0x02f9 line=762
+        0x02fa line=763
+        0x02fb line=764
+        0x02fc line=765
+        0x02fd line=766
+        0x02fe line=767
+        0x02ff line=768
+        0x0300 line=769
+        0x0301 line=770
+        0x0302 line=771
+        0x0303 line=772
+        0x0304 line=773
+        0x0305 line=774
+        0x0306 line=775
+        0x0307 line=776
+        0x0308 line=777
+        0x0309 line=778
+        0x030a line=779
+        0x030b line=780
+        0x030c line=781
+        0x030d line=782
+        0x030e line=783
+        0x030f line=784
+        0x0310 line=785
+        0x0311 line=786
+        0x0312 line=787
+        0x0313 line=788
+        0x0314 line=789
+        0x0315 line=790
+        0x0316 line=791
+        0x0317 line=792
+        0x0318 line=793
+        0x0319 line=794
+        0x031a line=795
+        0x031b line=796
+        0x031c line=797
+        0x031d line=798
+        0x031e line=799
+        0x031f line=800
+        0x0320 line=801
+        0x0321 line=802
+        0x0322 line=803
+        0x0323 line=804
+        0x0324 line=805
+        0x0325 line=806
+        0x0326 line=807
+        0x0327 line=808
+        0x0328 line=809
+        0x0329 line=810
+        0x032a line=811
+        0x032b line=812
+        0x032c line=813
+        0x032d line=814
+        0x032e line=815
+        0x032f line=816
+        0x0330 line=817
+        0x0331 line=818
+        0x0332 line=819
+        0x0333 line=820
+        0x0334 line=821
+        0x0335 line=822
+        0x0336 line=823
+        0x0337 line=824
+        0x0338 line=825
+        0x0339 line=826
+        0x033a line=827
+        0x033b line=828
+        0x033c line=829
+        0x033d line=830
+        0x033e line=831
+        0x033f line=832
+        0x0340 line=833
+        0x0341 line=834
+        0x0342 line=835
+        0x0343 line=836
+        0x0344 line=837
+        0x0345 line=838
+        0x0346 line=839
+        0x0347 line=840
+        0x0348 line=841
+        0x0349 line=842
+        0x034a line=843
+        0x034b line=844
+        0x034c line=845
+        0x034d line=846
+        0x034e line=847
+        0x034f line=848
+        0x0350 line=849
+        0x0351 line=850
+        0x0352 line=851
+        0x0353 line=852
+        0x0354 line=853
+        0x0355 line=854
+        0x0356 line=855
+        0x0357 line=856
+        0x0358 line=857
+        0x0359 line=858
+        0x035a line=859
+        0x035b line=860
+        0x035c line=861
+        0x035d line=862
+        0x035e line=863
+        0x035f line=864
+        0x0360 line=865
+        0x0361 line=866
+        0x0362 line=867
+        0x0363 line=868
+        0x0364 line=869
+        0x0365 line=870
+        0x0366 line=871
+        0x0367 line=872
+        0x0368 line=873
+        0x0369 line=874
+        0x036a line=875
+        0x036b line=876
+        0x036c line=877
+        0x036d line=878
+        0x036e line=879
+        0x036f line=880
+        0x0370 line=881
+        0x0371 line=882
+        0x0372 line=883
+        0x0373 line=884
+        0x0374 line=885
+        0x0375 line=886
+        0x0376 line=887
+        0x0377 line=888
+        0x0378 line=889
+        0x0379 line=890
+        0x037a line=891
+        0x037b line=892
+        0x037c line=893
+        0x037d line=894
+        0x037e line=895
+        0x037f line=896
+        0x0380 line=897
+        0x0381 line=898
+        0x0382 line=899
+        0x0383 line=900
+        0x0384 line=901
+        0x0385 line=902
+        0x0386 line=903
+        0x0387 line=904
+        0x0388 line=905
+        0x0389 line=906
+        0x038a line=907
+        0x038b line=908
+        0x038c line=909
+        0x038d line=910
+        0x038e line=911
+        0x038f line=912
+        0x0390 line=913
+        0x0391 line=914
+        0x0392 line=915
+        0x0393 line=916
+        0x0394 line=917
+        0x0395 line=918
+        0x0396 line=919
+        0x0397 line=920
+        0x0398 line=921
+        0x0399 line=922
+        0x039a line=923
+        0x039b line=924
+        0x039c line=925
+        0x039d line=926
+        0x039e line=927
+        0x039f line=928
+        0x03a0 line=929
+        0x03a1 line=930
+        0x03a2 line=931
+        0x03a3 line=932
+        0x03a4 line=933
+        0x03a5 line=934
+        0x03a6 line=935
+        0x03a7 line=936
+        0x03a8 line=937
+        0x03a9 line=938
+        0x03aa line=939
+        0x03ab line=940
+        0x03ac line=941
+        0x03ad line=942
+        0x03ae line=943
+        0x03af line=944
+        0x03b0 line=945
+        0x03b1 line=946
+        0x03b2 line=947
+        0x03b3 line=948
+        0x03b4 line=949
+        0x03b5 line=950
+        0x03b6 line=951
+        0x03b7 line=952
+        0x03b8 line=953
+        0x03b9 line=954
+        0x03ba line=955
+        0x03bb line=956
+        0x03bc line=957
+        0x03bd line=958
+        0x03be line=959
+        0x03bf line=960
+        0x03c0 line=961
+        0x03c1 line=962
+        0x03c2 line=963
+        0x03c3 line=964
+        0x03c4 line=965
+        0x03c5 line=966
+        0x03c6 line=967
+        0x03c7 line=968
+        0x03c8 line=969
+        0x03c9 line=970
+        0x03ca line=971
+        0x03cb line=972
+        0x03cc line=973
+        0x03cd line=974
+        0x03ce line=975
+        0x03cf line=976
+        0x03d0 line=977
+        0x03d1 line=978
+        0x03d2 line=979
+        0x03d3 line=980
+        0x03d4 line=981
+        0x03d5 line=982
+        0x03d6 line=983
+        0x03d7 line=984
+        0x03d8 line=985
+        0x03d9 line=986
+        0x03da line=987
+        0x03db line=988
+        0x03dc line=989
+        0x03dd line=990
+        0x03de line=991
+        0x03df line=992
+        0x03e0 line=993
+        0x03e1 line=994
+        0x03e2 line=995
+        0x03e3 line=996
+        0x03e4 line=997
+        0x03e5 line=998
+        0x03e6 line=999
+        0x03e7 line=1000
+        0x03e8 line=1001
+        0x03e9 line=1002
+        0x03ea line=1003
+        0x03eb line=1004
+        0x03ec line=1005
+        0x03ed line=1006
+        0x03ee line=1007
+        0x03ef line=1008
+        0x03f0 line=1009
+        0x03f1 line=1010
+        0x03f2 line=1011
+        0x03f3 line=1012
+        0x03f4 line=1013
+        0x03f5 line=1014
+        0x03f6 line=1015
+        0x03f7 line=1016
+        0x03f8 line=1017
+        0x03f9 line=1018
+        0x03fa line=1019
+        0x03fb line=1020
+        0x03fc line=1021
+        0x03fd line=1022
+        0x03fe line=1023
+        0x03ff line=1024
+        0x0400 line=1025
+        0x0401 line=1026
+        0x0402 line=1027
+        0x0403 line=1028
+        0x0404 line=1029
+        0x0405 line=1030
+        0x0406 line=1031
+        0x0407 line=1032
+        0x0408 line=1033
+        0x0409 line=1034
+        0x040a line=1035
+        0x040b line=1036
+        0x040c line=1037
+        0x040d line=1038
+        0x040e line=1039
+        0x040f line=1040
+        0x0410 line=1041
+        0x0411 line=1042
+        0x0412 line=1043
+        0x0413 line=1044
+        0x0414 line=1045
+        0x0415 line=1046
+        0x0416 line=1047
+        0x0417 line=1048
+        0x0418 line=1049
+        0x0419 line=1050
+        0x041a line=1051
+        0x041b line=1052
+        0x041c line=1053
+        0x041d line=1054
+        0x041e line=1055
+        0x041f line=1056
+        0x0420 line=1057
+        0x0421 line=1058
+        0x0422 line=1059
+        0x0423 line=1060
+        0x0424 line=1061
+        0x0425 line=1062
+        0x0426 line=1063
+        0x0427 line=1064
+        0x0428 line=1065
+        0x0429 line=1066
+        0x042a line=1067
+        0x042b line=1068
+        0x042c line=1069
+        0x042d line=1070
+        0x042e line=1071
+        0x042f line=1072
+        0x0430 line=1073
+        0x0431 line=1074
+        0x0432 line=1075
+        0x0433 line=1076
+        0x0434 line=1077
+        0x0435 line=1078
+        0x0436 line=1079
+        0x0437 line=1080
+      locals        :
+        0x0000 - 0x0438 reg=22 this Lio/github/itsmattguenther/linger/VoiceCallService;
+        0x0000 - 0x0438 reg=23 (null) Landroid/content/Intent;
+        0x0000 - 0x0438 reg=24 (null) I
+        0x0000 - 0x0438 reg=25 (null) I
+    #2              : (in Lio/github/itsmattguenther/linger/VoiceCallService;)
+      name          : 'onTaskRemoved'
+      type          : '(Landroid/content/Intent;)V'
+      access        : 0x0011 (PUBLIC FINAL)
+      code          -
+      registers     : 2
+      ins           : 2
+      outs          : 1
+      insns size    : 4 16-bit code units
+      catches       : (none)
+      positions     :
+        0x0000 line=1
+        0x0001 line=2
+        0x0002 line=3
+        0x0003 line=4
+      locals        :
+        0x0000 - 0x0004 reg=0 this Lio/github/itsmattguenther/linger/VoiceCallService;
+        0x0000 - 0x0004 reg=1 (null) Landroid/content/Intent;
+  source_file_idx   : 5267 (SourceFile)
+

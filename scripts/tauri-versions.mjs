@@ -149,11 +149,22 @@ export function patches(text, file = CARGO_TOML) {
   let inPatch = false;
   let upstream = null;
   text.split("\n").forEach((line, i) => {
-    const header = /^\s*\[([^\]]+)\]\s*$/.exec(line);
+    // A section, or a list of them (`[[bin]]`), with any comment after it.
+    const header = /^\s*(\[\[?)([^\]]+)\]\]?\s*(?:#.*)?$/.exec(line);
     if (header) {
-      inPatch = header[1].trim() === "patch.crates-io";
+      // TOML writes the same section with its names quoted and spaced
+      // (`[patch."crates-io"]`), and Cargo reads them all alike (#850's review).
+      const name = header[2].replace(/\s+/g, "").replace(/["']/g, "");
+      inPatch = header[1] === "[" && name === "patch.crates-io";
+      if (!inPatch && (name === "patch" || name.startsWith("patch."))) {
+        throw new Error(`${file}:${i + 1}: pins are read from [patch.crates-io] only, one to a line, not ${JSON.stringify(line.trim())}`);
+      }
       if (!inPatch) upstream = null;
       return;
+    }
+    // A pin written as a dotted key, outside any [patch] section.
+    if (/^\s*["']?patch["']?\s*\./.test(line)) {
+      throw new Error(`${file}:${i + 1}: pins are read from [patch.crates-io] only, one to a line, not ${JSON.stringify(line.trim())}`);
     }
     const named = /^#\s*upstream:\s*(.*?)\s*$/.exec(line);
     if (named) {

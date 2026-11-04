@@ -16,15 +16,29 @@ const REV = "10e79e36ab73ac7f631b5c97783d99130414073d";
 const pin = { name: "tao", git: "https://github.com/itsMattGuenther/tao", rev: REV, upstream: "tauri-apps/tao#1376" };
 const URL_1376 = "https://github.com/tauri-apps/tao/pull/1376";
 
-/** A stand-in for GitHub's API: the pull request, the tags, and which tags have the merge. */
-function github({ state = "open", merged = false, tags = [], has = [] }) {
-  return (path) => {
-    if (path === "repos/tauri-apps/tao/pulls/1376")
-      return { state, html_url: URL_1376, merged_at: merged ? "2026-11-20T00:00:00Z" : null, merge_commit_sha: merged ? "m".repeat(40) : null };
-    if (path === "repos/tauri-apps/tao/tags?per_page=100") return tags.map((name) => ({ name, commit: { sha: `sha-${name}` } }));
-    const compare = /^repos\/tauri-apps\/tao\/compare\/m+\.\.\.sha-(.+)$/.exec(path);
-    if (compare) return { status: has.includes(compare[1]) ? "ahead" : "behind" };
-    throw new Error(`no stand-in answer for ${path}`);
+/**
+ * A stand-in for GitHub's API: the pull request, the tags (in pages of
+ * `perPage`), and which tags have the merge; a tag in `diverged` is on
+ * another branch.
+ */
+function github({ state = "open", merged = false, tags = [], has = [], diverged = [], perPage = 100 }) {
+  const asked = [];
+  return {
+    asked,
+    one: (path) => {
+      asked.push(path);
+      if (path === "repos/tauri-apps/tao/pulls/1376")
+        return { state, html_url: URL_1376, merged_at: merged ? "2026-11-20T00:00:00Z" : null, merge_commit_sha: merged ? "m".repeat(40) : null };
+      const compare = /^repos\/tauri-apps\/tao\/compare\/m+\.\.\.sha-(.+)$/.exec(path);
+      if (compare) return { status: has.includes(compare[1]) ? "ahead" : diverged.includes(compare[1]) ? "diverged" : "behind" };
+      throw new Error(`no stand-in answer for ${path}`);
+    },
+    all: (path) => {
+      if (path !== "repos/tauri-apps/tao/tags?per_page=100") throw new Error(`no stand-in list for ${path}`);
+      const pages = [];
+      for (let at = 0; at < tags.length; at += perPage) pages.push(tags.slice(at, at + perPage).map((name) => ({ name, commit: { sha: `sha-${name}` } })));
+      return pages;
+    },
   };
 }
 
@@ -42,9 +56,27 @@ test("a merged fix no release has yet is merged; the oldest release that has it 
   assert.equal(standing(pin, github({ state: "closed", merged: true, tags, has: ["tao-v0.37.10", "tao-v0.37.9", "tao-v0.37.3"] })).tag, "tao-v0.37.3");
 });
 
+test("a release from an older line that has the fix is found, though a newer one lacks it", () => {
+  // tao-v0.38.0 was cut from a branch without the merge; tao-v0.37.3 has it.
+  const tags = ["tao-v0.38.0", "tao-v0.37.3", "tao-v0.37.2"];
+  const released = standing(pin, github({ state: "closed", merged: true, tags, has: ["tao-v0.37.3"], diverged: ["tao-v0.38.0"] }));
+  assert.deepEqual([released.state, released.tag], ["released", "tao-v0.37.3"]);
+});
+
+test("every page of tags is read: GitHub lists them by name, so a new release can be on the second", () => {
+  const tags = ["v0.24.0", "v0.23.0", "tao-v0.21.0", "tao-v0.37.3", "tao-v0.37.2"];
+  const gh = github({ state: "closed", merged: true, tags, has: ["tao-v0.37.3"], perPage: 2 });
+  assert.equal(standing(pin, gh).tag, "tao-v0.37.3");
+  assert.equal(standing(pin, github({ state: "closed", merged: true, tags, has: [], perPage: 2 })).state, "merged");
+  // Oldest first, and no further than the first that has it.
+  assert.deepEqual(gh.asked.filter((path) => path.includes("/compare/")).map((path) => path.split("sha-")[1]), ["tao-v0.21.0", "tao-v0.37.2", "tao-v0.37.3"]);
+});
+
 test("an answer it can't read fails, rather than reading as waiting", () => {
-  assert.throws(() => standing(pin, () => ({})), /has no state/);
-  assert.throws(() => standing(pin, (path) => (path.includes("/pulls/") ? { state: "closed", merged_at: "x", merge_commit_sha: "m" } : { message: "Not Found" })), /tags aren't a list/);
+  assert.throws(() => standing(pin, { one: () => ({}), all: () => [] }), /has no state/);
+  const merged = (all) => ({ one: () => ({ state: "closed", merged_at: "x", merge_commit_sha: "m" }), all });
+  assert.throws(() => standing(pin, merged(() => ({ message: "Not Found" }))), /tags aren't a list of pages/);
+  assert.throws(() => standing(pin, merged(() => [{ name: "tao-v0.37.3" }])), /tags aren't a list of pages/);
 });
 
 test("only a released or a closed fix calls for an issue, and it says what to do", () => {
@@ -65,9 +97,11 @@ const scenario = JSON.parse(fs.readFileSync(process.env.SCENARIO, "utf8"));
 const args = process.argv.slice(2);
 fs.appendFileSync(process.env.CALLS, JSON.stringify(args) + "\\n");
 if (args[0] === "api") {
-  const answer = scenario.api[args[1]] ?? (args[1].includes("/compare/") ? { status: "behind" } : null);
-  if (answer === null) { console.error("no answer for " + args[1]); process.exit(1); }
-  console.log(JSON.stringify(answer));
+  const path = args.at(-1);
+  const answer = scenario.api[path] ?? (path.includes("/compare/") ? { status: "behind" } : null);
+  if (answer === null) { console.error("no answer for " + path); process.exit(1); }
+  // --paginate --slurp: every page, in a list; the scenario's list is one page.
+  console.log(JSON.stringify(args.includes("--slurp") ? [answer] : answer));
 } else if (args[0] === "issue" && args[1] === "list") console.log(JSON.stringify(scenario.open ?? []));
 else if (args[0] === "issue" && args[1] === "create") console.log("https://github.com/x/y/issues/9");
 else { console.error("unexpected gh " + args.join(" ")); process.exit(1); }
