@@ -43,7 +43,7 @@ echo "== version check, and the checks' own tests =="
 scripts/version-check.sh
 node --test --test-reporter=dot scripts/ci-scope.test.mjs scripts/ci-gate.test.mjs scripts/changed-tests.test.mjs scripts/action-pins.test.mjs scripts/workflow-downloads.test.mjs
 node --test --test-reporter=dot scripts/csp-assets.test.mjs scripts/doc-paths.test.mjs scripts/overview-docs.test.mjs scripts/ios-app-group.test.mjs scripts/https-front.test.mjs scripts/linux-next-env.test.mjs scripts/package-deps.test.mjs scripts/playwright-image.test.mjs scripts/issue-label.test.mjs scripts/startup-time.test.mjs scripts/updater-urls.test.mjs scripts/release-draft.test.mjs client/scripts/webview2-wait.test.mjs
-node --test --test-reporter=dot scripts/pr-questions.test.mjs scripts/review-catches.test.mjs scripts/tauri-versions.test.mjs scripts/ios-flows.test.mjs scripts/ios-plist.test.mjs scripts/upstream-fixes.test.mjs scripts/android-jni.test.mjs
+node --test --test-reporter=dot scripts/pr-questions.test.mjs scripts/review-catches.test.mjs scripts/tauri-versions.test.mjs scripts/ios-flows.test.mjs scripts/ios-plist.test.mjs scripts/upstream-fixes.test.mjs scripts/android-jni.test.mjs scripts/installed-packages.test.mjs
 echo "== Tauri's Rust crates and JavaScript packages on one version =="
 node scripts/tauri-versions.mjs
 python3 scripts/linux-audio-check.test.py -q
@@ -58,6 +58,14 @@ if docker info >/dev/null 2>&1; then
   # interface to this machine for a moment, and Chromium in any other
   # check.sh running beside this one drops its page loads (#528).
   docker run --rm --network none -v "$PWD:/repo:ro" -w /repo rhysd/actionlint:1.7.12 -no-color
+fi
+
+if on web || on shell || on packages; then
+  # The client's checks run on the packages already installed, and this
+  # never installs any: after the lockfile changes, they'd test the old ones
+  # and fail, or pass, somewhere that doesn't say why (#852).
+  echo "== the client's packages are the lockfile's =="
+  node scripts/installed-packages.mjs client
 fi
 
 if on rust; then
