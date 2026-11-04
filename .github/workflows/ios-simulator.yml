@@ -244,9 +244,11 @@ jobs:
           # where trustd may read it, then trustd restarted to read it
           # afresh. Its log then says "skipping update". The log is kept from
           # here, before the restart, to the end of the run (trustd.log), so
-          # a stall in the warm-up before the flows has its lines too.
+          # a stall in the warm-up before the flows has its lines too. With
+          # nsurlsessiond's, which makes trustd's downloads, so the blocked
+          # download of the list ("an iPhone, starting") shows failing.
           nohup xcrun simctl spawn "$UDID" log stream --level info --style compact \
-            --predicate 'process == "trustd"' > "$OUT/trustd.log" 2>&1 &
+            --predicate 'process == "trustd" OR process == "nsurlsessiond"' > "$OUT/trustd.log" 2>&1 &
           xcrun simctl spawn "$UDID" defaults write com.apple.security ValidUpdateEnabled -bool NO
           xcrun simctl spawn "$UDID" defaults -currentHost write com.apple.security ValidUpdateEnabled -bool NO
           xcrun simctl spawn "$UDID" defaults write /Library/Preferences/com.apple.security ValidUpdateEnabled -bool NO || true

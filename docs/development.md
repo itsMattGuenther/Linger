@@ -592,7 +592,8 @@ update". The setting comes too late for the service's first start, which
 has already scheduled a download of the whole list by then, so the list's
 server, `valid.apple.com`, is made unreachable in the Mac's hosts file
 before the simulator boots: the download fails at once, with nothing to
-apply.
+apply. `trustd.log` has `nsurlsessiond`'s lines too, which make the
+download, so it shows failing.
 
 **Reading a run.** The `iphone-simulator` artifact has `screens/`, a picture
 of each screen the flows stop at, numbered in order, and `last.png`, the

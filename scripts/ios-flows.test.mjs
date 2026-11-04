@@ -226,7 +226,7 @@ test("the simulator's certificate service has its revocation list update off, be
   assert(restart < workflow.indexOf("add-root-cert") && restart < workflow.indexOf("simctl openurl"), "before the test authority, the warm-up and the flows");
   // Its log starts before the restart, so it has "skipping update", and
   // runs past the warm-up, so a stall there has its lines too.
-  const log = workflow.search(/nohup xcrun simctl spawn "\$UDID" log stream [^\n]*\\\n\s+--predicate 'process == "trustd"' > "\$OUT\/trustd\.log" 2>&1 &/);
+  const log = workflow.search(/nohup xcrun simctl spawn "\$UDID" log stream [^\n]*\\\n\s+--predicate 'process == "trustd" OR process == "nsurlsessiond"' > "\$OUT\/trustd\.log" 2>&1 &/);
   assert(log > workflow.indexOf("simctl bootstatus") && log < off, "trustd's log kept from before the setting and the restart");
 });
 
