@@ -85,7 +85,26 @@ appId: com.apple.mobileslideshow
             - tapOn:
                 text: "Continue"
                 optional: true
-- tapOn: "Share"
+# Share, tapped until the share sheet is open: once, on a busy simulator, a
+# tap did nothing, and the flow took Photos' own More for the sheet's
+# (#866). "1 Photo Selected" is the sheet's title. A tap while a slow sheet
+# is still coming up may find Share covered, so each is optional; the wait
+# after the loop is not, and fails if the sheet never opens.
+- repeat:
+    while:
+      notVisible: "1 Photo Selected"
+    times: 3
+    commands:
+      - tapOn:
+          text: "Share"
+          optional: true
+      - extendedWaitUntil:
+          visible: "1 Photo Selected"
+          timeout: 15000
+          optional: true
+- extendedWaitUntil:
+    visible: "1 Photo Selected"
+    timeout: 5000
 - extendedWaitUntil:
     visible: "Linger"
     timeout: 20000
