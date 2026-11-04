@@ -40,6 +40,9 @@ default.
   #836, #837, #838). Nothing is meant to look different. Owed after it
   ships: updating from 0.5.4 on Windows and Linux, the testers' iPhone list
   for #838, and a Pixel on the release build (#837).
+- **The iPhone app built with Xcode 27.1 and the iOS 27 SDK** (#839), which
+  Apple requires from April 2027. Nothing is meant to look different. Owed
+  after it ships: the TestFlight testers open it and run #838's list again.
 
 **0.5.4 release — prepared 2026-11-02: Linger updates itself, and phones
 share straight to it.** The notes are `docs/releases/0.5.4.md`, and its one

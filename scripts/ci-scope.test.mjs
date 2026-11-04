@@ -20,7 +20,7 @@ test("browser assertions alone need no package rebuild", () => {
 });
 test("the iPhone flows and what they run on run only the iPhone check", () => {
   for (const path of ["client/tests/ios/set-up.yaml", "client/tests/ios/seed.js", "scripts/https-front.mjs",
-    "scripts/https-front.test.mjs", "scripts/test-certs.sh"])
+    "scripts/https-front.test.mjs", "scripts/share-window-ready.mjs", "scripts/test-certs.sh"])
     assert.deepEqual(active([path]), ["ios"], path);
 });
 test("the iPhone check runs for the app's page and shell, and for its own workflow", () => {

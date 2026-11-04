@@ -6,7 +6,9 @@
 // docs/development.md's numbered list of them, a second copy of the order,
 // says the same.
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -262,3 +264,197 @@ test("Apple's revocation list server is unreachable before the simulator boots",
   assert.match(between, /sudo killall -HUP mDNSResponder/, "and its resolver told to read the file again");
 });
 
+
+// On GitHub's Xcode 27 Mac, the newest iOS (27.1) had only the iPhone Duo,
+// without Photos, and the share flow failed to open Photos there (#839). The
+// workflow's pick, run here on made-up device lists: the plain iPhone, the
+// model share-photo.yaml's taps were measured on, on the newest iOS that has
+// one.
+test("the simulator picks the plain iPhone on the newest iOS that has one, not a newer iOS without one", () => {
+  const workflow = readFileSync(fileURLToPath(new URL("../.github/workflows/ios-simulator.yml", import.meta.url)), "utf8");
+  const script = /read -r udid runtime name < <\(node -e '\n([\s\S]*?)\n\s*' "\$RUNNER_TEMP\/devices\.json"\)/.exec(workflow)?.[1];
+  assert(script, "the workflow's pick, a node script over devices.json");
+  const dir = mkdtempSync(join(tmpdir(), "ios-pick-"));
+  const pick = (devices) => {
+    const file = join(dir, "devices.json");
+    writeFileSync(file, JSON.stringify({ devices }));
+    return spawnSync(process.execPath, ["-e", script, file], { encoding: "utf8" });
+  };
+  const runtime = (version) => `com.apple.CoreSimulator.SimRuntime.iOS-${version}`;
+  const phones = (...names) => names.map((name) => ({ name, udid: `${name}-udid` }));
+  try {
+    const xcode27 = {
+      [runtime("27-0")]: phones("iPhone 17", "iPhone 17e", "iPhone 18 Pro", "iPhone Air", "iPad (A16)"),
+      [runtime("27-1")]: phones("iPhone Duo"),
+      "com.apple.CoreSimulator.SimRuntime.watchOS-27-0": phones("Apple Watch SE 3 (40mm)"),
+    };
+    assert.equal(pick(xcode27).stdout.trim(), `iPhone 17-udid ${runtime("27-0")} iPhone 17`, "iOS 27.0's iPhone 17, not iOS 27.1's iPhone Duo");
+    const later = { ...xcode27, [runtime("27-2")]: phones("iPhone 18 Pro", "iPhone 17", "iPhone Duo") };
+    assert.equal(pick(later).stdout.trim(), `iPhone 17-udid ${runtime("27-2")} iPhone 17`, "the newest iOS with a plain iPhone");
+    const tens = { [runtime("26-9")]: phones("iPhone 17"), [runtime("26-10")]: phones("iPhone 17") };
+    assert.match(pick(tens).stdout, /iOS-26-10 /, "versions compared as numbers, 26.10 after 26.9");
+    const none = pick({ [runtime("27-1")]: phones("iPhone Duo", "iPhone 18 Pro") });
+    assert.notEqual(none.status, 0, "no plain iPhone anywhere fails");
+    assert.match(none.stderr, /no plain iPhone/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// The share flow starts in Photos. A phone without it fails when it boots,
+// saying so, not minutes later in the last flow (#839).
+test("the simulator stops before the flows when Photos, which the share flow opens, isn't on the iPhone", () => {
+  const workflow = readFileSync(fileURLToPath(new URL("../.github/workflows/ios-simulator.yml", import.meta.url)), "utf8");
+  const flow = readFileSync(join(DIR, "share-photo.yaml"), "utf8");
+  const photos = /^- launchApp:\n {4}appId: ([\w.]+)$/m.exec(flow.split(/^---$/m)[1])?.[1];
+  assert.equal(photos, "com.apple.mobileslideshow", "the share flow opens Photos");
+  const check = workflow.indexOf(`grep -qx ${photos} "$OUT/apps.txt"`);
+  assert(check >= 0, "the workflow looks for Photos among the iPhone's apps");
+  assert(workflow.indexOf('xcrun simctl listapps "$UDID"') < check, "in the list of what's installed");
+  assert(workflow.indexOf("simctl bootstatus") < check && check < workflow.indexOf("maestro test"), "once booted, before the flows");
+});
+
+// The TestFlight build, the simulator's flows and the share window's builds
+// use one Xcode (#779, #839): a check that passes on another Xcode says
+// nothing about the build testers get. Bumped in one place, this fails until
+// it's bumped in all of them.
+test("every iPhone build uses the same Xcode, on the image that has it", () => {
+  const read = (name) => readFileSync(fileURLToPath(new URL(`../.github/workflows/${name}`, import.meta.url)), "utf8");
+  const chosen = {};
+  for (const name of ["ios.yml", "ios-simulator.yml"]) {
+    const workflow = read(name);
+    const input = /\n {6}xcode:\n(?: {8}.*\n)*? {8}default: "([\d.]+)"\n/.exec(workflow)?.[1];
+    assert(input, `${name} takes the Xcode by hand, with a default`);
+    // Where no input reaches (a pull request, the nightly run), the same one.
+    const fallbacks = [...workflow.matchAll(/inputs\.xcode \|\| '([\d.]+)'/g)].map((match) => match[1]);
+    assert(fallbacks.length >= 3, `${name} falls back to its default for the image, the cache and the Xcode`);
+    assert.deepEqual([...new Set(fallbacks)], [input], `${name}'s fallbacks are its default`);
+    assert.match(workflow, /runs-on: \$\{\{ startsWith\(inputs\.xcode \|\| '[\d.]+', '26'\) && 'macos-26' \|\| 'xcode-27' \}\}/, `${name} runs Xcode 27 on the xcode-27 image`);
+    assert.match(workflow, /sudo xcode-select -s "\/Applications\/Xcode_\$XCODE\.app"/, `${name} selects the chosen Xcode`);
+    chosen[name] = input;
+  }
+  const share = read("share-window.yml");
+  const selected = [...share.matchAll(/sudo xcode-select -s \/Applications\/Xcode_([\d.]+)\.app/g)].map((match) => match[1]);
+  const macs = [...share.matchAll(/runs-on: (\S+)/g)].map((match) => match[1]).filter((image) => image !== "ubuntu-latest");
+  assert.equal(selected.length, macs.length, "each of share-window.yml's Mac jobs selects its Xcode");
+  assert(macs.every((image) => image === "xcode-27"), "on the xcode-27 image");
+  chosen["share-window.yml"] = [...new Set(selected)].join(", ");
+  assert.equal(new Set(Object.values(chosen)).size, 1, `one Xcode for every iPhone build: ${JSON.stringify(chosen)}`);
+});
+
+// The share window's first start took 42 seconds to be in place on iOS 27.0
+// against 7 on iOS 26.5, and the 6 seconds the flow gave it let every tap
+// land on the empty sheet (#839, run 41857567919). Maestro can't see inside
+// the window, so the flow asks scripts/share-window-ready.mjs, which reads
+// iOS's log. Real lines from both runs.
+const SET_27 = "2026-11-04 16:06:42.704 Df LingerShare[65788:2bc51] [com.apple.UIKit:ViewServices] <_UIViewServiceRootViewController: 0x106134400>: Set materialized view controller: <ShareViewController: 0x106134000>";
+const INSTALLED_27 = "2026-11-04 16:06:43.108 Df LingerShare[65788:2bc51] [com.apple.UIKit:ViewServices] <_UIViewServiceRootViewController: 0x106134400>: Installed materialized view controller in hierarchy: <ShareViewController: 0x106134000>";
+const INSTALLED_26 = "2026-11-04 09:47:22.011 Df LingerShare[50355:21e35] [com.apple.UIKit:ViewServices] <_UIViewServiceRootViewController: 0x103528c00>: Installed materialized view controller in hierarchy: <ShareViewController: 0x103528800>";
+
+test("the share window counts as up once iOS logs it in place, from its own process", async () => {
+  const { windowUp } = await import("./share-window-ready.mjs");
+  assert.equal(windowUp(""), false, "nothing logged yet");
+  assert.equal(windowUp(SET_27), false, "set, not yet in the hierarchy");
+  assert.equal(windowUp(`${SET_27}\n${INSTALLED_27}\n`), true, "iOS 27.0's line");
+  assert.equal(windowUp(INSTALLED_26), true, "iOS 26.5's line, the same");
+  assert.equal(windowUp(INSTALLED_27.replace("LingerShare[65788:2bc51]", "MobileSlideshow[63074:2bc51]")), false, "only from the share window's own process");
+  assert.equal(windowUp(INSTALLED_27.replace("<ShareViewController", "<SomeOtherController")), false, "only for Linger's window");
+});
+
+test("share-window-ready answers over http, from the log as it is at each question, and fails when it can't read it", async () => {
+  const { server } = await import("./share-window-ready.mjs");
+  const dir = mkdtempSync(join(tmpdir(), "share-window-ready-"));
+  const log = join(dir, "app.log");
+  const running = server(log);
+  await new Promise((done) => running.listen(0, "127.0.0.1", done));
+  const ask = async () => {
+    const answer = await fetch(`http://127.0.0.1:${running.address().port}/`);
+    return [answer.status, await answer.text()];
+  };
+  try {
+    const [status, body] = await ask();
+    assert.equal(status, 500, "no log to read is an error, not a no");
+    assert.match(body, /can't read/);
+    writeFileSync(log, `${SET_27}\n`);
+    assert.deepEqual(await ask(), [200, "not yet"]);
+    writeFileSync(log, `${SET_27}\n${INSTALLED_27}\n`);
+    assert.deepEqual(await ask(), [200, "up"], "read afresh: the line written since is seen");
+  } finally {
+    await new Promise((done) => running.close(done));
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the share flow waits for the share window before its first tap inside it, and fails if it never comes", () => {
+  const flow = readFileSync(join(DIR, "share-photo.yaml"), "utf8");
+  const commands = flow.split(/^---$/m)[1].split(/^- /m).slice(1).map((command) => command.replace(/^\s*#.*\n/gm, "").trimEnd());
+  const linger = commands.findIndex((command) => command === 'tapOn: "Linger"');
+  const firstPoint = commands.findIndex((command) => /^tapOn:\n {4}point: /.test(command));
+  assert(linger >= 0 && firstPoint > linger, "Linger tapped in the share sheet, then taps by position");
+  const between = commands.slice(linger + 1, firstPoint);
+  const asked = between.findIndex((command) => command === "runScript:\n    file: window-up.js");
+  const loop = between.findIndex((command) => /^repeat:\n {4}while:\n {6}true: \$\{!output\.windowUp\}\n {4}times: (\d+)\n/.test(command));
+  const sure = between.findIndex((command) => command === "assertTrue: ${output.windowUp}");
+  assert(asked >= 0 && loop > asked && sure > loop, "asked once, then again while it isn't up, then it must be");
+  const times = Number(/times: (\d+)/.exec(between[loop])[1]);
+  const pause = Number(/timeout: (\d+)/.exec(between[loop])?.[1]);
+  assert.match(between[loop], /runScript:\n {10}file: window-up\.js/, "each time round, it asks again");
+  assert(times * pause >= 90_000 && times * pause <= 300_000, `up to 1.5 to 5 minutes, not ${times * pause} ms`);
+  const script = readFileSync(join(DIR, "window-up.js"), "utf8");
+  assert.match(script, /http\.get\(WINDOW_READY\)/, "window-up.js asks share-window-ready");
+  assert.match(script, /answer\.status !== 200\) throw/, "and fails on anything but an answer");
+});
+
+test("the workflow starts share-window-ready on the flows' app.log before the flows, and tells them where", () => {
+  const workflow = readFileSync(fileURLToPath(new URL("../.github/workflows/ios-simulator.yml", import.meta.url)), "utf8");
+  const config = readFileSync(join(DIR, "config.yaml"), "utf8");
+  const log = workflow.indexOf('--predicate \'process == "Linger" OR process == "LingerShare"');
+  const ready = workflow.indexOf('node scripts/share-window-ready.mjs "$OUT/app.log" "$READY_PORT"');
+  const listening = workflow.indexOf("until grep -q '^listening' \"$OUT/share-window-ready.log\"");
+  const flows = workflow.indexOf("maestro test");
+  assert(log >= 0 && ready > log, "on the log the share window's lines go to, once it's being kept");
+  assert(listening > ready && flows > listening, "ready for questions before the flows start");
+  assert.match(workflow.slice(flows, workflow.indexOf("client/tests/ios\n", flows)), /-e "WINDOW_READY=http:\/\/127\.0\.0\.1:\$READY_PORT\/"/, "its address passed to the flows");
+  assert.match(workflow, /\n {6}READY_PORT: \d+\n/, "on a port of its own");
+  assert.match(config, /^# {3}WINDOW_READY /m, "config.yaml lists it with what the flows need");
+});
+
+// The flows read settings passed with `maestro test -e NAME=value`, listed in
+// three places: config.yaml, the workflow's command, and the guide's command
+// for a Mac of your own. WINDOW_READY was added to the first two, and the
+// guide's command would have stopped at the share flow (#873's review). Every
+// name a flow reads is in all three. A name a flow sets for another (a
+// subflow's TEXT) is the flows' own.
+test("every setting the flows read is in config.yaml, the workflow's command and the guide's", () => {
+  const files = [...readdirSync(DIR), ...readdirSync(join(DIR, "subflows")).map((name) => `subflows/${name}`)];
+  const read = new Set();
+  const own = new Set();
+  for (const name of files.filter((file) => file !== "config.yaml" && /\.(ya?ml|js)$/.test(file))) {
+    const text = readFileSync(join(DIR, name), "utf8");
+    if (name.endsWith(".js")) {
+      // Without comments and strings: what's left that's all capitals, and
+      // isn't the file's own or followed by `.` or `(`, comes from outside.
+      const code = text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "").replace(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`/g, '""');
+      const declared = new Set([...code.matchAll(/\b(?:const|let|var|function)\s+([A-Z][A-Z0-9_]+)\b/g)].map((match) => match[1]));
+      for (const [, setting] of code.matchAll(/\b([A-Z][A-Z0-9_]{2,})\b(?!\s*[.(])/g)) if (!declared.has(setting)) read.add(setting);
+    } else {
+      for (const [, setting] of text.matchAll(/\$\{([A-Z][A-Z0-9_]*)\}/g)) read.add(setting);
+      for (const [, setting] of text.matchAll(/^\s+([A-Z][A-Z0-9_]*):/gm)) own.add(setting);
+    }
+  }
+  const settings = [...read].filter((setting) => !own.has(setting)).sort();
+  assert(settings.includes("SERVER") && settings.includes("WINDOW_READY"), `found the flows' settings: ${settings}`);
+  const config = readFileSync(join(DIR, "config.yaml"), "utf8");
+  const listed = [...config.matchAll(/^# {3}([A-Z][A-Z0-9_]+) /gm)].map((match) => match[1]).sort();
+  assert.deepEqual(listed, settings, "config.yaml lists exactly the settings the flows read");
+  const workflow = readFileSync(fileURLToPath(new URL("../.github/workflows/ios-simulator.yml", import.meta.url)), "utf8");
+  const command = workflow.slice(workflow.indexOf("maestro test"), workflow.indexOf("client/tests/ios\n", workflow.indexOf("maestro test")));
+  assert.deepEqual([...command.matchAll(/-e "([A-Z][A-Z0-9_]+)=/g)].map((match) => match[1]).sort(), settings, "the workflow passes each of them");
+  const guide = readFileSync(GUIDE, "utf8");
+  const local = guide.slice(guide.indexOf("**On a Mac of your own**"));
+  const run = /maestro test \\\n([\s\S]*?)tests\/ios\n/.exec(local)?.[1];
+  assert(run, "the guide's command for a Mac of your own runs the flows");
+  assert.deepEqual([...run.matchAll(/-e ([A-Z][A-Z0-9_]+)=/g)].map((match) => match[1]).sort(), settings, "and passes each of them");
+  assert.match(local, /node \.\.\/scripts\/share-window-ready\.mjs app\.log 8099 &/, "and starts what WINDOW_READY points at");
+  assert.match(run, /-e WINDOW_READY=http:\/\/127\.0\.0\.1:8099\//, "on the same port");
+});

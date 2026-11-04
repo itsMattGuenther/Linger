@@ -2081,3 +2081,45 @@ anything that kept it running in the background.
   simulator's flows have no voice); a real iPhone locked in voice, a call in
   the middle, and the window let go of, are the TestFlight testers' (Matt
   has no iPhone).
+
+## Decided — the iPhone app builds with Xcode 27.1 (#839)
+
+**2026-11-04, Matt.** From April 2027 App Store Connect takes only builds
+made with the iOS 27 SDK. The iPhone app declares the scene life cycle such a
+build needs to open (#838), and Xcode moved once the testers had a build
+with it made by Xcode 26.6, so a problem on their phones points at one change
+or the other, not both at once.
+
+- **Every iPhone build moves together:** the TestFlight build (`ios.yml`),
+  the simulator's flows (`ios-simulator.yml`) and the share window's builds
+  (`share-window.yml`), all on GitHub's `xcode-27` image, a preview. Each
+  Xcode keeps a build cache of its own: restored under the other, the link
+  fails (#835).
+- **27.1, the image's default.** Its own simulator, iOS 27.1, has only the
+  iPhone Duo there, and no Photos, so the share flow couldn't start. The
+  simulator now takes the plain iPhone (an iPhone 17, the model the share
+  window's taps were measured on) on the newest iOS that has one, iOS 27.0,
+  and stops at once, saying so, if Photos isn't on it.
+- **Not 27.2 yet.** On 2026-11-04 GitHub was still rolling it out: some of
+  its Xcode 27 Macs had only 27.2's release candidate and no iOS 27.2
+  simulator, and Tauri won't build for the simulator without the one of its
+  own Xcode ("Xcode Simulator SDK 27.2 is not installed", run 41853188953).
+  Move once every Mac has it, all three workflows at once
+  (`scripts/ios-flows.test.mjs` fails when they differ).
+- **The share window's first start is slow on the iOS 27.0 simulator:** in
+  place 42 seconds after Linger was tapped in the share sheet, against 7 on
+  iOS 26.5, with an empty sheet meanwhile (run 41857567919). It then drew
+  as it should, in the same places. The flow gave it 6 seconds, so now it
+  waits for the window itself, read from iOS's log
+  (`scripts/share-window-ready.mjs`). Whether a real iPhone on iOS 27 is
+  slow there too is the testers' to see.
+- **Xcode 26.6 stays a choice by hand** (`-f xcode=26.6`, in `ios.yml` and
+  `ios-simulator.yml`), to tell whether a problem is Xcode 27's, until April
+  2027, when App Store Connect stops taking its builds.
+- **Maestro 2.12.1**, the newest. Its Xcode 27 fix, starting a simulator
+  without Simulator.app, isn't one the workflow needs: it starts the
+  simulator itself, and 2.11 drove the flows on Xcode 27 already.
+- **tauri-apps/tauri#16121**, still open, reports Xcode 27 failing to run a
+  Tauri 2.11 app with `tauri ios dev`. Linger is on Tauri 2.12 and builds
+  with `tauri ios build`; the simulator's flows and the testers' phones are
+  the check.

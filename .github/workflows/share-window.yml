@@ -38,13 +38,13 @@ concurrency:
 jobs:
   extension:
     name: the share extension builds for the iPhone
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # The Xcode the release builds with (ios.yml, #779).
-      - name: Xcode 26
-        run: sudo xcode-select -s /Applications/Xcode_26.6.app
+      # The Xcode the release builds with (ios.yml, #779, #839).
+      - name: Xcode 27
+        run: sudo xcode-select -s /Applications/Xcode_27.1.app
       # The extension alone: it doesn't need the app's Rust library. Unsigned,
       # so its build phase signs it ad hoc with its App Group (#811), as a
       # release build does.
@@ -62,10 +62,13 @@ jobs:
   # platform-specific breakage shows up.
   rust:
     name: the app's Rust builds for the iPhone
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The Xcode the release builds with (ios.yml, #779, #839).
+      - name: Xcode 27
+        run: sudo xcode-select -s /Applications/Xcode_27.1.app
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
@@ -83,17 +86,20 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: client/src-tauri
+          # Build scripts' output, kept in the cache, names the Xcode they ran
+          # with, and restored under another Xcode the link fails (#835).
+          key: xcode-27
       - name: build the app's Rust for the iPhone
         run: cargo build --manifest-path client/src-tauri/Cargo.toml --target aarch64-apple-ios
 
   screens:
     name: the share window's screens, on the iPhone Simulator
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Xcode 26
-        run: sudo xcode-select -s /Applications/Xcode_26.6.app
+      - name: Xcode 27
+        run: sudo xcode-select -s /Applications/Xcode_27.1.app
       # The real window with sample conversations, in each state and at the
       # biggest text size, to look at before anybody installs it.
       - name: screenshots

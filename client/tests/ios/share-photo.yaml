@@ -17,6 +17,7 @@
 # So inside it, the flow taps by position, measured on the iPhone 17 the
 # workflow picks, and records the screen; whether it worked is read from
 # the server (shared.js) and from the room in Linger, which Maestro can see.
+# When the window is up is read from iOS's log (window-up.js, #839).
 appId: com.apple.mobileslideshow
 ---
 - launchApp:
@@ -126,16 +127,28 @@ appId: com.apple.mobileslideshow
 - takeScreenshot: 13-share-sheet
 - startRecording: share-window
 - tapOn: "Linger"
-# The window takes a few seconds to start and rise, and Maestro can't see it
-# arrive, so this is the one wait in these flows that's a length of time,
-# not the thing itself: 6 seconds, then until the screen holds still. Waiting
-# for stillness alone returned before the window had begun to move. A tap
-# that still misses fails the flow (the server never gets the message); it
-# can't pass it.
-- extendedWaitUntil:
-    visible: "The share window has had 6 seconds to come up"
-    timeout: 6000
-    optional: true
+# The window takes its time to start, and Maestro can't see it arrive: iOS
+# shows an empty sheet meanwhile, which a tap does nothing on. Its first start
+# was in place 7 seconds after this tap on iOS 26.5, and 42 on iOS 27.0, when
+# the 6 seconds the flow waited then let every tap miss (#839). So the flow
+# asks every 2 seconds, for up to 2 minutes, whether iOS's log says the
+# window is in place (window-up.js), and goes on once it is, then waits until
+# the screen holds still. A tap that still misses fails the flow (the server
+# never gets the message); it can't pass it.
+- runScript:
+    file: window-up.js
+- repeat:
+    while:
+      true: ${!output.windowUp}
+    times: 60
+    commands:
+      - extendedWaitUntil:
+          visible: "The share window has had 2 more seconds to come up"
+          timeout: 2000
+          optional: true
+      - runScript:
+          file: window-up.js
+- assertTrue: ${output.windowUp}
 - waitForAnimationToEnd:
     timeout: 15000
 - takeScreenshot: 14-share-window

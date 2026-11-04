@@ -506,13 +506,15 @@ TestFlight to a friend's phone takes the best part of an hour. So
 `.github/workflows/ios-simulator.yml` builds the iPhone app for the iOS
 Simulator on one of GitHub's Macs, starts it on a simulated iPhone, and
 drives it with [Maestro](https://maestro.dev), which taps and types the way a
-person does. It runs on every pull request that touches the app
+person does. It builds with Xcode 27.1, as the TestFlight build does, and
+runs on the plain iPhone (an iPhone 17) of the newest iOS that has one. It
+runs on every pull request that touches the app
 (`client/src`, `client/src-tauri`, the flows; `scripts/ci-scope.mjs` says
 exactly), every night on `main`, and by hand:
 
 ```bash
 gh workflow run ios-simulator.yml --ref <your-branch>   # whatever the branch changed
-gh workflow run ios-simulator.yml --ref <your-branch> -f xcode=27.1   # the Xcode 27 canary (#835)
+gh workflow run ios-simulator.yml --ref <your-branch> -f xcode=26.6   # with Xcode 26.6, to tell whether a problem is Xcode 27's (#839)
 gh run download <run-id> -n iphone-simulator            # the pictures and logs
 ```
 
@@ -560,7 +562,11 @@ workflow picks (from `14-share-window.png`; measure again if the workflow
 ever picks another model), and records the screen
 (`screens/share-window.mp4`, where the 0.9 seconds of "Sent" can be seen).
 Whether the share worked is read from the server and from Linger, which
-Maestro can see. The step "the App Group and the Keychain, as the app left
+Maestro can see. When the window is up is read from iOS's log:
+`scripts/share-window-ready.mjs` watches `app.log` for the line iOS writes
+once the window is in place and answers the flow over http
+(`window-up.js`). Its first start took 7 seconds on iOS 26.5 and 42 on iOS
+27.0, with an empty sheet showing meanwhile (#839). The step "the App Group and the Keychain, as the app left
 them" prints what the app left the window: the list in the App Group's
 folder, and which access groups the Keychain's entries are in. Four things
 about Photos that cost a run each: until it has drawn its first screen, iOS
@@ -644,7 +650,7 @@ types once more when it doesn't, so a field that loses typing every time
 still fails. A password types directly (its field shows dots), and so does
 the share window's message (Maestro can't see the window).
 
-**On a Mac of your own**, with Xcode 26, Java 17 or later and
+**On a Mac of your own**, with Xcode 27, Java 17 or later and
 [Maestro](https://docs.maestro.dev/getting-started/installing-maestro):
 
 ```bash
@@ -655,11 +661,21 @@ xcrun simctl install booted src-tauri/gen/apple/build/arm64-sim/Linger.app
 ```
 
 Then start a server, the front and the trust as the workflow's "a server on
-this Mac, behind https" step does, and run
-`SIMCTL_CHILD_SSL_CERT_FILE=<certs>/ca.pem maestro test -e SERVER=… -e
-SETUP_LINK=… -e HOST_USERNAME=… -e HOST_PASSWORD=… tests/ios` from
-`client/`. `maestro studio` shows what Maestro sees on the screen, for
-writing a new flow.
+this Mac, behind https" step does. Still in `client/`, keep the simulator's
+log and start the helper that tells the share flow when the share window is
+up (#839), as the workflow's "Maestro's flows" step does, and run the flows:
+
+```bash
+xcrun simctl spawn booted log stream --level info --style compact \
+  --predicate 'process == "Linger" OR process == "LingerShare"' > app.log &
+node ../scripts/share-window-ready.mjs app.log 8099 &
+SIMCTL_CHILD_SSL_CERT_FILE=<certs>/ca.pem maestro test \
+  -e SERVER=… -e SETUP_LINK=… -e HOST_USERNAME=… -e HOST_PASSWORD=… \
+  -e WINDOW_READY=http://127.0.0.1:8099/ tests/ios
+```
+
+`tests/ios/config.yaml` says what each setting is. `maestro studio` shows
+what Maestro sees on the screen, for writing a new flow.
 
 **What it can't tell you:** how the app does with a real phone's memory (a
 simulator has the Mac's, so a photo decoded whole that crashed phones, #817,
