@@ -41,8 +41,11 @@ default.
   ships: updating from 0.5.4 on Windows and Linux, the testers' iPhone list
   for #838, and a Pixel on the release build (#837).
 - **The iPhone app built with Xcode 27.1 and the iOS 27 SDK** (#839), which
-  Apple requires from April 2027. Nothing is meant to look different. Owed
-  after it ships: the TestFlight testers open it and run #838's list again.
+  Apple requires from April 2027. Nothing is meant to look different. A
+  tester opened build 11.1 on 2026-11-05. Owed after it ships: the TestFlight
+  testers run #838's list on it, and say whether the share window takes long
+  to open the first time (10 to 42 seconds on the iOS 27 simulator, against 7
+  on iOS 26.5).
 
 **0.5.4 release — prepared 2026-11-02: Linger updates itself, and phones
 share straight to it.** The notes are `docs/releases/0.5.4.md`, and its one
