@@ -57,7 +57,8 @@ test("the local gate's containers never join Docker's own network", () => {
   // and webkit.sh's have no network or share the machine's.
   for (const script of ["scripts/check.sh", "scripts/actionlint.sh", "scripts/webkit.sh"]) {
     const text = readFileSync(new URL(script, root), "utf8").replace(/\\\n\s*/g, " ");
-    const runs = text.split("\n").filter((line) => /^\s*docker run\b/.test(line));
+    // Wherever on its line it starts (exec docker run, if docker run, a && b), but not in a comment.
+    const runs = text.split("\n").map((line) => line.replace(/(^|\s)#.*/, "")).filter((line) => /(?:^|[\s;&|(])docker\s+(?:container\s+)?run\b/.test(line));
     // check.sh starts none of its own today; a new one there is still read.
     if (script !== "scripts/check.sh") assert.ok(runs.length > 0, `${script} starts no container any more; drop it from this test`);
     for (const run of runs) {

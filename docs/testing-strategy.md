@@ -499,8 +499,9 @@ rules that came out of them:
   2026-11-04 before actionlint started, with nothing wrong in the pull request
   (#874). A failed download is now tried again five times, each try with 90 s
   to finish, the log saying so. Only the download: actionlint runs once, and
-  what it finds fails at once. `scripts/actionlint-test.sh` has a stand-in
-  `docker` fail or never answer, and checks both. The image rather than
+  what it finds fails at once. Ctrl-C stops it, rather than counting as a
+  failed try. `scripts/actionlint-test.sh` has a stand-in `docker` fail or
+  never answer, and checks all three. The image rather than
   actionlint's release binary, because the image brings its own shellcheck.
 - **Every download in a workflow is tried again when it fails** (#761):
   `scripts/workflow-downloads.test.mjs`, in the rules job and `check.sh`,
@@ -514,7 +515,8 @@ rules that came out of them:
   nothing to try again, so it goes in a script that does, as
   `scripts/actionlint.sh` does. It reads workflows, not the scripts they call:
   the relay and server-update checks (`coturn-test.sh`, `update-docker-test.sh`)
-  still fetch their images once, though only for changes to `deploy/`.
+  still fetch their images once, but only run when a change reaches them, not
+  on every pull request as the `rules` job does.
 - The page server runs on port 1421. `LINGER_TEST_PORT=1431` (any free port)
   moves it, so a second copy of the repository, such as a git worktree, can
   run its browser tests while the first runs its own.

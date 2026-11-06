@@ -108,6 +108,29 @@ if command -v timeout >/dev/null; then
   check "  ... the log says it retried" said "trying again in 1 s"
 fi
 
+# Ctrl-C reaches every process in the terminal's foreground group. Started as
+# the leader of its own group, the script stands where it would at a prompt.
+# (Not from bash: a job it starts in the background ignores SIGINT for good.)
+fresh
+interrupted="$(LINGER_PULL_MAX_TIME=20 PULLS="hang hang hang hang hang hang" PATH="$work/bin:$PATH" node -e '
+  const { spawn } = require("node:child_process");
+  const { readFileSync } = require("node:fs");
+  const started = Date.now();
+  const child = spawn("bash", ["scripts/actionlint.sh"], { detached: true, stdio: "ignore" });
+  const asked = setInterval(() => {
+    if (readFileSync(process.env.STANDIN + "/pulls", "utf8").trim() === "0") return;
+    clearInterval(asked);
+    process.kill(-child.pid, "SIGINT");
+  }, 20);
+  child.on("exit", (code) => console.log(code, Math.round((Date.now() - started) / 1000)));
+')"
+read -r status took <<<"$interrupted"
+under() { [ "$took" -lt "$1" ]; }
+check "Ctrl-C during a download stops the script" exited 130
+check "  ... at once, not when the try runs out of time" under 15
+check "  ... with no second try" pulled 1
+check "  ... and actionlint never starts" ran 0
+
 # A Mac has no `timeout`: nothing on this PATH but bash, dirname and the stand-ins.
 bare="$work/bare"
 mkdir "$bare"

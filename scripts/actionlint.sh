@@ -15,6 +15,10 @@
 #
 # Only the download is tried again. actionlint runs once, and what it finds
 # fails at once. A copy of the image already here is used without asking.
+# Ctrl-C stops it, and isn't counted as a failed try: docker can exit on it
+# like any other failure, which bash alone would carry on from, so the trap
+# says it was stopped, and --foreground keeps `timeout` and docker in the
+# group Ctrl-C reaches.
 #
 # The container has no network, and needs none: on Docker's own network it adds
 # a network interface to the machine for a moment, and Chromium in any other
@@ -28,11 +32,13 @@ image=rhysd/actionlint:1.7.12
 
 pull() {
   if command -v timeout >/dev/null; then
-    timeout "${LINGER_PULL_MAX_TIME:-90}" docker pull -q "$image" >/dev/null
+    timeout --foreground "${LINGER_PULL_MAX_TIME:-90}" docker pull -q "$image" >/dev/null
   else
     docker pull -q "$image" >/dev/null
   fi
 }
+
+trap 'exit 130' INT
 
 if ! docker image inspect "$image" >/dev/null 2>&1; then
   pause=1
