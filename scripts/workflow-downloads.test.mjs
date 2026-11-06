@@ -67,7 +67,7 @@ const NULL = String.raw`["']?\/dev\/null["']?(?:\s|$)`;
 
 /** What's wrong with one command, or null when it's fine. */
 function commandProblem({ command, piped }) {
-  if (/(?:^|[\s(`"'/])docker\s+\S/.test(command)) return "run Docker from a script that tries its downloads again, as scripts/actionlint.sh does";
+  if (/(?:^|[\s(`"'/])docker["'`)]*\s+\S|\$\{?DOCKER\b/.test(command)) return "run Docker from a script that tries its downloads again, as scripts/actionlint.sh does";
   // A wget run, not one named in a list of packages: an option or an address follows.
   if (/(?:^|[\s(])wget\s+(?:-|https?:|["'$])/.test(command)) return "use curl, with --retry 5 --retry-all-errors";
   if (!/(?:^|[\s(])curl\s/.test(command)) return null;
@@ -143,6 +143,8 @@ test("a download without retries is refused; a check, a package list or a retrie
     "- uses: docker/setup-buildx-action@0123456789abcdef",
     "cat deploy/docker/notes.txt",
     "docker",
+    'echo "docker"',
+    "echo docker",
     "# docker run --rm rhysd/actionlint:1.7.12",
   ];
   for (const line of fine) assert.equal(downloadProblem(line), null, line);
@@ -181,6 +183,13 @@ test("a download without retries is refused; a check, a package list or a retrie
     "sh -c 'docker run rhysd/actionlint:1.7.12'",
     "/usr/bin/docker run rhysd/actionlint:1.7.12",
     "env DOCKER_BUILDKIT=1 docker build .",
+    '"docker" run rhysd/actionlint:1.7.12',
+    "'docker' pull rhysd/actionlint:1.7.12",
+    '"/usr/bin/docker" run rhysd/actionlint:1.7.12',
+    "$(command -v docker) run rhysd/actionlint:1.7.12",
+    "`command -v docker` run rhysd/actionlint:1.7.12",
+    '"$DOCKER" run rhysd/actionlint:1.7.12',
+    "${DOCKER} pull rhysd/actionlint:1.7.12",
   ];
   for (const line of bad) assert.notEqual(downloadProblem(line), null, line);
 });

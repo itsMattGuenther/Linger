@@ -535,6 +535,20 @@ on a world that has changed.
   nothing to do is text, not a button (`docs/design/system.md`, Row), which
   mends the people card's names too; the iPhone tests check the focus and that
   no name is a button.
+- **#877: a Docker command with the word in quotes passed the new rule.** The
+  check that a workflow runs no Docker directly (#874) needed a space right
+  after `docker`, so `"docker" run` and `'docker' pull` went through. Caught
+  by Greptile. *Missed because* the table of forms had a whole command in
+  quotes, not the one word, the same gap as #763. *Changed:* the forms are in
+  the table in `scripts/workflow-downloads.test.mjs`, with a path, a
+  substitution and a variable for the command.
+- **#877: a test's own wait had no end.** The Ctrl-C test polled for the first
+  download, so a script that exited before one would have kept it, and the
+  `rules` job, waiting until the job's limit. Caught by Greptile. *Missed
+  because* each way the script was broken on purpose still reached the
+  download. *Changed:* the wait ends when the script does, broken on purpose
+  to prove it, and "Would each new test fail with the code wrong?" asks about
+  it in `docs/pr-questions.md`.
 
 ## Comments that were wrong
 

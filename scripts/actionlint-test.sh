@@ -122,7 +122,12 @@ interrupted="$(LINGER_PULL_MAX_TIME=20 PULLS="hang hang hang hang hang hang" PAT
     clearInterval(asked);
     process.kill(-child.pid, "SIGINT");
   }, 20);
-  child.on("exit", (code) => console.log(code, Math.round((Date.now() - started) / 1000)));
+  // Whatever it was waiting for: a script that exits before its first download
+  // has to fail this check, not leave it waiting until the job runs out of time.
+  child.on("exit", (code) => {
+    clearInterval(asked);
+    console.log(code, Math.round((Date.now() - started) / 1000));
+  });
 ')"
 read -r status took <<<"$interrupted"
 under() { [ "$took" -lt "$1" ]; }
