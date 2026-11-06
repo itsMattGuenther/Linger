@@ -154,7 +154,8 @@ Break the code the way a later edit would, and watch the test fail: take
 out each part it keeps, one at a time. Tests that read the source (#768),
 inherited the setting they prove (#757), used a roomier queue (#809),
 stopped a wait before it began (#802), or found a step's markers with the
-step gone (#858, #864, #865) passed broken code.
+step gone (#858, #864, #865) passed broken code. A wait in a test ends if
+what it waits on dies (#877).
 
 ### Does a check that reads code, commands or docs take every form, and fail on what it can't read?
 

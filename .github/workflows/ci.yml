@@ -407,6 +407,9 @@ jobs:
       - name: the AppImage's downloads are tried again through a slow server
         # One slow moment at ffmpeg.org failed a package build (#753).
         run: bash scripts/appimage-fetch-test.sh
+      - name: actionlint's download is tried again, and its findings are not
+        # One 502 from Docker Hub failed a pull request with nothing wrong in it (#874).
+        run: bash scripts/actionlint-test.sh
       - name: every file the living docs name exists
         # A renamed or deleted file leaves every doc naming it stale (#770).
         run: node --test scripts/doc-paths.test.mjs
@@ -493,7 +496,7 @@ jobs:
       - name: workflow files
         # A broken workflow doesn't fail; it just doesn't run, and the
         # required check waits forever. actionlint also shellchecks each step.
-        run: docker run --rm -v "$PWD:/repo:ro" -w /repo rhysd/actionlint:1.7.12 -color
+        run: bash scripts/actionlint.sh -color
 
   all-green:
     # The one required check (the "Protect main" ruleset). It passes when

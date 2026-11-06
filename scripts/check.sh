@@ -52,12 +52,10 @@ bash scripts/tidy-branches-test.sh >/dev/null
 bash scripts/apt-mirrors-test.sh >/dev/null
 bash scripts/apt-install-test.sh >/dev/null
 bash scripts/appimage-fetch-test.sh >/dev/null
+bash scripts/actionlint-test.sh >/dev/null
 if docker info >/dev/null 2>&1; then
   echo "== workflow files =="
-  # No network: on Docker's own network the container adds a network
-  # interface to this machine for a moment, and Chromium in any other
-  # check.sh running beside this one drops its page loads (#528).
-  docker run --rm --network none -v "$PWD:/repo:ro" -w /repo rhysd/actionlint:1.7.12 -no-color
+  bash scripts/actionlint.sh -no-color
 fi
 
 if on web || on shell || on packages; then

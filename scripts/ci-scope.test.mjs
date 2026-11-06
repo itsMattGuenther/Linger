@@ -52,6 +52,10 @@ test("the Tauri version check and the iPhone flows' own test run only in the rul
     "scripts/browser-fakes.test.mjs"]), []);
   assert.deepEqual(active(["client/tests/ios/link-open.yaml"]), ["ios"]);
 });
+test("actionlint's script and its test run only in the rules job (#874)", () => {
+  assert.deepEqual(active(["scripts/actionlint.sh", "scripts/actionlint-test.sh"]), []);
+  assert.equal(active(["scripts/actionlint-other.sh"]).length, 7);
+});
 test("the Windows hidden-window check runs for the shell, the list window and its own files (#594)", () => {
   for (const path of ["client/src-tauri/src/window.rs", "client/src/next/app/list/ListWindow.tsx",
     "client/scripts/windows-hidden-check.mjs", "client/scripts/windows-window.ps1"])

@@ -10,6 +10,11 @@
 // timeout or a 5xx, not a dropped or refused connection. wget isn't used: one
 // tool, one rule.
 //
+// A Docker command in a workflow is refused, whichever: run, pull, create,
+// compose up and build all fetch what isn't here, and none has a --retry. One
+// 502 from Docker Hub failed a pull request with nothing wrong in it (#874).
+// Docker goes in a script that tries its downloads again, as actionlint.sh does.
+//
 // Reads the workflows and the repository's own actions without a YAML
 // library: a command continued with a trailing backslash is joined into one
 // line first.
@@ -62,6 +67,7 @@ const NULL = String.raw`["']?\/dev\/null["']?(?:\s|$)`;
 
 /** What's wrong with one command, or null when it's fine. */
 function commandProblem({ command, piped }) {
+  if (/(?:^|[\s(`"'/])docker["'`)]*\s+\S|\$\{?DOCKER\b/.test(command)) return "run Docker from a script that tries its downloads again, as scripts/actionlint.sh does";
   // A wget run, not one named in a list of packages: an option or an address follows.
   if (/(?:^|[\s(])wget\s+(?:-|https?:|["'$])/.test(command)) return "use curl, with --retry 5 --retry-all-errors";
   if (!/(?:^|[\s(])curl\s/.test(command)) return null;
@@ -131,6 +137,15 @@ test("a download without retries is refused; a check, a package list or a retrie
     'curl -fsS -o/dev/null "$HEALTH"',
     'curl -fsS "$HEALTH" 1>/dev/null 2>/dev/null',
     'echo "the | in here is words" ; curl --version',
+    "bash scripts/actionlint.sh -color",
+    "- uses: docker/login-action@0123456789abcdef # v3",
+    "sudo apt-get install -y docker.io",
+    "- uses: docker/setup-buildx-action@0123456789abcdef",
+    "cat deploy/docker/notes.txt",
+    "docker",
+    'echo "docker"',
+    "echo docker",
+    "# docker run --rm rhysd/actionlint:1.7.12",
   ];
   for (const line of fine) assert.equal(downloadProblem(line), null, line);
   const bad = [
@@ -150,6 +165,31 @@ test("a download without retries is refused; a check, a package list or a retrie
     'curl -fsSL "$URL" 1> tool.jar',
     'curl -fsSL "$URL" &> tool.jar',
     'curl -fsSL --retry 5 --retry-all-errors -o a.jar "$A";curl -fsSL -o b.jar "$B"',
+    'docker run --rm -v "$PWD:/repo:ro" -w /repo rhysd/actionlint:1.7.12 -color',
+    "docker pull -q rhysd/actionlint:1.7.12",
+    "docker image pull rhysd/actionlint:1.7.12",
+    "docker container run rhysd/actionlint:1.7.12",
+    "docker create rhysd/actionlint:1.7.12",
+    "docker compose up -d",
+    "docker build -t linger:test .",
+    "docker --context ci run rhysd/actionlint:1.7.12",
+    "sudo docker run rhysd/actionlint:1.7.12",
+    "(docker run rhysd/actionlint:1.7.12)",
+    "set -e; docker run rhysd/actionlint:1.7.12",
+    "run: docker run rhysd/actionlint:1.7.12",
+    "version=$(docker run rhysd/actionlint:1.7.12 --version)",
+    "version=`docker run rhysd/actionlint:1.7.12 --version`",
+    'bash -c "docker run rhysd/actionlint:1.7.12"',
+    "sh -c 'docker run rhysd/actionlint:1.7.12'",
+    "/usr/bin/docker run rhysd/actionlint:1.7.12",
+    "env DOCKER_BUILDKIT=1 docker build .",
+    '"docker" run rhysd/actionlint:1.7.12',
+    "'docker' pull rhysd/actionlint:1.7.12",
+    '"/usr/bin/docker" run rhysd/actionlint:1.7.12',
+    "$(command -v docker) run rhysd/actionlint:1.7.12",
+    "`command -v docker` run rhysd/actionlint:1.7.12",
+    '"$DOCKER" run rhysd/actionlint:1.7.12',
+    "${DOCKER} pull rhysd/actionlint:1.7.12",
   ];
   for (const line of bad) assert.notEqual(downloadProblem(line), null, line);
 });
