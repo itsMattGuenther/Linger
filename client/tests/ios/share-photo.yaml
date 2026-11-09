@@ -180,6 +180,9 @@ appId: com.apple.mobileslideshow
 # Back in Linger, still on evenings from room.yaml, where the photo arrives.
 # Coming forward took 16 seconds once, so the page is waited for first: the
 # room's message box, or the list's row for it if it opened on the list.
+# When it opens on the room, nothing is tapped before the wait for the
+# message, and Maestro counts both waits from coming forward (#878): the
+# message's timeout is the page's 45 s and its own 30.
 - launchApp:
     appId: io.github.itsmattguenther.linger
     stopApp: false
@@ -193,7 +196,7 @@ appId: com.apple.mobileslideshow
       - tapOn: "#evenings"
 - extendedWaitUntil:
     visible: "From the share sheet."
-    timeout: 30000
+    timeout: 75000
 # The message box still has the keyboard from room.yaml, over the message's
 # words: put it away for the picture.
 - hideKeyboard:

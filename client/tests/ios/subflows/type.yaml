@@ -24,8 +24,10 @@ appId: io.github.itsmattguenther.linger
     commands:
       - eraseText: 120
       - inputText: ${TEXT}
+# Maestro counts a wait from the last typing (#878): 20 s from typing again,
+# or, with no second try, a look at what the first wait saw.
 - extendedWaitUntil:
     visible:
       text: ${TEXT}
       focused: true
-    timeout: 10000
+    timeout: 20000

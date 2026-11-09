@@ -641,10 +641,25 @@ something the flow already waited for. After setting up, the list arrived
 first and the server's name a moment later, and a one-look check for the
 name failed in one of the three runs that got that far.
 
-**Type through `subflows/type.yaml`**, not with a bare `inputText`:
-`- runFlow: {file: subflows/type.yaml, env: {TEXT: ...}}`, with the field
-tapped first. Maestro types at machine speed, and once, with the simulator
-busy, the field got the first letter of an address and lost the rest
+**A wait's timeout counts from the last tap, not from when it starts.**
+Maestro takes off the time since the last command that could change the
+screen: a tap, typing, a key, a script, a launch. Waits, asserts and
+screenshots don't count. So a wait straight after another gets what the
+first left: the wait for the server's name, 30 s, gave up after 12, since
+the wait for the list before it had taken 19 (#878). Give the second wait
+the first's time plus its own. `scripts/ios-flows.test.mjs` fails a wait
+whose timeout isn't longer than one before it on the same clock, inside a
+`runFlow` or `repeat` too. A `runFlow` with `when:` may not run, so the
+check follows the clock past it both ways. It counts an optional tap as a
+tap, so don't put one that usually finds nothing between two waits; use a
+`runFlow` with `when:` there.
+
+**Type through `subflows/type.yaml`**, not with a bare `inputText`: a
+`runFlow` with `file: subflows/type.yaml` and `TEXT` under its `env`, each on
+a line of its own as the flows have it (the wait check can't read a command
+in braces), with the field tapped first. Maestro types at machine speed, and
+once, with the simulator busy, the field got the first letter of an address
+and lost the rest
 (#863). The subflow waits for the field to hold the text, and erases it and
 types once more when it doesn't, so a field that loses typing every time
 still fails. A password types directly (its field shows dots), and so does
