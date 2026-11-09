@@ -163,10 +163,11 @@ For: ci
 Gaps: Tests written from the case in mind, not from the ways things fail
 
 Every form the language has: how a thing is written, where its line may
-start, and every way the code is reached. Checks took a review a form
-(#763, #771, #831, #833, #850). Start from a table of tricky inputs. Then list
-every place the reader skips a line, a section or a field, and justify
-each: one you can't is a quiet path, as two were in #841.
+start, what may follow it there, and every way the code is reached. Checks
+took a review a form (#763, #771, #831, #833, #850, #880). Start from a table
+of tricky inputs. Then list every place the reader skips a line, a section
+or a field, or forgets what it knew, and justify each: one you can't is a
+quiet path, as two were in #841 and #880.
 
 ### Does every step a doc tells somebody to take work as written?
 

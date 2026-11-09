@@ -549,6 +549,24 @@ on a world that has changed.
   download. *Changed:* the wait ends when the script does, broken on purpose
   to prove it, and "Would each new test fail with the code wrong?" asks about
   it in `docs/pr-questions.md`.
+- **#880: a comment after `commands:` hid the waits under it.** The new
+  check that a wait after another has time of its own (#878) found a nested
+  list by comparing its line exactly, so `commands: # each time` skipped the
+  list and its waits. Caught by Greptile. *Missed because* the table of
+  tricky inputs had braces, a list at the wrong depth and a missing timeout,
+  but not a comment after a property, which YAML allows on any line.
+  *Changed:* `scripts/ios-flows.test.mjs` reads a property with a comment
+  after it, tested on `commands:` and `timeout:`, and question 8 in
+  `docs/pr-questions.md` asks what may follow a thing on its line.
+- **#880: the wait check started each nested list afresh.** It checked the
+  waits inside a `runFlow` or `repeat` only among themselves, so a wait
+  inside a `runFlow` with `when:` and one after it, on the same clock,
+  passed. Caught by Greptile. *Missed because* each nested list I tested
+  started with a tap, which hid the boundary. *Changed:* the clock carries
+  into and out of what a `runFlow` or `repeat` runs, a `runFlow` with
+  `when:` is followed both ways, and a repeat's second time round starts on
+  its first's clock, each with a test across the boundary. Question 8 asks
+  where a reader forgets what it knew.
 
 ## Comments that were wrong
 
