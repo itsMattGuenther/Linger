@@ -121,6 +121,122 @@ test("the order is read strictly", () => {
   assert.throws(() => flowsOrder("executionOrder:\n  continueOnFailure: false\nsettings:\n  flowsOrder:\n    - a\n"), /no executionOrder\.flowsOrder/);
 });
 
+/**
+ * A flow's commands, by indentation, comments left out: each one's name, its
+ * line in the file, its timeout, whether it's optional or has a `when:`, and
+ * the commands inside it (a repeat's, or a runFlow's own).
+ */
+export function flowCommands(text) {
+  const at = text.search(/^---$/m);
+  assert(at >= 0, "a flow has --- before its commands");
+  const first = text.slice(0, at).split("\n").length + 1;
+  const lines = text.slice(at).split("\n").slice(1)
+    .map((line, i) => ({ line: first + i, text: line }))
+    .filter(({ text: line }) => line.trim() && !/^\s*#/.test(line));
+  return commandList(lines, 0);
+}
+
+function commandList(lines, indent) {
+  const commands = [];
+  for (const { line, text } of lines) {
+    const item = new RegExp(`^ {${indent}}- (\\w+)(?::\\s*(\\S?))?`).exec(text);
+    // Braces would hide a timeout, optional: true or when: from this reader.
+    if (item && /[{[]/.test(item[2] ?? "")) assert.fail(`line ${line}: write ${item[1]} out, a property a line, for this check to read it`);
+    if (item) commands.push({ name: item[1], line, own: [] });
+    // A property, or a line inside one, under the command's name; never a list at that depth.
+    else if (commands.length && text.startsWith(" ".repeat(indent + 4)) && !text.startsWith(`${" ".repeat(indent + 4)}- `)) commands.at(-1).own.push({ line, text });
+    else assert.fail(`line ${line}: can't read ${JSON.stringify(text)} as a command, or one's property`);
+  }
+  return commands.map(({ name, line, own }) => {
+    const key = (name) => own.find(({ text }) => text.startsWith(`${" ".repeat(indent + 4)}${name}:`))?.text ?? "";
+    const nested = own.findIndex(({ text }) => text === `${" ".repeat(indent + 4)}commands:`);
+    const inside = nested < 0 ? [] : own.slice(nested + 1);
+    const end = inside.findIndex(({ text }) => !text.startsWith(" ".repeat(indent + 5)));
+    return {
+      name,
+      line,
+      timeout: Number(/^\s*timeout: (\d+)$/.exec(key("timeout"))?.[1] ?? 0),
+      optional: key("optional") !== "" && (/^\s*optional: (true|false)$/.exec(key("optional")) ?? assert.fail(`line ${line}: can't read ${key("optional").trim()}`))[1] === "true",
+      when: key("when") !== "",
+      commands: commandList(end < 0 ? inside : inside.slice(0, end), indent + 6),
+    };
+  });
+}
+
+// Maestro (2.12.1's Orchestra.kt, adjustedToLatestInteraction) counts a
+// wait's timeout from the last command that could change the screen, not
+// from when the wait starts. Those are taps, typing, keys, scripts, launches
+// and waits for animations; waits, asserts and screenshots aren't. So two
+// waits with nothing like that between them share one clock, and the second
+// gets what the first left of its timeout: set-up's wait for the server's
+// name, 30 s, gave up after 12, since the wait for the list had taken 19
+// (#878). A wait after another has a larger timeout, the first's time and
+// its own. An optional tap or a runFlow with `when:` may do nothing, so the
+// clock may carry on past them; a repeat runs because what it's after isn't
+// there yet, and its taps bring it, so it counts as one. Waits inside a
+// repeat or a runFlow are checked among themselves.
+const NO_CHANGE = new Set(["extendedWaitUntil", "assertVisible", "assertNotVisible", "assertTrue", "takeScreenshot", "startRecording", "stopRecording"]);
+
+/** Each wait with no time of its own left after the waits before it on its clock, by line. */
+export function sharedClocks(commands, problems = []) {
+  let before = 0;
+  for (const command of commands) {
+    if (command.name === "extendedWaitUntil") {
+      if (!command.timeout) problems.push(`${command.line}: a wait with no timeout`);
+      else if (command.timeout <= before) problems.push(`${command.line}: ${command.timeout} ms, counted from the same tap as a wait of ${before} ms before it`);
+      before = Math.max(before, command.timeout);
+    } else if (!NO_CHANGE.has(command.name) && !command.optional && !command.when) {
+      before = 0;
+    }
+    sharedClocks(command.commands, problems);
+  }
+  return problems;
+}
+
+test("a wait after another, on the same clock, has time of its own left", () => {
+  const files = [...flows, ...readdirSync(join(DIR, "subflows")).filter((name) => name.endsWith(".yaml")).map((name) => `subflows/${name.slice(0, -5)}`)];
+  let waits = 0;
+  for (const name of files) {
+    const commands = flowCommands(readFileSync(join(DIR, `${name}.yaml`), "utf8"));
+    const all = (list) => list.flatMap((command) => [command, ...all(command.commands)]);
+    waits += all(commands).filter((command) => command.name === "extendedWaitUntil").length;
+    assert.deepEqual(sharedClocks(commands).map((problem) => `${name}.yaml:${problem}`), [], "make each its own time plus the longest before it (#878)");
+  }
+  assert(waits >= 20, `${waits} waits read`);
+  // A runFlow of a subflow counts as a tap, so each subflow has one it always makes.
+  for (const name of files.filter((file) => file.startsWith("subflows/"))) {
+    const commands = flowCommands(readFileSync(join(DIR, `${name}.yaml`), "utf8"));
+    assert(commands.some((command) => !NO_CHANGE.has(command.name) && !command.optional && !command.when), `${name}.yaml always taps, types or runs something`);
+  }
+});
+
+test("waits on one clock are found, and only those", () => {
+  const flow = (...commands) => `appId: a\n---\n${commands.join("\n")}\n`;
+  const wait = (ms, extra = "") => `- extendedWaitUntil:\n    visible: "x"\n    timeout: ${ms}${extra}`;
+  const found = (...commands) => sharedClocks(flowCommands(flow(...commands)));
+  // #878's flow, and the line the problem is on.
+  assert.deepEqual(found("- pressKey: Enter", wait(60000), "# the name", wait(30000)), ["8: 30000 ms, counted from the same tap as a wait of 60000 ms before it"]);
+  assert.deepEqual(found("- pressKey: Enter", wait(60000), wait(90000)), []);
+  assert.deepEqual(found(wait(60000), "- takeScreenshot: a", "- assertVisible: \"y\"", wait(60000)), ["8: 60000 ms, counted from the same tap as a wait of 60000 ms before it"]);
+  assert.equal(found(wait(60000), wait(30000), wait(45000)).length, 2, "the longest before it, not the last");
+  assert.deepEqual(found(wait(60000), "- tapOn: \"y\"", wait(30000)), [], "a tap starts the clock again");
+  assert.deepEqual(found(wait(60000), "- runScript: s.js", wait(30000)), []);
+  assert.equal(found(wait(60000), "- tapOn:\n    text: \"y\"\n    optional: true", wait(30000)).length, 1, "an optional tap may not tap");
+  assert.equal(found(wait(60000), "- runFlow:\n    when:\n      notVisible: \"y\"\n    commands:\n      - tapOn: \"y\"", wait(30000)).length, 1, "a runFlow with when: may not run");
+  assert.deepEqual(found(wait(60000), "- runFlow:\n    file: subflows/type.yaml", wait(30000)), []);
+  assert.deepEqual(found(wait(60000), "- repeat:\n    while:\n      notVisible: \"y\"\n    times: 3\n    commands:\n      - tapOn:\n          text: \"y\"\n          optional: true", wait(30000)), []);
+  // Inside a repeat, among its own commands.
+  assert.deepEqual(found("- repeat:\n    times: 2\n    commands:\n      - tapOn: \"y\"\n" + wait(9000, "\n    optional: true").replace(/^/gm, "      ") + "\n" + wait(5000).replace(/^/gm, "      ")), ["11: 5000 ms, counted from the same tap as a wait of 9000 ms before it"]);
+  assert.deepEqual(found("- extendedWaitUntil:\n    visible: \"x\""), ["3: a wait with no timeout"]);
+  assert.throws(() => found("- tapOn: \"y\"", "  text: \"z\""), /line 4: can't read/);
+  assert.throws(() => found("- repeat:\n    commands:\n    - tapOn: \"y\""), /line 5: can't read/, "a list where the parser doesn't look for one");
+  assert.throws(() => flowCommands("appId: a\n- tapOn: \"y\"\n"), /--- before its commands/);
+  assert.throws(() => found("- tapOn: {text: \"y\", optional: true}"), /line 3: write tapOn out/);
+  assert.throws(() => found("- runFlow: {when: {visible: \"y\"}, commands: [{tapOn: \"y\"}]}"), /line 3: write runFlow out/);
+  assert.throws(() => found("- tapOn:\n    text: \"y\"\n    optional: \"true\""), /line 3: can't read optional: "true"/);
+  assert.deepEqual(found(wait(60000), "- tapOn:\n    text: \"y\"\n    optional: false", wait(30000)), [], "optional: false taps");
+});
+
 // While XCUITest drove the simulator, iOS sometimes held its question, or
 // the link after it, until the driver let go, and a link flow timed out
 // (#847). The workflow approves the scheme ahead, for the app, the way

@@ -641,6 +641,17 @@ something the flow already waited for. After setting up, the list arrived
 first and the server's name a moment later, and a one-look check for the
 name failed in one of the three runs that got that far.
 
+**A wait's timeout counts from the last tap, not from when it starts.**
+Maestro takes off the time since the last command that could change the
+screen: a tap, typing, a key, a script, a launch. Waits, asserts and
+screenshots don't count. So a wait straight after another gets what the
+first left: the wait for the server's name, 30 s, gave up after 12, since
+the wait for the list before it had taken 19 (#878). Give the second wait
+the first's time plus its own. `scripts/ios-flows.test.mjs` fails a wait
+whose timeout isn't longer than one before it on the same clock. An
+optional tap, or a `runFlow` with `when:`, may do nothing, so the clock
+carries on past it.
+
 **Type through `subflows/type.yaml`**, not with a bare `inputText`:
 `- runFlow: {file: subflows/type.yaml, env: {TEXT: ...}}`, with the field
 tapped first. Maestro types at machine speed, and once, with the simulator

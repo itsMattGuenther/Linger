@@ -37,8 +37,11 @@ appId: io.github.itsmattguenther.linger
     visible: "No rooms yet."
     timeout: 60000
 # The server's name comes in its own request, after the list: the title says
-# "Linger" until it does. Waited for, not looked for once.
+# "Linger" until it does. Waited for, not looked for once. Maestro counts a
+# wait's timeout from the last tap or typing, not from when the wait starts,
+# so this one's is counted from the Enter, as the list's is: the list's 60 s
+# and its own 30. At 30, a list that took 19 s left it 12 (#878).
 - extendedWaitUntil:
     visible: "Porch"
-    timeout: 30000
+    timeout: 90000
 - takeScreenshot: 06-list-empty-server
