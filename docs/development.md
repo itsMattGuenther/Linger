@@ -652,10 +652,12 @@ whose timeout isn't longer than one before it on the same clock. An
 optional tap, or a `runFlow` with `when:`, may do nothing, so the clock
 carries on past it.
 
-**Type through `subflows/type.yaml`**, not with a bare `inputText`:
-`- runFlow: {file: subflows/type.yaml, env: {TEXT: ...}}`, with the field
-tapped first. Maestro types at machine speed, and once, with the simulator
-busy, the field got the first letter of an address and lost the rest
+**Type through `subflows/type.yaml`**, not with a bare `inputText`: a
+`runFlow` with `file: subflows/type.yaml` and `TEXT` under its `env`, each on
+a line of its own as the flows have it (the wait check can't read a command
+in braces), with the field tapped first. Maestro types at machine speed, and
+once, with the simulator busy, the field got the first letter of an address
+and lost the rest
 (#863). The subflow waits for the field to hold the text, and erases it and
 types once more when it doesn't, so a field that loses typing every time
 still fails. A password types directly (its field shows dots), and so does
