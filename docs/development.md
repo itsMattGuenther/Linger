@@ -648,9 +648,11 @@ screenshots don't count. So a wait straight after another gets what the
 first left: the wait for the server's name, 30 s, gave up after 12, since
 the wait for the list before it had taken 19 (#878). Give the second wait
 the first's time plus its own. `scripts/ios-flows.test.mjs` fails a wait
-whose timeout isn't longer than one before it on the same clock. An
-optional tap, or a `runFlow` with `when:`, may do nothing, so the clock
-carries on past it.
+whose timeout isn't longer than one before it on the same clock, inside a
+`runFlow` or `repeat` too. A `runFlow` with `when:` may not run, so the
+check follows the clock past it both ways. It counts an optional tap as a
+tap, so don't put one that usually finds nothing between two waits; use a
+`runFlow` with `when:` there.
 
 **Type through `subflows/type.yaml`**, not with a bare `inputText`: a
 `runFlow` with `file: subflows/type.yaml` and `TEXT` under its `env`, each on
