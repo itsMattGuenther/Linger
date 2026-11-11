@@ -42,8 +42,8 @@ appId: io.github.itsmattguenther.linger
 - takeScreenshot: 10-message-sent
 # The box keeps the keyboard after Send, for the next message. A finger
 # dragging the conversation puts it away, with no Done to do it (#881).
-# Not Maestro's hideKeyboard: its drag is so short that iOS takes it for a
-# tap, and a tap beside the box put the keyboard away before this did. The
+# Not Maestro's hideKeyboard, which put the keyboard away without this too,
+# most likely as a tap would: its drag is 26 points in 50 ms. The
 # keyboard's space bar is how Maestro sees the keyboard.
 - swipe:
     start: 50%, 30%
