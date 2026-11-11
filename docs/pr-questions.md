@@ -133,7 +133,9 @@ Gaps: Tests written from the case in mind, not from the ways things fail
 A phone held sideways, words taller than the window, the window resized
 while a card is open, the card's opener pressed again, straight from one
 card to the next, and only a keyboard or a screen reader. A topic's card
-failed five ways (#796).
+failed five ways (#796). And every screen a change reaches: hiding iOS's bar
+over the keyboard took Done from every field, and what stood in for it
+first reached the conversation alone (#883).
 
 ### Is a value shared between windows, or kept in storage, tested changing somewhere else?
 

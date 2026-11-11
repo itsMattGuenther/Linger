@@ -47,6 +47,15 @@ default.
   to open the first time (10 to 42 seconds on the iOS 27 simulator, against 7
   on iOS 26.5).
 
+- **No bar over the iPhone's keyboard** (#881, PR #883). iOS's ^ ∨ ✓ row
+  above the keyboard is gone in Linger, as in the phone's own messages app.
+  The message box sits right on the keyboard and Send is never half under
+  the bar, which could swallow a tap on it. With no ✓, a finger dragging
+  anywhere, or tapping anywhere but a field or a button, puts the keyboard
+  away; Send still keeps it up for the next message. The app only, no
+  server update. Owed after it ships: the TestFlight testers try it on a
+  real iPhone, in a room, in Search and in Settings, and with VoiceOver.
+
 **0.5.4 release — prepared 2026-11-02: Linger updates itself, and phones
 share straight to it.** The notes are `docs/releases/0.5.4.md`, and its one
 line is in `client/src/next/core/release-line.json`. From it on, installed
