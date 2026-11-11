@@ -223,7 +223,7 @@ describe("the phone's keyboard (T-1603)", () => {
   });
 });
 
-/** The conversation, which the test puts fingers on, and a field with the keyboard or none. */
+/** The page, which the test puts fingers on, and a field with the keyboard or none. */
 function touched(typing: boolean) {
   const now = { typing };
   const listeners = new Map<string, (event: Fingers) => void>();
@@ -238,12 +238,13 @@ function touched(typing: boolean) {
   return { field, at, fire, stop, listening: () => listeners.size, focus: () => void (now.typing = true) };
 }
 
-/** A message in the conversation, and the box a message is edited in, as `closest` places them. */
-const row = { closest: (selectors: string) => (selectors.includes("textarea") ? null : {}) };
+/** A message, the box a message is edited in, and a button, as `closest` places them. */
+const row = { closest: () => null };
 const editBox = { closest: (selectors: string) => (selectors.includes("textarea") ? {} : null) };
+const send = { closest: (selectors: string) => (selectors.includes("button") ? {} : null) };
 
 describe("putting the iPhone's keyboard away without its bar (#881)", () => {
-  it("does it once a finger dragging the conversation has moved far enough", () => {
+  it("does it once a finger dragging the page has moved far enough", () => {
     const { field, at, fire } = touched(true);
     fire("touchstart", at([[100, 400]]));
     fire("touchmove", at([[100, 400 - DRAG_PX + 1]]));
@@ -255,12 +256,27 @@ describe("putting the iPhone's keyboard away without its bar (#881)", () => {
     expect(field.blurs).toBe(1);
   });
 
-  it("does it when a finger tapping the conversation lifts", () => {
+  it("does it when a finger tapping the page lifts", () => {
     const { field, at, fire } = touched(true);
     fire("touchstart", at([[100, 400]]));
     fire("touchmove", at([[102, 401]]));
     expect(field.blurs).toBe(0);
     fire("touchend");
+    expect(field.blurs).toBe(1);
+  });
+
+  it("leaves a tap on a control to the control: Send keeps it for the next message", () => {
+    const { field, at, fire } = touched(true);
+    fire("touchstart", at([[370, 480]], send));
+    fire("touchend");
+    fire("click", at([], send));
+    expect(field.blurs).toBe(0);
+  });
+
+  it("does it for a drag that starts on a control, through what Search found, say (Greptile on #883)", () => {
+    const { field, at, fire } = touched(true);
+    fire("touchstart", at([[200, 400]], send));
+    fire("touchmove", at([[200, 400 - DRAG_PX]], send));
     expect(field.blurs).toBe(1);
   });
 
@@ -297,9 +313,10 @@ describe("putting the iPhone's keyboard away without its bar (#881)", () => {
     expect(field.blurs).toBe(0);
   });
 
-  it("does it for a click there, as VoiceOver's double tap is, but in a field", () => {
+  it("does it for a click, as VoiceOver's double tap is, but in a field or on a control", () => {
     const { field, at, fire } = touched(true);
     fire("click", at([], editBox));
+    fire("click", at([], send));
     expect(field.blurs).toBe(0);
     fire("click", at([], row));
     expect(field.blurs).toBe(1);

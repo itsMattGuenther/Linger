@@ -204,6 +204,10 @@ export const DRAG_PX = 10;
 /** Where a field that takes typing is, for `inTextField`. */
 const TEXT_FIELD = "textarea, input, [contenteditable]";
 
+/** Where a control is, which decides for itself what a tap on it does to the keyboard. */
+const CONTROL =
+  "button, a[href], label, select, summary, [role=button], [role=link], [role=option], [role=menuitem], [role=menuitemradio], [role=menuitemcheckbox], [role=checkbox], [role=radio], [role=switch], [role=tab], [role=slider]";
+
 /** The part of an element this needs: what it's inside. */
 export interface Placed {
   closest(selectors: string): unknown;
@@ -221,32 +225,45 @@ export interface Touchable {
   removeEventListener(type: "touchstart" | "touchmove" | "touchend" | "touchcancel" | "click", listener: (event: Fingers) => void): void;
 }
 
+/** Whether `target` is inside something `selectors` names. */
+function inside(target: EventTarget | Placed | null, selectors: string): boolean {
+  return target !== null && "closest" in target && typeof target.closest === "function" && target.closest(selectors) !== null;
+}
+
 /** Whether `target` is in a field that takes typing, which has the keyboard while it has focus. */
 export function inTextField(target: EventTarget | Placed | null): boolean {
-  return target !== null && "closest" in target && typeof target.closest === "function" && target.closest(TEXT_FIELD) !== null;
+  return inside(target, TEXT_FIELD);
 }
 
 /**
- * Put the keyboard away when a finger drags or taps `area` (#881). The
- * iPhone's bar over the keyboard, whose Done did that, is hidden
- * (`src-tauri/src/phone_keyboard.rs`), and as in the phone's own messages
- * app, a finger on the conversation does it instead. `typing` answers the
- * field that has the keyboard, if one has. A finger that starts in a field
- * leaves the keyboard be, since typing goes there, and so does a second
- * finger. A drag puts it away once the finger has moved `DRAG_PX`, a tap
- * once it lifts. A click there does too, but in a field: VoiceOver's double
- * tap is a click with no touch, and once a tap has put the keyboard away,
- * its click finds nothing to. Answers how to stop.
+ * Put the keyboard away when a finger drags or taps `area`, the whole page
+ * on an iPhone (#881). Its bar over the keyboard, whose Done did that, is
+ * hidden (`src-tauri/src/phone_keyboard.rs`), so a finger does it instead,
+ * as in the phone's own apps, on every screen: Search opens with its box
+ * typing, and a drag through what it found, or a tap beside it, puts the
+ * keyboard away (Greptile on #883). `typing` answers the field that has the
+ * keyboard, if one has.
+ *
+ * A finger that starts in a field leaves the keyboard be, since typing goes
+ * there, and so does a second finger. A drag puts it away once the finger
+ * has moved `DRAG_PX`, wherever it started. A tap does once it lifts, but on
+ * a control, which decides for itself: Send keeps the keyboard for the next
+ * message. A click does too, but on a control or in a field: VoiceOver's
+ * double tap is a click with no touch, and once a tap has put the keyboard
+ * away, its click finds nothing to. Answers how to stop.
  */
 export function closeKeyboardOnTouch(area: Touchable, typing: () => { blur(): void } | null): () => void {
-  let from: { x: number; y: number } | null = null;
+  let from: { x: number; y: number; tap: boolean } | null = null;
   const close = () => {
     from = null;
     typing()?.blur();
   };
   const start = (event: Fingers) => {
     const finger = event.touches[0];
-    from = event.touches.length === 1 && finger && !inTextField(event.target) && typing() ? { x: finger.clientX, y: finger.clientY } : null;
+    from =
+      event.touches.length === 1 && finger && !inTextField(event.target) && typing()
+        ? { x: finger.clientX, y: finger.clientY, tap: !inside(event.target, CONTROL) }
+        : null;
   };
   const move = (event: Fingers) => {
     const finger = event.touches[0];
@@ -255,13 +272,13 @@ export function closeKeyboardOnTouch(area: Touchable, typing: () => { blur(): vo
     else if (Math.hypot(finger.clientX - from.x, finger.clientY - from.y) >= DRAG_PX) close();
   };
   const end = () => {
-    if (from) close();
+    if (from?.tap) close();
   };
   const cancel = () => {
     from = null;
   };
   const click = (event: { target: Fingers["target"] }) => {
-    if (!inTextField(event.target)) typing()?.blur();
+    if (!inTextField(event.target) && !inside(event.target, CONTROL)) typing()?.blur();
   };
   area.addEventListener("touchstart", start, { passive: true });
   area.addEventListener("touchmove", move, { passive: true });

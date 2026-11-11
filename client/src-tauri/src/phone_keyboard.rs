@@ -9,9 +9,10 @@
 //! bar and sent nothing. The page can't see the bar, so it can't make up the
 //! difference. With no bar, the keyboard alone is what the page makes room
 //! for, every time, and the conversation keeps the 68 points the bar took.
-//! A message box needs no Previous and Next; a finger on the conversation
-//! puts the keyboard away instead of Done (`closeKeyboardOnTouch` in
-//! core/phone.ts), as in the phone's own messages app.
+//! A message box needs no Previous and Next. Instead of Done, a finger
+//! dragging the page, or tapping it anywhere but a field or a control, puts
+//! the keyboard away (`closeKeyboardOnTouch` in core/phone.ts), as in the
+//! phone's own apps.
 //!
 //! The bar is the web view's `inputAccessoryView`, which iOS asks the view
 //! taking the typing (WebKit's `WKContentView`) for when the keyboard comes
