@@ -178,17 +178,21 @@ appId: com.apple.mobileslideshow
 - takeScreenshot: 16-after-send
 - stopRecording
 # Back in Linger, still on evenings from room.yaml, where the photo arrives.
-# Coming forward took 16 seconds once, so the page is waited for first: the
-# room's message box, or the list's row for it if it opened on the list.
-# When it opens on the room, nothing is tapped before the wait for the
-# message, and Maestro counts both waits from coming forward (#878): the
-# message's timeout is the page's 45 s and its own 30.
+# Coming forward took 16 seconds once. iOS may also have closed Linger in
+# the background, with Photos and the share window open; then it starts
+# afresh, and once took 30 seconds to show the room (#879). So the page is
+# waited for first, for up to a minute: the room's message box, or the
+# list's row for it if it opened on the list. When it opens on the room,
+# nothing is tapped before the wait for the message, and Maestro counts both
+# waits from coming forward (#878): the message's timeout is the page's 60 s
+# and its own 30. At 30, after that fresh start, it had no time left and
+# looked once (#879).
 - launchApp:
     appId: io.github.itsmattguenther.linger
     stopApp: false
 - extendedWaitUntil:
     visible: "(Message in #evenings|#evenings)"
-    timeout: 45000
+    timeout: 60000
 - runFlow:
     when:
       notVisible: "Message in #evenings"
@@ -196,7 +200,7 @@ appId: com.apple.mobileslideshow
       - tapOn: "#evenings"
 - extendedWaitUntil:
     visible: "From the share sheet."
-    timeout: 75000
+    timeout: 90000
 # The message box still has the keyboard from room.yaml, over the message's
 # words: put it away for the picture.
 - hideKeyboard:
