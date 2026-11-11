@@ -34,6 +34,10 @@ mod phone_backup;
 // The phone's call bar (#429): voice runs in its page, and this holds it up.
 #[cfg(any(mobile, test))]
 mod phone_call;
+// iOS's bar over the keyboard, hidden (#881): the page makes room for the
+// keyboard alone.
+#[cfg(target_os = "ios")]
+mod phone_keyboard;
 // The iPhone's scenes on Tauri 2.12 (#836): its window outlives iOS letting
 // go of the scene. Tests read the answers here too.
 #[cfg(any(target_os = "ios", test))]
@@ -368,6 +372,9 @@ pub fn run() {
     // iPhone already lands in a folder marked "don't back up" (#790).
     #[cfg(target_os = "ios")]
     phone_backup::keep_out_of_backups();
+    // And so the first keyboard already comes without iOS's bar (#881).
+    #[cfg(target_os = "ios")]
+    phone_keyboard::hide_bar();
     #[cfg(desktop)]
     let app = desktop_app();
     #[cfg(mobile)]

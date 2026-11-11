@@ -11,7 +11,7 @@ import { createRoot } from "react-dom/client";
 import "./styles/app.css";
 import { followAppearance, loadTextSize, onAppearance } from "./core/appearance";
 import { followInputMode } from "./core/inputMode";
-import { followKeyboard, followTextSize, onPhone } from "./core/phone";
+import { closeKeyboardOnTouch, followKeyboard, followTextSize, onIPhone, onPhone, typingIn } from "./core/phone";
 import { refuseStrayDrops } from "../lib/drops";
 import { voiceEndedAwayFrom } from "../lib/gateway";
 import { hearShellDrops, takeDropsFromTheShell } from "../lib/shellDrops";
@@ -48,6 +48,9 @@ if (onPhone()) {
     );
   }
   if (window.visualViewport) followKeyboard(window.visualViewport, () => window.innerHeight, document.documentElement);
+  // An iPhone's keyboard comes without iOS's bar over it, and its Done: a
+  // finger dragging or tapping anywhere else puts it away (#881).
+  if (onIPhone()) closeKeyboardOnTouch(document, () => typingIn(document));
   // Voice runs in the page on a phone, on the web engine's own WebRTC, with
   // the phone's echo cancelling (#429, lib/pageVoice.ts).
   voiceInThePage();

@@ -197,8 +197,8 @@ appId: com.apple.mobileslideshow
 - extendedWaitUntil:
     visible: "From the share sheet."
     timeout: 75000
-# The message box still has the keyboard from room.yaml, over the message's
-# words: put it away for the picture.
+# room.yaml put the keyboard away. Should it be up again, over the message's
+# words, put it away for the picture.
 - hideKeyboard:
     optional: true
 - waitForAnimationToEnd:

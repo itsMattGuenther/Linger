@@ -25,6 +25,10 @@ appId: io.github.itsmattguenther.linger
     file: subflows/type.yaml
     env:
       TEXT: "Hello from the iPhone."
+# No bar of iOS's own over the keyboard (Previous, Next, Done) for Send to
+# sit under: Linger hides it, since the page was measured sometimes with it
+# and sometimes without, and a tap on Send once landed on the bar (#881).
+- assertNotVisible: "Previous"
 - takeScreenshot: 09-typing-a-message
 - tapOn: "Send"
 - extendedWaitUntil:
@@ -36,3 +40,14 @@ appId: io.github.itsmattguenther.linger
     file: sent.js
 - assertTrue: ${output.sent}
 - takeScreenshot: 10-message-sent
+# The box keeps the keyboard after Send, for the next message. A finger
+# dragging the conversation puts it away, with no Done to do it (#881).
+# Not Maestro's hideKeyboard, which put the keyboard away without this too,
+# most likely as a tap would: its drag is 26 points in 50 ms. The
+# keyboard's space bar is how Maestro sees the keyboard.
+- swipe:
+    start: 50%, 30%
+    end: 50%, 45%
+    duration: 600
+- assertNotVisible: "space"
+- takeScreenshot: 10b-keyboard-away

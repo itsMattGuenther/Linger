@@ -567,6 +567,16 @@ on a world that has changed.
   `when:` is followed both ways, and a repeat's second time round starts on
   its first's clock, each with a test across the boundary. Question 8 asks
   where a reader forgets what it knew.
+- **#883: Done went from every screen, and what replaced it came to one.**
+  Hiding iOS's bar over the keyboard took its Done from every field, but the
+  finger that puts the keyboard away instead was wired into the
+  conversation alone. Search opens with its box typing and had no way left
+  to put the keyboard away. Caught by Greptile. *Missed because* the change
+  was built and tested from #881's case, the message box, and nobody listed
+  the other screens with a field. *Changed:* it's on the whole page
+  (`main.tsx`), so no screen can be left out, and a tap on a control is left
+  to the control. "Is each screen tried at its limits?" in
+  `docs/pr-questions.md` asks about every screen a change reaches.
 
 ## Comments that were wrong
 
