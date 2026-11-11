@@ -17,7 +17,7 @@ import { JoinLine } from "./JoinLine";
 import { LeftLine } from "./LeftLine";
 import { ShareLine, type ShareLineState } from "./ShareLine";
 import { PollClosedLine } from "./PollClosedLine";
-import { onIPhone, onPhone } from "../../core/phone";
+import { closeKeyboardOnTouch, onIPhone, onPhone, typingIn } from "../../core/phone";
 import { type MessageActions, MessageRow } from "./MessageRow";
 import type { CustomEmojiByName, MentionLookup } from "./MessageText";
 import "./Conversation.css";
@@ -307,6 +307,14 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
       element.removeEventListener("touchcancel", up);
     };
   }, [holdOlder]);
+
+  // On an iPhone, a finger dragging or tapping the conversation puts the
+  // keyboard away: iOS's bar over it, with its Done, is hidden (#881).
+  useEffect(() => {
+    const element = scroller.current;
+    if (!element || !onIPhone()) return;
+    return closeKeyboardOnTouch(element, () => typingIn(document));
+  }, []);
 
   // Somebody taking hold of the conversation ends any aiming at a row the
   // page left behind (`stopAiming`); the follow below stops its own the

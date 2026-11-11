@@ -692,7 +692,13 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   header gone. `followKeyboard` holds the page to the part of the screen
   that's visible (`--phone-top`, `--phone-height`, `data-keyboard`), so the
   message box sits on the keyboard. Android's web view ignores the viewport's
-  `interactive-widget`, which was tried first.
+  `interactive-widget`, which was tried first. An iPhone's web view adds a
+  bar of its own over the keyboard (Previous, Next, Done), and the visible
+  part was measured sometimes with it and sometimes without, so Send once
+  sat half under it (#881). The bar is hidden
+  (`src-tauri/src/phone_keyboard.rs`), and a finger dragging or tapping the
+  conversation puts the keyboard away instead of its Done
+  (`closeKeyboardOnTouch`), as in the phone's own messages app.
 
 ## The list window
 

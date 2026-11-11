@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { chosenTextScale, followKeyboard, followTextSize, isIPhone, isLinuxApp, isPhone, type Online, type Showing, type TextPage, textScale, thisDevice, type Visible, watchBackground, watchNetwork } from "./phone";
+import { chosenTextScale, closeKeyboardOnTouch, DRAG_PX, type Fingers, followKeyboard, followTextSize, isIPhone, isLinuxApp, isPhone, type Online, type Showing, type TextPage, textScale, thisDevice, type Touchable, typingIn, type Visible, watchBackground, watchNetwork } from "./phone";
 import { windowRole } from "./role";
 
 describe("the phone app", () => {
@@ -220,6 +220,97 @@ describe("the phone's keyboard (T-1603)", () => {
     followKeyboard(shown, () => 914, page);
     shown.keyboard(56, 0);
     expect(page.dataset.keyboard).toBe("down");
+  });
+});
+
+/** The conversation, which the test puts fingers on, and a field with the keyboard or none. */
+function touched(typing: boolean) {
+  const now = { typing };
+  const listeners = new Map<string, (event: Fingers) => void>();
+  const area: Touchable = {
+    addEventListener: (type, listener) => void listeners.set(type, listener),
+    removeEventListener: (type) => void listeners.delete(type),
+  };
+  const field = { blurs: 0, blur: () => void (field.blurs += 1) };
+  const at = (points: [number, number][], target: Fingers["target"] = row): Fingers => ({ target, touches: points.map(([clientX, clientY]) => ({ clientX, clientY })) });
+  const fire = (type: string, event: Fingers = at([])) => listeners.get(type)?.(event);
+  const stop = closeKeyboardOnTouch(area, () => (now.typing ? field : null));
+  return { field, at, fire, stop, listening: () => listeners.size, focus: () => void (now.typing = true) };
+}
+
+/** A message in the conversation, and the box a message is edited in, as `closest` places them. */
+const row = { closest: (selectors: string) => (selectors.includes("textarea") ? null : {}) };
+const editBox = { closest: (selectors: string) => (selectors.includes("textarea") ? {} : null) };
+
+describe("putting the iPhone's keyboard away without its bar (#881)", () => {
+  it("does it once a finger dragging the conversation has moved far enough", () => {
+    const { field, at, fire } = touched(true);
+    fire("touchstart", at([[100, 400]]));
+    fire("touchmove", at([[100, 400 - DRAG_PX + 1]]));
+    expect(field.blurs).toBe(0);
+    fire("touchmove", at([[100 + DRAG_PX, 400]]));
+    expect(field.blurs).toBe(1);
+    fire("touchmove", at([[100, 300]]));
+    fire("touchend");
+    expect(field.blurs).toBe(1);
+  });
+
+  it("does it when a finger tapping the conversation lifts", () => {
+    const { field, at, fire } = touched(true);
+    fire("touchstart", at([[100, 400]]));
+    fire("touchmove", at([[102, 401]]));
+    expect(field.blurs).toBe(0);
+    fire("touchend");
+    expect(field.blurs).toBe(1);
+  });
+
+  it("leaves it for a finger that starts in a field, where the typing goes", () => {
+    const { field, at, fire } = touched(true);
+    fire("touchstart", at([[100, 400]], editBox));
+    fire("touchmove", at([[100, 300]], editBox));
+    fire("touchend");
+    expect(field.blurs).toBe(0);
+  });
+
+  it("leaves it for two fingers, and for a touch iOS took over", () => {
+    const { field, at, fire } = touched(true);
+    fire("touchstart", at([[100, 400], [200, 400]]));
+    fire("touchend");
+    fire("touchstart", at([[100, 400]]));
+    fire("touchmove", at([[100, 400], [200, 400]]));
+    fire("touchmove", at([[100, 300]]));
+    fire("touchend");
+    fire("touchstart", at([[100, 400]]));
+    fire("touchcancel");
+    fire("touchend");
+    expect(field.blurs).toBe(0);
+  });
+
+  it("puts away only a keyboard that was up as the finger came down", () => {
+    const { field, at, fire, focus } = touched(false);
+    fire("touchstart", at([[100, 400]]));
+    fire("touchend");
+    // Reply, say, puts the box in focus during the tap: its keyboard stays.
+    fire("touchstart", at([[100, 400]]));
+    focus();
+    fire("touchend");
+    expect(field.blurs).toBe(0);
+  });
+
+  it("stops listening when asked", () => {
+    const { listening, stop } = touched(true);
+    expect(listening()).toBe(4);
+    stop();
+    expect(listening()).toBe(0);
+  });
+
+  it("knows which field has the keyboard: one that takes typing", () => {
+    const box = { ...editBox, blur: () => undefined };
+    const message = { ...row, blur: () => undefined };
+    expect(typingIn({ activeElement: box })).toBe(box);
+    expect(typingIn({ activeElement: message })).toBeNull();
+    expect(typingIn({ activeElement: editBox })).toBeNull();
+    expect(typingIn({ activeElement: null })).toBeNull();
   });
 });
 
