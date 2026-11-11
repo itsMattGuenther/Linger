@@ -297,9 +297,17 @@ describe("putting the iPhone's keyboard away without its bar (#881)", () => {
     expect(field.blurs).toBe(0);
   });
 
+  it("does it for a click there, as VoiceOver's double tap is, but in a field", () => {
+    const { field, at, fire } = touched(true);
+    fire("click", at([], editBox));
+    expect(field.blurs).toBe(0);
+    fire("click", at([], row));
+    expect(field.blurs).toBe(1);
+  });
+
   it("stops listening when asked", () => {
     const { listening, stop } = touched(true);
-    expect(listening()).toBe(4);
+    expect(listening()).toBe(5);
     stop();
     expect(listening()).toBe(0);
   });

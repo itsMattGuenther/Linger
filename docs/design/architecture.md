@@ -697,8 +697,9 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   part was measured sometimes with it and sometimes without, so Send once
   sat half under it (#881). The bar is hidden
   (`src-tauri/src/phone_keyboard.rs`), and a finger dragging or tapping the
-  conversation puts the keyboard away instead of its Done
-  (`closeKeyboardOnTouch`), as in the phone's own messages app.
+  conversation, or VoiceOver's double tap there, puts the keyboard away
+  instead of its Done (`closeKeyboardOnTouch`), as in the phone's own
+  messages app.
 
 ## The list window
 

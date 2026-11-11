@@ -215,10 +215,10 @@ export interface Fingers {
   touches: ArrayLike<{ clientX: number; clientY: number }>;
 }
 
-/** The part of an element this needs to hear fingers on it. */
+/** The part of an element this needs to hear fingers on it, and clicks. */
 export interface Touchable {
-  addEventListener(type: "touchstart" | "touchmove" | "touchend" | "touchcancel", listener: (event: Fingers) => void, options: { passive: true }): void;
-  removeEventListener(type: "touchstart" | "touchmove" | "touchend" | "touchcancel", listener: (event: Fingers) => void): void;
+  addEventListener(type: "touchstart" | "touchmove" | "touchend" | "touchcancel" | "click", listener: (event: Fingers) => void, options: { passive: true }): void;
+  removeEventListener(type: "touchstart" | "touchmove" | "touchend" | "touchcancel" | "click", listener: (event: Fingers) => void): void;
 }
 
 /** Whether `target` is in a field that takes typing, which has the keyboard while it has focus. */
@@ -234,7 +234,9 @@ export function inTextField(target: EventTarget | Placed | null): boolean {
  * field that has the keyboard, if one has. A finger that starts in a field
  * leaves the keyboard be, since typing goes there, and so does a second
  * finger. A drag puts it away once the finger has moved `DRAG_PX`, a tap
- * once it lifts. Answers how to stop.
+ * once it lifts. A click there does too, but in a field: VoiceOver's double
+ * tap is a click with no touch, and once a tap has put the keyboard away,
+ * its click finds nothing to. Answers how to stop.
  */
 export function closeKeyboardOnTouch(area: Touchable, typing: () => { blur(): void } | null): () => void {
   let from: { x: number; y: number } | null = null;
@@ -258,15 +260,20 @@ export function closeKeyboardOnTouch(area: Touchable, typing: () => { blur(): vo
   const cancel = () => {
     from = null;
   };
+  const click = (event: { target: Fingers["target"] }) => {
+    if (!inTextField(event.target)) typing()?.blur();
+  };
   area.addEventListener("touchstart", start, { passive: true });
   area.addEventListener("touchmove", move, { passive: true });
   area.addEventListener("touchend", end, { passive: true });
   area.addEventListener("touchcancel", cancel, { passive: true });
+  area.addEventListener("click", click, { passive: true });
   return () => {
     area.removeEventListener("touchstart", start);
     area.removeEventListener("touchmove", move);
     area.removeEventListener("touchend", end);
     area.removeEventListener("touchcancel", cancel);
+    area.removeEventListener("click", click);
   };
 }
 
