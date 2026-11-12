@@ -313,8 +313,15 @@ notifications added in the same release (step 5).
 **Yes**. All of it encrypted in transit: **Yes** (https and wss only, and
 voice is encrypted by WebRTC). Account creation: **username and
 password**. Delete account URL: `https://linger.im/delete-account`. A way to
-delete some data without deleting the account: **Yes** (a person deletes
-their own messages and files).
+delete some data without deleting the account: **left unanswered** (it's
+optional). A person can delete their own messages and files, but "Yes" asks
+for a web page saying how, and linger.im has none yet; answer it once one
+exists.
+
+Each data type's own **Save** only holds the answers on the page: leaving
+it loses everything since the last **Save draft**. So save a draft after
+each section, then **Save** on Preview, which is enabled only once the
+privacy policy and the target age are in (2026-11-12, filled in for 0.5.5).
 
 *Data types*, every one collected, **not shared**, **not** processed
 ephemerally (except search), for **App functionality**:
