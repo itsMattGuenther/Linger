@@ -48,12 +48,38 @@ export interface ServerBodyActions {
   /** The host's way from an empty place to Settings → Hosting (decision 17). */
   onHost?: (section: "rooms" | "invites") => void;
   /**
-   * On the phone (#830): a room held raises its notifications on this phone.
-   * With them off for this server, its one item is the way to turn them on.
+   * On the phone (#830), from a server that can notify it: a room held
+   * raises its notifications on this phone. With them off for this server,
+   * its one item is the way to turn them on.
    */
   roomPush?: RoomPush;
   /** The conversation showing beside the list, on this server: its row, or its person's, is marked (#351). */
   showing?: RoomId | null;
+}
+
+/**
+ * A listing's actions for its body, every one by name. Both lists draw a
+ * body from a listing (ServerSection with several servers, ListView with
+ * one), and each used to name the actions it passed: one added here could
+ * reach neither, as `roomPush` didn't (#888). An action missing below is a
+ * type error.
+ */
+export function bodyActions(from: ServerBodyActions): ServerBodyActions {
+  const all: { [K in keyof Required<ServerBodyActions>]: ServerBodyActions[K] } = {
+    onOpenRoom: from.onOpenRoom,
+    onOpenDm: from.onOpenDm,
+    onOpenPerson: from.onOpenPerson,
+    onMessage: from.onMessage,
+    onKnock: from.onKnock,
+    safetyFor: from.safetyFor,
+    onReports: from.onReports,
+    onStartDm: from.onStartDm,
+    onLeaveDm: from.onLeaveDm,
+    onHost: from.onHost,
+    roomPush: from.roomPush,
+    showing: from.showing,
+  };
+  return all;
 }
 
 /** A room's notifications on this phone (#830), for its held menu. */
@@ -555,7 +581,15 @@ const RoomItem = memo(function RoomItem({
 }) {
   const [held, setHeld] = useState<HTMLButtonElement | null>(null);
   const choice = push?.on ? push.choice(room.id) : null;
-  const pick = (to: PushRoomChoice | null) => () => push?.set(room.id, to);
+  // A choice closes the sheet, as every held sheet's do: the menu leaves that to its owner.
+  const pick = (to: PushRoomChoice | null) => () => {
+    setHeld(null);
+    push?.set(room.id, to);
+  };
+  const toSettings = () => {
+    setHeld(null);
+    push?.settings();
+  };
   const items: MenuItem[] = !push
     ? []
     : push.on
@@ -563,9 +597,9 @@ const RoomItem = memo(function RoomItem({
           { id: "off", label: "No notifications", checked: choice === null, onSelect: pick(null) },
           { id: "wakes", label: "When it wakes up", checked: choice === "wakes", onSelect: pick("wakes") },
           { id: "every", label: "Every message", checked: choice === "every", onSelect: pick("every") },
-          { id: "settings", label: "Notification settings", icon: "bell", onSelect: push.settings },
+          { id: "settings", label: "Notification settings", icon: "bell", onSelect: toSettings },
         ]
-      : [{ id: "settings", label: "Turn on notifications", icon: "bell", onSelect: push.settings }];
+      : [{ id: "settings", label: "Turn on notifications", icon: "bell", onSelect: toSettings }];
   return (
     <Row
       hold={
@@ -574,8 +608,8 @@ const RoomItem = memo(function RoomItem({
               onHold: setHeld,
               raised: held ? (
                 <HeldSheet
-                  label={`Notifications from ${room.name}`}
-                  head={room.name}
+                  label={`Notifications from #${room.name}`}
+                  head={`#${room.name}`}
                   anchor={boxOf(held)}
                   items={items}
                   onClose={(reason) => {

@@ -60,8 +60,9 @@ const DESKTOP: &[&str] = &["linux", "macOS", "windows"];
 const PHONE: &[&str] = &["android", "iOS"];
 
 /// Commands a phone never gets (SPEC §4.15): no voice in the core (the
-/// phone's runs in its page, #429), no notifications but the call bar
-/// (`phone_call.rs`), no in-app updates, no other windows, no tray, nothing
+/// phone's runs in its page, #429), no desktop notifications (a phone's come
+/// from its servers, `phone_push.rs`, and the call bar is `phone_call.rs`),
+/// no in-app updates, no other windows, no tray, nothing
 /// started at sign-in, no Linux clipboard workaround. Its chimes it does play
 /// (`phone_sound.rs`), and it reads its own version (`app_version`), which
 /// installs nothing.

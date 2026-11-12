@@ -101,7 +101,7 @@ export interface SettingsHolder {
   section?: SettingsKey;
   /** With several servers, the one it opens on (#719); the first in your order otherwise. */
   server?: string;
-  /** The phone app: no Windows, no Notifications, no microphones and no updates (SPEC §4.15). */
+  /** The phone app: no Windows, no microphones and no updates, and Notifications are the phone's (SPEC §4.15, #830). */
   phone: boolean;
 }
 

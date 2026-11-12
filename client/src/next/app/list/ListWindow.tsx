@@ -1892,7 +1892,9 @@ function listingOf(
     onStartDm: (people) => startDm(api, people),
     onLeaveDm: (room) => leaveDm(api, room),
     onHost: (section) => shell.settings(section, baseUrl),
-    roomPush: onPhone() ? roomPushOn(api, baseUrl, info) : undefined,
+    // Only where it can be turned on: a server too old for it, or whose
+    // host turned it off, has nothing for a held room to raise.
+    roomPush: onPhone() && pushSupport(info) === "on" ? roomPushOn(api, baseUrl, info) : undefined,
     showing: showingHere,
     saveLine: me ? (line) => said(saveStatus(api, withLine(me.status, line))) : undefined,
   };
@@ -1906,7 +1908,7 @@ function listingOf(
 function roomPushOn(api: ServerSession["api"], baseUrl: string, info: ListedInfo | undefined): RoomPush {
   const now = phonePush(baseUrl);
   return {
-    on: now.on && pushSupport(info) === "on",
+    on: now.on,
     choice: (room) => roomChoice(now.settings, room),
     set: (room, choice) => {
       void changePush(api, baseUrl, info ?? {}, withRoom(phonePush(baseUrl).settings, room, choice));

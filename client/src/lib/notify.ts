@@ -85,9 +85,12 @@ export function setDmAlerts(on: (() => boolean) | null): void {
 }
 
 /**
- * The phone app raises no notifications at all, open or closed (SPEC §4.15):
- * no banner and nothing asking for attention. Its in-app sounds still play,
- * as they would on a computer. Set once, at startup (`next/main.tsx`).
+ * The phone app's page raises no notifications of its own (SPEC §4.15): no
+ * banner and nothing asking for attention. Its in-app sounds still play, as
+ * they would on a computer. A phone's notifications come from its servers,
+ * through Apple or Google, only once somebody turns them on (#830,
+ * `lib/push.ts`), and none while Linger is on screen. Set once, at startup
+ * (`next/main.tsx`).
  */
 let noNotifications = false;
 

@@ -504,6 +504,20 @@ mockIPC((cmd, args) => {
     case "phone_call_bar":
       note(`${cmd}:${JSON.stringify(a)}`);
       return null;
+    // Phone notifications (#830, src-tauri/src/phone_push.rs). `?pushdenied`:
+    // the phone has said no to Linger's notifications.
+    case "push_permission":
+      note(`${cmd}:${JSON.stringify(a)}`);
+      return query.has("pushdenied") ? "denied" : "granted";
+    case "push_address":
+      return { service: "fcm", address: "this-phone" };
+    case "push_keys":
+      return { public_key: "BKey", auth_secret: "auth" };
+    case "push_forget":
+      note(`${cmd}:${JSON.stringify(a)}`);
+      return null;
+    case "push_opened":
+      return null;
     default:
       return null;
   }
@@ -776,6 +790,10 @@ const SIGNUPS_PAUSED =
 const SIGN_INS_PAUSED = "Too many sign-in tries from your network in the last minute. Try again in 12 seconds.";
 const SERVER_BUSY = "The server is busy letting other people in. Try again in a moment.";
 
+/** Linger's push relay, as a `?push` server names it (#830). */
+const PUSH_RELAY = "https://relay.example";
+let pushDevices = 0;
+
 const realFetch = window.fetch.bind(window);
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
@@ -784,6 +802,12 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   if (url.hostname === down) {
     note(`unreachable ${server}${url.pathname.slice("/api/v1".length)}`);
     throw new TypeError("Failed to fetch");
+  }
+  // Linger's push relay (#830, `?push`): it seals the phone's push address.
+  if (url.origin === PUSH_RELAY) {
+    const asked = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : {};
+    note(`seal ${String(asked.service)} ${String(asked.address)}`);
+    return json({ token: `sealed-${String(asked.address)}` });
   }
   const state = states[server];
   if (!state || !url.pathname.startsWith("/api/v1")) return realFetch(input, init);
@@ -996,6 +1020,21 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
     return refuse(404, "NOT_FOUND", "That message is gone.");
   }
   if (path === "/me/notify-rules") return json([]);
+  // This phone's notifications (#830, PROTOCOL §5), on a `?push` server.
+  if (path === "/push/devices" && method === "POST") {
+    pushDevices += 1;
+    note(`push on ${server} ${String(body.sealed_token)} ${JSON.stringify(body.settings)}`);
+    return json({ id: `device-${pushDevices}`, settings: body.settings }, 201);
+  }
+  const pushDevice = /^\/push\/devices\/([^/]+)$/.exec(path);
+  if (pushDevice && method === "PATCH") {
+    note(`push change ${server} ${pushDevice[1] ?? ""} ${JSON.stringify(body.settings)}`);
+    return json({ id: pushDevice[1], settings: body.settings });
+  }
+  if (pushDevice && method === "DELETE") {
+    note(`push off ${server} ${pushDevice[1] ?? ""}`);
+    return new Response(null, { status: 204 });
+  }
   // Report and block (PROTOCOL §5): The Good Company's; the others predate them.
   if (server === SERVER && path === "/me/blocks" && method === "GET") return json([...blocks]);
   const blockOf = server === SERVER ? /^\/me\/blocks\/([^/]+)$/.exec(path) : null;
@@ -1068,6 +1107,8 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
       file_expiry_days: 90,
       // `?screens`: the server passes shared screens on (#360, #746).
       ...(query.has("screens") ? { screens: true } : {}),
+      // `?push`: The Good Company notifies phones, through a relay (#830).
+      ...(query.has("push") && server === SERVER ? { push: true, push_relay: PUSH_RELAY } : {}),
       // `?hostissues`: the server you host has a nearly full disk and no
       // backup for four days (#582). Said to the host alone, as a server does.
       ...(query.has("hostissues") && server === SERVER && state.me?.is_host

@@ -298,6 +298,26 @@ takes only bundles signed with this key. Play Console's App integrity page
 shows the app signing key's SHA-256 fingerprint, and it must match
 `client/src-tauri/android-release-cert.sha256`.
 
+**Once, with the first release that has phone notifications (#830, #888)**,
+update Play Console's **Data safety** form (Policy → App content). The
+answers change because the app now takes Google's Firebase messaging,
+which runs only once somebody turns notifications on:
+
+- **Device or other IDs: collected**, not shared, not optional for
+  notifications but notifications themselves are. It's the push address
+  Google gives the phone, which goes to Linger's relay to be sealed and, in
+  that sealed form, to the person's server. Purpose: app functionality.
+  Processed in transit only, encrypted: yes.
+- **Messages: not collected by Linger.** A notification's words go from the
+  person's own server to the phone encrypted so the relay and Google can't
+  read them; they're processed only on the phone.
+- Nothing else changes: still no analytics, no crash reports, no ads, and
+  nothing sold. The app asks for notification permission (Android 13 and
+  later) the first time somebody turns them on.
+
+The App Store's privacy answers move the same way when the iPhone gets them
+(#889).
+
 ## The iPhone
 
 Only a Mac builds for the iPhone, so `.github/workflows/ios.yml` builds it on

@@ -40,7 +40,7 @@ export interface SettingsScope {
   server?: string;
   /** Something to choose in Windows (it appears only when there is). */
   windows: boolean;
-  /** The phone app: no Notifications, since a phone raises none (SPEC §4.15). */
+  /** The phone app: Notifications are the phone's own (#830), and there's no Windows (SPEC §4.15). */
   phone?: boolean;
 }
 
@@ -151,6 +151,7 @@ export const HEADINGS = {
   closing: "When You Close Your List",
   chimes: "A Familiar Little Sound",
   phonePush: "Phone Notifications",
+  phoneRooms: "Rooms on This Phone",
   follows: "People You Follow",
   voice: "Voice",
   banners: "Desktop Notifications",

@@ -143,7 +143,7 @@ function PhoneNotifications({ push, rooms }: { push: PhonePushProps; rooms: read
       </Block>
     );
   }
-  return (
+  const main = (
     <Block
       heading={HEADINGS.phonePush}
       lead="Off until you turn them on. They go through Apple or Google and Linger's relay, encrypted so none of them can read what they say. Nothing while you're using Linger somewhere else."
@@ -174,6 +174,19 @@ function PhoneNotifications({ push, rooms }: { push: PhonePushProps; rooms: read
           {kind("dms", "DMs", "Somebody writes to you.")}
           {kind("knocks", "Knocks", "Somebody knocks on your row.")}
           {kind("follows", "People you follow", "Somebody you chose below posts.")}
+        </>
+      ) : null}
+      <SaveLine phase={save.phase.kind === "problem" ? save.phase : { kind: "idle" }} />
+    </Block>
+  );
+  return (
+    <>
+      {main}
+      {state.on ? (
+        <Block
+          heading={HEADINGS.phoneRooms}
+          lead="Each room is off until you choose. When it wakes up is a room's first message after an hour with none. Every message is once a burst: the next replaces the last, and the room is quiet until you read it or 15 minutes pass."
+        >
           <ul className="nx-set-list" aria-label="Rooms on this phone">
             {rooms.map((room) => (
               <li key={room.id}>
@@ -193,14 +206,9 @@ function PhoneNotifications({ push, rooms }: { push: PhonePushProps; rooms: read
               </li>
             ))}
           </ul>
-          <Note>
-            When it wakes up is a room's first message after an hour with none. Every message is once a burst: the next replaces the last,
-            and the room is quiet until you read it or 15 minutes pass.
-          </Note>
-        </>
+        </Block>
       ) : null}
-      <SaveLine phase={save.phase.kind === "problem" ? save.phase : { kind: "idle" }} />
-    </Block>
+    </>
   );
 }
 

@@ -42,6 +42,23 @@ describe("a server's name and color, held for the list (#536)", () => {
     expect(held[HOME]).toEqual({ name: "The Good Company", accent_key: "amber" });
   });
 
+  it("keeps every field the list reads, and notices each one change (#888: push was compared, never kept)", () => {
+    const everything = {
+      name: "The Good Company",
+      accent_key: "amber",
+      screens: true,
+      screen_sound: true,
+      push: true,
+      push_relay: "https://push.linger.im",
+    } satisfies Required<Omit<ListedInfo, "health">>;
+    const held = withInfo({}, HOME, info(everything));
+    expect(held[HOME]).toEqual(everything);
+    expect(withInfo(held, HOME, info(everything))).toBe(held);
+    expect(withInfo(held, HOME, info({ ...everything, push: false }))[HOME]?.push).toBe(false);
+    expect(withInfo(held, HOME, info({ ...everything, push_relay: "https://relay.example" }))[HOME]?.push_relay).toBe("https://relay.example");
+    expect(withInfo(held, HOME, info({ ...everything, screens: false }))[HOME]?.screens).toBe(false);
+  });
+
   it("keeps what a server tells its host about the machine, and notices when it changes (#582)", () => {
     const health = { backups: true, last_backup_at: 5, backup_overdue: false, disk_nearly_full: false, file_space_nearly_full: false };
     const held = withInfo({}, HOME, info({ health }));

@@ -4,9 +4,10 @@
 
 //!
 //! The phone app is built from this crate too (SPEC §4.15). It has one window,
-//! no notifications, no tray, no in-app updates and, for now, no voice, so the
-//! modules for those are `#[cfg(desktop)]` and `phone_app` registers only what
-//! a phone uses.
+//! no desktop notifications (its own come from its servers, `phone_push`), no
+//! tray, no in-app updates and no voice in the core (its page does it, #429),
+//! so the modules for those are `#[cfg(desktop)]` and `phone_app` registers
+//! only what a phone uses.
 
 #[cfg(test)]
 mod acl;

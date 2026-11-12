@@ -914,10 +914,15 @@ macOS runners, or a friend's Mac.
   *Decided by Matt, 2026-11-11 (`docs/decisions.md`, "Phones get
   notifications, through a relay that can't read them"); SPEC §4.15, PROTOCOL
   §5.* #830 is the parent; each job is a sub-issue. ✅ The Apple, Google and
-  Cloudflare accounts (#885, 2026-11-12). 🟡 The server's side and the docs
-  (#886): who hears about what, RFC 8291 encryption, the phone's endpoints and
-  the host's off switch. Then the relay (#887), Android (#888) and the iPhone's
-  notification extension (#889).
+  Cloudflare accounts (#885, 2026-11-12). ✅ The server's side and the docs
+  (#886, PR #890): who hears about what, RFC 8291 encryption, the phone's
+  endpoints and the host's off switch. ✅ The relay at `push.linger.im` (#887,
+  PR #891). 🟡 Android (#888): Firebase messaging, Settings → Notifications
+  and a held room's choices on the phone, the phone idle as soon as it's put
+  away. Then the iPhone's notification extension (#889).
+  *Release notes, 0.5.5:* phone notifications on Android, which need the
+  server on 0.5.5 too (an older one says it needs an update); and update
+  Play's Data safety form first (docs/releasing.md, "Google Play").
   *Accept:* with Linger closed and the phone locked, each kind arrives on a
   real Android phone and, through the TestFlight testers, an iPhone; a switch
   turned off stops it; "only mentions" lets only mentions through; Do Not

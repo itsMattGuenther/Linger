@@ -31,7 +31,8 @@ followAppearance();
 // (styles/phone.css).
 if (onPhone()) {
   document.documentElement.dataset.shell = "phone";
-  // No notifications on a phone, open or closed (SPEC §4.15).
+  // The page raises no notifications on a phone: the phone's own come from
+  // its servers, once turned on (SPEC §4.15, #830, lib/push.ts).
   setNoNotifications(true);
   // Text, lines and rows grow with the phone's text size, and with the Text
   // size chosen in Settings on top of it (#690, styles/tokens.css).
