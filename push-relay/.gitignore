@@ -1,0 +1,6 @@
+node_modules/
+# Made by `wrangler types` (`pnpm check` runs it): 600 KB of the runtime's own types.
+worker-configuration.d.ts
+.wrangler/
+.dev.vars
+.env

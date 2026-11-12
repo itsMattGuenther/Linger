@@ -145,6 +145,17 @@ to be right for every shape that window takes.
 
 ## A fallback wider than the case it's for
 
+- **#891: a broken `SEAL_KEY` would have made every phone "gone".** The
+  push relay loaded its key inside the same `catch` that turns a token it
+  can't open into 410, so a missing or malformed key answered every send
+  "gone", and each server would have forgotten every phone; fixing the key
+  wouldn't have brought them back. Caught by Greptile. *Missed because* I
+  answered "Does each fallback cover only the case it's for?" looking at
+  `?? "unknown"`, not at what the `catch` held, and the broken-key test went
+  through `/seal`, where a 500 was right anyway. *Changed:* the key is
+  loaded before the token is read, so a broken one throws and answers 500,
+  with a test through `/send` (`push-relay/test/relay.test.ts`).
+
 - **#781: a failed `nm` read as "none of them".** The iPhone build's report
   of the calls Apple asks a reason for ran `nm -u … | grep … || echo "none
   of them"`, and the `||` covered the whole line: an app `nm` couldn't read
@@ -609,6 +620,16 @@ on a world that has changed.
   included (`PUSH_SEND_WITHIN_MS`), or dropped, with a test of a relay that
   holds everything; the setting refuses a query, a fragment or a password,
   and `/send` goes on through the address's own path, each with a test.
+
+- **#891: one phone's send limit could be had again by spelling its token
+  differently.** The relay counted the token as written, and read it
+  leniently: padding, spaces, and `+` for `-` all opened the same token, each
+  with an allowance of its own. Caught by Greptile. *Missed because* the
+  limit's test sent the same token each time, the case in mind, not another
+  spelling of it. *Changed:* a token opens only as the relay wrote it, and
+  the limit counts the phone's address once it's open, so every token for one
+  phone shares one allowance; a test sends two tokens for one phone and six
+  spellings of one.
 
 ## A copy in another language, tested where the two agree
 

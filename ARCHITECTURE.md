@@ -55,8 +55,9 @@ Companion to `SPEC.md`. Wire protocol is in `PROTOCOL.md`. Agent working rules a
        ▼
 ┌──────────────────────────────┐   ┌─────────────────────┐
 │  Linger's push relay         │──▶│  Apple's or Google's│──▶ the phone
-│  push.linger.im (#887),      │   │  push service       │
-│  for every server; stores    │   └─────────────────────┘
+│  push.linger.im, a Cloudflare│   │  push service       │
+│  Worker (push-relay/, #887), │   └─────────────────────┘
+│  for every server; stores    │
 │  and logs nothing            │
 └──────────────────────────────┘
 ```
@@ -79,7 +80,7 @@ app's notifications from (SPEC §4.15, #830).
 | **TypeScript + React frontend** | Largest ecosystem for virtualized lists and rich text; fastest to iterate. | — |
 | **Object store adapter, not blobs in DB** | 500 MB files must never traverse the app server. | — |
 | **Voice through the server (an SFU), not a mesh** | Each person sends their voice once, and the server passes it on, so a room holds 60 rather than stopping somewhere past ten. Built into the server binary (`crates/linger-sfu`, with `str0m`), so a host installs nothing extra and opens one UDP port. The cost: the server hears what it forwards (SPEC §4.14). `docs/decisions.md` has the reasons. | Only if one room's voice is more than one server can carry. |
-| **Phone notifications through one relay, encrypted to the phone** | Only Apple's and Google's push services wake a closed phone app, and only with keys from Linger's own accounts, which can't be handed to every host. So one relay holds them, and the host's server encrypts each notification to the phone with the standard web push encryption (RFC 8291, with RustCrypto's `p256`, `hkdf` and `aes-gcm`, already in the build for voice). The phone's push address reaches its server sealed by the relay. The relay, Apple and Google learn that a phone got something, and when (SPEC §4.15, `docs/decisions.md`). | If a phone gains a way to be woken that doesn't go through Apple or Google. |
+| **Phone notifications through one relay, encrypted to the phone** | Only Apple's and Google's push services wake a closed phone app, and only with keys from Linger's own accounts, which can't be handed to every host. So one relay holds them, and the host's server encrypts each notification to the phone with the standard web push encryption (RFC 8291, with RustCrypto's `p256`, `hkdf` and `aes-gcm`, already in the build for voice). The phone's push address reaches its server sealed by the relay. The relay, Apple and Google learn that a phone got something, and when (SPEC §4.15, `docs/decisions.md`). The relay is a Cloudflare Worker (`push-relay/`): nothing to run or patch, free at this size, and its fetch speaks the HTTP/2 Apple requires (checked 2026-11-12, #887). | If a phone gains a way to be woken that doesn't go through Apple or Google, or the relay outgrows Workers' free limits. |
 | **One Tauri crate for desktop and phone** | The phone app shares the gateway client, sign-in and wire types, rather than being a second app to keep in step (SPEC §4.15). Desktop-only code is switched off with `#[cfg(desktop)]`. | If a phone needs something the Tauri mobile runtime can't give. |
 
 ### The Tauri caveat, stated up front
@@ -267,6 +268,8 @@ linger/
 │                             #   iOS Simulator by ios-simulator.yml
 ├─ deploy/                    # Dockerfile, compose.yaml, Caddyfile, .env.example,
 │                             #   setup.sh, update.sh, entrypoint.sh
+├─ push-relay/                # the push relay at push.linger.im: a Cloudflare
+│                             #   Worker (#887), deployed by hand, not by CI
 ├─ packaging/arch/            # the Arch and Omarchy package and its repository
 ├─ assets/                    # logos and fonts' licenses; sounds/ waits for
 │                             #   entrance sounds (TASKS.md, Backburner)
@@ -1365,6 +1368,14 @@ phone that should hear about a message, carrying the notification encrypted to t
 and the phone's sealed address (PROTOCOL §5). It needs no port and no setting: nothing is
 sent until somebody's phone asks to be notified. `LINGER_PUSH=off` turns it off, and the
 server then never contacts the relay and forgets every phone it had.
+
+The relay itself isn't a host's to run. It is one Cloudflare Worker, `push-relay/`
+(#887), free at this size, deployed by hand with wrangler from the machine that holds
+its three secrets: Linger's APNs key, the Firebase service account, and the key it seals
+phones' addresses with (`push-relay/README.md`). Cloudflare's logs, traces and Logpush
+are off for it, and it stores nothing. A Worker reaching Apple's push service, which
+takes HTTP/2 only, was checked from Cloudflare's network on 2026-11-12 before it was
+built.
 
 Caddy is bundled specifically so TLS certificates are automatic. A self-hoster should
 never have to think about certbot. Its Caddyfile has two blocks and the deployment needs

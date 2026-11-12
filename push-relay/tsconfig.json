@@ -1,0 +1,19 @@
+{
+  // One project for the Worker and its tests, on the Workers runtime's own
+  // types (worker-configuration.d.ts, which `pnpm check` makes first). The
+  // tests run in Node, whose fetch, Request and crypto are the same web APIs.
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "es2022",
+    "moduleResolution": "bundler",
+    "lib": ["es2022"],
+    "types": [],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["worker-configuration.d.ts", "src", "test"]
+}

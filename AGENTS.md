@@ -256,6 +256,7 @@ The pieces:
 cargo test --workspace          # core + server; also regenerates TS bindings
 cargo fmt --all && cargo clippy --workspace --all-targets -- -D warnings
 cd client && pnpm check         # typecheck frontend
+cd push-relay && pnpm check && pnpm test   # the push relay (push-relay/README.md)
 cd client && pnpm tauri dev     # needs the GUI system deps in docs/development.md
 cd client/src-tauri && cargo clippy --all-targets -- -D warnings && cargo test
 scripts/minio-test.sh           # the S3 backend, against a throwaway MinIO

@@ -1,0 +1,46 @@
+// Linger's push relay (#887, SPEC §4.15, PROTOCOL §5): the one place Linger's
+// Apple and Google push keys live. README.md says how to deploy it.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "linger-push",
+  "main": "src/index.ts",
+  // The newest date the pinned wrangler's own runtime knows, so `wrangler dev`
+  // runs what Cloudflare runs. Move it with wrangler.
+  "compatibility_date": "2026-10-12",
+
+  // Only push.linger.im answers: no workers.dev address, no preview addresses.
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "push.linger.im", "custom_domain": true }],
+
+  // Nothing is logged or kept (hard rule 4): no Workers Logs, no traces, no
+  // Logpush, and wrangler sends no usage metrics of its own.
+  "observability": {
+    "enabled": false,
+    "logs": { "enabled": false },
+    "traces": { "enabled": false }
+  },
+  "logpush": false,
+  "send_metrics": false,
+
+  // Not secret: an APNs key's id and the team are nothing without the key.
+  "vars": {
+    "APNS_KEY_ID": "FGGDB7SBQQ",
+    "APNS_TEAM_ID": "SFTT38V54H",
+    "APNS_TOPIC": "io.github.itsmattguenther.linger"
+  },
+
+  // Set with `wrangler secret put`, never written here (README.md):
+  // APNS_KEY, the .p8 file's text; FCM_SERVICE_ACCOUNT, the Firebase service
+  // account's JSON; SEAL_KEY, 32 random bytes in base64 that seal and open
+  // phones' addresses.
+  "secrets": { "required": ["APNS_KEY", "FCM_SERVICE_ACCOUNT", "SEAL_KEY"] },
+
+  // Counted per Cloudflare location, in memory, and kept nowhere. The keys
+  // are hashes: of a sealed address for sending, and of the asker's network
+  // address for sealing.
+  "ratelimits": [
+    { "name": "SEND_LIMIT", "namespace_id": "887001", "simple": { "limit": 60, "period": 60 } },
+    { "name": "SEAL_LIMIT", "namespace_id": "887002", "simple": { "limit": 30, "period": 60 } }
+  ]
+}

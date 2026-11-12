@@ -11,9 +11,16 @@ const active = (paths) => Object.entries(classify(paths)).filter(([, value]) => 
 for (const paths of [["README.md"], ["docs/testing.md", "LICENSE"], ["docs/screenshots/example.png"]])
   test(`documentation only: ${paths}`, () => assert.deepEqual(active(paths), []));
 for (const paths of [[], ["unexpected.conf"], ["Cargo.lock"], [".github/workflows/ci.yml"], ["crates/linger-core/src/lib.rs"]])
-  test(`conservative fallback: ${paths}`, () => assert.equal(active(paths).length, 7));
+  test(`conservative fallback: ${paths}`, () => assert.equal(active(paths).length, 8));
 test("UI changes test both browser and native packages and the iPhone app, not unrelated server jobs", () => {
   assert.deepEqual(active(["client/src/next/styles/app.css"]), ["web", "packages", "ios"]);
+});
+test("the push relay's own files run its checks and nothing else; the wire types run it too", () => {
+  for (const path of ["push-relay/src/index.ts", "push-relay/test/relay.test.ts", "push-relay/wrangler.jsonc",
+    "push-relay/package.json", "push-relay/pnpm-lock.yaml"])
+    assert.deepEqual(active([path]), ["relay"], path);
+  assert(active(["client/src/generated/RelaySend.ts"]).includes("relay"));
+  assert(!active(["crates/linger-server/src/main.rs"]).includes("relay"));
 });
 test("browser assertions alone need no package rebuild", () => {
   assert.deepEqual(active(["client/tests/browser/console.spec.ts"]), ["web"]);
@@ -36,12 +43,12 @@ test("the packaged audio and video checks' own files rebuild only the packages",
 });
 test("the startup measurement is run by hand, and only its own tests run for it", () => {
   assert.deepEqual(active(["scripts/startup-time.mjs", "scripts/startup-time.test.mjs"]), []);
-  assert.equal(active(["scripts/startup-time.sh"]).length, 7);
+  assert.equal(active(["scripts/startup-time.sh"]).length, 8);
 });
 test("the questions before a pull request and the catch count are run by hand, and only their own tests run for them", () => {
   assert.deepEqual(active(["scripts/pr-questions.mjs", "scripts/pr-questions.test.mjs",
     "scripts/review-catches.mjs", "scripts/review-catches.test.mjs"]), []);
-  assert.equal(active(["scripts/pr-questions.sh"]).length, 7);
+  assert.equal(active(["scripts/pr-questions.sh"]).length, 8);
 });
 test("the Tauri version check and the iPhone flows' own test run only in the rules job (#835)", () => {
   assert.deepEqual(active(["scripts/tauri-versions.mjs", "scripts/tauri-versions.test.mjs", "scripts/ios-flows.test.mjs", "scripts/ios-plist.test.mjs",
@@ -54,7 +61,7 @@ test("the Tauri version check and the iPhone flows' own test run only in the rul
 });
 test("actionlint's script and its test run only in the rules job (#874)", () => {
   assert.deepEqual(active(["scripts/actionlint.sh", "scripts/actionlint-test.sh"]), []);
-  assert.equal(active(["scripts/actionlint-other.sh"]).length, 7);
+  assert.equal(active(["scripts/actionlint-other.sh"]).length, 8);
 });
 test("the Windows hidden-window check runs for the shell, the list window and its own files (#594)", () => {
   for (const path of ["client/src-tauri/src/window.rs", "client/src/next/app/list/ListWindow.tsx",
@@ -108,12 +115,12 @@ test("local: the shell gets a count and one line per domain", (t) => {
   git("commit", "-q", "-am", "docs");
   const script = fileURLToPath(new URL("./ci-scope.mjs", import.meta.url));
   const out = execFileSync("node", [script, "--local", "main"], { cwd: dir, encoding: "utf8" });
-  assert.equal(out, "changed=1\nrust=false\ns3=false\nweb=false\nshell=false\ncoturn=false\npackages=false\nios=false\n");
+  assert.equal(out, "changed=1\nrust=false\ns3=false\nweb=false\nshell=false\ncoturn=false\npackages=false\nios=false\nrelay=false\n");
 });
 test("local: no base to compare with selects everything", (t) => {
   const { dir } = branchRepo(t);
   const script = fileURLToPath(new URL("./ci-scope.mjs", import.meta.url));
   const out = execFileSync("node", [script, "--local", "no-such-ref"], { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
   assert.match(out, /^changed=0\nrust=true\n/);
-  assert.equal(out.match(/=true/g).length, 7);
+  assert.equal(out.match(/=true/g).length, 8);
 });

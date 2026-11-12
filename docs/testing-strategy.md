@@ -70,7 +70,8 @@ only changes documentation.
 | Only browser tests, `client/tests/browser/` | As the client | WebKit when `check.sh` couldn't run it (no packages) |
 | The desktop shell, `client/src-tauri/` | Its clippy and tests, when the GUI libraries are installed, and the app icons check | The packages, and the iPhone app in the simulator |
 | Only the iPhone flows, `client/tests/ios/`, or their https front (`scripts/https-front.mjs`, `scripts/test-certs.sh`) | The rules lint, the version check and the front's tests | The iPhone app in the simulator |
-| `deploy/` | The Rust checks and the update script's test | S3, the relay and a real server update in Docker |
+| `deploy/` | The Rust checks and the update script's test | S3, the voice relay and a real server update in Docker |
+| The push relay, `push-relay/` | Its typecheck on the Workers runtime's types, and its tests against stand-ins for Apple and Google | Nothing more; it's deployed by hand |
 | The startup measurement, `scripts/startup-time.mjs` | Its own tests (below); the measuring itself is run by hand ([performance.md](performance.md)) | Nothing more |
 | Shared types (`crates/linger-core/`, `client/src/generated/`), CI, `scripts/`, anything else | Everything | Everything |
 
@@ -164,6 +165,7 @@ depends on timing.
 |---|---|
 | A rule in the client's logic: ordering, parsing, what the store keeps | A unit test beside the code (`client/src/lib/*.test.ts`, `client/src/next/**/*.test.ts`), run by Vitest |
 | A rule the server keeps: limits, who may do what, what an endpoint returns | An integration test in `crates/linger-server/tests/`, driving real HTTP against a temporary SQLite file |
+| What the push relay asks of Apple and Google, and answers a phone or a server | A test in `push-relay/test/`, calling the Worker's handler with stand-ins for Apple and Google |
 | What a screen looks like, or how it answers the keyboard and mouse | A browser test in `client/tests/browser/`, on a fixture page with the desktop shell and servers faked. The design system's rules (`docs/design/system.md`) are measured there |
 | Gateway resume, sequence numbers, reconnects | A test that really drops the connection, not a mock (`AGENTS.md`) |
 | The installed app: what it's allowed to load, its packages, native audio, shortcuts | The package checks: `scripts/csp-assets.mjs`, `scripts/linux-next-check.mjs`, `scripts/linux-audio-check.py`, `scripts/windows-*.ps1` |

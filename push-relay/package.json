@@ -1,0 +1,17 @@
+{
+  "name": "linger-push-relay",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "check": "wrangler types && tsc --noEmit",
+    "test": "vitest run",
+    "types": "wrangler types",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.11",
+    "wrangler": "4.151.1"
+  }
+}

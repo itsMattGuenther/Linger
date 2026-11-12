@@ -41,7 +41,8 @@ The script sorts each changed file into parts (`partsOf` in
 - `phone`: what only the phones run: the Xcode and Android projects, the
   share extension and share window, files named for the phone, and the
   iPhone flows.
-- `server`: the server, and the types that cross the wire: `crates/`.
+- `server`: the server, and the types that cross the wire: `crates/`; and
+  the push relay, `push-relay/`.
 - `ci`: the checks, the workflows, packaging and the release: `scripts/`,
   `.github/`, `packaging/`.
 - `deploy`: running a server: `deploy/`.
