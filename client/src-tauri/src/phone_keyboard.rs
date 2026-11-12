@@ -34,7 +34,9 @@ unsafe extern "C-unwind" fn no_bar(_view: *mut AnyObject, _cmd: Sel) -> *mut Any
 /// since only the simulator and a phone can show it.
 pub fn hide_bar() {
     let Some(view) = AnyClass::get(c"WKContentView") else {
-        eprintln!("Linger: WebKit has no WKContentView, so iOS's bar over the keyboard stays (#881)");
+        eprintln!(
+            "Linger: WebKit has no WKContentView, so iOS's bar over the keyboard stays (#881)"
+        );
         return;
     };
     // SAFETY: an Objective-C method is called with its receiver and selector
@@ -43,11 +45,23 @@ pub fn hide_bar() {
     // shape. The replacement is on WKContentView alone (added there if only a
     // superclass has the method), so no other view's keyboard changes.
     let replaced = unsafe {
-        let imp = std::mem::transmute::<unsafe extern "C-unwind" fn(*mut AnyObject, Sel) -> *mut AnyObject, Imp>(no_bar);
-        class_replaceMethod(std::ptr::from_ref(view).cast_mut(), sel!(inputAccessoryView), imp, c"@@:".as_ptr())
+        let imp = std::mem::transmute::<
+            unsafe extern "C-unwind" fn(*mut AnyObject, Sel) -> *mut AnyObject,
+            Imp,
+        >(no_bar);
+        class_replaceMethod(
+            std::ptr::from_ref(view).cast_mut(),
+            sel!(inputAccessoryView),
+            imp,
+            c"@@:".as_ptr(),
+        )
     };
     eprintln!(
         "Linger: iOS's bar over the keyboard is hidden (#881), {}",
-        if replaced.is_some() { "WebKit's answer replaced" } else { "an answer added" }
+        if replaced.is_some() {
+            "WebKit's answer replaced"
+        } else {
+            "an answer added"
+        }
     );
 }

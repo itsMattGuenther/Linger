@@ -49,7 +49,9 @@ pub struct PushOpened {
 /// A server's base address, as the page names servers: https, short, and
 /// nothing a key could be stored under by mistake.
 fn server_ok(server: &str) -> bool {
-    server.starts_with("https://") && server.len() <= 512 && !server.chars().any(char::is_whitespace)
+    server.starts_with("https://")
+        && server.len() <= 512
+        && !server.chars().any(char::is_whitespace)
 }
 
 const NOT_HERE: &str = "This phone can't get Linger's notifications yet.";
@@ -78,7 +80,11 @@ pub async fn push_keys(server: String) -> Result<PushKeys, String> {
     if !server_ok(&server) {
         return Err("That isn't a server's address.".to_string());
     }
-    crate::off_thread(move || platform::keys(&server), || Err(NOT_HERE.to_string())).await
+    crate::off_thread(
+        move || platform::keys(&server),
+        || Err(NOT_HERE.to_string()),
+    )
+    .await
 }
 
 /// Forget this phone's keys for `server`: "Nothing", or signing out. With no
@@ -227,7 +233,9 @@ mod android {
     }
 
     pub fn permission(asking: bool) -> String {
-        answers::permission(&ask(&json!({ "do": if asking { "ask" } else { "permission" } })))
+        answers::permission(&ask(
+            &json!({ "do": if asking { "ask" } else { "permission" } }),
+        ))
     }
 
     pub fn address() -> Result<PushAddress, String> {
@@ -264,34 +272,54 @@ mod tests {
 
     #[test]
     fn kotlin_s_answers_are_read_and_anything_else_is_a_no() {
-        assert_eq!(answers::permission(&json!({ "state": "granted" })), "granted");
+        assert_eq!(
+            answers::permission(&json!({ "state": "granted" })),
+            "granted"
+        );
         assert_eq!(answers::permission(&json!({ "state": "asking" })), "asking");
         assert_eq!(answers::permission(&json!({ "state": "maybe" })), "denied");
         assert_eq!(answers::permission(&json!(null)), "denied");
 
         assert_eq!(
             answers::address(&json!({ "address": "fcm-token" })),
-            Ok(PushAddress { service: "fcm".into(), address: "fcm-token".into() })
+            Ok(PushAddress {
+                service: "fcm".into(),
+                address: "fcm-token".into()
+            })
         );
         assert_eq!(
             answers::address(&json!({ "error": "Google Play services isn't on this phone." })),
             Err("Google Play services isn't on this phone.".to_string())
         );
-        assert_eq!(answers::address(&json!({ "address": "" })), Err(NOT_HERE.to_string()));
+        assert_eq!(
+            answers::address(&json!({ "address": "" })),
+            Err(NOT_HERE.to_string())
+        );
 
         assert_eq!(
             answers::keys(&json!({ "public_key": "BPub", "auth_secret": "aSec" })),
-            Ok(PushKeys { public_key: "BPub".into(), auth_secret: "aSec".into() })
+            Ok(PushKeys {
+                public_key: "BPub".into(),
+                auth_secret: "aSec".into()
+            })
         );
         assert!(answers::keys(&json!({ "public_key": "BPub" })).is_err());
 
         assert_eq!(
             answers::opened(&json!({ "server": "https://s", "room": "r", "message": "m" })),
-            Some(PushOpened { server: "https://s".into(), room: Some("r".into()), message: Some("m".into()) })
+            Some(PushOpened {
+                server: "https://s".into(),
+                room: Some("r".into()),
+                message: Some("m".into())
+            })
         );
         assert_eq!(
             answers::opened(&json!({ "server": "https://s" })),
-            Some(PushOpened { server: "https://s".into(), room: None, message: None })
+            Some(PushOpened {
+                server: "https://s".into(),
+                room: None,
+                message: None
+            })
         );
         assert_eq!(answers::opened(&json!({})), None);
     }

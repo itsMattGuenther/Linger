@@ -264,7 +264,8 @@ mod shared_example {
     #[test]
     fn the_phones_open_what_this_makes() {
         let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../tests/fixtures/push-notification.json")).unwrap();
+            serde_json::from_str(include_str!("../../tests/fixtures/push-notification.json"))
+                .unwrap();
         let field = |name: &str| fixture[name].as_str().unwrap().to_string();
         let b64 = |name: &str| URL_SAFE_NO_PAD.decode(field(name)).unwrap();
         let as_private = SecretKey::from_slice(&b64("as_private")).unwrap();
@@ -272,11 +273,22 @@ mod shared_example {
         let auth: [u8; 16] = b64("auth_secret").try_into().unwrap();
         let words = field("plaintext").into_bytes();
         let padding = (words.len() + 1).next_multiple_of(PADDED_TO) - (words.len() + 1);
-        let message = seal(&as_private, &salt, &b64("ua_public"), &auth, &words, padding).unwrap();
+        let message = seal(
+            &as_private,
+            &salt,
+            &b64("ua_public"),
+            &auth,
+            &words,
+            padding,
+        )
+        .unwrap();
         assert_eq!(URL_SAFE_NO_PAD.encode(&message), field("message"));
         assert_eq!((message.len() - 86 - 16) % PADDED_TO, 0, "padded");
 
         let phone = SecretKey::from_slice(&b64("ua_private")).unwrap();
-        assert_eq!(phone.public_key().to_encoded_point(false).as_bytes(), b64("ua_public").as_slice());
+        assert_eq!(
+            phone.public_key().to_encoded_point(false).as_bytes(),
+            b64("ua_public").as_slice()
+        );
     }
 }
