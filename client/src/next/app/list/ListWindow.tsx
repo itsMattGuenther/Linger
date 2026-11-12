@@ -1910,9 +1910,7 @@ function roomPushOn(api: ServerSession["api"], baseUrl: string, info: ListedInfo
   return {
     on: now.on,
     choice: (room) => roomChoice(now.settings, room),
-    set: (room, choice) => {
-      void changePush(api, baseUrl, info ?? {}, withRoom(phonePush(baseUrl).settings, room, choice));
-    },
+    set: (room, choice) => changePush(api, baseUrl, info ?? {}, (now) => withRoom(now, room, choice)),
     settings: () => shell.settings("notifications", baseUrl),
   };
 }

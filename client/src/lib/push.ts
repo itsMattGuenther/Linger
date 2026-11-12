@@ -158,7 +158,7 @@ export function onPhonePush(listener: () => void): () => void {
 export function resetPhonePush(): void {
   held = {};
   listeners.clear();
-  turns.clear();
+  turn = Promise.resolve();
 }
 
 // ---------------------------------------------------------------------------
@@ -223,23 +223,21 @@ async function permitted(phone: PushPhone, events: EventTarget | null): Promise<
 }
 
 /**
- * Each server's changes, one at a time, in the order they were asked for.
- * Turning off while turning on still waits on the relay would otherwise
- * finish first, and then the turning on would register a phone whose keys
- * the turning off had just deleted, showing "on" for notifications nobody
- * could open. So the last thing asked is what's true at the end.
+ * Every change, one at a time, in the order they were asked for, across
+ * all servers. Turning off while turning on still waits on the relay would
+ * otherwise finish first, and the turning on would then register a phone
+ * whose keys the turning off had just deleted. And the servers share one
+ * thing: the phone's push address, which forgetting the last server's keys
+ * deletes. Turning one server off while another is registering could
+ * delete the address that one was about to hand its server (#894 review).
+ * So the last thing asked is what's true at the end, and nothing the phone
+ * holds changes under a registration.
  */
-const turns = new Map<string, Promise<unknown>>();
+let turn: Promise<unknown> = Promise.resolve();
 
-function inTurn<T>(server: string, job: () => Promise<T>): Promise<T> {
-  const before = turns.get(server) ?? Promise.resolve();
-  const mine = before.then(job, job);
-  const settled = mine.catch(() => undefined);
-  turns.set(server, settled);
-  // The last one out leaves nothing behind.
-  void settled.then(() => {
-    if (turns.get(server) === settled) turns.delete(server);
-  });
+function inTurn<T>(job: () => Promise<T>): Promise<T> {
+  const mine = turn.then(job, job);
+  turn = mine.catch(() => undefined);
   return mine;
 }
 
@@ -310,25 +308,32 @@ export async function turnOn(
   if (support === "old") return "This server needs an update before it can notify your phone.";
   const relay = info.push_relay;
   if (support !== "on" || typeof relay !== "string") return "This server's host turned phone notifications off.";
-  return inTurn(server, async () => {
+  return inTurn(async () => {
     if (!(await permitted(phone, events))) return DENIED;
-    return register(api, server, relay, phonePush(server).settings, phone);
+    const problem = await register(api, server, relay, phonePush(server).settings, phone);
+    // Not on after all: the keys made for it go, and with no server left,
+    // the push address too (#894 review).
+    if (problem !== null && !phonePush(server).on) await phone.forget(server).catch(() => undefined);
+    return problem;
   });
 }
 
 /**
- * New choices for `server`. Off, they're kept for when it's turned on;
- * on, the server is told, and a phone it has forgotten registers again.
- * Answers a problem in words, or null.
+ * Change `server`'s choices with `edit`, applied to the choices as they are
+ * when its turn comes, so two quick taps keep both: built from what the
+ * screen showed, the second would undo the first (#894 review). Off,
+ * they're kept for when it's turned on; on, the server is told, and a
+ * phone it has forgotten registers again. Answers a problem in words, or
+ * null.
  */
-export async function change(
+export function change(
   api: AuthedApi,
   server: string,
   info: Pick<ServerInfo, "push" | "push_relay">,
-  settings: PushSettings,
+  edit: (now: PushSettings) => PushSettings,
   phone: PushPhone = tauriPhone,
 ): Promise<string | null> {
-  return inTurn(server, () => changeNow(api, server, info, settings, phone));
+  return inTurn(() => changeNow(api, server, info, edit(phonePush(server).settings), phone));
 }
 
 async function changeNow(
@@ -358,7 +363,7 @@ async function changeNow(
 
 /** "Nothing": the server and this phone forget it; the choices stay for next time. */
 export function turnOff(api: AuthedApi, server: string, phone: PushPhone = tauriPhone): Promise<string | null> {
-  return inTurn(server, async () => {
+  return inTurn(async () => {
     const now = phonePush(server);
     try {
       if (now.device !== null) await api.delete(`/push/devices/${now.device}`);
@@ -384,7 +389,7 @@ export async function keepRegistered(
 ): Promise<string | null> {
   const relay = info.push_relay;
   if (pushSupport(info) !== "on" || typeof relay !== "string") return null;
-  return inTurn(server, async () => {
+  return inTurn(async () => {
     const now = phonePush(server);
     if (!now.on) return null;
     if ((await phone.permission(false)) !== "granted") return null;
@@ -397,9 +402,11 @@ export async function keepRegistered(
  * so the phone forgets its keys, and nothing is kept about it.
  */
 export function forgetPush(server: string, phone: PushPhone = tauriPhone): Promise<void> {
-  return inTurn(server, async () => {
-    if (!(server in held)) return;
-    keep(server, null);
+  return inTurn(async () => {
+    if (server in held) keep(server, null);
+    // Always: a registration that failed partway may have made keys this
+    // page never kept a word about (#894 review). The phone forgets nothing
+    // it doesn't hold, and never starts Google's service to do it.
     await phone.forget(server).catch(() => undefined);
   });
 }

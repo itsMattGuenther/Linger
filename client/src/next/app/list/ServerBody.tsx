@@ -16,6 +16,8 @@ import { knockOfflineLine, type KnockResult } from "../../core/knock";
 import { PersonCard } from "./PersonCard";
 import { LeaveGroup, LeaveQuestion, leaveItem } from "../LeaveGroup";
 import { boxOf, HeldSheet } from "./HeldSheet";
+import { FloatingForm } from "../chat/ReportBlock";
+import "../chat/ReportBlock.css";
 
 /** How long a knocked row rests before it can knock again (SPEC §4.9). */
 const KNOCKED_MS = 3_000;
@@ -87,7 +89,8 @@ export interface RoomPush {
   /** Notifications from this server are on, on this phone. */
   on: boolean;
   choice: (room: RoomId) => PushRoomChoice | null;
-  set: (room: RoomId, choice: PushRoomChoice | null) => void;
+  /** Resolves to the problem in words, or null. */
+  set: (room: RoomId, choice: PushRoomChoice | null) => Promise<string | null>;
   /** Settings → Notifications, for this server. */
   settings: () => void;
 }
@@ -565,6 +568,40 @@ const PersonItem = memo(function PersonItem({
 });
 
 /** A room, on its row (#533). */
+/** A room's notification choice the server didn't take: what it said, and Try again. */
+function ChoiceFailed({ room, problem, onAgain, onClose }: { room: string; problem: string; onAgain: () => Promise<void>; onClose: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const box = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    box.current?.querySelector("button")?.focus();
+  }, []);
+  return (
+    <div ref={box} className="nx-report" role="group" aria-label={`Notifications from #${room}`}>
+      <h3 className="nx-report-title">{`#${room}'s notifications didn't change`}</h3>
+      <p className="nx-report-problem" role="alert">
+        {problem}
+      </p>
+      <div className="nx-report-buttons">
+        <Button variant="secondary" size="md" onClick={onClose}>
+          Close
+        </Button>
+        <Button
+          variant="primary"
+          size="md"
+          busy={busy}
+          onClick={() => {
+            if (busy) return;
+            setBusy(true);
+            void onAgain().finally(() => setBusy(false));
+          }}
+        >
+          Try again
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 const RoomItem = memo(function RoomItem({
   room,
   selected,
@@ -580,11 +617,18 @@ const RoomItem = memo(function RoomItem({
   push?: RoomPush;
 }) {
   const [held, setHeld] = useState<HTMLButtonElement | null>(null);
+  // A choice the server didn't take, said where it was made (#894 review).
+  const [failed, setFailed] = useState<{ choice: PushRoomChoice | null; problem: string; anchor: MenuAnchor } | null>(null);
   const choice = push?.on ? push.choice(room.id) : null;
+  const choose = async (to: PushRoomChoice | null, anchor: MenuAnchor): Promise<void> => {
+    const problem = (await push?.set(room.id, to)) ?? null;
+    setFailed(problem === null ? null : { choice: to, problem, anchor });
+  };
   // A choice closes the sheet, as every held sheet's do: the menu leaves that to its owner.
   const pick = (to: PushRoomChoice | null) => () => {
+    const anchor = held ? boxOf(held) : null;
     setHeld(null);
-    push?.set(room.id, to);
+    if (anchor) void choose(to, anchor);
   };
   const toSettings = () => {
     setHeld(null);
@@ -617,6 +661,15 @@ const RoomItem = memo(function RoomItem({
                     if (reason === "escape" || reason === "tab") held.focus();
                   }}
                 />
+              ) : failed ? (
+                <FloatingForm anchor={failed.anchor} label={`Notifications from #${room.name}`} onClose={() => setFailed(null)}>
+                  <ChoiceFailed
+                    room={room.name}
+                    problem={failed.problem}
+                    onAgain={() => choose(failed.choice, failed.anchor)}
+                    onClose={() => setFailed(null)}
+                  />
+                </FloatingForm>
               ) : null,
             }
           : undefined

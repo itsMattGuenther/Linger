@@ -285,6 +285,13 @@ on a world that has changed.
 
 ## Tests written from the case in mind, not from the ways things fail
 
+- **#894: a room's notification choice that failed said nothing.** The held
+  sheet closes as you choose, and the answer, a problem in words, was
+  dropped, so offline the old choice simply stayed. Caught by Greptile.
+  *Missed because* the browser test only made choices the server took.
+  *Changed:* a refused choice says so where it was made, with Try again,
+  and the test fixture refuses the first change on `?pushfail`.
+
 - **#870: the log meant to show the blocked download started after it.**
   `nsurlsessiond`'s lines were added to `trustd.log` so each run would show
   the revocation list download failing, but the log starts after the server
@@ -708,6 +715,28 @@ it, or another program, runs at the same time.
   each with a test that holds the lock as the other program would. Rule: a
   file or entry two programs change is changed under a lock they share.
 
+- **#894: turning one server off while another registered could delete the
+  phone's push address under it.** Changes took turns per server, but every
+  server shares the phone's one push address, which forgetting the last
+  server's keys deletes: the registering server then handed over an address
+  that was gone, and showed notifications on that never came. Caught by
+  Greptile. *Missed because* "two at once" was asked of one server's
+  changes, and the stand-in phone had no address to lose. *Changed:* every
+  change takes its turn in one queue for all servers (`inTurn`,
+  `lib/push.ts`), the phone deletes the address only when the server it
+  forgets had keys and was the last, and waits for Google to finish; the
+  stand-in phone now holds keys and loses its address as Android does, with
+  a test of one server turned off while another registers.
+- **#894: two quick taps in phone notification settings kept only the
+  second.** Each tap sent the whole of what the screen showed, and the
+  screen showed the server's last answer, so the second tap's settings
+  still had the first tap undone. Caught by Greptile. *Missed because* the
+  tests waited for each change before making the next. *Changed:* a change
+  is an edit (`(now) => ...`), applied to the choices as they are when its
+  turn comes, so passing a whole copy built from the screen doesn't fit the
+  type; a unit test of three at once, and a browser test of two taps while
+  the server is slow (`?pushslow`).
+
 ## Counted after the work it limits
 
 - **#822: a share sign-in over the limit still stored a new family.** The
@@ -742,6 +771,15 @@ it, or another program, runs at the same time.
   sets `process.exitCode`, and the test runs it in a temporary folder of
   its own and checks nothing is left there, failing or passing; the
   question now names this trap.
+
+- **#894: a first turning on of phone notifications that failed left the
+  phone's keys, and its push address, behind.** The keys are made before
+  the server is asked; when it refused, the page kept nothing about that
+  server, so signing out, which only forgot servers the page knew, left
+  them. Caught by Greptile. *Missed because* the failing path was traced
+  for what it shows, not for what it made before failing. *Changed:* a
+  failed first turning on forgets the keys at once, and signing out always
+  asks the phone to forget, with tests of both.
 
 ## A doc step nobody tried
 

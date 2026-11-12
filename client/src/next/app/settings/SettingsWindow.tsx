@@ -670,7 +670,7 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
                 state: push,
                 turnOn: () => pushOn(api, server, info ?? {}),
                 turnOff: () => pushOff(api, server),
-                change: (settings) => changePush(api, server, info ?? {}, settings),
+                change: (edit) => changePush(api, server, info ?? {}, edit),
               },
             }
           : {

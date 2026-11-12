@@ -1272,6 +1272,45 @@ test.describe("phone notifications, from a server that sends them (#830)", () =>
     ]);
   });
 
+  /** Settings → Notifications on this phone, turned on. */
+  async function turnedOn(page: Page, query: string) {
+    await open(page, `?one&shell=phone&push${query}`);
+    await settled(page);
+    await noLongPress(page);
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await settings(page).getByRole("navigation", { name: "Settings" }).getByText("Notifications").click();
+    await settings(page).getByRole("switch", { name: "Notifications on this phone" }).tap();
+    await expect(settings(page).getByRole("switch", { name: "DMs", exact: true })).toBeChecked();
+  }
+
+  test("taps faster than the server answers all count (#894 review)", async ({ page }) => {
+    await turnedOn(page, "&pushslow");
+    await settings(page).getByRole("switch", { name: "DMs", exact: true }).tap();
+    await settings(page).getByRole("switch", { name: "Knocks", exact: true }).tap();
+    await expect
+      .poll(async () => (await pushes(page)).filter((line) => line.startsWith("push change")).at(-1))
+      .toBe(`push change https://good-company.example device-1 {"mentions":true,"dms":false,"knocks":false,"follows":true,"rooms":[]}`);
+    await expect(settings(page).getByRole("switch", { name: "DMs", exact: true })).not.toBeChecked();
+    await expect(settings(page).getByRole("switch", { name: "Knocks", exact: true })).not.toBeChecked();
+  });
+
+  test("a room's choice the server refuses says so, and Try again sends it (#894 review)", async ({ page }) => {
+    await turnedOn(page, "&pushfail");
+    await settings(page).getByRole("button", { name: "Back to Settings" }).click();
+    await settings(page).getByRole("button", { name: "Back", exact: true }).click();
+    await hold(page, "general");
+    await sheet(page).getByRole("menuitemcheckbox", { name: "Every message" }).tap();
+    const failed = page.getByRole("dialog", { name: "Notifications from #general" });
+    await expect(failed).toContainText("#general's notifications didn't change");
+    await expect(failed.getByRole("alert")).toHaveText("The server is busy. Try again in a moment.");
+    expect(await sticksOut(page), "the problem").toEqual([]);
+    await failed.getByRole("button", { name: "Try again" }).tap();
+    await expect(failed).toHaveCount(0);
+    await expect.poll(async () => (await pushes(page)).at(-1)).toMatch(/^push change https:\/\/good-company\.example device-1 .*"choice":"every"/);
+    await hold(page, "general");
+    await expect(sheet(page).getByRole("menuitemcheckbox", { name: "Every message" })).toHaveAttribute("aria-checked", "true");
+  });
+
   test("a phone that said no: the switch stays off, and says where to change it", async ({ page }) => {
     await open(page, "?one&shell=phone&push&pushdenied");
     await settled(page);

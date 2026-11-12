@@ -32,6 +32,13 @@ const INFO = { push: true, push_relay: RELAY };
 /** Everything the stand-ins were asked, in order. */
 let said: string[];
 let permission: string;
+/**
+ * The phone as Android keeps it: keys per server, and one push address,
+ * which goes when the last server's keys do (PushBridge.forget). A new one
+ * is a new number.
+ */
+let keysHeld: Set<string>;
+let addressNumber: number;
 
 function phone(overrides: Partial<PushPhone> = {}): PushPhone {
   return {
@@ -41,14 +48,17 @@ function phone(overrides: Partial<PushPhone> = {}): PushPhone {
     },
     address: async () => {
       said.push("address");
-      return { service: "fcm", address: "fcm-address" };
+      return { service: "fcm", address: addressNumber === 1 ? "fcm-address" : `fcm-address-${addressNumber}` };
     },
     keys: async (server) => {
       said.push(`keys ${server}`);
+      keysHeld.add(server);
       return { public_key: "BPublic", auth_secret: "secret" };
     },
     forget: async (server) => {
       said.push(`forget ${server}`);
+      const had = keysHeld.delete(server);
+      if (had && keysHeld.size === 0) addressNumber += 1;
     },
     opened: async () => null,
     ...overrides,
@@ -106,6 +116,8 @@ beforeEach(() => {
   resetPhonePush();
   said = [];
   permission = "granted";
+  keysHeld = new Set();
+  addressNumber = 1;
   posts = [];
   patches = [];
   deletes = [];
@@ -211,7 +223,7 @@ describe("turning on", () => {
 
 describe("changing, and Nothing", () => {
   it("keeps choices made while off, for when it's on", async () => {
-    expect(await change(server(), SERVER, INFO, onlyMentions(FIRST_SETTINGS), phone())).toBeNull();
+    expect(await change(server(), SERVER, INFO, onlyMentions, phone())).toBeNull();
     expect(said).toEqual([]);
     expect(phonePush(SERVER)).toEqual({ on: false, settings: onlyMentions(FIRST_SETTINGS), device: null });
     await turnOn(server(), SERVER, INFO, phone());
@@ -222,18 +234,18 @@ describe("changing, and Nothing", () => {
     await turnOn(server(), SERVER, INFO, phone());
     said = [];
     const rooms = withRoom(FIRST_SETTINGS, "room-a", "every");
-    expect(await change(server(), SERVER, INFO, rooms, phone())).toBeNull();
+    expect(await change(server(), SERVER, INFO, () => rooms, phone())).toBeNull();
     expect(patches).toEqual([{ path: "/push/devices/device-1", body: { settings: rooms } }]);
 
     failNext = new ApiError(404, { code: "NOT_FOUND", message: "That phone isn't registered for notifications here.", retry_after_ms: null });
     said = [];
-    expect(await change(server(), SERVER, INFO, FIRST_SETTINGS, phone())).toBeNull();
+    expect(await change(server(), SERVER, INFO, () => FIRST_SETTINGS, phone())).toBeNull();
     expect(said).toContain("POST /push/devices");
     expect(phonePush(SERVER).settings).toEqual(FIRST_SETTINGS);
   });
 
   it("Nothing forgets it on the server and the phone, and keeps the choices", async () => {
-    await change(server(), SERVER, INFO, onlyMentions(FIRST_SETTINGS), phone());
+    await change(server(), SERVER, INFO, onlyMentions, phone());
     await turnOn(server(), SERVER, INFO, phone());
     said = [];
     expect(await turnOff(server(), SERVER, phone())).toBeNull();
@@ -256,9 +268,11 @@ describe("keeping it going", () => {
     expect(posts).toHaveLength(2);
   });
 
-  it("signing out forgets the server's keys, and nothing for a server it never heard from", async () => {
+  it("signing out forgets the server's keys; for a server it never heard from, the phone has nothing to forget", async () => {
     await forgetPush(SERVER, phone());
-    expect(said).toEqual([]);
+    expect(said).toEqual([`forget ${SERVER}`]);
+    expect(addressNumber).toBe(1);
+    said = [];
     await turnOn(server(), SERVER, INFO, phone());
     said = [];
     await forgetPush(SERVER, phone());
@@ -321,19 +335,60 @@ describe("one change at a time, per server (#888)", () => {
   it("a change that fails doesn't stop the next one", async () => {
     await turnOn(server(), SERVER, INFO, phone());
     failNext = new ApiError(500, { code: "INTERNAL", message: "Something went wrong on the server.", retry_after_ms: null });
-    const first = change(server(), SERVER, INFO, onlyMentions(FIRST_SETTINGS), phone());
-    const second = change(server(), SERVER, INFO, FIRST_SETTINGS, phone());
+    const first = change(server(), SERVER, INFO, onlyMentions, phone());
+    const second = change(server(), SERVER, INFO, () => FIRST_SETTINGS, phone());
     expect(await first).toBe("Something went wrong on the server.");
     expect(await second).toBeNull();
     expect(phonePush(SERVER).settings).toEqual(FIRST_SETTINGS);
   });
 
-  it("another server's change doesn't wait", async () => {
+  it("two quick changes both count: each is made to the choices as they are by its turn (#894 review)", async () => {
+    await turnOn(server(), SERVER, INFO, phone());
+    const dms = change(server(), SERVER, INFO, (now) => ({ ...now, dms: false }), phone());
+    const knocks = change(server(), SERVER, INFO, (now) => ({ ...now, knocks: false }), phone());
+    const room = change(server(), SERVER, INFO, (now) => withRoom(now, "room-a", "wakes"), phone());
+    expect(await Promise.all([dms, knocks, room])).toEqual([null, null, null]);
+    expect(patches.at(-1)?.body).toEqual({ settings: { ...withRoom(FIRST_SETTINGS, "room-a", "wakes"), dms: false, knocks: false } });
+    expect(phonePush(SERVER).settings).toEqual({ ...withRoom(FIRST_SETTINGS, "room-a", "wakes"), dms: false, knocks: false });
+  });
+
+  it("another server turned off while one registers can't delete the address it's handing over (#894 review)", async () => {
+    const OTHER = "https://other.example";
+    await turnOn(server(), OTHER, INFO, phone());
     const answer = slowRelay();
     const on = turnOn(server(), SERVER, INFO, phone());
-    expect(await change(server(), "https://other.example", INFO, onlyMentions(FIRST_SETTINGS), phone())).toBeNull();
-    expect(phonePush("https://other.example").settings).toEqual(onlyMentions(FIRST_SETTINGS));
+    const off = turnOff(server(), OTHER, phone());
+    await vi.waitFor(() => expect(said.filter((line) => line.startsWith("seal "))).toHaveLength(2));
     answer();
-    await on;
+    expect(await on).toBeNull();
+    expect(await off).toBeNull();
+    // The address the server was handed is still the phone's: the other
+    // server's keys went after this one's were made, so they weren't the last.
+    const sealed = said.filter((line) => line.startsWith("seal ")).at(-1) ?? "";
+    expect(sealed).toContain(`"address":"fcm-address"`);
+    expect(addressNumber).toBe(1);
+    expect(said.indexOf(`forget ${OTHER}`)).toBeGreaterThan(said.lastIndexOf("POST /push/devices"));
+  });
+
+  it("a first turning on that fails leaves no keys, and with no server left, no address (#894 review)", async () => {
+    failNext = new ApiError(503, { code: "INTERNAL", message: "The server is busy.", retry_after_ms: null });
+    expect(await turnOn(server(), SERVER, INFO, phone())).toBe("The server is busy.");
+    expect(said.at(-1)).toBe(`forget ${SERVER}`);
+    expect(keysHeld.size).toBe(0);
+    expect(phonePush(SERVER).on).toBe(false);
+    // Turned on, a later failure to register again keeps what's working.
+    await turnOn(server(), SERVER, INFO, phone());
+    failNext = new ApiError(503, { code: "INTERNAL", message: "The server is busy.", retry_after_ms: null });
+    said = [];
+    expect(await keepRegistered(server(), SERVER, INFO, phone())).toBe("The server is busy.");
+    expect(said).not.toContain(`forget ${SERVER}`);
+    expect(phonePush(SERVER).on).toBe(true);
+  });
+
+  it("signing out forgets keys a failed turning on left, though nothing was kept about it", async () => {
+    keysHeld.add(SERVER);
+    await forgetPush(SERVER, phone());
+    expect(said).toEqual([`forget ${SERVER}`]);
+    expect(keysHeld.size).toBe(0);
   });
 });

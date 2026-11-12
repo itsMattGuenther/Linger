@@ -15,7 +15,8 @@ export interface PhonePushProps {
   /** Each resolves to the problem in words, or null. */
   turnOn: () => Promise<string | null>;
   turnOff: () => Promise<string | null>;
-  change: (settings: PushSettings) => Promise<string | null>;
+  /** `edit` is applied to the choices as they are when it's sent, so quick taps all count. */
+  change: (edit: (now: PushSettings) => PushSettings) => Promise<string | null>;
 }
 
 export interface NotificationsProps {
@@ -116,12 +117,14 @@ function PhoneNotifications({ push, rooms }: { push: PhonePushProps; rooms: read
   const save = useSave();
   const { state, support } = push;
   const settings = state.settings;
-  const set = (next: PushSettings) => void save.run(push.change(next));
+  // Each change says what it changes, never the whole of what was showing:
+  // a second tap before the first is saved would otherwise undo it (#894 review).
+  const set = (edit: (now: PushSettings) => PushSettings) => void save.run(push.change(edit));
   const kind = (key: "mentions" | "dms" | "knocks" | "follows", title: string, description: string) => (
     <SettingRow
       title={title}
       description={description}
-      control={<Switch label={title} checked={settings[key]} onChange={(on) => set({ ...settings, [key]: on })} />}
+      control={<Switch label={title} checked={settings[key]} onChange={(on) => set((now) => ({ ...now, [key]: on }))} />}
     />
   );
 
@@ -165,7 +168,7 @@ function PhoneNotifications({ push, rooms }: { push: PhonePushProps; rooms: read
             title="Only when somebody mentions me"
             description="Mentions, and nothing else from this server."
             control={
-              <Button size="sm" pressed={isOnlyMentions(settings)} onClick={() => set(onlyMentions(settings))}>
+              <Button size="sm" pressed={isOnlyMentions(settings)} onClick={() => set(onlyMentions)}>
                 Only mentions
               </Button>
             }
@@ -199,7 +202,7 @@ function PhoneNotifications({ push, rooms }: { push: PhonePushProps; rooms: read
                       size="sm"
                       value={roomChoice(settings, room.id) ?? "off"}
                       options={ROOM_PICKS}
-                      onChange={(pick) => set(withRoom(settings, room.id, pick === "off" ? null : pick))}
+                      onChange={(pick) => set((now) => withRoom(now, room.id, pick === "off" ? null : pick))}
                     />
                   }
                 />

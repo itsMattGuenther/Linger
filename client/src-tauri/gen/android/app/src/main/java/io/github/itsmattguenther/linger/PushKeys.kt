@@ -85,11 +85,17 @@ object PushKeys {
   @Synchronized
   fun all(context: Context): List<Keys> = prefs(context).all.keys.mapNotNull { read(context, it) }
 
-  /** Forget `server`'s keys. Answers whether any server is left. */
+  /**
+   * Forget `server`'s keys. Answers whether that took this phone's last: it
+   * had keys for `server` and none for any other server are left. A server
+   * it never had keys for (a sign-out with notifications never on) answers
+   * false, so nothing starts Firebase just to delete an address it never had.
+   */
   @Synchronized
   fun forget(context: Context, server: String): Boolean {
+    val had = prefs(context).contains(server)
     prefs(context).edit().remove(server).commit()
-    return prefs(context).all.isNotEmpty()
+    return had && prefs(context).all.isEmpty()
   }
 
   fun encode(bytes: ByteArray): String = b64(bytes)

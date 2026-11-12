@@ -97,9 +97,20 @@ object PushBridge {
     return JSONObject().put("public_key", PushKeys.encode(keys.public)).put("auth_secret", PushKeys.encode(keys.auth))
   }
 
-  /** With no server left, the push address goes too: nothing should hold one for an app that wants nothing. */
+  /**
+   * With no server left, the push address goes too: nothing should hold one
+   * for an app that wants nothing. Waited for, so an address asked for next
+   * is a new one, never the one being deleted. The page asks one thing of
+   * the phone at a time (lib/push.ts), so no server registers meanwhile.
+   */
   private fun forget(context: Context, server: String): JSONObject {
-    if (!PushKeys.forget(context, server)) FirebaseMessaging.getInstance().deleteToken()
+    if (PushKeys.forget(context, server)) {
+      try {
+        Tasks.await(FirebaseMessaging.getInstance().deleteToken(), 20, TimeUnit.SECONDS)
+      } catch (e: Exception) {
+        // Google will find it unused and let it go.
+      }
+    }
     return JSONObject()
   }
 

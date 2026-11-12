@@ -793,6 +793,7 @@ const SERVER_BUSY = "The server is busy letting other people in. Try again in a 
 /** Linger's push relay, as a `?push` server names it (#830). */
 const PUSH_RELAY = "https://relay.example";
 let pushDevices = 0;
+let pushFailed = false;
 
 const realFetch = window.fetch.bind(window);
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -1028,6 +1029,14 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   }
   const pushDevice = /^\/push\/devices\/([^/]+)$/.exec(path);
   if (pushDevice && method === "PATCH") {
+    // `?pushslow`: the server takes a while to answer, so taps can overtake it.
+    if (query.has("pushslow")) await new Promise((settle) => window.setTimeout(settle, 400));
+    // `?pushfail`: the first change is refused (#894 review).
+    if (query.has("pushfail") && !pushFailed) {
+      pushFailed = true;
+      note(`push change refused ${server}`);
+      return refuse(503, "INTERNAL", "The server is busy. Try again in a moment.");
+    }
     note(`push change ${server} ${pushDevice[1] ?? ""} ${JSON.stringify(body.settings)}`);
     return json({ id: pushDevice[1], settings: body.settings });
   }
