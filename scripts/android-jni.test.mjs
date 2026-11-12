@@ -69,9 +69,21 @@ test("every external fun in Linger's own Kotlin is a crossing", () => {
   const kotlin = execFileSync("git", ["ls-files", "client/src-tauri/gen/android/app/src/main/java"], { cwd: ROOT, encoding: "utf8" })
     .split("\n").filter((path) => path.endsWith(".kt"));
   const external = kotlin.flatMap((path) => [...read(path).matchAll(/\bexternal\s+fun\s+(\w+)/g)].map((match) => `${path} ${match[1]}`));
-  assert(external.length > 0, "Keyring.kt's initializeNdkContext, at least");
+  assert(kotlin.length > 0, "Linger's own Kotlin, to read");
   assert.deepEqual(external.filter((each) => !CROSSINGS.some((crossing) => each === `${crossing.from} ${crossing.method}`)), [],
     "add these to CROSSINGS in scripts/android-jni.mjs, with a keep rule");
+});
+
+// From Tauri 2.12 (#850) tao sets up the Android context Rust uses (ndk_context)
+// as the app opens. MainActivity also set it up, for the Keystore, and
+// ndk-context answers a second setup by panicking, so the app aborted the
+// moment it opened. Nothing but tao may set it up.
+test("nothing but tao sets up Rust's Android context", () => {
+  const tracked = execFileSync("git", ["ls-files", "client/src-tauri/gen/android/app/src/main/java", "client/src-tauri/src"], { cwd: ROOT, encoding: "utf8" })
+    .split("\n").filter((path) => /\.(kt|java|rs)$/.test(path));
+  assert(tracked.some((path) => path.endsWith("MainActivity.kt")), "MainActivity, to read");
+  const setting = tracked.filter((path) => /initializeNdkContext|initialize_android_context/.test(read(path)));
+  assert.deepEqual(setting, [], "tao sets up ndk_context in WryActivity's onCreate; a second setup aborts the app");
 });
 
 test("only a rule that keeps a class whole counts, and one it can't read fails, naming the line", () => {
@@ -135,7 +147,7 @@ test("run: one that kept everything passes, reading every classes.dex", (t) => {
   const out = run();
   assert.equal(out.status, 0, out.stderr);
   assert.deepEqual(run.leftBehind(), []);
-  assert.match(out.stdout, /keeps all 2 names Rust and Kotlin cross by/);
+  assert.match(out.stdout, new RegExp(`keeps all ${CROSSINGS.length} names Rust and Kotlin cross by`));
 });
 
 // The table repeats the method each crossing's file names; if that file moved

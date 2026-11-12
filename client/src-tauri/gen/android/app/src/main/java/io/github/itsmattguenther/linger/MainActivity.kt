@@ -8,7 +8,6 @@ import android.os.Bundle
 import android.webkit.WebView
 import androidx.activity.enableEdgeToEdge
 import androidx.core.content.ContextCompat
-import io.crates.keyring.Keyring
 import java.lang.ref.WeakReference
 
 class MainActivity : TauriActivity() {
@@ -30,10 +29,11 @@ class MainActivity : TauriActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
-    super.onCreate(savedInstanceState)
     // Sign-ins are kept in the Android Keystore (src-tauri/src/secrets.rs),
-    // which needs the app's context first.
-    Keyring.initializeNdkContext(applicationContext)
+    // which needs the app's context set up for Rust. tao does that in
+    // super.onCreate; setting it up a second time aborted the app as it
+    // opened, from Tauri 2.12 (#850, scripts/android-jni.test.mjs).
+    super.onCreate(savedInstanceState)
     VoiceCallService.activity = WeakReference(this)
     val actions = IntentFilter().apply {
       addAction(VoiceCallService.MUTE)

@@ -32,14 +32,6 @@ export const CROSSINGS = [
     type: "(Landroid/content/Context;Ljava/lang/String;ZZ)V",
     from: "client/src-tauri/src/phone_call.rs",
   },
-  {
-    // Kotlin calls it, and Rust answers by its name: an `external fun`, the
-    // Android Keystore that keeps sign-ins (secrets.rs, T-1604).
-    class: "io.crates.keyring.Keyring$Companion",
-    method: "initializeNdkContext",
-    type: "(Landroid/content/Context;)V",
-    from: "client/src-tauri/gen/android/app/src/main/java/io/crates/keyring/Keyring.kt",
-  },
 ];
 
 /**
