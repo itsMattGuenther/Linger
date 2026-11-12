@@ -435,7 +435,29 @@ describe("what the relay takes", () => {
     expect((await call(request("/send", { token, payload: PAYLOAD, ttl: 60 }))).status).toBe(429);
     expect(sendLimit.keys).toHaveLength(1);
     expect(sendLimit.keys[0]).not.toContain(token.slice(3, 20));
+    expect(sendLimit.keys[0]).not.toContain(APNS_ADDRESS.slice(0, 16));
     expect(asked).toEqual([]);
+  });
+
+  // #891: the limit counted the token as written, and other spellings of it
+  // opened, so each spelling had an allowance of its own.
+  it("gives one phone one allowance, however its token is spelled or sealed", async () => {
+    const one = await sealed("apns", APNS_ADDRESS);
+    const two = await sealed("apns", APNS_ADDRESS);
+    await call(request("/send", { token: one, payload: PAYLOAD, ttl: 60 }));
+    await call(request("/send", { token: two, payload: PAYLOAD, ttl: 60 }));
+    expect(sendLimit.keys).toHaveLength(2);
+    expect(sendLimit.keys[1], "two tokens, one phone, one count").toBe(sendLimit.keys[0]);
+
+    asked = [];
+    const body = one.slice(3);
+    const plus = body.replace(/-/g, "+").replace(/_/g, "/");
+    for (const spelled of [`${one}=`, `${one}==`, ` ${one}`, `${one} `, `v1.${plus}`, `v1.${body.slice(0, 10)} ${body.slice(10)}`]) {
+      if (spelled === one) continue;
+      const res = await call(request("/send", { token: spelled, payload: PAYLOAD, ttl: 60 }));
+      expect(res.status, JSON.stringify(spelled.slice(-6))).toBe(410);
+    }
+    expect(asked, "no other spelling reaches Apple").toEqual([]);
   });
 
   it("answers nothing else", async () => {
@@ -448,5 +470,17 @@ describe("what the relay takes", () => {
     const res = await call(request("/seal", { service: "apns", address: APNS_ADDRESS }));
     expect(res.status).toBe(500);
     expect(await res.text()).not.toContain("SEAL_KEY");
+  });
+
+  // #891: a broken SEAL_KEY made every token "not sealed here", a 410, and
+  // every server would have forgotten every phone.
+  it("never calls a phone gone for a broken key of its own", async () => {
+    const token = await sealed("apns", APNS_ADDRESS);
+    for (const broken of ["", "not base64!", base64url(new Uint8Array(16))]) {
+      env = { ...env, SEAL_KEY: broken };
+      const res = await call(request("/send", { token, payload: PAYLOAD, ttl: 60 }));
+      expect(res.status, JSON.stringify(broken)).toBe(500);
+    }
+    expect(asked).toEqual([]);
   });
 });

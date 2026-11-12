@@ -69,10 +69,12 @@ pnpm exec wrangler secret put SEAL_KEY < ~/.config/linger-push/seal-key
 ```
 
 Back all three up with the other signing keys. `SEAL_KEY` is the one that's
-new here: every sealed address was sealed with it. Lost, the relay can't open
-any of them, answers each send "gone", and every phone has to register again
-the next time it's opened. Nothing is lost for good, but nobody's phone buzzes
-until then.
+new here: every sealed address was sealed with it. Lost and replaced by a new
+one, the relay can't open any of them, answers each send "gone", and every
+phone has to register again the next time it's opened. Nothing is lost for
+good, but nobody's phone buzzes until then. A `SEAL_KEY` that isn't 32 bytes
+of base64 at all is a mistake, not a new key: every request then gets 500, and
+no server forgets a phone over it.
 
 The APNs key's id, the team and the app's bundle id aren't secret, and are in
 `wrangler.jsonc`'s `vars`. A new APNs key means a new `APNS_KEY` and

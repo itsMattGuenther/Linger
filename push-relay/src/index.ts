@@ -143,16 +143,17 @@ async function sendRoute(
   const send = relaySend(text);
   if (send === null) return refused(400, "That isn't a notification this relay takes.");
 
-  // Per phone: a server, or anybody holding a sealed token, can't buzz one
-  // phone without end.
-  if (!(await env.SEND_LIMIT.limit({ key: await hashKey(send.token) })).success) {
-    return refused(429, "Too many for this phone at once.");
-  }
-
   const to = await open(env.SEAL_KEY, send.token);
   // Not sealed here, or sealed with a key this relay no longer has: either
   // way it will never reach anybody, so the phone should register again.
   if (to === null) return refused(410, "That phone's address doesn't open here.");
+
+  // Per phone, by its address (#891): however its tokens were sealed or
+  // spelled, and however many servers hold one, a phone has one allowance,
+  // and nobody holding a token can buzz it without end.
+  if (!(await env.SEND_LIMIT.limit({ key: await hashKey(`${to.service}:${to.address}`) })).success) {
+    return refused(429, "Too many for this phone at once.");
+  }
 
   let outcome: Outcome;
   try {

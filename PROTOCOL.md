@@ -1306,8 +1306,12 @@ address, which the rate limit counts as a hash. A shape it doesn't take is 400; 
 
 **Sending** checks the `RelaySend` (`payload` base64url, at most 3,072 characters;
 `ttl` a whole number of seconds up to four weeks; `collapse` letters, digits, `_` and
-`-`, at most 64) and answers 400 for anything else and 413 for a body over 8 KB. Sixty a
-minute per sealed token, counted as a hash, then 429. A token it can't open is 410. To
+`-`, at most 64) and answers 400 for anything else and 413 for a body over 8 KB. A token
+it can't open is 410, and so is one spelled any other way than the relay wrote it (padded,
+spaced, `+` for `-`). Then sixty a minute per phone, counted as a hash of its address, so
+every token for it, from every server, shares one allowance; past it, 429. A relay whose
+own key is broken answers 500, never 410, so no server forgets a phone for the relay's
+fault. To
 Apple it goes as an alert, `mutable-content: 1` so the iPhone's notification extension
 decrypts it before it shows, with `"Linger"` / `"Open Linger to see it."` as what shows if
 the extension can't, `payload` as `p`, the `ttl` as `apns-expiration`, `collapse` as

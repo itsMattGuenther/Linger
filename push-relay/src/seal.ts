@@ -61,18 +61,26 @@ export async function seal(secret: string, inside: Address): Promise<string> {
   return VERSION + base64url(whole);
 }
 
-/** Open a sealed token, or `null` when it wasn't sealed by this key. */
+/**
+ * Open a sealed token, or `null` when it wasn't sealed by this key.
+ *
+ * Only as `seal` writes it (#891): no padding, no spaces, no `+` or `/`, no
+ * spare bits. A token spelled another way is refused rather than read, so one
+ * phone's token has one spelling.
+ *
+ * A broken `SEAL_KEY` throws instead (#891). It isn't the token's fault, and
+ * answering "gone" for it would have every server forget every phone.
+ */
 export async function open(secret: string, token: string): Promise<Address | null> {
+  const opener = await key(secret, "decrypt");
   if (!token.startsWith(VERSION)) return null;
-  const whole = fromBase64(token.slice(VERSION.length));
-  if (!whole || whole.length < 12 + 16) return null;
+  const text = token.slice(VERSION.length);
+  if (!/^[A-Za-z0-9_-]+$/.test(text)) return null;
+  const whole = fromBase64(text);
+  if (!whole || whole.length < 12 + 16 || base64url(whole) !== text) return null;
   let words: ArrayBuffer;
   try {
-    words = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: whole.slice(0, 12) },
-      await key(secret, "decrypt"),
-      whole.slice(12),
-    );
+    words = await crypto.subtle.decrypt({ name: "AES-GCM", iv: whole.slice(0, 12) }, opener, whole.slice(12));
   } catch {
     return null;
   }
