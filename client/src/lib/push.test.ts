@@ -272,3 +272,68 @@ describe("keeping it going", () => {
     expect(kept[SERVER]).toEqual({ on: true, settings: FIRST_SETTINGS, device: "device-1" });
   });
 });
+
+describe("one change at a time, per server (#888)", () => {
+  /** A relay that answers only when told to, so a test can act while it waits. */
+  function slowRelay(): () => void {
+    let answer: () => void = () => undefined;
+    const answered = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit) => {
+        said.push(`seal ${url} ${String(init.body)}`);
+        await answered;
+        return new Response(JSON.stringify({ token: "v1.sealed" }), { status: 200 });
+      }),
+    );
+    return answer;
+  }
+
+  it("turned off while turning on still waits on the relay: off is what's true at the end", async () => {
+    const answer = slowRelay();
+    const on = turnOn(server(), SERVER, INFO, phone());
+    const off = turnOff(server(), SERVER, phone());
+    await vi.waitFor(() => expect(said.some((line) => line.startsWith("seal "))).toBe(true));
+    // Off waits its turn: nothing deleted or forgotten under the registering.
+    expect(said.filter((line) => line.startsWith("forget") || line.startsWith("DELETE"))).toEqual([]);
+    answer();
+    expect(await on).toBeNull();
+    expect(await off).toBeNull();
+    expect(said.slice(-3)).toEqual(["POST /push/devices", "DELETE /push/devices/device-1", `forget ${SERVER}`]);
+    expect(phonePush(SERVER).on).toBe(false);
+    expect(phonePush(SERVER).device).toBeNull();
+  });
+
+  it("signed out while registering: the keys go after, and nothing is kept", async () => {
+    const answer = slowRelay();
+    const on = turnOn(server(), SERVER, INFO, phone());
+    const out = forgetPush(SERVER, phone());
+    answer();
+    await on;
+    await out;
+    expect(said.at(-1)).toBe(`forget ${SERVER}`);
+    expect(phonePush(SERVER).on).toBe(false);
+    expect(JSON.parse(stored.get("linger.push.v1") ?? "{}")).toEqual({});
+  });
+
+  it("a change that fails doesn't stop the next one", async () => {
+    await turnOn(server(), SERVER, INFO, phone());
+    failNext = new ApiError(500, { code: "INTERNAL", message: "Something went wrong on the server.", retry_after_ms: null });
+    const first = change(server(), SERVER, INFO, onlyMentions(FIRST_SETTINGS), phone());
+    const second = change(server(), SERVER, INFO, FIRST_SETTINGS, phone());
+    expect(await first).toBe("Something went wrong on the server.");
+    expect(await second).toBeNull();
+    expect(phonePush(SERVER).settings).toEqual(FIRST_SETTINGS);
+  });
+
+  it("another server's change doesn't wait", async () => {
+    const answer = slowRelay();
+    const on = turnOn(server(), SERVER, INFO, phone());
+    expect(await change(server(), "https://other.example", INFO, onlyMentions(FIRST_SETTINGS), phone())).toBeNull();
+    expect(phonePush("https://other.example").settings).toEqual(onlyMentions(FIRST_SETTINGS));
+    answer();
+    await on;
+  });
+});

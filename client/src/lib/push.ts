@@ -158,6 +158,7 @@ export function onPhonePush(listener: () => void): () => void {
 export function resetPhonePush(): void {
   held = {};
   listeners.clear();
+  turns.clear();
 }
 
 // ---------------------------------------------------------------------------
@@ -219,6 +220,27 @@ async function permitted(phone: PushPhone, events: EventTarget | null): Promise<
   if (asked === "granted") return true;
   if (asked !== "asking" || answered === null) return false;
   return (await answered) === "granted";
+}
+
+/**
+ * Each server's changes, one at a time, in the order they were asked for.
+ * Turning off while turning on still waits on the relay would otherwise
+ * finish first, and then the turning on would register a phone whose keys
+ * the turning off had just deleted, showing "on" for notifications nobody
+ * could open. So the last thing asked is what's true at the end.
+ */
+const turns = new Map<string, Promise<unknown>>();
+
+function inTurn<T>(server: string, job: () => Promise<T>): Promise<T> {
+  const before = turns.get(server) ?? Promise.resolve();
+  const mine = before.then(job, job);
+  const settled = mine.catch(() => undefined);
+  turns.set(server, settled);
+  // The last one out leaves nothing behind.
+  void settled.then(() => {
+    if (turns.get(server) === settled) turns.delete(server);
+  });
+  return mine;
 }
 
 /** An error, in the words a person can act on. */
@@ -286,9 +308,12 @@ export async function turnOn(
 ): Promise<string | null> {
   const support = pushSupport(info);
   if (support === "old") return "This server needs an update before it can notify your phone.";
-  if (support !== "on" || typeof info.push_relay !== "string") return "This server's host turned phone notifications off.";
-  if (!(await permitted(phone, events))) return DENIED;
-  return register(api, server, info.push_relay, phonePush(server).settings, phone);
+  const relay = info.push_relay;
+  if (support !== "on" || typeof relay !== "string") return "This server's host turned phone notifications off.";
+  return inTurn(server, async () => {
+    if (!(await permitted(phone, events))) return DENIED;
+    return register(api, server, relay, phonePush(server).settings, phone);
+  });
 }
 
 /**
@@ -302,6 +327,16 @@ export async function change(
   info: Pick<ServerInfo, "push" | "push_relay">,
   settings: PushSettings,
   phone: PushPhone = tauriPhone,
+): Promise<string | null> {
+  return inTurn(server, () => changeNow(api, server, info, settings, phone));
+}
+
+async function changeNow(
+  api: AuthedApi,
+  server: string,
+  info: Pick<ServerInfo, "push" | "push_relay">,
+  settings: PushSettings,
+  phone: PushPhone,
 ): Promise<string | null> {
   const now = phonePush(server);
   if (!now.on) {
@@ -322,16 +357,18 @@ export async function change(
 }
 
 /** "Nothing": the server and this phone forget it; the choices stay for next time. */
-export async function turnOff(api: AuthedApi, server: string, phone: PushPhone = tauriPhone): Promise<string | null> {
-  const now = phonePush(server);
-  try {
-    if (now.device !== null) await api.delete(`/push/devices/${now.device}`);
-  } catch (error) {
-    if (!(error instanceof ApiError && error.code === "NOT_FOUND")) return words(error);
-  }
-  await phone.forget(server).catch(() => undefined);
-  keep(server, { on: false, settings: now.settings, device: null });
-  return null;
+export function turnOff(api: AuthedApi, server: string, phone: PushPhone = tauriPhone): Promise<string | null> {
+  return inTurn(server, async () => {
+    const now = phonePush(server);
+    try {
+      if (now.device !== null) await api.delete(`/push/devices/${now.device}`);
+    } catch (error) {
+      if (!(error instanceof ApiError && error.code === "NOT_FOUND")) return words(error);
+    }
+    await phone.forget(server).catch(() => undefined);
+    keep(server, { on: false, settings: now.settings, device: null });
+    return null;
+  });
 }
 
 /**
@@ -345,18 +382,24 @@ export async function keepRegistered(
   info: Pick<ServerInfo, "push" | "push_relay">,
   phone: PushPhone = tauriPhone,
 ): Promise<string | null> {
-  const now = phonePush(server);
-  if (!now.on || pushSupport(info) !== "on" || typeof info.push_relay !== "string") return null;
-  if ((await phone.permission(false)) !== "granted") return null;
-  return register(api, server, info.push_relay, now.settings, phone);
+  const relay = info.push_relay;
+  if (pushSupport(info) !== "on" || typeof relay !== "string") return null;
+  return inTurn(server, async () => {
+    const now = phonePush(server);
+    if (!now.on) return null;
+    if ((await phone.permission(false)) !== "granted") return null;
+    return register(api, server, relay, now.settings, phone);
+  });
 }
 
 /**
  * Signed out of `server`: its server has already forgotten this phone (PROTOCOL §5),
  * so the phone forgets its keys, and nothing is kept about it.
  */
-export async function forgetPush(server: string, phone: PushPhone = tauriPhone): Promise<void> {
-  if (!(server in held)) return;
-  keep(server, null);
-  await phone.forget(server).catch(() => undefined);
+export function forgetPush(server: string, phone: PushPhone = tauriPhone): Promise<void> {
+  return inTurn(server, async () => {
+    if (!(server in held)) return;
+    keep(server, null);
+    await phone.forget(server).catch(() => undefined);
+  });
 }
