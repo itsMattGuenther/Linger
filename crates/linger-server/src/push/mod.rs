@@ -63,9 +63,11 @@ const RELAY_AT_ONCE: usize = 8;
 /// nothing in this module runs at all.
 pub struct Pusher {
     client: reqwest::Client,
-    send_url: String,
+    send_url: reqwest::Url,
     turns: Semaphore,
     in_flight: InFlight,
+    /// Notifications waiting for one of the `turns`.
+    queued: AtomicUsize,
 }
 
 impl Pusher {
@@ -77,12 +79,41 @@ impl Pusher {
             // sealed address somewhere the host never named.
             .redirect(reqwest::redirect::Policy::none())
             .build()?;
+        // `/send` after the relay's own path, through the URL's own parts
+        // (#890): the setting has no query or fragment for it to land in.
+        let mut send_url = relay.clone();
+        send_url
+            .path_segments_mut()
+            .map_err(|()| anyhow::anyhow!("the relay's address can't take a path"))?
+            .pop_if_empty()
+            .push("send");
         Ok(Self {
             client,
-            send_url: format!("{}/send", relay.as_str().trim_end_matches('/')),
+            send_url,
             turns: Semaphore::new(RELAY_AT_ONCE),
             in_flight: InFlight::default(),
+            queued: AtomicUsize::new(0),
         })
+    }
+
+    /// How many notifications are waiting for a turn to reach the relay.
+    /// Tests ask it, to change something while one waits.
+    pub fn queued(&self) -> usize {
+        self.queued.load(Ordering::Acquire)
+    }
+
+    /// Wait for a turn at the relay, counted in [`Pusher::queued`] while
+    /// waiting, however the wait ends.
+    async fn turn(&self) -> Option<tokio::sync::SemaphorePermit<'_>> {
+        struct Waiting<'a>(&'a AtomicUsize);
+        impl Drop for Waiting<'_> {
+            fn drop(&mut self) {
+                self.0.fetch_sub(1, Ordering::AcqRel);
+            }
+        }
+        self.queued.fetch_add(1, Ordering::AcqRel);
+        let _waiting = Waiting(&self.queued);
+        self.turns.acquire().await.ok()
     }
 
     /// Wait until every notification already started has been sent, or
@@ -137,8 +168,18 @@ pub fn message_posted(state: &AppState, message: &Message) {
     let message = message.clone();
     tokio::spawn(async move {
         let _turn = turn;
-        if let Err(error) = for_message(&state, &pusher, &message).await {
-            tracing::warn!(error = %error.message, "couldn't work out phone notifications for a message");
+        // Everything for one message, waits included, within
+        // `push_within` (#890): a slow relay costs notifications, never a
+        // pile of them arriving late.
+        let within = state.config.push_within;
+        match tokio::time::timeout(within, for_message(&state, &pusher, &message)).await {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => {
+                tracing::warn!(error = %error.message, "couldn't work out phone notifications for a message");
+            }
+            Err(_) => tracing::debug!(
+                "a message's phone notifications took too long, and the rest were dropped"
+            ),
         }
     });
 }
@@ -153,8 +194,15 @@ pub fn knocked(state: &AppState, from: UserId, to: UserId) {
     let state = state.clone();
     tokio::spawn(async move {
         let _turn = turn;
-        if let Err(error) = for_knock(&state, &pusher, from, to).await {
-            tracing::warn!(error = %error.message, "couldn't work out phone notifications for a knock");
+        let within = state.config.push_within;
+        match tokio::time::timeout(within, for_knock(&state, &pusher, from, to)).await {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => {
+                tracing::warn!(error = %error.message, "couldn't work out phone notifications for a knock");
+            }
+            Err(_) => {
+                tracing::debug!("a knock's phone notifications took too long, and were dropped")
+            }
         }
     });
 }
@@ -362,6 +410,32 @@ async fn send(
     ttl: u32,
     collapse: Option<String>,
 ) {
+    let Some(_turn) = pusher.turn().await else {
+        return;
+    };
+    // Everything that let it through, asked again now that it's its turn
+    // (#890): its owner may have signed out, turned the switch off, blocked
+    // somebody or opened Linger elsewhere while it waited.
+    if state.gateway.attending(phone.user_id) {
+        return;
+    }
+    let still = repo::push::Still {
+        id: phone.id,
+        sealed_token: &phone.sealed_token,
+        public_key: &phone.public_key,
+        switch: switch(payload.kind),
+        room_id: payload.room_id,
+        from: payload.user_id,
+    };
+    match repo::push::still_wanted(&state.db.read, &still, now_ms()).await {
+        Ok(true) => {}
+        Ok(false) => return,
+        Err(error) => {
+            tracing::warn!(error = %error.message, "couldn't check a notification was still wanted");
+            return;
+        }
+    }
+
     let Ok(words) = serde_json::to_vec(payload) else {
         return;
     };
@@ -378,19 +452,18 @@ async fn send(
         ttl,
         collapse,
     };
-    let Ok(_turn) = pusher.turns.acquire().await else {
-        return;
-    };
     match pusher
         .client
-        .post(&pusher.send_url)
+        .post(pusher.send_url.clone())
         .json(&body)
         .send()
         .await
     {
         Ok(answer) if answer.status().is_success() => {}
         Ok(answer) if matches!(answer.status(), StatusCode::NOT_FOUND | StatusCode::GONE) => {
-            if let Err(error) = repo::push::forget(&state.db.write, phone.id).await {
+            if let Err(error) =
+                repo::push::forget(&state.db.write, phone.id, &phone.sealed_token).await
+            {
                 tracing::warn!(error = %error.message, "couldn't forget a phone the relay says is gone");
             }
         }
@@ -399,6 +472,18 @@ async fn send(
             tracing::debug!(status = %answer.status(), "the relay didn't take a notification")
         }
         Err(error) => tracing::debug!(error = %error.without_url(), "couldn't reach the relay"),
+    }
+}
+
+/// The switch on a phone that lets a kind through, as `push_devices` names
+/// it; a room's is its row in `push_rooms`.
+fn switch(kind: PushKind) -> &'static str {
+    match kind {
+        PushKind::Mention => "mentions",
+        PushKind::Dm => "dms",
+        PushKind::Knock => "knocks",
+        PushKind::Follow => "follows",
+        PushKind::Room => "room",
     }
 }
 
@@ -528,6 +613,26 @@ mod tests {
         assert_eq!(files(&[file("video/mp4")]), "Sent a video");
         assert_eq!(files(&[file("application/pdf")]), "Sent a file");
         assert_eq!(files(&[file("image/png"), file("video/mp4")]), "Sent files");
+    }
+
+    /// After the relay's own path, never inside a query or after a slash it
+    /// already has (#890).
+    #[test]
+    fn send_goes_after_the_relay_s_own_path() {
+        for (relay, send) in [
+            ("https://push.linger.im", "https://push.linger.im/send"),
+            (
+                "https://relay.example/push",
+                "https://relay.example/push/send",
+            ),
+            (
+                "https://relay.example/push/",
+                "https://relay.example/push/send",
+            ),
+        ] {
+            let pusher = Pusher::new(&relay.parse().unwrap()).unwrap();
+            assert_eq!(pusher.send_url.as_str(), send);
+        }
     }
 
     #[test]

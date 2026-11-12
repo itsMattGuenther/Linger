@@ -50,6 +50,11 @@ struct Relay {
     broken: Arc<std::sync::atomic::AtomicBool>,
     /// Never answer, as a relay that has hung.
     hung: Arc<std::sync::atomic::AtomicBool>,
+    /// Hold every request until `release`, to change things meanwhile.
+    held: Arc<std::sync::atomic::AtomicBool>,
+    opened: Arc<tokio::sync::Notify>,
+    /// Requests that reached the relay, held or not.
+    arrived: Arc<std::sync::atomic::AtomicUsize>,
 }
 
 impl Relay {
@@ -68,11 +73,47 @@ impl Relay {
     fn take_sent(&self) -> Vec<RelaySend> {
         std::mem::take(&mut *self.sent.lock().unwrap())
     }
+
+    fn hold(&self) {
+        self.held.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    fn release(&self) {
+        self.held.store(false, std::sync::atomic::Ordering::SeqCst);
+        self.opened.notify_waiters();
+    }
+
+    fn arrived(&self) -> usize {
+        self.arrived.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+/// Wait until `ready` says so, five seconds at most.
+async fn until(what: &str, ready: impl Fn() -> bool) {
+    for _ in 0..500 {
+        if ready() {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    panic!("never: {what}");
 }
 
 async fn take(State(relay): State<Relay>, Json(send): Json<RelaySend>) -> StatusCode {
+    relay
+        .arrived
+        .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     if relay.hung.load(std::sync::atomic::Ordering::SeqCst) {
         std::future::pending::<()>().await;
+    }
+    loop {
+        let opened = relay.opened.notified();
+        tokio::pin!(opened);
+        opened.as_mut().enable();
+        if !relay.held.load(std::sync::atomic::Ordering::SeqCst) {
+            break;
+        }
+        opened.await;
     }
     let gone = relay.gone.lock().unwrap().contains(&send.token);
     relay.sent.lock().unwrap().push(send);
@@ -214,6 +255,13 @@ async fn settled(server: &common::TestServer) {
 }
 
 async fn post(server: &common::TestServer, token: &str, room: RoomId, body: &str) -> Message {
+    let message = post_now(server, token, room, body).await;
+    settled(server).await;
+    message
+}
+
+/// Post without waiting for its notifications to go.
+async fn post_now(server: &common::TestServer, token: &str, room: RoomId, body: &str) -> Message {
     let resp = http()
         .post(server.url(&format!("/rooms/{room}/messages")))
         .bearer_auth(token)
@@ -222,9 +270,7 @@ async fn post(server: &common::TestServer, token: &str, room: RoomId, body: &str
         .await
         .unwrap();
     assert_eq!(resp.status(), 200, "post: {}", resp.text().await.unwrap());
-    let message = resp.json().await.unwrap();
-    settled(server).await;
-    message
+    resp.json().await.unwrap()
 }
 
 async fn dm(server: &common::TestServer, token: &str, with: &[UserId]) -> Room {
@@ -694,6 +740,115 @@ async fn a_relay_that_isn_t_there_or_never_answers_never_holds_up_a_message() {
         "posting waited on the relay: {:?}",
         started.elapsed()
     );
+}
+
+/// A notification waiting for its turn at the relay is checked again when
+/// the turn comes (#890): signed out meanwhile, it isn't sent.
+#[tokio::test]
+async fn a_phone_signed_out_while_its_notification_waits_gets_nothing() {
+    let (server, relay, host, room) = server().await;
+    let sam = phone(
+        &server,
+        common::join_member(&server, &host.access_token, "sam").await,
+        defaults(),
+    )
+    .await;
+    let jo = phone(
+        &server,
+        common::join_member(&server, &host.access_token, "jo").await,
+        defaults(),
+    )
+    .await;
+    let pusher = server.state.push.clone().unwrap();
+
+    // Every turn at the relay taken by a notification to sam, held there.
+    relay.hold();
+    for n in 0..8 {
+        post_now(&server, &host.access_token, room.id, &format!("@sam {n}")).await;
+    }
+    until("eight at the relay", || relay.arrived() == 8).await;
+    post_now(&server, &host.access_token, room.id, "@jo waiting").await;
+    until("jo's waiting for a turn", || pusher.queued() == 1).await;
+
+    let resp = http()
+        .post(server.url("/auth/logout"))
+        .json(&json!({ "refresh_token": jo.auth.refresh_token }))
+        .send()
+        .await
+        .unwrap();
+    assert!(resp.status().is_success());
+    relay.release();
+    settled(&server).await;
+
+    let sent = relay.take_sent();
+    assert_eq!(sent.len(), 8, "sam's eight, and nothing for jo");
+    assert!(sent.iter().all(|send| send.token == sam.sealed));
+}
+
+/// The relay saying an old address is gone, after the phone gave a new one,
+/// leaves the phone at its new address (#890).
+#[tokio::test]
+async fn a_late_gone_for_an_old_address_leaves_the_new_one() {
+    let (server, relay, host, room) = server().await;
+    let jo = phone(
+        &server,
+        common::join_member(&server, &host.access_token, "jo").await,
+        defaults(),
+    )
+    .await;
+    relay.gone.lock().unwrap().push(jo.sealed.clone());
+    relay.hold();
+    post_now(&server, &host.access_token, room.id, "@jo old address").await;
+    until("at the relay", || relay.arrived() == 1).await;
+
+    let resp = http()
+        .patch(server.url(&format!("/push/devices/{}", jo.id)))
+        .bearer_auth(&jo.auth.access_token)
+        .json(&json!({ "sealed_token": "sealed-jo-new" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    relay.release();
+    settled(&server).await;
+    assert_eq!(relay.take_sent().len(), 1, "the old address's 410");
+
+    let resp = http()
+        .get(server.url(&format!("/push/devices/{}", jo.id)))
+        .bearer_auth(&jo.auth.access_token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200, "the phone at its new address is kept");
+    post(&server, &host.access_token, room.id, "@jo new address").await;
+    let sent = relay.take_sent();
+    assert_eq!(sent.len(), 1);
+    assert_eq!(sent[0].token, "sealed-jo-new");
+}
+
+/// A message's notifications that can't reach the relay in time are
+/// dropped, waiting included, rather than piling up to arrive late (#890).
+#[tokio::test]
+async fn notifications_that_wait_too_long_are_dropped() {
+    let (relay, url) = Relay::start().await;
+    let (server, host, room) = common::server_with_room_tuned("garage", |config| {
+        config.push_relay = Some(url);
+        config.push_within = std::time::Duration::from_millis(300);
+    })
+    .await;
+    phone(
+        &server,
+        common::join_member(&server, &host.access_token, "jo").await,
+        defaults(),
+    )
+    .await;
+    relay.hold();
+    post_now(&server, &host.access_token, room.id, "@jo slow relay").await;
+    until("at the relay", || relay.arrived() == 1).await;
+    tokio::time::timeout(std::time::Duration::from_secs(3), settled(&server))
+        .await
+        .expect("given up on within its time, not the request's ten seconds");
+    relay.release();
 }
 
 /// A server whose relay hangs, with jo's phone registered on it.

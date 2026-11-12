@@ -210,6 +210,18 @@ Read for them by hand: no blocking file work on the async runtime (#792,
 shape the code so the mistake can't be made, as `Store` did for the update
 files (#794).
 
+### Is a copy in another language tested where the two languages differ?
+
+For: server, page, shell, phone
+Gaps: A copy in another language, tested where the two agree
+
+The server reads mentions with a copy of the app's message reader, and read
+`@jo𝟙` differently: JavaScript sees the `𝟙` as two halves, Rust as one
+character (#890). Test a copy with examples from where its languages differ,
+such as characters outside the Basic Multilingual Plane, what counts as
+whitespace, what a regex's `.` stops at, and how numbers parse, not only
+from what the code does.
+
 ### What does it leave behind when it ends, fails or is cancelled?
 
 For: page, shell, phone

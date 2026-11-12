@@ -362,5 +362,65 @@
     "body": "",
     "mentions": [],
     "plain": ""
+  },
+  {
+    "body": "@jo𝟙",
+    "mentions": [
+      "jo"
+    ],
+    "plain": "@jo𝟙"
+  },
+  {
+    "body": "𝐀@jo",
+    "mentions": [
+      "jo"
+    ],
+    "plain": "𝐀@jo"
+  },
+  {
+    "body": "@jo𝐀 hi",
+    "mentions": [
+      "jo"
+    ],
+    "plain": "@jo𝐀 hi"
+  },
+  {
+    "body": "𠀀@jo and @jo𠀀",
+    "mentions": [
+      "jo"
+    ],
+    "plain": "𠀀@jo and @jo𠀀"
+  },
+  {
+    "body": "𝐀_x_ y",
+    "mentions": [],
+    "plain": "𝐀x y"
+  },
+  {
+    "body": "_x_𝐀",
+    "mentions": [],
+    "plain": "x𝐀"
+  },
+  {
+    "body": "**a**𝟙",
+    "mentions": [],
+    "plain": "a𝟙"
+  },
+  {
+    "body": "𝐀:tada: and :tada:𝐀",
+    "mentions": [],
+    "plain": "𝐀:tada: and :tada:𝐀"
+  },
+  {
+    "body": "𝐀https://a.example/@jo",
+    "mentions": [],
+    "plain": "𝐀https://a.example/@jo"
+  },
+  {
+    "body": "😀@jo 😀",
+    "mentions": [
+      "jo"
+    ],
+    "plain": "😀@jo 😀"
   }
 ]

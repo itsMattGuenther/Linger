@@ -16,9 +16,13 @@
 //! so a change to one that the other doesn't follow fails a test.
 //!
 //! It works on `char`s where the app works on UTF-16 units. The two differ
-//! only inside characters outside the Basic Multilingual Plane (most emoji),
-//! and no rule here starts or ends inside one: none of them is a word
-//! character, a space, or a character the syntax uses.
+//! only for characters outside the Basic Multilingual Plane (most emoji, and
+//! letters such as `𝐀` and digits such as `𝟙`), which JavaScript holds as
+//! two halves. Every boundary rule looks at one unit beside the syntax, and
+//! for such a character that is a half, which is never a letter or a number:
+//! so in the app `@jo𝟙` mentions `jo` and `𝐀@jo` mentions `jo` too.
+//! [`word_char`] says the same of the whole character (#890). None of them
+//! is a space or a character the syntax uses either.
 
 use std::collections::HashMap;
 
@@ -122,9 +126,15 @@ fn js_line_end(c: char) -> bool {
     matches!(c, '\n' | '\r' | '\u{2028}' | '\u{2029}')
 }
 
-/// `[\p{L}\p{N}_]`: a letter, a number or an underscore.
+/// `[\p{L}\p{N}_]`: a letter, a number or an underscore, as the app asks it
+/// of one UTF-16 unit. A character outside the Basic Multilingual Plane is
+/// two units there, and half of one is neither, so it is no word character
+/// here either, whatever it is whole.
 fn word_char(c: Option<&char>) -> bool {
     let Some(&c) = c else { return false };
+    if u32::from(c) > 0xFFFF {
+        return false;
+    }
     c == '_'
         || matches!(
             c.general_category(),

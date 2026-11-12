@@ -1246,7 +1246,13 @@ and its notifications start at once rather than when its socket is noticed gone.
 
 **What the server sends the relay.** `POST <push_relay>/send`, no redirects followed, ten
 seconds at most, after the message is saved and `message.create` has gone out; posting
-never waits on it.
+never waits on it. Eight go to the relay at once, server-wide, and a message's
+notifications are all handed over within 30 seconds of it, waiting for a turn included
+(`PUSH_SEND_WITHIN_MS`), or dropped. **Right before each one goes**, the server asks again
+whether it should (#890): the phone is still registered, at the address and with the key it
+was encrypted for, its sign-in is live, the switch that let it through is on, no block
+stands between its owner and the author, and its owner isn't using Linger. A phone signed
+out while its notification waited gets nothing.
 
 ```ts
 type RelaySend = {
@@ -1265,7 +1271,8 @@ mention, a DM, a follow and a knock stack.
 
 The relay answers 2xx when Apple or Google took it, and 404 or 410 when the phone's address
 is gone (the app removed, the phone reset, or a sealed address it can't open). Then the
-server forgets that phone, and it registers again the next time it's opened. Anything else
+server forgets that phone, unless it has registered a new address since, and it registers
+again the next time it's opened. Anything else
 is dropped, and never retried: a notification late enough to need a retry is one nobody
 wants. The server logs the status, never the notification or its address.
 

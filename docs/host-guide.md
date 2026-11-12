@@ -366,7 +366,7 @@ That keeps working, and [Updating](#updating-the-server) says how to move them.)
 | `LINGER_BACKUPS` | `off` stops the server's nightly copy of its database into `data/backups` ([Backups](#backups)). | on |
 | `LINGER_SCREENS` | `off` stops screen sharing in voice ([Shared screens](#shared-screens)). Voice carries on. | on |
 | `LINGER_PUSH` | `off` stops phone notifications from your server ([Phone notifications](#phone-notifications)): it never contacts Linger's relay, and forgets every phone that asked. | on |
-| `LINGER_PUSH_RELAY` | Where phone notifications go. Only Linger's own relay can reach the phone apps, so leave it alone unless you're testing a relay of your own. | `https://push.linger.im` |
+| `LINGER_PUSH_RELAY` | Where phone notifications go: an `https://` address with no `?` or `#` part. Only Linger's own relay can reach the phone apps, so leave it alone unless you're testing a relay of your own. | `https://push.linger.im` |
 | `LINGER_BACKUP_S3_*` | A bucket each nightly copy is also sent to, so it survives the machine: `_BUCKET`, `_ACCESS_KEY_ID` and `_SECRET_ACCESS_KEY`, plus `_ENDPOINT`, `_REGION` and `_PATH_STYLE` as for files, and `_PREFIX` for where in the bucket. See [Sending the copies to a bucket](#sending-the-copies-to-a-bucket). | unset — copies stay on the machine |
 | `LINGER_MEDIA_DOMAIN` | The name files are served from. Set it if you are using two free names, or want something other than `cdn.` + your domain. It must be different from the main one. | `cdn.<your address>` |
 | `LINGER_STORAGE` | `local` keeps files on the machine. `s3` keeps them in a cloud bucket. | `local` |

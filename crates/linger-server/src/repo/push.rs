@@ -236,14 +236,65 @@ pub async fn delete(db: &SqlitePool, user_id: UserId, id: PushDeviceId) -> Resul
     Ok(gone == 1)
 }
 
-/// Forget a phone the relay says is gone: Apple or Google no longer know its
-/// address, because the app was removed or the phone reset.
-pub async fn forget(db: &SqlitePool, id: PushDeviceId) -> Result<(), ApiError> {
-    sqlx::query("DELETE FROM push_devices WHERE id = ?")
+/// Forget a phone the relay says is gone: Apple or Google no longer know
+/// the address `sealed_token` stands for, because the app was removed or
+/// the phone reset.
+///
+/// Only while that is still its address (#890): a phone can register a new
+/// one while a notification to the old one is on its way, and the answer
+/// about the old one mustn't take the new one with it.
+pub async fn forget(db: &SqlitePool, id: PushDeviceId, sealed_token: &str) -> Result<(), ApiError> {
+    sqlx::query("DELETE FROM push_devices WHERE id = ? AND sealed_token = ?")
         .bind(id.to_vec())
+        .bind(sealed_token)
         .execute(db)
         .await?;
     Ok(())
+}
+
+/// What a notification has to still be true of right before it goes to the
+/// relay (#890), however long it waited for its turn: the phone is
+/// registered, at the same address and with the same key it was encrypted
+/// for; its sign-in is live; the switch that let it through is still on;
+/// and no block stands between its owner and `from`, who wrote or knocked.
+pub struct Still<'a> {
+    pub id: PushDeviceId,
+    pub sealed_token: &'a str,
+    pub public_key: &'a [u8],
+    /// The kind's switch, as `push_devices` names it, or `room`.
+    pub switch: &'static str,
+    pub room_id: Option<RoomId>,
+    pub from: UserId,
+}
+
+/// Whether [`Still`] holds.
+pub async fn still_wanted(db: &SqlitePool, still: &Still<'_>, now: i64) -> Result<bool, ApiError> {
+    let found: Option<i64> = sqlx::query_scalar(
+        "SELECT 1 FROM push_devices d
+         WHERE d.id = ?1 AND d.sealed_token = ?2 AND d.public_key = ?3
+           AND CASE ?4 WHEN 'mentions' THEN d.mentions
+                       WHEN 'dms' THEN d.dms
+                       WHEN 'knocks' THEN d.knocks
+                       WHEN 'follows' THEN d.follows
+                       WHEN 'room' THEN EXISTS (SELECT 1 FROM push_rooms pr
+                                               WHERE pr.device_id = d.id AND pr.room_id = ?5)
+                       ELSE 0 END
+           AND EXISTS (SELECT 1 FROM refresh_tokens t
+                       WHERE t.family_id = d.family_id AND t.revoked_at IS NULL AND t.expires_at > ?6)
+           AND NOT EXISTS (SELECT 1 FROM blocks b
+                           WHERE (b.user_id = d.user_id AND b.blocked_id = ?7)
+                              OR (b.user_id = ?7 AND b.blocked_id = d.user_id))",
+    )
+    .bind(still.id.to_vec())
+    .bind(still.sealed_token)
+    .bind(still.public_key)
+    .bind(still.switch)
+    .bind(still.room_id.map(|room| room.to_vec()))
+    .bind(now)
+    .bind(still.from.to_vec())
+    .fetch_optional(db)
+    .await?;
+    Ok(found.is_some())
 }
 
 /// Forget the phone of every sign-in that has ended: revoked, or past its

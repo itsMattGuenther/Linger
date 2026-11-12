@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use linger_core::limits::{
     DEFAULT_POOL_BYTES, DEFAULT_SIGNUPS_PER_HOUR, MAX_FILE_BYTES, PRESENCE_GRACE_MS,
-    RESUME_BUFFER_MAX_FRAMES, SCREEN_ALIVE_MS, SCREEN_SHARE_LINE_AFTER_MS,
+    PUSH_SEND_WITHIN_MS, RESUME_BUFFER_MAX_FRAMES, SCREEN_ALIVE_MS, SCREEN_SHARE_LINE_AFTER_MS,
     VOICE_JOIN_LINE_AFTER_MS,
 };
 
@@ -169,6 +169,11 @@ pub struct Config {
     /// phone's details, and forgets any it had. On by default, through
     /// [`DEFAULT_PUSH_RELAY`].
     pub push_relay: Option<reqwest::Url>,
+    /// How long one message's notifications may take to reach the relay,
+    /// waiting for a turn included (#830): `PUSH_SEND_WITHIN_MS`. Not an
+    /// environment variable, like `voice_line_after`. Tests shorten it
+    /// rather than wait.
+    pub push_within: Duration,
 }
 
 /// The relay Linger's phone apps are registered with (#887). Only it holds
@@ -367,8 +372,9 @@ pub enum ConfigError {
     )]
     Push(String),
     #[error(
-        "LINGER_PUSH_RELAY is {0:?}. It wants the relay's address, starting https://. Leave it \
-         out for {DEFAULT_PUSH_RELAY}, the relay Linger's phone apps work with."
+        "LINGER_PUSH_RELAY is {0:?}. It wants the relay's address, starting https://, with no \
+         ? or # part. Leave it out for {DEFAULT_PUSH_RELAY}, the relay Linger's phone apps work \
+         with."
     )]
     PushRelay(String),
     #[error(
@@ -459,6 +465,7 @@ impl Config {
                 std::env::var("LINGER_PUSH").ok(),
                 std::env::var("LINGER_PUSH_RELAY").ok(),
             )?,
+            push_within: Duration::from_millis(PUSH_SEND_WITHIN_MS),
         })
     }
 
@@ -719,8 +726,19 @@ fn push_relay(
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| DEFAULT_PUSH_RELAY.to_string());
     let text = raw.trim();
+    // An address and nothing else: a query, a fragment or a password would
+    // swallow the `/send` added after it (#890).
     match reqwest::Url::parse(text) {
-        Ok(url) if url.scheme() == "https" && url.host_str().is_some() => Ok(Some(url)),
+        Ok(url)
+            if url.scheme() == "https"
+                && url.host_str().is_some()
+                && url.query().is_none()
+                && url.fragment().is_none()
+                && url.username().is_empty()
+                && url.password().is_none() =>
+        {
+            Ok(Some(url))
+        }
         _ => Err(ConfigError::PushRelay(text.to_string())),
     }
 }
@@ -1271,6 +1289,7 @@ mod tests {
             backup_bucket: None,
             screens: true,
             push_relay: None,
+            push_within: Duration::from_millis(PUSH_SEND_WITHIN_MS),
         }
     }
 
@@ -1530,6 +1549,9 @@ mod tests {
             "relay.example",
             "https://",
             "ftp://relay.example",
+            "https://relay.example?key=x",
+            "https://relay.example/push#here",
+            "https://me:secret@relay.example",
         ] {
             assert!(
                 matches!(relay(None, Some(bad)), Err(ConfigError::PushRelay(_))),

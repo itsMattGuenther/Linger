@@ -408,6 +408,10 @@ pub const PUSH_EVERY_QUIET_MS: i64 = 15 * 60_000;
 /// that day; a knock is a tap on the shoulder, and stale in minutes.
 pub const PUSH_KEEP_SECS: u32 = 24 * 60 * 60;
 pub const PUSH_KNOCK_KEEP_SECS: u32 = 10 * 60;
+/// How long the server keeps trying to hand one message's notifications to
+/// the relay, waiting for a turn included. Past it they're dropped: a slow
+/// relay costs notifications, never a pile of them arriving late.
+pub const PUSH_SEND_WITHIN_MS: u64 = 30_000;
 
 #[cfg(test)]
 mod tests {
