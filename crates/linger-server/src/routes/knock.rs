@@ -8,9 +8,11 @@
 //! anybody compose.
 //!
 //! So the whole of it is: check the person is really here, check the rate
-//! limit, put one frame on that person's sessions. If they are not connected,
-//! the knock lands nowhere and that is the correct behaviour — it is a tap on
-//! the shoulder, not a voicemail.
+//! limit, put one frame on that person's sessions, and wake their phone if
+//! they asked to hear knocks there and aren't using Linger anywhere else
+//! (#830). Nothing waits for them: a knock nobody was there for is gone, and
+//! a phone keeps one for minutes, not hours. It is a tap on the shoulder,
+//! not a voicemail.
 
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -68,5 +70,6 @@ async fn knock(
             from_user_id: auth.id,
         },
     );
+    crate::push::knocked(&state, auth.id, req.target_user_id);
     Ok(StatusCode::NO_CONTENT)
 }

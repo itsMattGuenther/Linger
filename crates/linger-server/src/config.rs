@@ -163,7 +163,17 @@ pub struct Config {
     /// (#360, SPEC §4.20). On unless set to `off`: a host's way to turn it
     /// off without an update, should it ever need to be.
     pub screens: bool,
+    /// `LINGER_PUSH` and `LINGER_PUSH_RELAY`: the relay phone notifications
+    /// go through (SPEC §4.15, #830), or `None` when the host set
+    /// `LINGER_PUSH=off`. Then the server never contacts a relay, takes no
+    /// phone's details, and forgets any it had. On by default, through
+    /// [`DEFAULT_PUSH_RELAY`].
+    pub push_relay: Option<reqwest::Url>,
 }
+
+/// The relay Linger's phone apps are registered with (#887). Only it holds
+/// the keys Apple and Google take notifications for the app from.
+pub const DEFAULT_PUSH_RELAY: &str = "https://push.linger.im";
 
 /// What takes a shared file nobody starred or pinned (`LINGER_FILE_EXPIRY_DAYS`,
 /// SPEC §4.10). The sweeper (`crate::expiry`) does the taking.
@@ -351,6 +361,17 @@ pub enum ConfigError {
     )]
     Screens(String),
     #[error(
+        "LINGER_PUSH is {0:?}. Leave it out (or write `on`) so phones signed in here get the \
+         notifications their owners choose, through {DEFAULT_PUSH_RELAY}, or write `off` so \
+         this server never sends any."
+    )]
+    Push(String),
+    #[error(
+        "LINGER_PUSH_RELAY is {0:?}. It wants the relay's address, starting https://. Leave it \
+         out for {DEFAULT_PUSH_RELAY}, the relay Linger's phone apps work with."
+    )]
+    PushRelay(String),
+    #[error(
         "{missing} isn't set, but other LINGER_BACKUP_S3_ settings are. The nightly copy goes \
          to a bucket only when LINGER_BACKUP_S3_BUCKET, LINGER_BACKUP_S3_ACCESS_KEY_ID and \
          LINGER_BACKUP_S3_SECRET_ACCESS_KEY are all set. Set the missing one, or remove the \
@@ -434,6 +455,10 @@ impl Config {
             backups,
             backup_bucket: backup_bucket(|name| std::env::var(name).ok(), backups)?,
             screens: screens(std::env::var("LINGER_SCREENS").ok())?,
+            push_relay: push_relay(
+                std::env::var("LINGER_PUSH").ok(),
+                std::env::var("LINGER_PUSH_RELAY").ok(),
+            )?,
         })
     }
 
@@ -670,6 +695,33 @@ fn screens(configured: Option<String>) -> Result<bool, ConfigError> {
         Ok(true)
     } else {
         Err(ConfigError::Screens(text.to_string()))
+    }
+}
+
+/// `LINGER_PUSH` and `LINGER_PUSH_RELAY` (#830): the relay, unless push is
+/// `off`. Anything but `on` or `off` is a startup error, and so is a relay
+/// that isn't an `https` address: a notification is encrypted, but the
+/// sealed address beside it shouldn't cross a network in the open either.
+fn push_relay(
+    configured: Option<String>,
+    relay: Option<String>,
+) -> Result<Option<reqwest::Url>, ConfigError> {
+    if let Some(raw) = configured.filter(|value| !value.trim().is_empty()) {
+        let text = raw.trim();
+        if text.eq_ignore_ascii_case("off") {
+            return Ok(None);
+        }
+        if !text.eq_ignore_ascii_case("on") {
+            return Err(ConfigError::Push(text.to_string()));
+        }
+    }
+    let raw = relay
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| DEFAULT_PUSH_RELAY.to_string());
+    let text = raw.trim();
+    match reqwest::Url::parse(text) {
+        Ok(url) if url.scheme() == "https" && url.host_str().is_some() => Ok(Some(url)),
+        _ => Err(ConfigError::PushRelay(text.to_string())),
     }
 }
 
@@ -1218,6 +1270,7 @@ mod tests {
             backups: true,
             backup_bucket: None,
             screens: true,
+            push_relay: None,
         }
     }
 
@@ -1445,6 +1498,44 @@ mod tests {
             pool_bytes(Some("100MB".to_string())),
             Err(ConfigError::PoolTooSmall(_))
         ));
+    }
+
+    #[test]
+    fn push_goes_through_linger_s_relay_unless_turned_off() {
+        let relay = |on: Option<&str>, relay: Option<&str>| {
+            push_relay(on.map(str::to_string), relay.map(str::to_string))
+        };
+        let default = relay(None, None).unwrap().unwrap();
+        assert_eq!(default.as_str(), "https://push.linger.im/");
+        assert_eq!(relay(Some(" on "), Some("")).unwrap(), Some(default));
+        assert_eq!(relay(Some("OFF"), None).unwrap(), None);
+        // Off wins over an address: nothing is sent anywhere.
+        assert_eq!(
+            relay(Some("off"), Some("https://relay.example")).unwrap(),
+            None
+        );
+        assert_eq!(
+            relay(None, Some("https://relay.example/push"))
+                .unwrap()
+                .unwrap()
+                .as_str(),
+            "https://relay.example/push"
+        );
+        assert!(matches!(
+            relay(Some("yes"), None),
+            Err(ConfigError::Push(_))
+        ));
+        for bad in [
+            "http://relay.example",
+            "relay.example",
+            "https://",
+            "ftp://relay.example",
+        ] {
+            assert!(
+                matches!(relay(None, Some(bad)), Err(ConfigError::PushRelay(_))),
+                "{bad}"
+            );
+        }
     }
 
     #[test]

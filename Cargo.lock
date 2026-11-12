@@ -1673,6 +1673,7 @@ dependencies = [
 name = "linger-server"
 version = "0.5.4"
 dependencies = [
+ "aes-gcm",
  "anyhow",
  "argon2",
  "async-trait",
@@ -1683,12 +1684,14 @@ dependencies = [
  "futures-util",
  "gif",
  "hex",
+ "hkdf",
  "image",
  "infer",
  "jiff",
  "jsonwebtoken",
  "linger-core",
  "linger-sfu",
+ "p256",
  "png",
  "rand 0.8.7",
  "reqwest",

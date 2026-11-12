@@ -220,7 +220,8 @@ sharing (#360), shipped in 0.5.2** (2026-10-27); what's left of it, its real
 check (T-1908) included, is under
 [M16](#m16--screen-sharing-360-shipped-in-052). **Mobile is started**
 (2026-10-02): Android since 0.4.8, voice since 2026-10-19, and friends'
-iPhones through TestFlight since 0.5.1. It has [its own section](#mobile--started-2026-10-02).
+iPhones through TestFlight since 0.5.1. Phone notifications are being built
+(#830, from 2026-11-12). It has [its own section](#mobile--started-2026-10-02).
 
 Closed milestones are archived in `docs/tasks/` with every landing note and
 surprise intact. Tasks T-001…T-604 live there. Decisions that shaped the queue
@@ -617,7 +618,8 @@ until the desktop app was finished and lived with; the release checks closed on
 2026-09-25 and friends have used it since. **T-1601 is decided and written into
 SPEC §4.15:** a phone app for iPhone and Android from the same Tauri 2 code, no
 push and no notifications, no `mobile` presence, uploads yes, and text only at
-first: voice rooms came on 2026-10-19 (T-1606, #429). The reasons are in
+first: voice rooms came on 2026-10-19 (T-1606, #429), and notifications chosen
+by kind on 2026-11-11 (#830, T-1608 below). The reasons are in
 [`docs/decisions.md`](docs/decisions.md).
 
 *Check: sign in, read a room, send a message and a photo, from a phone.*
@@ -635,6 +637,7 @@ macOS runners, or a friend's Mac.
   voice in the first version: it comes back only if people using the phone app
   ask. Phone backups leave Linger out (the opt-in was dropped 2026-10-03), and
   report and block come before any store listing (T-1605). SPEC §4.15.
+  *Push reversed 2026-11-11 (#830, T-1608).*
 
 - 🟡 **T-1602 · The mobile shell** — effort: **high**
   *Android: accepted on Matt's Pixel (2026-10-03). iPhone: on friends'
@@ -906,6 +909,20 @@ macOS runners, or a friend's Mac.
   *Accept:* on a real phone, share a screenshot from the photo library to Linger,
   pick a room, see it in that room's message box, send it, and see it arrive
   on a computer.
+
+- 🟡 **T-1608 · Phone notifications, chosen by kind** — effort: **high** (#830)
+  *Decided by Matt, 2026-11-11 (`docs/decisions.md`, "Phones get
+  notifications, through a relay that can't read them"); SPEC §4.15, PROTOCOL
+  §5.* #830 is the parent; each job is a sub-issue. ✅ The Apple, Google and
+  Cloudflare accounts (#885, 2026-11-12). 🟡 The server's side and the docs
+  (#886): who hears about what, RFC 8291 encryption, the phone's endpoints and
+  the host's off switch. Then the relay (#887), Android (#888) and the iPhone's
+  notification extension (#889).
+  *Accept:* with Linger closed and the phone locked, each kind arrives on a
+  real Android phone and, through the TestFlight testers, an iPhone; a switch
+  turned off stops it; "only mentions" lets only mentions through; Do Not
+  Disturb holds them; a tap opens the right conversation; signing out stops
+  them; and there's never a badge.
 
 ---
 
@@ -1333,7 +1350,9 @@ run again when its area changes.
 - Bundle identifier is `com.linger.desktop` — fine? Changing after M7 is painful.
 - ~~**Mobile push goes through Apple and Google, or it does not exist.**~~
   **Answered by Matt, 2026-10-02**, and written into SPEC §4.15: no push, so no
-  relay and no notifications, and the README stays as it is. There is
+  relay and no notifications, and the README stays as it is. *Reversed
+  2026-11-11 (#830): push, through one relay Linger runs, encrypted so the
+  relay, Apple and Google can't read it, and the README says so.* There is
   no third way to wake a phone app. Whatever a notification says, and the fact
   that it happened, passes through a company that is not you. The README's
   privacy section does not currently allow for that. Three answers: no push

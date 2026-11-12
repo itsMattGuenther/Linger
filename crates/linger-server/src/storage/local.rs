@@ -392,6 +392,7 @@ mod tests {
             backups: true,
             backup_bucket: None,
             screens: true,
+            push_relay: None,
         }))
         .unwrap()
     }

@@ -264,8 +264,9 @@ already using Linger or reading that DM. Both are on unless turned off, on that
 computer (Settings → Notifications). Besides these, Linger says two things about
 itself: where it went, once ever, the first time the list is closed (§3, #400), and
 that your share has gone black, once a share (§4.20).
-Nothing opens a window by itself. The phone
-app raises none of these (§4.15): it marks mentions and DMs inside the app only.
+Nothing opens a window by itself. A phone has
+notifications of its own, chosen by kind on that phone (§4.15, #830); the
+desktop's switches don't touch them, and they never carry a number.
 
 A mention is stored as `@username`. Usernames never change, so an old mention never
 breaks. People mention each other by the names they know (#267): `@` at the start of
@@ -666,7 +667,10 @@ The sender sees `knocked` for three seconds, then the control resets. This
 acknowledges the request, not delivery; it is not knock history. A refused
 knock never shows `knocked`, wherever it was pressed. Somebody offline can't
 be knocked: the control stays where it is, greyed out, and says why ("Can't
-knock while Justin B is offline.") until they're back (#288). The recipient's
+knock while Justin B is offline.") until they're back (#288). Somebody online
+but idle or away on a computer can still be knocked, and their phone hears it
+if it hears knocks (§4.15, #830): "Sam knocked", kept for ten minutes at most,
+since a knock is a tap on the shoulder and not a voicemail. The recipient's
 card still disappears after eight seconds. A second knock from the same person takes their card's
 place, its eight seconds starting over, rather than stacking a second card, and
 at most three cards show at once, the newest (#512). Changing cards or servers must not
@@ -1045,16 +1049,54 @@ client in Rust, the same screens laid out for a phone. It is not a phone-friendl
 website. It is for seeing who is around and answering them, not a full port. It
 started **text only**, and voice rooms came to it on 2026-10-19 (#429, below).
 
-**Nothing wakes it, and it raises no notifications.** The only way to wake a closed
-phone app is a push through Apple's or Google's push service. Sending one needs keys
-that cannot be handed to every host, and the usual answer, one central relay that
-holds them, is a company in the middle. So there is no push and no relay, and the
-README's privacy promise stands as written: nothing new leaves the server. The phone
-app raises no notification, open or closed: no banners, nothing on the lock screen,
-and no badge on its icon, which would be an unread count (§4.2). Mentions and DMs are
-marked inside the app as on desktop and are there when you open it. Opening it
-catches up the way a desktop app does after a reconnect. **The one exception is the
-call bar** (#429): while you're in voice, Android shows one silent, ongoing line,
+**Notifications, chosen by kind** (Matt, 2026-11-11, #830). This reverses "nothing
+wakes it" (2026-10-02, `docs/decisions.md`): some friends never take part because
+they don't open Linger unless something tells them to. A closed phone app can only be
+woken by Apple's or Google's push service, with keys from Linger's own accounts that
+can't be handed to every host. So one relay holds them, Matt's, at `push.linger.im`,
+with its code in this repository. The phone has the relay seal its push address, and
+its server keeps only the sealed copy, which only the relay can open. The server
+encrypts each notification to a key only that phone holds (RFC 8291) and hands it to
+the relay, which passes it to Apple or Google. They and the relay learn that a phone
+got something, and when; none of them can read what it says. The relay stores
+nothing and keeps no logs. A host can switch it off for their server
+(`LINGER_PUSH=off`), and then the server never contacts the relay and keeps no
+phone's details.
+
+- **Off until the person says yes.** The phone asks once, the first time it matters.
+- **Kinds, each with its own switch,** per server on each phone (Settings →
+  Notifications, with the server picker Settings already has): **mentions**,
+  somebody names you; **DMs**, somebody writes to you; **knocks** (§4.9); and
+  **people you follow** ("always notify me when [person] posts", §4.2). Each is on
+  once the person says yes. **Rooms** are off unless chosen, one by one: **When it
+  wakes up**, the room's first message after an hour with none, or **Every
+  message**, once a burst: a second notification from the room replaces the first,
+  and the room stays quiet until it's read or 15 minutes pass. **Only when somebody
+  mentions me** and **Nothing** are one tap each, and Nothing makes the server
+  forget the phone.
+- **What one says:** who, where, and the start of the message ("Sam in #general:
+  you around tonight?"), a DM's only who wrote, and a knock "Sam knocked". The
+  phone's own lock-screen preview setting decides whether the words show while it's
+  locked. Tapping one opens that conversation.
+- **No double buzz.** Nothing while you're using Linger on another device, or on
+  this one: the app open has its chimes. Idle or away elsewhere, the phone hears
+  it. A phone app put in the background says it's idle (§4.3), so its
+  notifications start at once.
+- **Never** your own messages, anything from somebody you blocked or who blocked
+  you, a conversation you can't see, or a reaction, a poll, a new MOTD or a voice
+  join line, as on desktop. No badge on the icon and no number in a notification
+  (§4.2). No `@everyone`.
+- **The phone's own settings still apply:** Do Not Disturb and Focus, lock-screen
+  previews, and on Android one notification channel per kind, so the phone can
+  switch kinds off too. Linger adds no quiet hours of its own on the phone.
+- **Signing out** of a server on the phone ends its notifications from that server,
+  and so does anything else that ends the sign-in.
+- **Not yet:** a notification when somebody starts voice in a room, and clearing one
+  when it's read on another device. Either can follow.
+
+Mentions and DMs are marked inside the app as on desktop and are there when you open
+it. Opening it catches up the way a desktop app does after a reconnect. **The call
+bar** (#429): while you're in voice, Android shows one silent, ongoing line,
 "In voice in #general", with Mute and Leave. Android ends a background app's
 microphone and network within seconds unless the app keeps a foreground service, and
 a foreground service must show a notification, so the bar is what keeps a call going
@@ -1078,9 +1120,11 @@ nothing. They go out as notification sounds, so they follow the phone's notifica
 volume and vibration settings, as a message app's do.
 
 **Presence is the same five states** (§4.3). Open on screen, a phone is `around` or
-`in_room`. Sent to the background, the phone soon stops the app and its connection
-closes, so it shows `offline`, or whatever their other devices say (§4.3). That is
-the truth: it hears nothing until it is opened again. Presence never says which
+`in_room`. Sent to the background, it says `idle` at once, so its notifications
+start (#830), and the phone soon stops the app and its connection closes, so it
+shows `offline`, or whatever their other devices say (§4.3). That is the truth: the
+app hears nothing until it is opened again, and only a notification reaches it in
+between. Presence never says which
 device somebody is on, because it is where they are, not what they are holding.
 There is no `mobile` state. One would also break older desktop apps: they can't read
 a presence value they don't know, and it would arrive in the first message they get
@@ -1216,8 +1260,8 @@ chip on an iPhone opens only the host's Take out, and nothing for anybody else.
 There a person's volume, and everyone in a
 big room by name, rise from the bottom of the screen as its menus do, and each
 chip takes a tap a thumb's height (#747). A locked phone stays in the call (the call bar,
-above). Ringing a closed phone into a voice room would need push, so that stays out
-(§4.14).
+above). Ringing a closed phone into a voice room isn't one of the notifications' kinds
+yet (#830).
 
 ### 4.16 A co-host
 
@@ -1649,7 +1693,8 @@ says what replaced it: a status somebody typed.
 - DMs and group DMs (§4.13)
 - Search (§4.12)
 - Knock (§4.9)
-- A phone app for iPhone and Android, with voice rooms (#429) and no push (§4.15)
+- A phone app for iPhone and Android, with voice rooms (#429) and notifications
+  chosen by kind (#830, §4.15)
 - Every emoji, shortcodes, and a server's own emoji (§4.17, #359)
 - Polls, asked with `/poll` by the host or a co-host (§4.18, #474)
 - Screen sharing at 30 or 60 frames a second, watched from every app, with the

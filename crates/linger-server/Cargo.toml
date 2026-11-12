@@ -12,6 +12,11 @@ linger-core = { workspace = true }
 linger-sfu = { workspace = true }
 
 anyhow = { workspace = true }
+# Phone notifications are encrypted to the phone (RFC 8291, #830), so the
+# relay, Apple and Google carry them without reading them: P-256 key
+# agreement, HKDF and AES-128-GCM. All three are already in the build, the
+# same versions, for voice's DTLS (`str0m`'s rust-crypto backend).
+aes-gcm = "0.10"
 argon2 = { workspace = true }
 async-trait = "0.1"
 axum = { workspace = true }
@@ -26,6 +31,7 @@ futures-util = { workspace = true }
 # without decoding them, before deciding to (#487). Already built for `image`.
 gif = "0.14"
 hex = { workspace = true }
+hkdf = "0.12"
 # Uploaded images are decoded and re-encoded, which is what strips EXIF and
 # neutralises polyglots in one step (SPEC §4.10, ARCHITECTURE §7).
 image = { version = "0.25", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
@@ -35,6 +41,7 @@ infer = "0.22"
 # (#503). Already in the build: `rusty-s3` is built on it.
 jiff = { version = "0.2", default-features = false, features = ["std"] }
 jsonwebtoken = { workspace = true }
+p256 = { version = "0.13", default-features = false, features = ["ecdh", "std"] }
 # The PNG writer `image` uses, named directly to write a picture a few rows at
 # a time rather than all of it in memory first (#487). Already built for `image`.
 png = "0.18"

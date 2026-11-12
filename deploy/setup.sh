@@ -344,4 +344,8 @@ one).
 If your provider has a firewall of its own (DigitalOcean's Cloud Firewalls,
 say), open these ports there too: ${ports[*]}.
 Updating later is ./update.sh, from this folder.
+
+Phones signed in here get the notifications their owners choose, through
+Linger's relay (push.linger.im), encrypted so the relay, Apple and Google
+can't read them. LINGER_PUSH=off in .env turns that off.
 DONE

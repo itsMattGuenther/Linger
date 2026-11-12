@@ -12,6 +12,7 @@ pub mod nonces;
 #[cfg(test)]
 mod plans;
 pub mod polls;
+pub mod push;
 pub mod rooms;
 pub mod search;
 pub mod users;

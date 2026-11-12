@@ -358,7 +358,7 @@ fn new_opaque_token() -> String {
     hex::encode(bytes)
 }
 
-fn token_hash(token: &str) -> String {
+pub(crate) fn token_hash(token: &str) -> String {
     hex::encode(Sha256::digest(token.as_bytes()))
 }
 
@@ -566,6 +566,15 @@ pub async fn share_family<E>(
 /// Logout: revoke the presented token's whole family. Idempotent; unknown
 /// tokens are silently fine (logout must never fail).
 pub async fn revoke_family(db: &SqlitePool, token: &str) -> anyhow::Result<()> {
+    // The phone this sign-in registered for notifications goes with it
+    // (#830): signed out is signed out, on the lock screen too.
+    sqlx::query(
+        "DELETE FROM push_devices
+         WHERE family_id = (SELECT family_id FROM refresh_tokens WHERE token_hash = ?)",
+    )
+    .bind(token_hash(token))
+    .execute(db)
+    .await?;
     sqlx::query(
         "UPDATE refresh_tokens SET revoked_at = ?
          WHERE revoked_at IS NULL
@@ -598,6 +607,11 @@ pub async fn end_sign_ins(
     .bind(user_id.to_vec())
     .execute(&mut *conn)
     .await?;
+    // And every phone those sign-ins registered for notifications (#830).
+    sqlx::query("DELETE FROM push_devices WHERE user_id = ?")
+        .bind(user_id.to_vec())
+        .execute(&mut *conn)
+        .await?;
     sqlx::query("UPDATE users SET token_generation = token_generation + 1 WHERE id = ?")
         .bind(user_id.to_vec())
         .execute(&mut *conn)

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -443,5 +445,26 @@ describe("hostile messages parse about as fast as ordinary ones (#512)", () => {
       ["https://y.example", "https://y.example/"],
     ]);
     expect(plainText("*a* and **b** and _c_ not snake_case")).toBe("a and b and c not snake_case");
+  });
+});
+
+/**
+ * The server reads a body for phone notifications with its own copy of this
+ * parser (`crates/linger-server/src/markdown.rs`, #830): who it mentions, and
+ * its words without the formatting. Both read these examples, so a rule
+ * changed here and not there, or there and not here, fails one of them.
+ */
+describe("the examples the server reads the same way", () => {
+  const cases = JSON.parse(
+    readFileSync(new URL("../../../crates/linger-server/tests/fixtures/markdown.json", import.meta.url), "utf8"),
+  ) as { body: string; mentions: string[]; plain: string }[];
+
+  it("are all there", () => {
+    expect(cases.length).toBeGreaterThan(20);
+  });
+
+  it.each(cases.map((c) => [JSON.stringify(c.body), c] as const))("%s", (_, { body, mentions, plain }) => {
+    expect(mentionHandles(body)).toEqual(mentions);
+    expect(plainText(body)).toBe(plain);
   });
 });

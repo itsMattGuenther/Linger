@@ -267,6 +267,9 @@ pub async fn sweep(state: &AppState) -> Result<Swept, ApiError> {
     .execute(&state.db.write)
     .await?
     .rows_affected();
+    // The phones of sign-ins that have ended (#830). Nothing is sent to one
+    // anyway; this is about not keeping its sealed address and keys.
+    crate::repo::push::forget_ended(&state.db.write, now_ms()).await?;
 
     swept.archives = crate::export::sweep(state).await?;
 

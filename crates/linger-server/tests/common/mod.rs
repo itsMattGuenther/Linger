@@ -82,6 +82,7 @@ pub fn data_config(dir: &tempfile::TempDir) -> Config {
         backups: true,
         backup_bucket: None,
         screens: true,
+        push_relay: None,
     }
 }
 
@@ -116,6 +117,7 @@ pub async fn spawn_named_server(domain: &str, media_domain: &str) -> TestServer 
         backups: true,
         backup_bucket: None,
         screens: true,
+        push_relay: None,
     };
     spawn_with(dir, config).await
 }
@@ -161,6 +163,7 @@ pub async fn spawn_s3_server() -> Option<TestServer> {
         backups: true,
         backup_bucket: None,
         screens: true,
+        push_relay: None,
     };
     Some(spawn_with(dir, config).await)
 }
