@@ -607,6 +607,8 @@ mod tests {
             backups: true,
             backup_bucket: None,
             screens: true,
+            push_relay: None,
+            push_within: std::time::Duration::from_millis(linger_core::limits::PUSH_SEND_WITHIN_MS),
         }))
         .unwrap();
         store

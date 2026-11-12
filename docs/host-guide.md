@@ -365,6 +365,8 @@ That keeps working, and [Updating](#updating-the-server) says how to move them.)
 | `LINGER_FILE_EXPIRY_DAYS` | When old files are deleted. `when-full` keeps them until the server needs the room: past 90% of `LINGER_POOL_BYTES`, the oldest go first until it's under 80%. A number of days deletes each file that long after it was shared, however much room there is. `off` keeps every sent file forever, and uploads are refused once it's full. Starred files, and files on pinned messages, never go. | `when-full` |
 | `LINGER_BACKUPS` | `off` stops the server's nightly copy of its database into `data/backups` ([Backups](#backups)). | on |
 | `LINGER_SCREENS` | `off` stops screen sharing in voice ([Shared screens](#shared-screens)). Voice carries on. | on |
+| `LINGER_PUSH` | `off` stops phone notifications from your server ([Phone notifications](#phone-notifications)): it never contacts Linger's relay, and forgets every phone that asked. | on |
+| `LINGER_PUSH_RELAY` | Where phone notifications go: an `https://` address with no `?` or `#` part. Only Linger's own relay can reach the phone apps, so leave it alone unless you're testing a relay of your own. | `https://push.linger.im` |
 | `LINGER_BACKUP_S3_*` | A bucket each nightly copy is also sent to, so it survives the machine: `_BUCKET`, `_ACCESS_KEY_ID` and `_SECRET_ACCESS_KEY`, plus `_ENDPOINT`, `_REGION` and `_PATH_STYLE` as for files, and `_PREFIX` for where in the bucket. See [Sending the copies to a bucket](#sending-the-copies-to-a-bucket). | unset — copies stay on the machine |
 | `LINGER_MEDIA_DOMAIN` | The name files are served from. Set it if you are using two free names, or want something other than `cdn.` + your domain. It must be different from the main one. | `cdn.<your address>` |
 | `LINGER_STORAGE` | `local` keeps files on the machine. `s3` keeps them in a cloud bucket. | `local` |
@@ -518,6 +520,27 @@ Your server passes voice along. It keeps none of it and plays none of it,
 but it is on your machine, so you *could* listen, the same way you could read
 messages. Anybody still on Linger 0.4.0 or older can't join voice until they
 update.
+
+## Phone notifications
+
+People who use Linger on a phone choose, on that phone, what notifies them:
+mentions, DMs, knocks, people they follow, and rooms they pick. A closed phone
+can only be woken through Apple or Google, so your server sends each
+notification to Linger's relay, `push.linger.im`, which passes it to them.
+
+- **Your server encrypts each one** so only that phone can open it. The relay,
+  Apple and Google learn that a phone got something, and when, and can't read
+  what it says. The relay keeps nothing and logs nothing; its code is in
+  Linger's repository.
+- **Your server never learns where a phone is.** The phone gives it an address
+  locked by the relay, which only the relay can open.
+- **It costs nothing to set up.** No port, no account, no setting. Nothing is
+  sent until somebody's phone asks for notifications, and only then for what
+  they chose.
+
+To turn it off for your whole server, put `LINGER_PUSH=off` in `.env` and run
+`docker compose up -d`. Your server then never contacts the relay, forgets every
+phone that asked, and the apps say notifications are off here.
 
 ## The voice relay
 
@@ -1072,4 +1095,6 @@ Say this out loud to the people you invite, because it is true:
 > software.
 
 Linger has no telemetry, analytics, or crash reporting. Nobody is counting
-your users.
+your users. Phone notifications go through Linger's relay and Apple or Google,
+encrypted so none of them can read them ([Phone
+notifications](#phone-notifications)); `LINGER_PUSH=off` stops them.

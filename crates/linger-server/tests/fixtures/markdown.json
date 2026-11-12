@@ -1,0 +1,426 @@
+[
+  {
+    "body": "hi @matt",
+    "mentions": [
+      "matt"
+    ],
+    "plain": "hi @matt"
+  },
+  {
+    "body": "`@matt` in code",
+    "mentions": [],
+    "plain": "@matt in code"
+  },
+  {
+    "body": "```\n@matt\n```",
+    "mentions": [],
+    "plain": "@matt"
+  },
+  {
+    "body": "you@example.com",
+    "mentions": [],
+    "plain": "you@example.com"
+  },
+  {
+    "body": "@matthews and @matt",
+    "mentions": [
+      "matthews",
+      "matt"
+    ],
+    "plain": "@matthews and @matt"
+  },
+  {
+    "body": "@Matt with a capital",
+    "mentions": [],
+    "plain": "@Matt with a capital"
+  },
+  {
+    "body": "\\@matt escaped",
+    "mentions": [],
+    "plain": "@matt escaped"
+  },
+  {
+    "body": "**@matt** look",
+    "mentions": [
+      "matt"
+    ],
+    "plain": "@matt look"
+  },
+  {
+    "body": "[@matt](https://example.com)",
+    "mentions": [
+      "matt"
+    ],
+    "plain": "@matt"
+  },
+  {
+    "body": "[click](https://example.com/@matt)",
+    "mentions": [],
+    "plain": "click"
+  },
+  {
+    "body": "https://example.com/@matt",
+    "mentions": [],
+    "plain": "https://example.com/@matt"
+  },
+  {
+    "body": "HTTPS://EXAMPLE.COM/@matt",
+    "mentions": [],
+    "plain": "HTTPS://EXAMPLE.COM/@matt"
+  },
+  {
+    "body": "> @matt said",
+    "mentions": [
+      "matt"
+    ],
+    "plain": "@matt said"
+  },
+  {
+    "body": "- @sam\n- @matt",
+    "mentions": [
+      "sam",
+      "matt"
+    ],
+    "plain": "@sam @matt"
+  },
+  {
+    "body": "1. @sam\n2) @jo",
+    "mentions": [
+      "sam",
+      "jo"
+    ],
+    "plain": "@sam @jo"
+  },
+  {
+    "body": "@a too short",
+    "mentions": [],
+    "plain": "@a too short"
+  },
+  {
+    "body": "@matt @matt twice",
+    "mentions": [
+      "matt"
+    ],
+    "plain": "@matt @matt twice"
+  },
+  {
+    "body": "x@matt",
+    "mentions": [],
+    "plain": "x@matt"
+  },
+  {
+    "body": "@matt_bot",
+    "mentions": [
+      "matt_bot"
+    ],
+    "plain": "@matt_bot"
+  },
+  {
+    "body": "@abcdefghijklmnopqrstuvwxy",
+    "mentions": [],
+    "plain": "@abcdefghijklmnopqrstuvwxy"
+  },
+  {
+    "body": "@matt's",
+    "mentions": [
+      "matt"
+    ],
+    "plain": "@matt's"
+  },
+  {
+    "body": "@mattñ",
+    "mentions": [],
+    "plain": "@mattñ"
+  },
+  {
+    "body": ":tada: @matt :+1:",
+    "mentions": [
+      "matt"
+    ],
+    "plain": ":tada: @matt :+1:"
+  },
+  {
+    "body": "__init__ and snake_case_name",
+    "mentions": [],
+    "plain": "init and snake_case_name"
+  },
+  {
+    "body": "2 * 3 * 4",
+    "mentions": [],
+    "plain": "2 * 3 * 4"
+  },
+  {
+    "body": "~~gone~~ *em* _u_ **strong**",
+    "mentions": [],
+    "plain": "gone em u strong"
+  },
+  {
+    "body": "[a](javascript:alert(1)) @matt",
+    "mentions": [
+      "matt"
+    ],
+    "plain": "[a](javascript:alert(1)) @matt"
+  },
+  {
+    "body": "[label](https://x.example \"title\") @jo",
+    "mentions": [
+      "jo"
+    ],
+    "plain": "label @jo"
+  },
+  {
+    "body": "``code with ` tick`` @jo",
+    "mentions": [
+      "jo"
+    ],
+    "plain": "code with ` tick @jo"
+  },
+  {
+    "body": "~~~\nfenced @matt\n~~~\nafter @jo",
+    "mentions": [
+      "jo"
+    ],
+    "plain": "fenced @matt after @jo"
+  },
+  {
+    "body": "```js\nunclosed @matt",
+    "mentions": [],
+    "plain": "unclosed @matt"
+  },
+  {
+    "body": ">>>>>> deep @matt",
+    "mentions": [
+      "matt"
+    ],
+    "plain": "> deep @matt"
+  },
+  {
+    "body": "multi\n\n\nline   spaces",
+    "mentions": [],
+    "plain": "multi line spaces"
+  },
+  {
+    "body": "**unclosed bold @matt",
+    "mentions": [
+      "matt"
+    ],
+    "plain": "**unclosed bold @matt"
+  },
+  {
+    "body": "(see https://linger.example) @matt.",
+    "mentions": [
+      "matt"
+    ],
+    "plain": "(see https://linger.example) @matt."
+  },
+  {
+    "body": "@matt—hi",
+    "mentions": [
+      "matt"
+    ],
+    "plain": "@matt—hi"
+  },
+  {
+    "body": "emoji 😀@matt",
+    "mentions": [
+      "matt"
+    ],
+    "plain": "emoji 😀@matt"
+  },
+  {
+    "body": "[@matt](not a url)",
+    "mentions": [
+      "matt"
+    ],
+    "plain": "[@matt](not a url)"
+  },
+  {
+    "body": "` @matt `",
+    "mentions": [],
+    "plain": "@matt"
+  },
+  {
+    "body": "\\`@matt\\`",
+    "mentions": [
+      "matt"
+    ],
+    "plain": "`@matt`"
+  },
+  {
+    "body": "  - indented @ab",
+    "mentions": [
+      "ab"
+    ],
+    "plain": "indented @ab"
+  },
+  {
+    "body": "    - four spaces @bo",
+    "mentions": [
+      "bo"
+    ],
+    "plain": "- four spaces @bo"
+  },
+  {
+    "body": "a\r\n- b @cd\r",
+    "mentions": [
+      "cd"
+    ],
+    "plain": "a - b @cd"
+  },
+  {
+    "body": "[[x]](https://a.example) @zz",
+    "mentions": [
+      "zz"
+    ],
+    "plain": "[x] @zz"
+  },
+  {
+    "body": "http:// on its own",
+    "mentions": [],
+    "plain": "http:// on its own"
+  },
+  {
+    "body": "@matt:",
+    "mentions": [
+      "matt"
+    ],
+    "plain": "@matt:"
+  },
+  {
+    "body": ":@matt:",
+    "mentions": [
+      "matt"
+    ],
+    "plain": ":@matt:"
+  },
+  {
+    "body": "_@matt_ and *@jo*",
+    "mentions": [
+      "matt",
+      "jo"
+    ],
+    "plain": "@matt and @jo"
+  },
+  {
+    "body": "~~@matt~~",
+    "mentions": [
+      "matt"
+    ],
+    "plain": "@matt"
+  },
+  {
+    "body": "> quote\nstill quote @sam\n\nafter",
+    "mentions": [
+      "sam"
+    ],
+    "plain": "quote still quote @sam after"
+  },
+  {
+    "body": "````\n```\n@matt\n````\n@jo",
+    "mentions": [
+      "jo"
+    ],
+    "plain": "``` @matt @jo"
+  },
+  {
+    "body": "1234567890. not a list @ab",
+    "mentions": [
+      "ab"
+    ],
+    "plain": "1234567890. not a list @ab"
+  },
+  {
+    "body": "[x](https://a.example/(b)) @ab",
+    "mentions": [
+      "ab"
+    ],
+    "plain": "x @ab"
+  },
+  {
+    "body": "trailing https://linger.example/a). @ab",
+    "mentions": [
+      "ab"
+    ],
+    "plain": "trailing https://linger.example/a). @ab"
+  },
+  {
+    "body": " @ab ",
+    "mentions": [
+      "ab"
+    ],
+    "plain": "@ab"
+  },
+  {
+    "body": "@ab　@cd",
+    "mentions": [
+      "ab",
+      "cd"
+    ],
+    "plain": "@ab @cd"
+  },
+  {
+    "body": "",
+    "mentions": [],
+    "plain": ""
+  },
+  {
+    "body": "@jo𝟙",
+    "mentions": [
+      "jo"
+    ],
+    "plain": "@jo𝟙"
+  },
+  {
+    "body": "𝐀@jo",
+    "mentions": [
+      "jo"
+    ],
+    "plain": "𝐀@jo"
+  },
+  {
+    "body": "@jo𝐀 hi",
+    "mentions": [
+      "jo"
+    ],
+    "plain": "@jo𝐀 hi"
+  },
+  {
+    "body": "𠀀@jo and @jo𠀀",
+    "mentions": [
+      "jo"
+    ],
+    "plain": "𠀀@jo and @jo𠀀"
+  },
+  {
+    "body": "𝐀_x_ y",
+    "mentions": [],
+    "plain": "𝐀x y"
+  },
+  {
+    "body": "_x_𝐀",
+    "mentions": [],
+    "plain": "x𝐀"
+  },
+  {
+    "body": "**a**𝟙",
+    "mentions": [],
+    "plain": "a𝟙"
+  },
+  {
+    "body": "𝐀:tada: and :tada:𝐀",
+    "mentions": [],
+    "plain": "𝐀:tada: and :tada:𝐀"
+  },
+  {
+    "body": "𝐀https://a.example/@jo",
+    "mentions": [],
+    "plain": "𝐀https://a.example/@jo"
+  },
+  {
+    "body": "😀@jo 😀",
+    "mentions": [
+      "jo"
+    ],
+    "plain": "😀@jo 😀"
+  }
+]

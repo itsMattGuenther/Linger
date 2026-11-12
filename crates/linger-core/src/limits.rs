@@ -378,6 +378,41 @@ pub const RATE_POLL_VOTE: (u32, u64) = (20, 10);
 /// Read-marker updates are debounced client-side to once per 5s per room.
 pub const READ_MARKER_DEBOUNCE_MS: u64 = 5_000;
 
+// ---------------------------------------------------------------------------
+// Phone notifications (SPEC §4.15, PROTOCOL §5, #830)
+// ---------------------------------------------------------------------------
+
+/// Changes to one person's phone notifications in an hour: registering a
+/// phone, changing its switches, removing it. A Settings screen sends one
+/// per switch flipped; an app asking in a loop can't keep the relay or the
+/// database busy.
+pub const RATE_PUSH_DEVICE: (u32, u64) = (60, 3_600);
+/// The longest sealed push address the server keeps for a phone. The relay
+/// makes it and only the relay reads it (#887); a few hundred characters
+/// covers Apple's and Google's addresses sealed, with room to spare.
+pub const MAX_PUSH_SEALED_CHARS: usize = 1_024;
+/// How many rooms one phone can choose a room setting for. More than any
+/// server's rooms, and a bound on what one request writes.
+pub const MAX_PUSH_ROOMS: usize = 500;
+/// How much of a message a phone notification carries before it trails off:
+/// the same as a desktop banner (`client/src/lib/notify-rules.ts`).
+pub const PUSH_EXCERPT_CHARS: usize = 140;
+/// "When it wakes up" (#830): a room's first message after this long with
+/// none.
+pub const PUSH_WAKE_AFTER_MS: i64 = 60 * 60_000;
+/// "Every message" (#830): after one notification a room stays quiet on that
+/// phone until it's opened, or until this long has passed.
+pub const PUSH_EVERY_QUIET_MS: i64 = 15 * 60_000;
+/// How long Apple or Google keep a notification for a phone that's switched
+/// off or out of signal, in seconds. A message is worth hearing about later
+/// that day; a knock is a tap on the shoulder, and stale in minutes.
+pub const PUSH_KEEP_SECS: u32 = 24 * 60 * 60;
+pub const PUSH_KNOCK_KEEP_SECS: u32 = 10 * 60;
+/// How long the server keeps trying to hand one message's notifications to
+/// the relay, waiting for a turn included. Past it they're dropped: a slow
+/// relay costs notifications, never a pile of them arriving late.
+pub const PUSH_SEND_WITHIN_MS: u64 = 30_000;
+
 #[cfg(test)]
 mod tests {
     use super::*;

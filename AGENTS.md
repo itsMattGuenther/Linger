@@ -396,7 +396,7 @@ M0 scaffold → M1 server REST → M2 gateway → M3 client shell
   → M13 ambient voice                                   ← V2, cut 2026-10-11
   → M15 the Buddy list client (#198)                    ← built, the app from 0.4.0
   → M16 screen sharing (#360)                ← V2, shipped in 0.5.2, check owed
-  → mobile (T-16xx), no push        ← Android from 0.4.8, iPhone in TestFlight
+  → mobile (T-16xx), notifications (#830)  ← Android from 0.4.8, iPhone in TestFlight
   → backburner: entrance sounds (T-901…T-903)
 ```
 
@@ -411,8 +411,10 @@ started, so don't build toward it. Larger groups and the voice rework (a
 forwarding server) were #197, closed 2026-10-19. **M16 (screen sharing) shipped
 in 0.5.2** (2026-10-27); its real check (T-1908) is still owed, so it isn't
 closed. **Mobile is started** (Matt, 2026-10-02): a phone app for
-iPhone and Android from the same Tauri 2 crate, with no push and no
-notifications. It started text only and got voice on 2026-10-19 (#429). It
+iPhone and Android from the same Tauri 2 crate. It started text only and
+with no push, and got voice on 2026-10-19 (#429). **Phone notifications are
+being built** (Matt, 2026-11-11, #830): chosen by kind, through one relay
+Linger runs, encrypted so the relay, Apple and Google can't read them. It
 has been on Android since 0.4.8 and on friends' iPhones through TestFlight
 since 0.5.1. Read SPEC §4.15 before touching it; its tasks are `TASKS.md`
 §Mobile. Close a milestone's checks before starting the next.

@@ -8,7 +8,9 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::id::{AttachmentId, EmojiId, ExportId, MessageId, ReportId, RoomId, UploadId, UserId};
+use crate::id::{
+    AttachmentId, EmojiId, ExportId, MessageId, PushDeviceId, ReportId, RoomId, UploadId, UserId,
+};
 
 // NOTE on 64-bit integers: ts-rs maps i64/u64 to `bigint`, but JSON.parse hands
 // the frontend plain numbers. Every 64-bit value on this wire (Unix ms, byte
@@ -493,6 +495,20 @@ pub struct ServerInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub screen_sound: Option<bool>,
+    /// Whether this server sends phone notifications (SPEC §4.15, #830):
+    /// `false` when its host set `LINGER_PUSH=off`. Always sent; a server
+    /// from before leaves it out, and the phone app says the server needs an
+    /// update before it can notify.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub push: Option<bool>,
+    /// The relay this server sends notifications through, when `push` is
+    /// on: `https://push.linger.im` unless the host set `LINGER_PUSH_RELAY`.
+    /// A phone seals its push address with this relay (PROTOCOL §5, "Phone
+    /// notifications"), since only the relay that sealed one can open it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub push_relay: Option<String>,
     /// What the host alone is told about the machine the server runs on
     /// (#582): its backups and how full its disk is. Left out for everybody
     /// else, co-hosts included, and by a server from before it.
@@ -1247,6 +1263,147 @@ pub struct Report {
     pub note: Option<String>,
     #[ts(type = "number")]
     pub created_at: i64,
+}
+
+// ---------------------------------------------------------------------------
+// Phone notifications (SPEC §4.15, PROTOCOL §5, #830)
+// ---------------------------------------------------------------------------
+
+/// What one phone wants to hear about from this server. Each kind is its own
+/// switch; "only when somebody mentions me" is `mentions` alone, and
+/// "nothing" is no phone registered at all (`DELETE /push/devices/{id}`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct PushSettings {
+    /// Somebody names you (`@username`).
+    pub mentions: bool,
+    /// Somebody writes in a DM or group DM you're in.
+    pub dms: bool,
+    /// Somebody knocks on your row (SPEC §4.9).
+    pub knocks: bool,
+    /// Somebody you asked to hear from posts (`notify_rules`, SPEC §4.2).
+    pub follows: bool,
+    /// Rooms you chose to hear from; every room not listed is off. Never a
+    /// DM: `dms` covers those.
+    pub rooms: Vec<PushRoom>,
+}
+
+/// One room a phone hears from, and how much.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct PushRoom {
+    pub room_id: RoomId,
+    pub choice: PushRoomChoice,
+}
+
+/// How much of one room reaches a phone. Off is the room not being listed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum PushRoomChoice {
+    /// The first message after an hour with none (`PUSH_WAKE_AFTER_MS`).
+    Wakes,
+    /// Any message, once a burst: then quiet until the room is opened, or
+    /// `PUSH_EVERY_QUIET_MS` has passed.
+    Every,
+}
+
+/// `POST /push/devices`: a phone asks this server for notifications.
+///
+/// `refresh_token` says which sign-in the phone is (PROTOCOL §2): signing
+/// out of it, or anything that ends it, removes the phone. The rest comes
+/// from the phone and the relay, and the server reads none of it but the
+/// key: `sealed_token` is the phone's push address locked by the relay, and
+/// `public_key` and `auth_secret` are what RFC 8291 encrypts to, base64url.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct RegisterPushDeviceRequest {
+    pub refresh_token: String,
+    pub sealed_token: String,
+    /// An uncompressed P-256 point, 65 bytes.
+    pub public_key: String,
+    /// 16 bytes.
+    pub auth_secret: String,
+    pub settings: PushSettings,
+}
+
+/// `PATCH /push/devices/{id}`: new switches, or a new sealed address when
+/// Apple or Google gave the phone a new one. Either or both.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct UpdatePushDeviceRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub sealed_token: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub settings: Option<PushSettings>,
+}
+
+/// A phone registered for notifications, as its owner sees it. Its keys and
+/// sealed address go in and never come back out.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct PushDevice {
+    pub id: PushDeviceId,
+    pub settings: PushSettings,
+}
+
+/// Why a notification was sent: the one switch that let it through.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum PushKind {
+    Mention,
+    Dm,
+    Knock,
+    Follow,
+    Room,
+}
+
+/// What a phone reads once it has decrypted a notification (RFC 8291). The
+/// server writes the words, so the phone shows them without asking anybody
+/// anything. Nothing outside the encryption says any of it.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct PushPayload {
+    /// 1. A phone ignores a version it doesn't know.
+    pub v: u32,
+    pub kind: PushKind,
+    /// "Sam in #general", "Sam" for a DM, "Sam knocked".
+    pub title: String,
+    /// The start of the message, with its formatting taken off.
+    pub body: String,
+    /// Who wrote, or knocked.
+    pub user_id: UserId,
+    /// Where to open. Left out for a knock.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub room_id: Option<RoomId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub message_id: Option<MessageId>,
+}
+
+/// What a server sends the relay (`POST <relay>/send`, PROTOCOL §5): an
+/// encrypted notification and the sealed address to deliver it to. The relay
+/// can't read `payload`, and nothing else here says who or what it's about.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct RelaySend {
+    /// The phone's sealed push address, as the phone registered it.
+    pub token: String,
+    /// The RFC 8291 `aes128gcm` body, base64url without padding.
+    pub payload: String,
+    /// How long Apple or Google may hold it for a phone that's off, in
+    /// seconds.
+    pub ttl: u32,
+    /// A notification with the same `collapse` replaces the one before
+    /// instead of stacking. Different for every phone and room, so it says
+    /// nothing about which room it is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub collapse: Option<String>,
 }
 
 // ---------------------------------------------------------------------------

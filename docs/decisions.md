@@ -678,6 +678,8 @@ eGGnogSC's proposal on #253 over his own brainstorm of 2026-09-26, which had a
   middle of every message's existence. Matt: no relay keeps "no company in the
   middle" true for messages and voice. The README's privacy section stays as it
   is. The cost is that a phone never buzzes; the app catches up when opened.
+  *Reversed 2026-11-11: phones get notifications, through a relay that can't
+  read them, below.*
 - **No `mobile` presence.** A closed phone app is offline, which is the truth.
   Presence is where somebody is, not what they are holding (SPEC §4.3). It also
   avoids a protocol change: `PresenceState` has no catch-all, so an older
@@ -2123,3 +2125,74 @@ or the other, not both at once.
   Tauri 2.11 app with `tauri ios dev`. Linger is on Tauri 2.12 and builds
   with `tauri ios build`; the simulator's flows and the testers' phones are
   the check.
+
+---
+
+## Decided — phones get notifications, through a relay that can't read them (#830)
+
+**Matt, 2026-11-11.** This reverses "nothing wakes it" (2026-10-02, above).
+Several friends never take part in conversations because they don't open
+Linger unless something tells them to, and they asked for notifications they
+can choose by kind. A tester's first ask (2026-11-02) was every notification
+off except mentions, and that stays one tap. People who don't want any turn
+them off; Matt will. SPEC §4.15 is the rule and PROTOCOL §5, "Phone
+notifications", the wire; this is why.
+
+- **What "no company in the middle" means.** It was always about ownership:
+  no company owns the servers and what's said on them, the way one company
+  owns every Discord server and everything said there. It never meant that
+  nothing passes through a company on its way somewhere. Matt would rather
+  nothing went through Apple or Google, but they are the only way to reach a
+  closed phone, so they get as little as possible: a notification they can't
+  read, and the time it arrived. The README's privacy section says so.
+- **One relay, Matt's,** at `push.linger.im`, on Cloudflare Workers (free at
+  this size, and no Netlify credits). It holds the keys from Linger's own
+  Apple and Google accounts, which can't be handed to every host. Its code
+  lives in this repository (#887), so anybody can read what it does. It
+  stores nothing and keeps no logs (hard rule 4). Nothing else reaches a
+  closed phone: notifications only while the app is in the background die
+  within a minute of leaving it, an Android app that never closes needs a
+  permanent notification that Play limits, and an iPhone has nothing else.
+  If Workers can't talk to Apple's push service (it needs HTTP/2), the relay
+  is a small Rust service on the droplet instead; that is the relay's first
+  check.
+- **A host never sees a phone's push address.** The phone has the relay seal
+  it, and its server keeps only the sealed copy, which only the relay opens.
+- **Encrypted from the server to the phone,** with the standard web push
+  encryption (RFC 8291), checked against the RFC's own example on the
+  server, in Kotlin and in Swift. The relay, Apple and Google carry it without
+  reading it. It is never called end-to-end (hard rule 9): the host's server
+  writes the words.
+- **A notification says who, where and the start of the message** ("Sam in
+  #general: you around tonight?"). The phone's own lock-screen preview setting
+  decides whether that shows while it's locked.
+- **Kinds, each a switch,** per server on each phone: mentions, DMs, knocks
+  and people you follow are on once somebody says yes; rooms are off. A room
+  is Off, When it wakes up (its first message after an hour with none, the
+  moment the people who never check are missing), or Every message: once a
+  burst, the next replacing the last, then quiet until the room is read or 15
+  minutes pass. "Only when somebody mentions me" and "Nothing" are one tap
+  each.
+- **No double buzz.** Nothing while you're using Linger on another device; the
+  desktop says it there. Idle or away there, the phone hears it.
+- **No badge and no number** (hard rule 3), and no `@everyone` (hard rule
+  5). Reactions, polls, a new MOTD and voice join lines never notify, as on
+  desktop.
+- **A host can switch it off** for their server (`LINGER_PUSH=off`): then the
+  server never contacts the relay and keeps no phone's details.
+- **Desktop stays as it is.** Its mentions still have no off switch; the phone
+  gets switches of its own.
+- **Not in this build:** a notification when somebody starts voice in a room,
+  and clearing a notification when it's read on another device. Either can
+  follow.
+
+**How the server decides (#886).** The desktop's own reasons
+(`client/src/lib/notify-rules.ts`) and the phone's switches. It reads
+mentions and the words with a copy of the app's parser
+(`crates/linger-server/src/markdown.rs`), tested against the same examples
+as the app's (`crates/linger-server/tests/fixtures/markdown.json`), so a
+handle in a code span wakes nobody on either. A phone belongs to one sign-in
+and goes when it ends. "Using Linger" is a session with its socket open that
+says `around`, so a phone app put in the background says `idle`, or its own
+notifications would wait for its socket to drop.
+

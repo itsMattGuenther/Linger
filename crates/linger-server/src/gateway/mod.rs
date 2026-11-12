@@ -955,6 +955,24 @@ impl Gateway {
         true
     }
 
+    /// Whether somebody is using Linger right now, on any device: one of their
+    /// sessions has a socket open and says `around`, in a room or not
+    /// (#653). Idle and away don't count, and neither does a session whose
+    /// socket dropped and is waiting out its grace period (#654).
+    ///
+    /// Phone notifications ask it (#830): somebody who is using Linger hears
+    /// about a message there, and their phone buzzing too would only be the
+    /// same thing twice. A phone app that's open is one of these sessions,
+    /// and one put away says `idle` (PROTOCOL §5, "Phone notifications").
+    #[must_use]
+    pub fn attending(&self, user_id: UserId) -> bool {
+        self.session_presence.get(&user_id).is_some_and(|sessions| {
+            sessions
+                .values()
+                .any(|session| session.sockets > 0 && session.state == PresenceState::Around)
+        })
+    }
+
     /// Presence snapshot for `ready`, as this person is allowed to see it.
     ///
     /// **Redacted the same way a live `presence.update` is** (SPEC §4.13):

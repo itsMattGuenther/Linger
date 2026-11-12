@@ -57,6 +57,15 @@ async fn build_info(state: &AppState, viewer: UserId) -> Result<ServerInfo, ApiE
         voice: Some(state.gateway.forwards_voice()),
         screens: Some(state.gateway.passes_screens()),
         screen_sound: Some(state.gateway.passes_screens()),
+        // Phone notifications (#830): whether this server sends them, and
+        // the relay a phone seals its push address with, which has to be
+        // the one the server sends through.
+        push: Some(state.config.push_relay.is_some()),
+        push_relay: state
+            .config
+            .push_relay
+            .as_ref()
+            .map(|relay| relay.as_str().trim_end_matches('/').to_string()),
         health,
     })
 }

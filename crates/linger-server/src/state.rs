@@ -44,6 +44,10 @@ pub struct AppState {
     /// One pass at a time taking the oldest files to make room
     /// (`expiry::keep_room`, #583), so two never pick the same ones.
     pub making_room: Arc<Mutex<()>>,
+    /// What sends phone notifications through the relay (`crate::push`,
+    /// #830), or `None` when the host set `LINGER_PUSH=off`: then nothing
+    /// is ever sent, and no phone's details are kept.
+    pub push: Option<Arc<crate::push::Pusher>>,
 }
 
 impl AppState {
@@ -106,6 +110,25 @@ impl AppState {
             )
             .with_bucket(bucket),
         );
+        // Phone notifications (#830). Off, the server keeps no phone's
+        // sealed address or keys: any it had from before go now.
+        let push = match &config.push_relay {
+            Some(relay) => Some(Arc::new(crate::push::Pusher::new(relay)?)),
+            None => {
+                let forgotten = crate::repo::push::forget_all(&db.write)
+                    .await
+                    .map_err(|_| {
+                        anyhow::anyhow!("could not clear the phones registered for notifications")
+                    })?;
+                if forgotten > 0 {
+                    tracing::info!(
+                        forgotten,
+                        "phone notifications are off: forgot the phones registered for them"
+                    );
+                }
+                None
+            }
+        };
         let passwords = Arc::new(PasswordWork::new(
             config.password_checks_at_once,
             PASSWORD_WORK_WAIT,
@@ -123,6 +146,7 @@ impl AppState {
             passwords,
             backups,
             making_room: Arc::new(Mutex::new(())),
+            push,
         })
     }
 }

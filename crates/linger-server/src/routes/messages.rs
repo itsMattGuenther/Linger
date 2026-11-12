@@ -201,6 +201,9 @@ async fn create(
     state
         .gateway
         .publish(ServerEvent::MessageCreate(message.clone()));
+    // The phones it should wake (#830), in the background: posting never
+    // waits on the relay.
+    crate::push::message_posted(&state, &message);
     Ok(Json(message))
 }
 

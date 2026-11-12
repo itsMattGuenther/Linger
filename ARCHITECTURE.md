@@ -47,13 +47,25 @@ Companion to `SPEC.md`. Wire protocol is in `PROTOCOL.md`. Agent working rules a
 │  Object store adapter                            │
 │    local filesystem | S3-compatible              │
 │  Background: media processing (ffmpeg),          │
-│    expiry, daily backups                         │
+│    expiry, daily backups, phone notifications    │
 └──────────────────────────────────────────────────┘
+       │ HTTPS: a phone notification, encrypted to the
+       │ phone (RFC 8291), and its sealed address.
+       │ None with LINGER_PUSH=off.
+       ▼
+┌──────────────────────────────┐   ┌─────────────────────┐
+│  Linger's push relay         │──▶│  Apple's or Google's│──▶ the phone
+│  push.linger.im (#887),      │   │  push service       │
+│  for every server; stores    │   └─────────────────────┘
+│  and logs nothing            │
+└──────────────────────────────┘
 ```
 
 The server is one binary plus one data directory, shipped as one Docker image.
 Caddy and the optional voice relay (coturn) are the deployment's other two
-containers (§9).
+containers (§9). The push relay is not part of a host's deployment: Linger runs
+one, for every server, because only it holds the keys Apple and Google take the
+app's notifications from (SPEC §4.15, #830).
 
 ---
 
@@ -67,6 +79,7 @@ containers (§9).
 | **TypeScript + React frontend** | Largest ecosystem for virtualized lists and rich text; fastest to iterate. | — |
 | **Object store adapter, not blobs in DB** | 500 MB files must never traverse the app server. | — |
 | **Voice through the server (an SFU), not a mesh** | Each person sends their voice once, and the server passes it on, so a room holds 60 rather than stopping somewhere past ten. Built into the server binary (`crates/linger-sfu`, with `str0m`), so a host installs nothing extra and opens one UDP port. The cost: the server hears what it forwards (SPEC §4.14). `docs/decisions.md` has the reasons. | Only if one room's voice is more than one server can carry. |
+| **Phone notifications through one relay, encrypted to the phone** | Only Apple's and Google's push services wake a closed phone app, and only with keys from Linger's own accounts, which can't be handed to every host. So one relay holds them, and the host's server encrypts each notification to the phone with the standard web push encryption (RFC 8291, with RustCrypto's `p256`, `hkdf` and `aes-gcm`, already in the build for voice). The phone's push address reaches its server sealed by the relay. The relay, Apple and Google learn that a phone got something, and when (SPEC §4.15, `docs/decisions.md`). | If a phone gains a way to be woken that doesn't go through Apple or Google. |
 | **One Tauri crate for desktop and phone** | The phone app shares the gateway client, sign-in and wire types, rather than being a second app to keep in step (SPEC §4.15). Desktop-only code is switched off with `#[cfg(desktop)]`. | If a phone needs something the Tauri mobile runtime can't give. |
 
 ### The Tauri caveat, stated up front
@@ -238,8 +251,8 @@ linger/
 ├─ Cargo.toml                 # workspace: the three crates below
 ├─ crates/
 │  ├─ linger-core/            # the wire contract: shared types, IDs, palette, fonts
-│  ├─ linger-server/          # axum, SQLite, object store, gateway
-│  │                          #   (migrations/ and tests/ beside src/)
+│  ├─ linger-server/          # axum, SQLite, object store, gateway, phone
+│  │                          #   notifications (migrations/ and tests/ beside src/)
 │  └─ linger-sfu/             # voice forwarding, which the server runs (#197)
 ├─ client/
 │  ├─ src-tauri/              # the Rust shell: gateway client, keyring, voice,
@@ -558,6 +571,40 @@ CREATE TABLE notify_rules (
   room_id         BLOB REFERENCES rooms(id) ON DELETE CASCADE,  -- NULL = all rooms
   PRIMARY KEY (user_id, target_user_id, room_id)
 );
+
+-- Phone notifications (SPEC §4.15, PROTOCOL §5, #830, 0027): a phone that asked
+-- to be notified, one per sign-in. Ending the sign-in deletes it, and so does the
+-- relay saying its push address is gone. The server can't open `sealed_token`;
+-- only the relay can. `public_key` and `auth_secret` are what each notification
+-- is encrypted to (RFC 8291).
+CREATE TABLE push_devices (
+  id              BLOB PRIMARY KEY,
+  user_id         BLOB NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  family_id       BLOB NOT NULL UNIQUE,        -- the sign-in: refresh_tokens.family_id
+  sealed_token    TEXT NOT NULL,
+  public_key      BLOB NOT NULL,               -- P-256, uncompressed, 65 bytes
+  auth_secret     BLOB NOT NULL,               -- 16 bytes
+  mentions        INTEGER NOT NULL,            -- the kinds' switches
+  dms             INTEGER NOT NULL,
+  knocks          INTEGER NOT NULL,
+  follows         INTEGER NOT NULL,
+  created_at      INTEGER NOT NULL,
+  updated_at      INTEGER NOT NULL
+);
+CREATE INDEX idx_push_devices_user ON push_devices(user_id);
+
+-- The rooms a phone hears from: `wakes` or `every`; a room not here is off. For
+-- `every`, when the phone was last told and about which message: quiet until it's
+-- read past that, or 15 minutes pass.
+CREATE TABLE push_rooms (
+  device_id       BLOB NOT NULL REFERENCES push_devices(id) ON DELETE CASCADE,
+  room_id         BLOB NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+  choice          TEXT NOT NULL,               -- wakes | every
+  notified_at     INTEGER,
+  notified_id     BLOB,
+  PRIMARY KEY (device_id, room_id)
+) WITHOUT ROWID;
+CREATE INDEX idx_push_rooms_room ON push_rooms(room_id);
 
 -- Report and block (SPEC §4.15, PROTOCOL §5, T-1605). A block is one
 -- person's private list; the server only stops their knocks.
@@ -1312,6 +1359,13 @@ A relayed client sends to that address like everybody else, the public one in th
 offer, and the host hands it to the `linger` container through the published UDP port,
 so the relay never needs Docker's own addresses.
 
+**Phone notifications** (#830) are the one connection the server opens to Linger itself:
+an HTTPS post to the push relay, `https://push.linger.im` (`LINGER_PUSH_RELAY`), for each
+phone that should hear about a message, carrying the notification encrypted to that phone
+and the phone's sealed address (PROTOCOL §5). It needs no port and no setting: nothing is
+sent until somebody's phone asks to be notified. `LINGER_PUSH=off` turns it off, and the
+server then never contacts the relay and forgets every phone it had.
+
 Caddy is bundled specifically so TLS certificates are automatic. A self-hoster should
 never have to think about certbot. Its Caddyfile has two blocks and the deployment needs
 two DNS records: the domain, and `cdn.` in front of it for uploaded files (§7).
@@ -1391,9 +1445,11 @@ be M14 and went to `TASKS.md`'s *Backburner*, because the desktop app had to be
 finished and used by real people before a second platform doubled the surface
 of every bug still in it. It came back on 2026-10-02 as its own section of
 `TASKS.md` (T-16xx), not a milestone: a phone app for iPhone and Android from
-the same Tauri 2 crate, with no push (SPEC §4.15). It started text only and
-got voice on 2026-10-19 (#429). It has been on Android since 0.4.8 and on
-friends' iPhones through TestFlight since 0.5.1. **M14 is now custom themes** (Matt,
+the same Tauri 2 crate. It started text only and with no push, got voice on
+2026-10-19 (#429), and gets notifications chosen by kind from 2026-11-12
+(#830): the server's side first (#886), then the relay (#887), Android (#888)
+and the iPhone (#889). It has been on Android since 0.4.8 and on friends'
+iPhones through TestFlight since 0.5.1. **M14 is now custom themes** (Matt,
 2026-08-31), which is V3 rather than V2: SPEC §6 carries the scope line and
 `TASKS.md` M14 carries the three things that have to be decided before any of it
 starts. The short version is that a theme is a list of token values rather than
@@ -1411,7 +1467,9 @@ it is, live message frames for that room are dropped rather than folded into
 history they do not join onto — an invisible gap is the one thing the message
 store must never produce. The decision that blocked mobile, whether push
 through Apple and Google was acceptable at all, was answered on 2026-10-02: it
-isn't, so the phone app has no push (SPEC §4.15).
+wasn't, so the phone app started with no push. Matt reversed that on 2026-11-11
+(#830): a notification goes through Apple or Google encrypted so they can't read
+it, through one relay Linger runs (SPEC §4.15, `docs/decisions.md`).
 
 **The activity-detection spike came before M0** and did its job. One evening,
 Kubuntu/Plasma 6 Wayland and Windows, a throwaway binary that printed the

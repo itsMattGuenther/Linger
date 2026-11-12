@@ -139,8 +139,16 @@ product.
 
 **Your conversations live on your friend's server, not a company's.**
 Messages, files, voice and shared screens travel encrypted (TLS) to the
-host's server, and nowhere else. No company sits in the middle, and nothing
-in Linger reads them to sell you something.
+host's server, and nowhere else. No company owns that server or what's said
+on it, and nothing in Linger reads them to sell you something.
+
+**Phone notifications go through Apple or Google**, because nothing else can
+wake a closed phone. Each one is encrypted on the host's server so only your
+phone can open it, then handed to Linger's relay, which passes it on. The
+relay, Apple and Google learn that your phone got something, and when, but
+can't read what it says. The relay keeps nothing and logs nothing, and its
+code is in this repository. You choose on each phone what notifies you, and a
+host can turn notifications off for their whole server.
 
 Linger isn't end-to-end encrypted yet, so the person running the server can
 see what's on it, and the database and files sit unencrypted on their disk.

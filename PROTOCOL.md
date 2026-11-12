@@ -332,7 +332,8 @@ consumes the token. Once any user exists, both endpoints return `NOT_FOUND`.
 ```
 GET  /server             → { name, accent_key, icon_key, member_count, created_at,
                              storage_used_bytes, storage_limit_bytes, file_expiry_days,
-                             file_expiry_when_full?, voice?, screens?, screen_sound?, health? }
+                             file_expiry_when_full?, voice?, screens?, screen_sound?,
+                             push?, push_relay?, health? }
 PATCH /server            (host or co-host) { name?, accent_key?, icon_key? }   # accent_key from PALETTE
 
 GET  /rooms              → Room[]                       # public rooms only
@@ -438,6 +439,13 @@ there.
 **`screen_sound`** says whether it passes a shared screen's sound on too (§8, "The
 computer's sound", #736): `true` exactly when `screens` is. A server from before it leaves
 it out, and the app offers no "Share the computer's sound" there.
+
+**`push`** says whether this server sends phone notifications (§5, "Phone notifications",
+#830): `false` when its host set `LINGER_PUSH=off`. **`push_relay`** is the relay it sends
+them through, when `push` is `true`: `https://push.linger.im` unless the host set
+`LINGER_PUSH_RELAY`. A phone seals its push address with that relay, since only the relay
+that sealed one can open it. A server from before leaves both out, and the phone app says
+the server needs an update before it can notify.
 
 ### 3.1 DMs
 
@@ -1103,8 +1111,9 @@ is `VALIDATION_FAILED`, and an id that isn't a member of this server is
 `NOT_FOUND`. Nobody else can read the list, and the person blocked is never told:
 nothing they can call answers any differently.
 
-The server enforces one thing itself: a `knock` from somebody you've blocked is
-answered 204, as any knock is, and goes nowhere. Everything else is the client's.
+The server enforces two things itself: a `knock` from somebody you've blocked is
+answered 204, as any knock is, and goes nowhere; and no phone notification crosses a
+block, either way (below, "Phone notifications"). Everything else is the client's.
 A blocked person's messages still arrive, live and in history, and the client
 draws each one as a single grey line you can open (SPEC §4.15). They don't chime,
 light a DM, or show in Media or Search. That is deliberate: in a room of friends,
@@ -1153,6 +1162,145 @@ time, so somebody just made a co-host hears the next one. A client also asks
 when its own `user.update` says it has just become a co-host. There is **no
 count** anywhere (AGENTS rule 3): the list shows one quiet row while any report
 is open, never how many.
+
+### Phone notifications (SPEC §4.15, #830)
+
+A phone asks its server to notify it, and the server sends each notification,
+encrypted to that phone, through a relay that passes it to Apple's or Google's push
+service. Only those can wake a closed app, and only with keys from Linger's own Apple
+and Google accounts, which the relay holds (`push.linger.im`, #887) and hosts never
+do.
+
+```
+POST   /push/devices         { refresh_token, sealed_token, public_key, auth_secret, settings }
+                                                  → PushDevice
+GET    /push/devices/:id                          → PushDevice
+PATCH  /push/devices/:id     { sealed_token?, settings? }  → PushDevice
+DELETE /push/devices/:id                          → 204
+```
+
+```ts
+type PushSettings = {
+  mentions: boolean;   // somebody names you
+  dms: boolean;        // somebody writes in a DM or group DM you're in
+  knocks: boolean;     // somebody knocks on your row
+  follows: boolean;    // somebody you follow posts (notify rules, above)
+  rooms: { room_id: string; choice: "wakes" | "every" }[];   // a room not listed is off
+}
+type PushDevice = { id: string; settings: PushSettings }
+```
+
+**A phone is one sign-in.** `refresh_token` is that sign-in's current refresh token
+(§2), and names it: the phone is removed when the sign-in ends, whatever ends it
+(signing out, a new password, removal, deleting the account, a refresh token used twice,
+or 30 days unopened). Registering again from the same sign-in replaces what it sent before
+and keeps its `id`. One that isn't a live sign-in of the caller's is `VALIDATION_FAILED`.
+`GET`, `PATCH` and `DELETE` take only the caller's own phones; anybody else's, and one
+that's gone, is `NOT_FOUND`, which tells the phone to register again. `DELETE` is "Nothing"
+on that phone: the server forgets it, and answers 204 whether or not it was there. With
+the host's `LINGER_PUSH=off` (`GET /server`'s `push` is `false`), `POST` and `PATCH` are
+`CONFLICT`, the server keeps no phone's details, and it never contacts a relay. Sixty
+changes an hour per person (`RATE_PUSH_DEVICE`).
+
+**What the phone hands over**, the least that reaches it:
+
+- `sealed_token`: its push address from Apple (an APNs device token) or Google (an FCM
+  registration token), sealed by the relay in `GET /server`'s `push_relay`. The phone
+  asks the relay itself (#887), so the host never sees the real address, and only that
+  relay can open the sealed one. Printable ASCII, no spaces, at most 1,024 characters
+  (`MAX_PUSH_SEALED_CHARS`). A phone whose address changes `PATCH`es the new one sealed.
+- `public_key` and `auth_secret`, base64url: an uncompressed P-256 public key (65 bytes)
+  and 16 random bytes, RFC 8291's `ua_public` and `auth_secret`. A phone keeps one pair per
+  server, so no two servers can tell they reach the same phone, and knows which server a
+  notification is from by which key opens it.
+- `settings`: each room listed once, at most 500 (`MAX_PUSH_ROOMS`), and every one a room
+  on this server, never a DM: `dms` covers those.
+
+**Who is notified about a message.** A phone whose owner can see the conversation (any
+room, or a DM they're in), didn't write the message, hasn't blocked its author and isn't
+blocked by them, and isn't using Linger anywhere at that moment, for the first of these its
+switches let through:
+
+1. `mention`: the message names them (`@username`), where the app draws it as a mention.
+   The server reads a body with a copy of the app's parser (`crates/linger-server/src/markdown.rs`),
+   so a handle in a code span, an address or a link's target is no mention on either.
+2. `dm`: it's in a DM or group DM they're in.
+3. `follow`: they have a notify rule for its author, for this room or every room.
+4. `room`: they chose this room. `wakes` is the room's first message after an hour with
+   none (`PUSH_WAKE_AFTER_MS`), not counting the lines below. `every` is any message, once
+   a burst: after one, the room is quiet on that phone until its owner's read marker
+   reaches the message they were told about, or 15 minutes pass (`PUSH_EVERY_QUIET_MS`).
+
+Only a new message posted with `POST /rooms/:id/messages` notifies. A poll, a reaction, a
+new MOTD, an edit, and the lines the server writes (a voice join, a screen share, a poll
+closing, somebody leaving a group DM) never do. There is no `@everyone` to match.
+
+**A knock** (§7) reaches the knocked person's phones that hear `knocks`, if no block
+stands between the two and they aren't using Linger anywhere.
+
+**Using Linger** is having a session whose socket is open and says `around`, in a room or
+not (§8, "Each session speaks for itself"). Idle and away don't count, and neither does a
+socket that dropped and is waiting out its grace period. A phone app is a session while
+it's open, so it sends `presence.update { state: "idle" }` as it goes to the background,
+and its notifications start at once rather than when its socket is noticed gone.
+
+**What the server sends the relay.** `POST <push_relay>/send`, no redirects followed, ten
+seconds at most, after the message is saved and `message.create` has gone out; posting
+never waits on it. Eight go to the relay at once, server-wide, and a message's
+notifications are all handed over within 30 seconds of it, waiting for a turn included
+(`PUSH_SEND_WITHIN_MS`), or dropped. **Right before each one goes**, the server asks again
+whether it should (#890): the phone is still registered, at the address and with the key it
+was encrypted for, its sign-in is live, the switch that let it through is on, no block
+stands between its owner and the author, and its owner isn't using Linger. A phone signed
+out while its notification waited gets nothing.
+
+```ts
+type RelaySend = {
+  token: string;       // the phone's sealed_token, as it registered it
+  payload: string;     // the encrypted notification, base64url without padding
+  ttl: number;         // seconds Apple or Google may hold it for a phone that's off
+  collapse?: string;   // a later one with the same value replaces this one
+}
+```
+
+`ttl` is a day for a message (`PUSH_KEEP_SECS`) and ten minutes for a knock
+(`PUSH_KNOCK_KEEP_SECS`). `collapse` is set for a `room` notification only: the first 16
+bytes of SHA-256 over the phone's `auth_secret` and the room's id, as hex, so it is the
+same for one phone and one room and says nothing about which room to anybody else. A
+mention, a DM, a follow and a knock stack.
+
+The relay answers 2xx when Apple or Google took it, and 404 or 410 when the phone's address
+is gone (the app removed, the phone reset, or a sealed address it can't open). Then the
+server forgets that phone, unless it has registered a new address since, and it registers
+again the next time it's opened. Anything else
+is dropped, and never retried: a notification late enough to need a retry is one nobody
+wants. The server logs the status, never the notification or its address.
+
+**The encryption** is RFC 8291 with RFC 8188's `aes128gcm` coding, in one record: a fresh
+P-256 key pair and salt for every notification, a record size of 4096, the server's
+public key as the key id, and the words padded with zeros to a multiple of 256 bytes, so
+the length says little about the message. The relay, Apple and Google can't read it; the
+host's server wrote it, so it is never called end-to-end. Inside is JSON:
+
+```ts
+type PushPayload = {
+  v: 1;                // a phone ignores a version it doesn't know
+  kind: "mention" | "dm" | "knock" | "follow" | "room";
+  title: string;       // "Sam in #general"; a DM's "Sam"; "Sam knocked"
+  body: string;        // the start of the message, formatting off, 140 characters then "…"
+  user_id: string;     // who wrote, or knocked
+  room_id?: string;    // where to open; left out for a knock
+  message_id?: string;
+}
+```
+
+`body` is what a desktop banner says (`client/src/lib/notify-rules.ts`). Files sent with no
+words are "Sent a photo", "Sent videos", "Sent files" and the like, never how many. A
+knock's is "Just saying hi.".
+
+**Older apps and servers.** A server from before has no `push` in `GET /server`, and a
+phone app says it needs an update before it can notify. An app from before never
+registers, so its sign-ins get nothing. Desktop is unchanged by any of it.
 
 ### Custom emoji (SPEC §4.8, #359)
 
@@ -1620,8 +1768,10 @@ allowed; the client says when that is in words (#268).
 The server writes nothing. A knock is not a row, and there is no endpoint that
 lists knocks, because there is nothing to list. All it does is put one `knock`
 frame on the target's sessions (every session that person has open, and nobody
-else's — see §8's fan-out rules). If they are not connected it lands nowhere,
-which is correct: it is a tap on the shoulder, not a voicemail.
+else's — see §8's fan-out rules), and wakes their phone if it hears knocks and they
+aren't using Linger anywhere (§5, "Phone notifications"). Apple or Google keep that
+for ten minutes at most. Nothing else waits for them: it is a tap on the shoulder,
+not a voicemail.
 
 The frame carries `from_user_id` and nothing else. No id, no body, nothing to
 reply to and nothing to dismiss — a knock that a client could mark as read

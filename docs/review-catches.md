@@ -214,6 +214,25 @@ on a world that has changed.
   *Changed:* the list says how it went (`UPDATE_SAID`), and a test fails it
   from the list's side (`next-settings-window.spec.ts`). Rule: what another
   window asks the list to do is tested failing (`docs/testing-strategy.md`).
+- **#890: a phone signed out while its notification waited still got it.**
+  Who a notification was for was worked out once, then it waited for a turn
+  at the relay, and went whatever had changed meanwhile: a sign-out, a
+  switch turned off, a block. Caught by Greptile. *Missed because* I
+  answered "Is each guard checked right before what it guards?" with "it's
+  milliseconds", picturing a relay that answers at once, and no test changed
+  anything while a notification waited. *Changed:* right before each one
+  goes, the server asks again that the phone is registered at that address
+  with that key, its sign-in live, the switch on, no block, and its owner
+  not using Linger (`repo::push::still_wanted`), with a test that signs out
+  while one waits for a turn (`crates/linger-server/tests/push.rs`).
+- **#890: a late "gone" for a phone's old address deleted it at its new
+  one.** The server forgot a phone by its id when the relay said an address
+  was gone, so a phone that registered a new address while a notification
+  to the old one was out lost both. Caught by Greptile. *Missed because* the
+  same gap: the answer is about the address as it was, and the test of
+  "gone" changed nothing before it came. *Changed:* the phone is forgotten
+  only while that's still its address, with a test that changes it while
+  the relay holds the answer.
 
 ## A check nobody could run before it mattered
 
@@ -577,6 +596,34 @@ on a world that has changed.
   (`main.tsx`), so no screen can be left out, and a tap on a control is left
   to the control. "Is each screen tried at its limits?" in
   `docs/pr-questions.md` asks about every screen a change reaches.
+- **#890 (2 catches): a slow relay could pile notifications up, and a relay
+  address with a query sent them to the wrong path.** Each hand-off to the
+  relay had ten seconds, but the wait for one of its eight turns had no
+  limit, so behind a slow relay every later notification waited, to arrive
+  late. And `LINGER_PUSH_RELAY` took a query or a fragment, which the
+  `/send` added after it landed inside. Caught by Greptile. *Missed because*
+  the relay tests were one that answers, errs, isn't there or hangs one
+  request, never one too slow for everybody behind it; and the setting's
+  tests tried bad schemes, not the other parts of an address. *Changed:* a
+  message's notifications are handed over within 30 seconds, waiting
+  included (`PUSH_SEND_WITHIN_MS`), or dropped, with a test of a relay that
+  holds everything; the setting refuses a query, a fragment or a password,
+  and `/send` goes on through the address's own path, each with a test.
+
+## A copy in another language, tested where the two agree
+
+- **#890: the server's copy of the app's message reader saw some mentions
+  differently.** JavaScript holds a character outside the Basic
+  Multilingual Plane (`𝐀`, `𝟙`, most emoji) as two halves, and a mention's
+  boundary looks at one half, which is never a letter, so `@jo𝟙` mentions jo
+  in the app. The Rust copy looked at the whole character and didn't.
+  Caught by Greptile. *Missed because* the shared examples were written from
+  the syntax (code spans, links, escapes), not from where the two languages
+  differ, and the copy's own comment said such characters couldn't matter.
+  *Changed:* the copy treats them as JavaScript does (`word_char` in
+  `crates/linger-server/src/markdown.rs`), the shared examples have ten with
+  them beside every kind of boundary, and `docs/pr-questions.md` asks where
+  the two languages of a copy differ.
 
 ## Comments that were wrong
 

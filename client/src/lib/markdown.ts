@@ -25,6 +25,12 @@
  * emphasis whose delimiters straddle a code span, mostly — are cases nobody
  * types on purpose. The rule followed instead is that anything ambiguous stays
  * literal text: a `*` with no partner is a `*`.
+ *
+ * **The server has a copy** (`crates/linger-server/src/markdown.rs`, #830): it
+ * reads who a body mentions and its plain words for phone notifications, and
+ * must read them as this does. A rule changed here is changed there in the same
+ * pull request, and an example added to
+ * `crates/linger-server/tests/fixtures/markdown.json`, which both test.
  */
 
 export type Inline =

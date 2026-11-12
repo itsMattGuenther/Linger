@@ -15,7 +15,9 @@ pub mod palette;
 pub mod screen;
 pub mod wire;
 
-pub use id::{AttachmentId, EmojiId, ExportId, MessageId, ReportId, RoomId, UploadId, UserId};
+pub use id::{
+    AttachmentId, EmojiId, ExportId, MessageId, PushDeviceId, ReportId, RoomId, UploadId, UserId,
+};
 pub use palette::PALETTE;
 
 /// The curated bundled font set (SPEC §5.7). `font_key` / `msg_font_key` on the wire

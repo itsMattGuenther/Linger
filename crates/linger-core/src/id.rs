@@ -130,6 +130,11 @@ define_id!(
     /// emoji (SPEC §4.8, #359).
     EmojiId
 );
+define_id!(
+    /// A phone that asked this server for notifications (SPEC §4.15, #830):
+    /// one per sign-in, gone when that sign-in ends.
+    PushDeviceId
+);
 
 #[cfg(test)]
 mod tests {

@@ -52,6 +52,20 @@ screens?: boolean,
  */
 screen_sound?: boolean, 
 /**
+ * Whether this server sends phone notifications (SPEC §4.15, #830):
+ * `false` when its host set `LINGER_PUSH=off`. Always sent; a server
+ * from before leaves it out, and the phone app says the server needs an
+ * update before it can notify.
+ */
+push?: boolean, 
+/**
+ * The relay this server sends notifications through, when `push` is
+ * on: `https://push.linger.im` unless the host set `LINGER_PUSH_RELAY`.
+ * A phone seals its push address with this relay (PROTOCOL §5, "Phone
+ * notifications"), since only the relay that sealed one can open it.
+ */
+push_relay?: string, 
+/**
  * What the host alone is told about the machine the server runs on
  * (#582): its backups and how full its disk is. Left out for everybody
  * else, co-hosts included, and by a server from before it.
