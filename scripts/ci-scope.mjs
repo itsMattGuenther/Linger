@@ -7,8 +7,9 @@ import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 
 // `ios` is the iPhone app in the simulator (ios-simulator.yml): the app's
-// shell and page, and the flows and helpers that drive it.
-const domains = ["rust", "s3", "web", "shell", "coturn", "packages", "ios"];
+// shell and page, and the flows and helpers that drive it. `relay` is the
+// push relay's Worker (push-relay/, #887), which reads the wire types too.
+const domains = ["rust", "s3", "web", "shell", "coturn", "packages", "ios", "relay"];
 export function classify(paths) {
   const selected = new Set();
   const add = (...names) => names.forEach((name) => selected.add(name));
@@ -29,6 +30,7 @@ export function classify(paths) {
     else if (path.startsWith("assets/logo/")) add("web", "packages");
     else if (/^scripts\/(.*audio.*|.*icon.*|windows-update-check\.ps1|video-runtime-probe\.js|fixtures\/tone-h264-aac\.mp4|appimage-.*)$/.test(path)) add("packages");
     else if (path.startsWith("deploy/")) add("rust", "s3", "coturn");
+    else if (path.startsWith("push-relay/")) add("relay");
     else add(...domains);
   }
   return Object.fromEntries(domains.map((name) => [name, selected.has(name)]));

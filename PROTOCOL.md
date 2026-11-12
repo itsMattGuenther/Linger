@@ -1206,9 +1206,10 @@ changes an hour per person (`RATE_PUSH_DEVICE`).
 
 - `sealed_token`: its push address from Apple (an APNs device token) or Google (an FCM
   registration token), sealed by the relay in `GET /server`'s `push_relay`. The phone
-  asks the relay itself (#887), so the host never sees the real address, and only that
-  relay can open the sealed one. Printable ASCII, no spaces, at most 1,024 characters
-  (`MAX_PUSH_SEALED_CHARS`). A phone whose address changes `PATCH`es the new one sealed.
+  asks the relay itself ("The relay", below), so the host never sees the real address,
+  and only that relay can open the sealed one. Printable ASCII, no spaces, at most 1,024
+  characters (`MAX_PUSH_SEALED_CHARS`). A phone whose address changes `PATCH`es the new
+  one sealed.
 - `public_key` and `auth_secret`, base64url: an uncompressed P-256 public key (65 bytes)
   and 16 random bytes, RFC 8291's `ua_public` and `auth_secret`. A phone keeps one pair per
   server, so no two servers can tell they reach the same phone, and knows which server a
@@ -1275,6 +1276,46 @@ server forgets that phone, unless it has registered a new address since, and it 
 again the next time it's opened. Anything else
 is dropped, and never retried: a notification late enough to need a retry is one nobody
 wants. The server logs the status, never the notification or its address.
+
+**The relay** (`push-relay/`, #887) is Linger's, at `https://push.linger.im`: a Cloudflare
+Worker holding the keys from Linger's Apple and Google accounts. It keeps nothing between
+requests and logs nothing.
+
+```
+POST <push_relay>/seal   { service, address }             → { token }      # from a phone
+POST <push_relay>/send   { token, payload, ttl, collapse? } → 204          # from a server
+```
+
+```ts
+type SealRequest = {
+  service: "apns" | "apns_sandbox" | "fcm";   // a TestFlight or App Store iPhone build,
+                                              // one run from Xcode, or Android
+  address: string;     // APNs: the device token in hex, 64 to 200 characters
+                       // FCM: the registration token, letters, digits and :_-, 20 to 512
+}
+type SealResponse = { token: string }   // "v1." and base64url; at most 1,024 characters
+```
+
+**Sealing** encrypts the service and address with AES-256-GCM under a key only the relay
+holds, with a fresh nonce each time, so one address sealed twice is two tokens nobody can
+tell apart. A token that's been changed, or sealed with another key, doesn't open. The
+phone app's own page may call it (it answers `tauri://localhost` and `tauri.localhost`'s
+CORS preflight); nothing else gets an answer a page can read. Thirty a minute per network
+address, which the rate limit counts as a hash. A shape it doesn't take is 400; a body over
+8 KB, 413; past the limit, 429.
+
+**Sending** checks the `RelaySend` (`payload` base64url, at most 3,072 characters;
+`ttl` a whole number of seconds up to four weeks; `collapse` letters, digits, `_` and
+`-`, at most 64) and answers 400 for anything else and 413 for a body over 8 KB. Sixty a
+minute per sealed token, counted as a hash, then 429. A token it can't open is 410. To
+Apple it goes as an alert, `mutable-content: 1` so the iPhone's notification extension
+decrypts it before it shows, with `"Linger"` / `"Open Linger to see it."` as what shows if
+the extension can't, `payload` as `p`, the `ttl` as `apns-expiration`, `collapse` as
+`apns-collapse-id`, and never a badge. To Google it goes as a data message, `data.p`,
+high priority, with the `ttl` and `collapse` as `collapse_key`; the app shows it itself.
+Apple's `410`, `BadDeviceToken` or `DeviceTokenNotForTopic`, and Google's `UNREGISTERED`,
+`SENDER_ID_MISMATCH` or a bad `message.token`, are 410, the phone gone. Anything else
+from them is 502.
 
 **The encryption** is RFC 8291 with RFC 8188's `aes128gcm` coding, in one record: a fresh
 P-256 key pair and salt for every notification, a record size of 4096, the server's

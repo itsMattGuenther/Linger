@@ -38,6 +38,7 @@ jobs:
       web: ${{ steps.classify.outputs.web }}
       shell: ${{ steps.classify.outputs.shell }}
       coturn: ${{ steps.classify.outputs.coturn }}
+      relay: ${{ steps.classify.outputs.relay }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -194,6 +195,32 @@ jobs:
         # Dev mode serves every asset as a file, so only a production build
         # shows an embedded font or sound the CSP blocks (#318).
         run: node ../scripts/csp-assets.mjs dist
+
+  # The push relay (push-relay/, #887): a Cloudflare Worker, typechecked on
+  # the Workers runtime's own types and tested against stand-ins for Apple and
+  # Google. Deploying it is by hand (push-relay/README.md), never from CI.
+  push-relay:
+    name: push relay
+    needs: changes
+    if: ${{ needs.changes.outputs.relay == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: push-relay
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: enable pnpm
+        run: corepack enable
+      - name: install
+        run: pnpm install --frozen-lockfile
+      - name: typecheck
+        run: pnpm check
+      - name: test
+        run: pnpm test
 
   # The browser checks, in both engines: Chromium is WebView2 (Windows) and
   # WebKit is under WebKitGTK (Linux). Each engine runs in parts at once
@@ -507,7 +534,7 @@ jobs:
     # Renaming or adding jobs never needs a settings change.
     name: all green
     if: always()
-    needs: [changes, coturn, rust, s3, web, web-browser, new-tests, tauri-shell, rules]
+    needs: [changes, coturn, rust, s3, web, web-browser, new-tests, tauri-shell, push-relay, rules]
     runs-on: ubuntu-latest
     # Room for GitHub's close after the last step, as above (#823).
     timeout-minutes: 15

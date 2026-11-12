@@ -234,6 +234,8 @@ client/                the desktop app: Tauri 2 shell (src-tauri) and React
                        apps build from the same shell (src-tauri/gen/android
                        and src-tauri/gen/apple)
 deploy/                Dockerfile, compose, Caddyfile, .env.example, setup.sh, update.sh
+push-relay/            the push relay at push.linger.im, a Cloudflare Worker that passes
+                       phone notifications to Apple and Google (deployed by hand)
 packaging/arch/        the Arch/Omarchy package and its repository
 assets/                logos and fonts' licenses
 agents/                skills for your own coding agent (linger-report, linger-contribute)

@@ -60,6 +60,11 @@ additional services or browser engines:
   stops when DNS never answers (so Docker starts it again), and refuses an
   empty secret, without opening host ports or using your server data. CI
   runs this too; it does not replace the voice checks on separate networks.
+- The push relay, `push-relay/`, is a Cloudflare Worker with its own
+  packages: `cd push-relay && pnpm install`, then `pnpm check` and `pnpm test`
+  (`check.sh` runs both when the branch touches it). Its tests use stand-ins
+  for Apple and Google and keys made on the spot; deploying it is by hand, in
+  [its README](../push-relay/README.md).
 - `bash scripts/update-docker-test.sh` needs Docker and network access to
   ghcr.io. It runs `deploy/update.sh` on a real 0.4.2 server, checks it comes
   back as 0.4.3 with a database backup, then runs it again with nothing new.

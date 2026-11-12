@@ -30,7 +30,7 @@ const ROOT = fileURLToPath(new URL("../", import.meta.url));
  * its names failing, not unread (#771's review). A test below fails when a new
  * one isn't added here.
  */
-const TOP = [".cargo", ".github", "agents", "assets", "client", "crates", "deploy", "docs", "packaging", "scripts"];
+const TOP = [".cargo", ".github", "agents", "assets", "client", "crates", "deploy", "docs", "packaging", "push-relay", "scripts"];
 
 /** What a build or a run makes, never in the repository. */
 const MADE = /(?:^|\/)(?:target|dist|node_modules|test-results|playwright-report|gen)\//;

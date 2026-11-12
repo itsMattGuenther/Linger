@@ -1385,6 +1385,38 @@ pub struct PushPayload {
     pub message_id: Option<MessageId>,
 }
 
+/// Which push service a phone's address belongs to (#887): Apple's, for an
+/// iPhone build from TestFlight or the App Store; Apple's sandbox, for one
+/// run from Xcode; or Google's, for Android.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum PushService {
+    Apns,
+    ApnsSandbox,
+    Fcm,
+}
+
+/// `POST <relay>/seal` (PROTOCOL §5): a phone hands the relay its push
+/// address, straight from Apple or Google, and gets back a token only the
+/// relay can open. The phone gives its servers the token, never the address.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct SealRequest {
+    pub service: PushService,
+    /// An APNs device token in hex, or an FCM registration token.
+    pub address: String,
+}
+
+/// The relay's answer to [`SealRequest`]: the sealed address. A new one every
+/// time, even for the same address, so no two servers can tell they reach the
+/// same phone.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct SealResponse {
+    pub token: String,
+}
+
 /// What a server sends the relay (`POST <relay>/send`, PROTOCOL §5): an
 /// encrypted notification and the sealed address to deliver it to. The relay
 /// can't read `payload`, and nothing else here says who or what it's about.

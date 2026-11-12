@@ -22,7 +22,7 @@ if [ -z "$base" ]; then
 fi
 
 if [ "$all" = 1 ] || [ -z "$base" ]; then
-  scope=$'changed=0\nrust=true\ns3=true\nweb=true\nshell=true\ncoturn=true\npackages=true\nios=true'
+  scope=$'changed=0\nrust=true\ns3=true\nweb=true\nshell=true\ncoturn=true\npackages=true\nios=true\nrelay=true'
 else
   scope="$(node scripts/ci-scope.mjs --local "$base")"
 fi
@@ -33,7 +33,7 @@ if [ "$all" = 1 ]; then
 elif [ "$changed" = 0 ]; then
   echo "nothing changed since ${base:-a base branch}; checking everything"
 else
-  echo "$changed file(s) changed since $base; checking: rules$(for d in rust web shell coturn; do on "$d" && printf ', %s' "$d"; done)"
+  echo "$changed file(s) changed since $base; checking: rules$(for d in rust web shell coturn relay; do on "$d" && printf ', %s' "$d"; done)"
 fi
 
 echo "== rules lint =="
@@ -114,6 +114,12 @@ if on web; then
   (cd client && pnpm exec vite build --logLevel warn && node ../scripts/csp-assets.mjs dist)
 fi
 
+if on relay; then
+  echo "== push relay: its packages are the lockfile's, typecheck, tests =="
+  node scripts/installed-packages.mjs push-relay
+  (cd push-relay && pnpm check >/dev/null && pnpm test)
+fi
+
 if on packages; then
   # The icons are what the pinned Tauri CLI makes from the approved artwork.
   # CI's package check asked this alone, so a Tauri upgrade that draws them
@@ -134,7 +140,7 @@ fi
 
 extra=()
 on s3 && extra+=("the S3 storage tests (scripts/minio-test.sh runs them here)")
-on coturn && extra+=("the relay and a real server update, in Docker (docs/development.md)")
+on coturn && extra+=("the voice relay and a real server update, in Docker (docs/development.md)")
 if on web && [ "$webkit_here" = 0 ]; then
   extra+=("the WebKit browser tests, and this branch's new or edited ones ten times (scripts/webkit.sh runs them here, with Docker)")
 fi

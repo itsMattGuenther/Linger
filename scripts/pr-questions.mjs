@@ -45,6 +45,7 @@ export function knownParts(path) {
   else if (path.startsWith("client/")) add("page");
   else if (/^(?:scripts|\.github|packaging|agents)\/|^\.git(?:ignore|attributes)$/.test(path)) add("ci");
   else if (path.startsWith("deploy/")) add("deploy");
+  else if (path.startsWith("push-relay/")) add("server");
   else return null;
   // Page and shell files that only the phones run are named for them.
   if (/^client\/(?:src|src-tauri|tests)\//.test(path) && PHONE_NAME.test(path.slice(path.lastIndexOf("/") + 1))) add("phone");
