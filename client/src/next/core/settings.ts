@@ -40,7 +40,7 @@ export interface SettingsScope {
   server?: string;
   /** Something to choose in Windows (it appears only when there is). */
   windows: boolean;
-  /** The phone app: no Notifications, since a phone raises none (SPEC §4.15). */
+  /** The phone app: Notifications are the phone's own (#830), and there's no Windows (SPEC §4.15). */
   phone?: boolean;
 }
 
@@ -78,7 +78,7 @@ export function settingsEntries(scope: SettingsScope): SettingsEntry[] {
     item("appearance"),
     ...(scope.windows && scope.phone !== true ? [item("windows")] : []),
     item("sound"),
-    ...(scope.phone === true ? [] : [item("notifications")]),
+    item("notifications"),
     item("account"),
     ...(scope.severalServers ? [item("servers")] : []),
     ...(scope.hosting === null
@@ -113,7 +113,9 @@ export function sectionLead(key: SettingsKey, scope: SettingsScope): string {
     case "sound":
       return scope.phone === true ? "Choose your chimes." : "Choose your notification chimes. To silence people in voice, use deafen.";
     case "notifications":
-      return "Desktop banners for DMs, mentions and the people you choose, and cards when somebody arrives.";
+      return scope.phone === true
+        ? "What reaches this phone while Linger is closed, server by server. The phone's own settings still have the last word."
+        : "Desktop banners for DMs, mentions and the people you choose, and cards when somebody arrives.";
     case "account":
       return scope.phone === true ? "Your password, your archive and this phone." : "Your password, your archive, updates and this computer.";
     case "servers":
@@ -148,6 +150,9 @@ export const HEADINGS = {
   conversations: "Conversations Open",
   closing: "When You Close Your List",
   chimes: "A Familiar Little Sound",
+  phonePush: "Phone Notifications",
+  phoneRooms: "Rooms on This Phone",
+  follows: "People You Follow",
   voice: "Voice",
   banners: "Desktop Notifications",
   arrivals: "Arrivals",

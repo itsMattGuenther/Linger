@@ -58,10 +58,11 @@ script doesn't know is in every part, and a test fails until it's added.
 For: page, shell, phone, server, ci
 Gaps: Two at once
 
-Two share sign-ins at once signed the app out, and the app and the share
-window wrote over each other's sign-ins (#822). A release job run again
-undated a published release (#794). Make them take turns or share a lock,
-and test two at once, and one run twice.
+Two share sign-ins at once signed the app out (#822). A release job run
+again undated a release (#794). Turns per server let one delete the push
+address all of them share (#894), and a second quick tap undid the first
+(#894). Take turns or share a lock, around all they share, and test two at
+once, and one run twice.
 
 ### What happens offline, in the background, or just restarted?
 
@@ -122,8 +123,8 @@ Gaps: Tests written from the case in mind, not from the ways things fail
 Stopped or overtaken while it waits, still under way when somebody looks,
 part of it failing, and a network that refuses, drops, cuts off half way or
 never answers. A share turned down while its files were read was sent anyway
-(#792), and a log that named a request only once it ended couldn't show one
-still waiting (#849). The cases are in `docs/testing-strategy.md`, "What
+(#792), a log named a request only once it ended (#849), and a failed
+choice said nothing (#894). The cases are in `docs/testing-strategy.md`, "What
 reviews have taught".
 
 ### Is each screen tried at its limits?
@@ -229,7 +230,8 @@ For: page, shell, phone
 Gaps: Files left behind
 
 Every share left its copies in a temporary folder until iOS cleared it
-(#822), and a copy the phone stopped partway stayed (#792). Look for the
+(#822), a copy the phone stopped partway stayed (#792), and keys made
+before a registration failed were never forgotten (#894). Look for the
 files, timers, listeners and entries it makes, after it succeeds, fails and
 is cancelled; trace the failing path too: Node's `process.exit` skips
 `finally` (#846).

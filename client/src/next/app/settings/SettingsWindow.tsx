@@ -1,7 +1,7 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { copyText } from "../../core/copy";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Invite } from "../../../generated/Invite";
 import type { SignInLinkMade } from "../../../generated/SignInLinkMade";
 import type { Room } from "../../../generated/Room";
@@ -9,6 +9,7 @@ import type { ServerInfo } from "../../../generated/ServerInfo";
 import type { User } from "../../../generated/User";
 import { displayNameRequest, lookAlikeIn, type NameSaid } from "../../../lib/account";
 import { ApiError, type AuthedApi, PublicApi, TransportError } from "../../../lib/api";
+import { change as changePush, onPhonePush, phonePush, pushSupport, turnOff as pushOff, turnOn as pushOn } from "../../../lib/push";
 import { emojiPicture } from "../../../lib/emoji/picture";
 import { uploadFile } from "../../../lib/upload";
 import { useNow } from "../../../lib/clock";
@@ -100,7 +101,7 @@ export interface SettingsHolder {
   section?: SettingsKey;
   /** With several servers, the one it opens on (#719); the first in your order otherwise. */
   server?: string;
-  /** The phone app: no Windows, no Notifications, no microphones and no updates (SPEC §4.15). */
+  /** The phone app: no Windows, no microphones and no updates, and Notifications are the phone's (SPEC §4.15, #830). */
   phone: boolean;
 }
 
@@ -225,6 +226,8 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
     return first && firstApi ? [first.baseUrl, firstApi] : [null, null];
   }, [apis, signedOuts, picked, serverPrefs.order]);
   const state: GatewayState | undefined = server === null ? undefined : servers[server];
+  // This phone's notifications from the picked server (#830): kept on the phone.
+  const push = useSyncExternalStore(onPhonePush, () => phonePush(server ?? ""));
   const [section, setSection] = useState<{ key: SettingsKey | undefined; asked: number }>({ key: holder.section, asked: 0 });
 
   // Presence: typing or moving in Settings is you being here (core/report.ts).
@@ -658,20 +661,34 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
         setRule: async (rule, on) => {
           return askOwner(holder.notify({ server, rule, on }), "Couldn't reach the list window.");
         },
-        arrivals: {
-          on: arrivalCards,
-          onChange: (on) => {
-            saveArrivalCards(localStore(), on);
-            setArrivalCards(on);
-          },
-        },
-        dmAlerts: {
-          on: dmAlerts,
-          onChange: (on) => {
-            saveDmAlerts(localStore(), on);
-            setDmAlerts(on);
-          },
-        },
+        // On the phone, its own notifications (#830) in place of the
+        // desktop's banners and arrival cards.
+        ...(phone
+          ? {
+              phonePush: {
+                support: pushSupport(info),
+                state: push,
+                turnOn: () => pushOn(api, server, info ?? {}),
+                turnOff: () => pushOff(api, server),
+                change: (edit) => changePush(api, server, info ?? {}, edit),
+              },
+            }
+          : {
+              arrivals: {
+                on: arrivalCards,
+                onChange: (on: boolean) => {
+                  saveArrivalCards(localStore(), on);
+                  setArrivalCards(on);
+                },
+              },
+              dmAlerts: {
+                on: dmAlerts,
+                onChange: (on: boolean) => {
+                  saveDmAlerts(localStore(), on);
+                  setDmAlerts(on);
+                },
+              },
+            }),
       }}
       account={{
         serverName,

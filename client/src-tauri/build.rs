@@ -8,7 +8,8 @@
 /// `phone_call_bar` are the phone's alone (`capabilities/phone.json`), and so is
 /// `phone_save`, which only an iPhone uses (#703), the three `shared_`
 /// commands that read files shared to Linger from the phone's share sheet
-/// (#785, `shared.rs`), and `phone_voice_ended` (#851, `voice_away.rs`).
+/// (#785, `shared.rs`), `phone_voice_ended` (#851, `voice_away.rs`), and the
+/// five `push_` commands for phone notifications (#830, `phone_push.rs`).
 const COMMANDS: &[&str] = &[
     "sessions_load",
     "session_save",
@@ -56,6 +57,11 @@ const COMMANDS: &[&str] = &[
     "phone_voice_ended",
     "phone_text_scale",
     "phone_save",
+    "push_permission",
+    "push_address",
+    "push_keys",
+    "push_forget",
+    "push_opened",
     "shared_files",
     "shared_file",
     "shared_done",

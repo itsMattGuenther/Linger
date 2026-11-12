@@ -27,3 +27,8 @@
 # rule here.
 -keep class io.github.itsmattguenther.linger.VoiceCallService { *; }
 -keep class io.github.itsmattguenther.linger.VoiceCallService$Companion { *; }
+
+# Phone notifications (#830): Rust calls PushBridge.answer by its Java name,
+# through JNI (src-tauri/src/phone_push.rs). scripts/android-jni.mjs checks a
+# release build keeps it.
+-keep class io.github.itsmattguenther.linger.PushBridge { *; }

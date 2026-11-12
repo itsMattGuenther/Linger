@@ -18,8 +18,9 @@
     <!-- The call bar (#429, VoiceCallService): while in voice, a foreground
          service keeps the call going with the phone locked, which Android
          allows only with its one notification showing. Android 13 and later
-         ask before it may show (POST_NOTIFICATIONS); it is the only
-         notification Linger ever shows (SPEC §4.15). -->
+         ask before it may show (POST_NOTIFICATIONS), and before phone
+         notifications may (#830, LingerMessagingService), asked once, when
+         somebody turns those on (SPEC §4.15). -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -91,6 +92,26 @@
             android:exported="false"
             android:foregroundServiceType="microphone"
             android:stopWithTask="true" />
+
+        <!-- Phone notifications (#830, SPEC §4.15): Google hands this what
+             the relay passed on, encrypted to this phone, and it opens and
+             shows it. Nothing outside Linger can start it. -->
+        <service
+            android:name=".LingerMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+        <!-- Firebase carries notifications and does nothing else (hard rule
+             4): it doesn't start itself before somebody turns notifications
+             on, collects nothing, measures no deliveries, and has no
+             analytics to switch on. client/src/next/privacy.test.ts checks
+             each of these stays. -->
+        <meta-data android:name="firebase_messaging_auto_init_enabled" android:value="false" />
+        <meta-data android:name="firebase_analytics_collection_deactivated" android:value="true" />
+        <meta-data android:name="delivery_metrics_exported_to_big_query_enabled" android:value="false" />
+        <meta-data android:name="google_analytics_adid_collection_enabled" android:value="false" />
 
         <provider
           android:name="androidx.core.content.FileProvider"

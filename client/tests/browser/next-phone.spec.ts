@@ -137,8 +137,9 @@ test("opens Settings over the list, as its sections and then one section, withou
   await expect(sections).toContainText("Profile");
   await expect(sections).toContainText("Sound");
   await expect(sections).not.toContainText("Windows");
-  await expect(sections).not.toContainText("Notifications");
   await expect(sections).not.toContainText("Voice");
+  // This phone's own notifications (#830).
+  await expect(sections).toContainText("Notifications");
 
   // One section, the whole width, with the way back.
   await sections.getByText("Appearance").click();
@@ -1126,7 +1127,7 @@ test.describe("a row held with a finger raises its actions from the bottom (#704
     await expect(group).toHaveCount(0);
     expect((await did(page)).filter((line) => line.startsWith("leave "))).toEqual(["leave d-eli-sam"]);
 
-    // A room has nothing to raise.
+    // A room has nothing to raise: this server can't notify phones (#830).
     const general = room(page, "general");
     await touch.down(await middle(general));
     await page.waitForTimeout(800);
@@ -1177,6 +1178,150 @@ test.describe("a row held with a finger raises its actions from the bottom (#704
     await settings.getByRole("button", { name: "Back to Settings" }).click();
     await expect(settings.getByRole("combobox", { name: "Server" })).toHaveValue("https://ashen-lanterns.example");
     expect(await sticksOut(page), "Settings with its picker").toEqual([]);
+  });
+});
+
+// Phone notifications (#830, SPEC §4.15): off until turned on, from
+// Settings or from a room held on the list, and each change reaches the
+// server at once. `?push` is a server that can notify phones.
+test.describe("phone notifications, from a server that sends them (#830)", () => {
+  test.use({ isMobile: true, hasTouch: true, userAgent: ANDROID });
+  test.skip(({ browserName }) => browserName !== "chromium", "Only Chromium lets a test hold a finger down");
+
+  const sheet = (page: Page) => page.getByRole("menu");
+  const items = (page: Page) => sheet(page).locator("[data-kit='MenuItem']");
+  const pushes = async (page: Page) => (await did(page)).filter((line) => /^(push |seal |push_)/.test(line));
+  const settings = (page: Page) => page.locator(".nx-phone-over [data-screen='settings']");
+
+  async function hold(page: Page, name: string) {
+    const row = room(page, name);
+    await still(row);
+    const touch = await finger(page);
+    await touch.down(await middle(row));
+    await expect(sheet(page)).toBeVisible();
+    await touch.up();
+    await page.waitForTimeout(300);
+  }
+
+  test("a room held offers to turn them on; on, its choices; each reaches the server, and off forgets the phone", async ({ page }) => {
+    await open(page, "?one&shell=phone&push");
+    await settled(page);
+    await noLongPress(page);
+
+    // Off: the room's one item is the way to turn them on.
+    await hold(page, "general");
+    await expect(sheet(page)).toHaveAccessibleName("Notifications from #general");
+    await expect(items(page)).toHaveText(["Turn on notifications"]);
+    expect(await sticksOut(page), "the sheet").toEqual([]);
+    await sheet(page).getByRole("menuitem", { name: "Turn on notifications" }).tap();
+
+    // Settings, on Notifications for this server: one switch, and nothing asked yet.
+    await expect(settings(page).locator(".nx-set-title")).toHaveText("Notifications");
+    const main = settings(page).getByRole("switch", { name: "Notifications on this phone" });
+    await expect(main).not.toBeChecked();
+    await expect(settings(page).getByRole("switch", { name: "Mentions" })).toHaveCount(0);
+    expect(await pushes(page)).toEqual([]);
+    expect(await sticksOut(page), "Notifications, off").toEqual([]);
+
+    // On: the phone is asked, its address sealed by the relay, and the server told.
+    await main.tap();
+    await expect(main).toBeChecked();
+    await expect
+      .poll(() => pushes(page))
+      .toEqual([
+        'push_permission:{"ask":false}',
+        "seal fcm this-phone",
+        `push on https://good-company.example sealed-this-phone {"mentions":true,"dms":true,"knocks":true,"follows":true,"rooms":[]}`,
+      ]);
+    for (const kind of ["Mentions", "DMs", "Knocks", "People you follow"]) {
+      await expect(settings(page).getByRole("switch", { name: kind, exact: true })).toBeChecked();
+    }
+    expect(await sticksOut(page), "Notifications, on").toEqual([]);
+
+    // Only mentions is one tap, and changes reach the server as they're made.
+    await settings(page).getByRole("button", { name: "Only mentions", exact: true }).tap();
+    await expect(settings(page).getByRole("button", { name: "Only mentions", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(settings(page).getByRole("switch", { name: "DMs", exact: true })).not.toBeChecked();
+    await expect
+      .poll(async () => (await pushes(page)).at(-1))
+      .toBe(`push change https://good-company.example device-1 {"mentions":true,"dms":false,"knocks":false,"follows":false,"rooms":[]}`);
+
+    // A room, from its held sheet: its choice is checked, and Every message reaches the server.
+    await settings(page).getByRole("button", { name: "Back to Settings" }).click();
+    await settings(page).getByRole("button", { name: "Back", exact: true }).click();
+    await expect(page.locator(".nx-phone-over")).toHaveCount(0);
+    await hold(page, "general");
+    await expect(items(page)).toHaveText(["No notifications", "When it wakes up", "Every message", "Notification settings"]);
+    await expect(sheet(page).getByRole("menuitemcheckbox", { name: "No notifications" })).toHaveAttribute("aria-checked", "true");
+    expect(await sticksOut(page), "the sheet, on").toEqual([]);
+    await sheet(page).getByRole("menuitemcheckbox", { name: "Every message" }).tap();
+    await expect(sheet(page)).toHaveCount(0);
+    await expect.poll(async () => (await pushes(page)).at(-1)).toMatch(/^push change https:\/\/good-company\.example device-1 .*"rooms":\[\{"room_id":"[^"]+","choice":"every"\}\]/);
+    await hold(page, "general");
+    await expect(sheet(page).getByRole("menuitemcheckbox", { name: "Every message" })).toHaveAttribute("aria-checked", "true");
+
+    // Off: the server forgets this phone, and so does the phone; the choices stay for next time.
+    await sheet(page).getByRole("menuitem", { name: "Notification settings" }).tap();
+    await expect(settings(page).locator(".nx-set-title")).toHaveText("Notifications");
+    await expect(settings(page).getByRole("combobox", { name: "Notifications from #general" })).toHaveValue("every");
+    await main.tap();
+    await expect(main).not.toBeChecked();
+    await expect.poll(async () => (await pushes(page)).slice(-2)).toEqual([
+      "push off https://good-company.example device-1",
+      'push_forget:{"server":"https://good-company.example"}',
+    ]);
+  });
+
+  /** Settings → Notifications on this phone, turned on. */
+  async function turnedOn(page: Page, query: string) {
+    await open(page, `?one&shell=phone&push${query}`);
+    await settled(page);
+    await noLongPress(page);
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await settings(page).getByRole("navigation", { name: "Settings" }).getByText("Notifications").click();
+    await settings(page).getByRole("switch", { name: "Notifications on this phone" }).tap();
+    await expect(settings(page).getByRole("switch", { name: "DMs", exact: true })).toBeChecked();
+  }
+
+  test("taps faster than the server answers all count (#894 review)", async ({ page }) => {
+    await turnedOn(page, "&pushslow");
+    await settings(page).getByRole("switch", { name: "DMs", exact: true }).tap();
+    await settings(page).getByRole("switch", { name: "Knocks", exact: true }).tap();
+    await expect
+      .poll(async () => (await pushes(page)).filter((line) => line.startsWith("push change")).at(-1))
+      .toBe(`push change https://good-company.example device-1 {"mentions":true,"dms":false,"knocks":false,"follows":true,"rooms":[]}`);
+    await expect(settings(page).getByRole("switch", { name: "DMs", exact: true })).not.toBeChecked();
+    await expect(settings(page).getByRole("switch", { name: "Knocks", exact: true })).not.toBeChecked();
+  });
+
+  test("a room's choice the server refuses says so, and Try again sends it (#894 review)", async ({ page }) => {
+    await turnedOn(page, "&pushfail");
+    await settings(page).getByRole("button", { name: "Back to Settings" }).click();
+    await settings(page).getByRole("button", { name: "Back", exact: true }).click();
+    await hold(page, "general");
+    await sheet(page).getByRole("menuitemcheckbox", { name: "Every message" }).tap();
+    const failed = page.getByRole("dialog", { name: "Notifications from #general" });
+    await expect(failed).toContainText("#general's notifications didn't change");
+    await expect(failed.getByRole("alert")).toHaveText("The server is busy. Try again in a moment.");
+    expect(await sticksOut(page), "the problem").toEqual([]);
+    await failed.getByRole("button", { name: "Try again" }).tap();
+    await expect(failed).toHaveCount(0);
+    await expect.poll(async () => (await pushes(page)).at(-1)).toMatch(/^push change https:\/\/good-company\.example device-1 .*"choice":"every"/);
+    await hold(page, "general");
+    await expect(sheet(page).getByRole("menuitemcheckbox", { name: "Every message" })).toHaveAttribute("aria-checked", "true");
+  });
+
+  test("a phone that said no: the switch stays off, and says where to change it", async ({ page }) => {
+    await open(page, "?one&shell=phone&push&pushdenied");
+    await settled(page);
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await settings(page).getByRole("navigation", { name: "Settings" }).getByText("Notifications").click();
+    const main = settings(page).getByRole("switch", { name: "Notifications on this phone" });
+    await main.tap();
+    await expect(settings(page)).toContainText("Your phone isn't letting Linger show notifications.");
+    await expect(main).not.toBeChecked();
+    expect((await pushes(page)).filter((line) => line.startsWith("push on") || line.startsWith("seal"))).toEqual([]);
+    expect(await sticksOut(page), "the problem").toEqual([]);
   });
 });
 

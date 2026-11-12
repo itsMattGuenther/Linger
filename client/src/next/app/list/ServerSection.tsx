@@ -7,7 +7,7 @@ import { lineProblem } from "../../core/you";
 import { Icon, IconButton, MarkerCluster, Menu, type MenuAnchor, type MenuCloseReason, type MenuItem, Name, TextField, useHold, VoiceGlyph } from "../../kit";
 import { markerFor } from "../markers";
 import { boxOf, HeldSheet } from "./HeldSheet";
-import { ServerBody, type ServerBodyActions } from "./ServerBody";
+import { bodyActions, ServerBody, type ServerBodyActions } from "./ServerBody";
 import "./ServerSection.css";
 
 /** One server, as the list with several servers shows it. */
@@ -231,17 +231,7 @@ export const ServerSection = memo(function ServerSection({
             speaking={listing.speaking}
             idPrefix={`s${index}-`}
             serverName={name}
-            onOpenRoom={listing.onOpenRoom}
-            onOpenDm={listing.onOpenDm}
-            onOpenPerson={listing.onOpenPerson}
-            showing={listing.showing}
-            onMessage={listing.onMessage}
-            onKnock={listing.onKnock}
-            safetyFor={listing.safetyFor}
-            onReports={listing.onReports}
-            onStartDm={listing.onStartDm}
-            onLeaveDm={listing.onLeaveDm}
-            onHost={listing.onHost}
+            {...bodyActions(listing)}
           />
         </div>
       )}

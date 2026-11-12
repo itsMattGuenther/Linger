@@ -32,6 +32,14 @@ export const CROSSINGS = [
     type: "(Landroid/content/Context;Ljava/lang/String;ZZ)V",
     from: "client/src-tauri/src/phone_call.rs",
   },
+  {
+    // Rust calls it (phone_push.rs): everything phone notifications ask of
+    // Android, as a JSON request and answer (#830).
+    class: "io.github.itsmattguenther.linger.PushBridge",
+    method: "answer",
+    type: "(Landroid/content/Context;Ljava/lang/String;)Ljava/lang/String;",
+    from: "client/src-tauri/src/phone_push.rs",
+  },
 ];
 
 /**

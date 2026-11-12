@@ -1,6 +1,6 @@
 import { getCurrentWindow, LogicalPosition, LogicalSize } from "@tauri-apps/api/window";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { type CSSProperties, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useNow } from "../../../lib/clock";
 import {
   connect,
@@ -36,7 +36,20 @@ import { ANYWHERE, type TalkEdge } from "../../core/talkHold";
 import { forgetNotifications, resetNotifications, setDmAlerts, setQuietServers, showNotice } from "../../../lib/notify";
 import { forgetPreviews } from "../../../lib/previews";
 import { type BlockedServer, type ServerSession, useSessions, type WaitingServer } from "../../../lib/session";
-import { dropPresence, lastInput, onBack, setAway, setPresenceLive, setPresenceRoom, startPresence } from "../../../lib/watchPresence";
+import { dropPresence, lastInput, onBack, setAway, setPresenceLive, setPresenceRoom, setPutAway, startPresence } from "../../../lib/watchPresence";
+import {
+  allPhonePush,
+  change as changePush,
+  keepRegistered,
+  OPENED_EVENT,
+  onPhonePush,
+  phonePush,
+  pushSupport,
+  type PushTarget,
+  roomChoice,
+  tauriPhone,
+  withRoom,
+} from "../../../lib/push";
 import type { MessageId } from "../../../generated/MessageId";
 import type { RoomId } from "../../../generated/RoomId";
 import { OWNER, PROTOCOL, tauriBus } from "../../core/bus";
@@ -108,6 +121,7 @@ import { SignInView } from "../signin/SignInView";
 import { WindowMessage } from "../WindowMessage";
 import type { AwayNudge } from "./AwayNudge";
 import { ListView } from "./ListView";
+import type { RoomPush } from "./ServerBody";
 import "./ListWindow.css";
 import type { BlockedListing, ServerListing } from "./ServerSection";
 import type { AwayEverywhere } from "./YouEverywhere";
@@ -414,7 +428,30 @@ function Servers({
   const [prefs, setPrefs] = useState<ServerPrefs>(() => loadServerPrefs(localStore()));
   // The phone app, a while in the background (SPEC §4.15): its connections close.
   const [backgrounded, setBackgrounded] = useState(false);
-  useEffect(() => (onPhone() ? watchBackground(document, BACKGROUND_GRACE_MS, setBackgrounded, () => void retryAllNow(), flushReadMarkers) : undefined), []);
+  // Leaving the screen says idle at once (#830), so the phone's own
+  // notifications start: PROTOCOL §5, "Using Linger".
+  useEffect(
+    () =>
+      onPhone()
+        ? watchBackground(
+            document,
+            BACKGROUND_GRACE_MS,
+            (away) => {
+              setBackgrounded(away);
+              if (!away) setPutAway(false);
+            },
+            () => {
+              setPutAway(false);
+              void retryAllNow();
+            },
+            () => {
+              flushReadMarkers();
+              setPutAway(true);
+            },
+          )
+        : undefined,
+    [],
+  );
   // A screen being watched stops then too (#360): nobody sees it, and it
   // went on costing the phone's data and saying it was watching.
   useEffect(() => {
@@ -583,6 +620,46 @@ function Servers({
   // The same map until the sign-ins change, so what's handed it isn't drawn again for nothing (#533).
   const apis = useMemo(() => new Map(signedIn.map((session) => [session.baseUrl, session.api])), [signedIn]);
   apisRef.current = apis;
+
+  // Phone notifications (#830). Each server this phone hears from is told
+  // again once its info has come, as the app starts: that carries a push
+  // address Apple or Google changed, and a phone the server forgot.
+  const pushKept = useRef(new Set<string>());
+  useEffect(() => {
+    if (!onPhone()) return;
+    for (const [server, info] of Object.entries(infos)) {
+      const api = apis.get(server);
+      if (!api || pushKept.current.has(server) || pushSupport(info) === "unknown") continue;
+      pushKept.current.add(server);
+      void keepRegistered(api, server, info);
+    }
+  }, [infos, apis]);
+  // A tapped notification opens its conversation, once the server it's from
+  // is signed in. Asked as the app starts, for a tap that started it, and
+  // whenever the phone says another was tapped.
+  const tapped = useRef<PushTarget | null>(null);
+  const openTapped = useCallback(() => {
+    const target = tapped.current;
+    if (!target || !apisRef.current.has(target.server)) return;
+    tapped.current = null;
+    if (target.room !== null) openChat(target.server, target.room, target.message ?? undefined);
+  }, []);
+  useEffect(() => {
+    if (!onPhone() || !isTauri()) return;
+    const take = () => {
+      void tauriPhone
+        .opened()
+        .then((target) => {
+          if (target) tapped.current = target;
+          openTapped();
+        })
+        .catch(() => undefined);
+    };
+    take();
+    window.addEventListener(OPENED_EVENT, take);
+    return () => window.removeEventListener(OPENED_EVENT, take);
+  }, [openTapped]);
+  useEffect(openTapped, [apis, openTapped]);
   // "Show my local time" follows this computer's clock (#604, SPEC §4.6):
   // on a server where it's on and the zone the server holds isn't this
   // computer's (travel, or another computer last), it's moved here.
@@ -1286,6 +1363,8 @@ function Servers({
   // changes, so an event on one server draws that server's section and no
   // other (#533).
   const listed = useRef(new Map<string, { from: readonly unknown[]; listing: ServerListing }>());
+  // This phone's notifications from each server (#830), for a held room's menu.
+  const pushes = useSyncExternalStore(onPhonePush, allPhonePush);
   const listings = useMemo(
     () =>
       ordered.flatMap((session): ServerListing[] => {
@@ -1294,7 +1373,7 @@ function Servers({
         const { api, baseUrl } = session;
         const isQuiet = quiet.has(baseUrl);
         const showingHere = besideTab?.server === baseUrl ? besideTab.roomId : null;
-        const from = [api, state, now, isQuiet, infos[baseUrl], showingHere];
+        const from = [api, state, now, isQuiet, infos[baseUrl], showingHere, pushes[baseUrl]];
         const held = listed.current.get(baseUrl);
         if (held && held.from.every((one, at) => one === from[at])) return [held.listing];
         const model = keepSame(held?.listing.model ?? null, listModel(state, now));
@@ -1302,7 +1381,7 @@ function Servers({
         listed.current.set(baseUrl, { from, listing });
         return [listing];
       }),
-    [ordered, states, now, quiet, infos, besideTab?.server, besideTab?.roomId],
+    [ordered, states, now, quiet, infos, besideTab?.server, besideTab?.roomId, pushes],
   );
 
   // Files shared to Linger from the phone's share sheet (#785): what's
@@ -1813,6 +1892,9 @@ function listingOf(
     onStartDm: (people) => startDm(api, people),
     onLeaveDm: (room) => leaveDm(api, room),
     onHost: (section) => shell.settings(section, baseUrl),
+    // Only where it can be turned on: a server too old for it, or whose
+    // host turned it off, has nothing for a held room to raise.
+    roomPush: onPhone() && pushSupport(info) === "on" ? roomPushOn(api, baseUrl, info) : undefined,
     showing: showingHere,
     saveLine: me ? (line) => said(saveStatus(api, withLine(me.status, line))) : undefined,
   };
@@ -1821,6 +1903,17 @@ function listingOf(
 // What the list hands its parts, made out here so each holds only what it's
 // handed: one made inside the list window, and kept, keeps that whole
 // drawing of the window alive with it (#534).
+
+/** A room's notifications on this phone, from `baseUrl` (#830), for its held menu. */
+function roomPushOn(api: ServerSession["api"], baseUrl: string, info: ListedInfo | undefined): RoomPush {
+  const now = phonePush(baseUrl);
+  return {
+    on: now.on,
+    choice: (room) => roomChoice(now.settings, room),
+    set: (room, choice) => changePush(api, baseUrl, info ?? {}, (now) => withRoom(now, room, choice)),
+    settings: () => shell.settings("notifications", baseUrl),
+  };
+}
 
 /** The link the shell is holding for the paste box, once (#607, src-tauri/src/deep_link.rs). */
 /** The shell, asked from the page: `invoke`, in the shape `lib/shellDrops.ts` takes. */

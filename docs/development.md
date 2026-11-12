@@ -468,6 +468,23 @@ Linger on the phone.
 phone or emulator, a debug build can be inspected from Chrome's
 `chrome://inspect`.
 
+**Phone notifications on Android (#830, #888)** come through Google's
+Firebase Cloud Messaging, the only way to wake a closed Android app. The app
+takes Firebase's messaging library and nothing else of Firebase's, with its
+analytics and its starting by itself switched off in the manifest
+(`client/src/next/privacy.test.ts` checks both). Firebase's settings for
+Linger's project are `gen/android/app/google-services.json`, which is
+committed: it names the project and holds no secret (the keys that send are
+the relay's, `push-relay/README.md`). A virtual phone needs a system image
+**with Google Play** (or Google APIs) to get a push address; without Google's
+services the switch in Settings says so. The Kotlin that opens a notification
+has its own tests, against RFC 8291's example and against what the server
+makes (`crates/linger-server/tests/fixtures/push-notification.json`); from
+`client/src-tauri/gen/android`: `./gradlew -q :app:testUniversalDebugUnitTest`
+(CI runs it in `desktop.yml`'s Android job). Notifications travel through
+Linger's relay, so a test end to end needs a server with `LINGER_PUSH` on, a
+phone signed in to it over https, and a real message from somebody else.
+
 On a virtual phone with an NVIDIA card, the emulator may switch itself to
 drawing on the CPU ("Your GPU drivers may have a bug"). It works, but the
 phone's graphics driver crashed the app once when it was reinstalled while

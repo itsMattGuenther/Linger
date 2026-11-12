@@ -97,6 +97,12 @@ jobs:
       - name: build the Android app
         working-directory: client
         run: pnpm tauri android build --debug --target aarch64 --apk
+      # The phone opens a notification the server encrypted (#830): the
+      # Kotlin side against RFC 8291's own example and against what
+      # crates/linger-server makes (tests/fixtures/push-notification.json).
+      - name: the phone opens what the server encrypts
+        working-directory: client/src-tauri/gen/android
+        run: ./gradlew --no-daemon -q :app:testUniversalDebugUnitTest
       # A release build shrinks the app's Kotlin, which a debug build doesn't,
       # so a name Rust and Kotlin cross by can go only there: 0.5.4 shipped
       # without the call bar's (#834). Built unsigned (no key here), as the

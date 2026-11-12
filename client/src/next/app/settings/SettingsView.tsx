@@ -70,7 +70,7 @@ export interface SettingsViewProps {
   servers?: ServersProps;
   /** Only for the host or a co-host; leave out for a member (SRV-8, #424). */
   hosting?: HostingProps;
-  /** The phone app (SPEC §4.15): no Notifications, and Sound and Account say less. */
+  /** The phone app (SPEC §4.15): Notifications are the phone's (#830), and Sound and Account say less. */
   phone?: boolean;
 }
 

@@ -1,0 +1,10 @@
+{
+  "about": "One phone notification as the server encrypts it (RFC 8291, aes128gcm, padded to 256 bytes), with RFC 8291 Appendix A's keys, salt and secret. The server's test makes it again and compares (crates/linger-server/src/push/crypto.rs); the phones' tests open it (Android's PushCryptoTest.kt, the iPhone's notification extension tests).",
+  "ua_private": "q1dXpw3UpT5VOmu_cf_v6ih07Aems3njxI-JWgLcM94",
+  "ua_public": "BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4",
+  "auth_secret": "BTBZMqHH6r4Tts7J_aSIgg",
+  "as_private": "yfWPiYE-n46HLnH0KqZOF1fJJU3MYrct3AELtAQ-oRw",
+  "salt": "DGv6ra1nlYgDCS1FRnbzlw",
+  "plaintext": "{\"v\":1,\"kind\":\"mention\",\"title\":\"Sam in #general\",\"body\":\"you around tonight? @jo\",\"user_id\":\"0190b6c2-6b1a-7c3e-9d2f-1a2b3c4d5e6f\",\"room_id\":\"0190b6c2-6b1a-7c3e-9d2f-2a2b3c4d5e6f\",\"message_id\":\"0190b6c2-6b1a-7c3e-9d2f-3a2b3c4d5e6f\"}",
+  "message": "DGv6ra1nlYgDCS1FRnbzlwAAEABBBP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A_e3c0XWOO2NErVvepb4AdS-GvwvLRbSIXH53EIjb-yEbbsXzVjCWCaFQb3wBrdgVdbQ6ca7gGqyPE37MSNOij-t3K324ZWXKbVaKI3CXxo9ON3ij0Pob8FxNsYPFM4B4Q49EyXAShqpn9aIIZsklv0JHEgmptSGtGO2DBcbZt9YZ-0LtsD__amQi3jAJUrIdKAkDpCtlcd_Bx8SXXJc4XuBG7WQ7SYu2BKsx3w5lFjyXuYeGX6T7iQLun6y4ZjQIOTGmLHye5erb8LfcOTFkjBAK2SbtmPBF9QDdaSgN0UpK5jF36DKLz3dZwhmT5PbWToty7OefUjyJFMFTj4DqpEL4rrNxPDgpIl32mwttYhHw"
+}

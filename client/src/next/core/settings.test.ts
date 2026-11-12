@@ -57,10 +57,12 @@ describe("the Settings sidebar", () => {
     expect(settingsKeys({ ...MEMBER, windows: false })).not.toContain("windows");
   });
 
-  it("leaves the phone without Windows and Notifications, and keeps the host's sections (SPEC §4.15)", () => {
+  it("leaves the phone without Windows, gives it its own Notifications, and keeps the host's sections (SPEC §4.15, #830)", () => {
     const phone = { ...HOST, phone: true };
-    expect(settingsKeys(phone)).toEqual(["profile", "appearance", "sound", "account", "rooms", "invites", "people", "emoji", "server"]);
-    expect(showable(phone, "notifications")).toBe("profile");
+    expect(settingsKeys(phone)).toEqual(["profile", "appearance", "sound", "notifications", "account", "rooms", "invites", "people", "emoji", "server"]);
+    expect(showable(phone, "notifications")).toBe("notifications");
+    expect(sectionLead("notifications", phone)).toMatch(/this phone/);
+    expect(sectionLead("notifications", HOST)).toMatch(/Desktop banners/);
   });
 
   it("calls Sound just that on the phone, which is text only for now", () => {

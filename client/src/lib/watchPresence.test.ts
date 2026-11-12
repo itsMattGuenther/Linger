@@ -25,7 +25,7 @@ vi.mock("./gateway", () => ({
   },
 }));
 
-const { dropPresence, setAway, setPresenceLive, setPresenceRoom, startPresence } = await import(
+const { dropPresence, setAway, setPresenceLive, setPresenceRoom, setPutAway, startPresence } = await import(
   "./watchPresence"
 );
 
@@ -55,6 +55,7 @@ async function settle(): Promise<void> {
 
 describe("the presence driver", () => {
   beforeEach(() => {
+    setPutAway(false);
     reset();
     setPresenceLive(HOME, false);
   });
@@ -226,6 +227,31 @@ describe("the presence driver", () => {
       },
     ]);
     expect(sentTo(WORK)).toEqual([]);
+  });
+
+  // #830: the moment the phone app leaves the screen, every server hears it's
+  // idle and in no room, so its notifications start; back, it's here again.
+  it("tells every server a phone put away is idle at once, and here again when it's back", async () => {
+    setPresenceLive(HOME, true);
+    setPresenceLive(WORK, true);
+    setPresenceRoom(HOME, ROOM);
+    await settle();
+    outbox.length = 0;
+
+    setPutAway(true);
+    await settle();
+    expect(sentTo(HOME)).toEqual([
+      { op: "room.focus", d: { room_id: null } },
+      { op: "presence.update", d: { state: "idle", away_message: null } },
+    ]);
+    expect(sentTo(WORK)).toEqual([{ op: "presence.update", d: { state: "idle", away_message: null } }]);
+
+    outbox.length = 0;
+    setPutAway(false);
+    await settle();
+    // Moving into a room ends idle on the server (PROTOCOL §8), so that's all.
+    expect(sentTo(HOME)).toEqual([{ op: "room.focus", d: { room_id: ROOM } }]);
+    expect(sentTo(WORK)).toEqual([{ op: "presence.update", d: { state: "around", away_message: null } }]);
   });
 
   it("stops talking to a server that was signed out of", async () => {

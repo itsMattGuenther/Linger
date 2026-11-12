@@ -32,11 +32,18 @@ export const INFO_EVERY_MS = 60 * 60_000;
 export const INFO_RETRY_MS = 2 * 60_000;
 
 /**
- * What the list shows of a server: its name and the host's color (a palette
- * key), and for the host, how its machine is (#582), which the foot says
- * while something there needs them.
+ * What the list keeps of a server, besides `health`: its name and the
+ * host's color (a palette key), whether it passes shared screens on, and
+ * whether it notifies phones (#830). Compared and copied from this one list,
+ * so a field can't be compared and then left behind (#888: `push` was).
  */
-export type ListedInfo = Pick<ServerInfo, "name" | "accent_key" | "health" | "screens" | "screen_sound">;
+const LISTED = ["name", "accent_key", "screens", "screen_sound", "push", "push_relay"] as const satisfies readonly (keyof ServerInfo)[];
+
+/**
+ * What the list shows of a server: `LISTED`, and for the host, how its
+ * machine is (#582), which the foot says while something there needs them.
+ */
+export type ListedInfo = Pick<ServerInfo, (typeof LISTED)[number] | "health">;
 
 /**
  * The list's held answers with one server's new one. The very same object
@@ -49,25 +56,16 @@ export function withInfo(
   info: ListedInfo,
 ): Readonly<Record<string, ListedInfo>> {
   const was = held[server];
-  if (
-    was !== undefined &&
-    was.name === info.name &&
-    was.accent_key === info.accent_key &&
-    was.screens === info.screens &&
-    was.screen_sound === info.screen_sound &&
-    sameHealth(was.health, info.health)
-  )
-    return held;
-  return {
-    ...held,
-    [server]: {
-      name: info.name,
-      accent_key: info.accent_key,
-      ...(info.health ? { health: info.health } : {}),
-      ...(info.screens === undefined ? {} : { screens: info.screens }),
-      ...(info.screen_sound === undefined ? {} : { screen_sound: info.screen_sound }),
-    },
-  };
+  if (was !== undefined && LISTED.every((key) => was[key] === info[key]) && sameHealth(was.health, info.health)) return held;
+  const kept: ListedInfo = { name: info.name, accent_key: info.accent_key };
+  for (const key of LISTED) copy(kept, info, key);
+  if (info.health) kept.health = info.health;
+  return { ...held, [server]: kept };
+}
+
+/** One listed field, when the server said it: an older server leaves the newer ones out. */
+function copy<K extends keyof ListedInfo>(to: ListedInfo, from: ListedInfo, key: K): void {
+  if (from[key] !== undefined) to[key] = from[key];
 }
 
 function sameHealth(a: ServerHealth | undefined, b: ServerHealth | undefined): boolean {

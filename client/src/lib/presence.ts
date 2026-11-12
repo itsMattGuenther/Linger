@@ -9,6 +9,10 @@
  * edges can be tested without waiting for either. The driver that reads the
  * window and sends the frames is `watchPresence.ts`.
  *
+ * A phone app put away (#830, SPEC §4.15) is idle and in no room at once,
+ * with no clock: the phone's own notifications start only when its owner
+ * isn't using Linger anywhere (PROTOCOL §5), and a phone in a pocket isn't.
+ *
  * `away` is a deliberate state a person chooses, not a clock running out, so
  * it comes in from outside as `wantAway` and outranks everything here: while
  * it is set the two clocks stop mattering, because somebody who said they are
@@ -28,6 +32,11 @@ export const IDLE_AFTER_MS = 10 * 60_000;
 export interface PresenceClock {
   /** The window has the user's attention right now. */
   focused: boolean;
+  /**
+   * The phone app is in the background (#830): idle, in no room, now. Never
+   * true on a computer, whose minimised window keeps the ten-minute clock.
+   */
+  putAway: boolean;
   /** Last pointer, key, wheel, or focus. Not blur — that is `blurredAt`. */
   lastInputAt: number;
   /** When the window last lost focus. Ignored while `focused` is true. */
@@ -59,6 +68,7 @@ export type PresenceAction =
  * putting the app in the background. Either one expiring is enough.
  */
 export function stillHere(clock: PresenceClock, now: number): boolean {
+  if (clock.putAway) return false;
   if (now - clock.lastInputAt >= LEAVE_AFTER_MS) return false;
   if (!clock.focused && now - clock.blurredAt >= LEAVE_AFTER_MS) return false;
   return true;
@@ -101,7 +111,7 @@ export function decide(clock: PresenceClock, now: number): PresenceAction | null
   const want = wantedRoom(clock, now);
   if (want !== clock.sentRoomId) return { kind: "focus", roomId: want };
 
-  const idle = now - clock.lastInputAt >= IDLE_AFTER_MS;
+  const idle = clock.putAway || now - clock.lastInputAt >= IDLE_AFTER_MS;
   if (idle && clock.sentState !== "idle") return { kind: "state", state: "idle" };
   if (!idle && clock.sentState === "idle") return { kind: "state", state: "around" };
   return null;

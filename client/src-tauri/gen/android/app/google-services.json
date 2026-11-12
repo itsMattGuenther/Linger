@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "828541092932",
+    "project_id": "linger-4701a",
+    "storage_bucket": "linger-4701a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:828541092932:android:e9e35df0f3769e3ad76811",
+        "android_client_info": {
+          "package_name": "io.github.itsmattguenther.linger"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBYeN6p_rQjd3rtkeaNyNd3IVWxZobxtjc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

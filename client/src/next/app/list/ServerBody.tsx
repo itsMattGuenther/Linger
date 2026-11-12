@@ -1,11 +1,12 @@
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CardSafety } from "../../core/safety";
+import type { PushRoomChoice } from "../../../generated/PushRoomChoice";
 import type { RoomId } from "../../../generated/RoomId";
 import type { User } from "../../../generated/User";
 import { hostsHere } from "../../../lib/host";
 import { type DmRow, type ListModel, type PersonRow, type RoomRow, splitPeople, splitRooms } from "../../core/list";
 import { onPhone } from "../../core/phone";
-import { Button, Icon, IconButton, MarkerCluster, type MenuAnchor, Name, Row, RowList, SectionLabel, VoiceGlyph } from "../../kit";
+import { Button, Icon, IconButton, MarkerCluster, type MenuAnchor, type MenuItem, Name, Row, RowList, SectionLabel, VoiceGlyph } from "../../kit";
 import { markerFor } from "../markers";
 import { useOneLine } from "../useOneLine";
 import { useTheirTime } from "../useTheirTime";
@@ -15,6 +16,8 @@ import { knockOfflineLine, type KnockResult } from "../../core/knock";
 import { PersonCard } from "./PersonCard";
 import { LeaveGroup, LeaveQuestion, leaveItem } from "../LeaveGroup";
 import { boxOf, HeldSheet } from "./HeldSheet";
+import { FloatingForm } from "../chat/ReportBlock";
+import "../chat/ReportBlock.css";
 
 /** How long a knocked row rests before it can knock again (SPEC §4.9). */
 const KNOCKED_MS = 3_000;
@@ -46,8 +49,50 @@ export interface ServerBodyActions {
   onLeaveDm?: (id: RoomId) => Promise<string | null>;
   /** The host's way from an empty place to Settings → Hosting (decision 17). */
   onHost?: (section: "rooms" | "invites") => void;
+  /**
+   * On the phone (#830), from a server that can notify it: a room held
+   * raises its notifications on this phone. With them off for this server,
+   * its one item is the way to turn them on.
+   */
+  roomPush?: RoomPush;
   /** The conversation showing beside the list, on this server: its row, or its person's, is marked (#351). */
   showing?: RoomId | null;
+}
+
+/**
+ * A listing's actions for its body, every one by name. Both lists draw a
+ * body from a listing (ServerSection with several servers, ListView with
+ * one), and each used to name the actions it passed: one added here could
+ * reach neither, as `roomPush` didn't (#888). An action missing below is a
+ * type error.
+ */
+export function bodyActions(from: ServerBodyActions): ServerBodyActions {
+  const all: { [K in keyof Required<ServerBodyActions>]: ServerBodyActions[K] } = {
+    onOpenRoom: from.onOpenRoom,
+    onOpenDm: from.onOpenDm,
+    onOpenPerson: from.onOpenPerson,
+    onMessage: from.onMessage,
+    onKnock: from.onKnock,
+    safetyFor: from.safetyFor,
+    onReports: from.onReports,
+    onStartDm: from.onStartDm,
+    onLeaveDm: from.onLeaveDm,
+    onHost: from.onHost,
+    roomPush: from.roomPush,
+    showing: from.showing,
+  };
+  return all;
+}
+
+/** A room's notifications on this phone (#830), for its held menu. */
+export interface RoomPush {
+  /** Notifications from this server are on, on this phone. */
+  on: boolean;
+  choice: (room: RoomId) => PushRoomChoice | null;
+  /** Resolves to the problem in words, or null. */
+  set: (room: RoomId, choice: PushRoomChoice | null) => Promise<string | null>;
+  /** Settings → Notifications, for this server. */
+  settings: () => void;
 }
 
 type Fold = "rooms" | "more" | "people" | "away" | "others" | "offline";
@@ -85,6 +130,7 @@ export function ServerBody({
   onStartDm,
   onLeaveDm,
   onHost,
+  roomPush,
   showing = null,
 }: ServerBodyActions & {
   model: ListModel;
@@ -234,7 +280,14 @@ export function ServerBody({
   );
   const rooms = splitRooms(model.rooms);
   const roomRow = (room: RoomRow) => (
-    <RoomItem key={room.id} room={room} selected={room.id === showing} talking={room.people.some(talking)} onOpen={onOpenRoom ? openRoom : undefined} />
+    <RoomItem
+      key={room.id}
+      room={room}
+      selected={room.id === showing}
+      talking={room.people.some(talking)}
+      onOpen={onOpenRoom ? openRoom : undefined}
+      push={phone ? roomPush : undefined}
+    />
   );
   // The + on Rooms: a new group, from the people here.
   const canStart = onStartDm !== undefined;
@@ -515,19 +568,112 @@ const PersonItem = memo(function PersonItem({
 });
 
 /** A room, on its row (#533). */
+/** A room's notification choice the server didn't take: what it said, and Try again. */
+function ChoiceFailed({ room, problem, onAgain, onClose }: { room: string; problem: string; onAgain: () => Promise<void>; onClose: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const box = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    box.current?.querySelector("button")?.focus();
+  }, []);
+  return (
+    <div ref={box} className="nx-report" role="group" aria-label={`Notifications from #${room}`}>
+      <h3 className="nx-report-title">{`#${room}'s notifications didn't change`}</h3>
+      <p className="nx-report-problem" role="alert">
+        {problem}
+      </p>
+      <div className="nx-report-buttons">
+        <Button variant="secondary" size="md" onClick={onClose}>
+          Close
+        </Button>
+        <Button
+          variant="primary"
+          size="md"
+          busy={busy}
+          onClick={() => {
+            if (busy) return;
+            setBusy(true);
+            void onAgain().finally(() => setBusy(false));
+          }}
+        >
+          Try again
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 const RoomItem = memo(function RoomItem({
   room,
   selected,
   talking,
   onOpen,
+  push,
 }: {
   room: RoomRow;
   selected: boolean;
   talking: boolean;
   onOpen?: (id: RoomId) => void;
+  /** The phone (#830): held, the room raises its notifications on this phone. */
+  push?: RoomPush;
 }) {
+  const [held, setHeld] = useState<HTMLButtonElement | null>(null);
+  // A choice the server didn't take, said where it was made (#894 review).
+  const [failed, setFailed] = useState<{ choice: PushRoomChoice | null; problem: string; anchor: MenuAnchor } | null>(null);
+  const choice = push?.on ? push.choice(room.id) : null;
+  const choose = async (to: PushRoomChoice | null, anchor: MenuAnchor): Promise<void> => {
+    const problem = (await push?.set(room.id, to)) ?? null;
+    setFailed(problem === null ? null : { choice: to, problem, anchor });
+  };
+  // A choice closes the sheet, as every held sheet's do: the menu leaves that to its owner.
+  const pick = (to: PushRoomChoice | null) => () => {
+    const anchor = held ? boxOf(held) : null;
+    setHeld(null);
+    if (anchor) void choose(to, anchor);
+  };
+  const toSettings = () => {
+    setHeld(null);
+    push?.settings();
+  };
+  const items: MenuItem[] = !push
+    ? []
+    : push.on
+      ? [
+          { id: "off", label: "No notifications", checked: choice === null, onSelect: pick(null) },
+          { id: "wakes", label: "When it wakes up", checked: choice === "wakes", onSelect: pick("wakes") },
+          { id: "every", label: "Every message", checked: choice === "every", onSelect: pick("every") },
+          { id: "settings", label: "Notification settings", icon: "bell", onSelect: toSettings },
+        ]
+      : [{ id: "settings", label: "Turn on notifications", icon: "bell", onSelect: toSettings }];
   return (
     <Row
+      hold={
+        push
+          ? {
+              onHold: setHeld,
+              raised: held ? (
+                <HeldSheet
+                  label={`Notifications from #${room.name}`}
+                  head={`#${room.name}`}
+                  anchor={boxOf(held)}
+                  items={items}
+                  onClose={(reason) => {
+                    setHeld(null);
+                    if (reason === "escape" || reason === "tab") held.focus();
+                  }}
+                />
+              ) : failed ? (
+                <FloatingForm anchor={failed.anchor} label={`Notifications from #${room.name}`} onClose={() => setFailed(null)}>
+                  <ChoiceFailed
+                    room={room.name}
+                    problem={failed.problem}
+                    onAgain={() => choose(failed.choice, failed.anchor)}
+                    onClose={() => setFailed(null)}
+                  />
+                </FloatingForm>
+              ) : null,
+            }
+          : undefined
+      }
       lead={{ kind: "room" }}
       lines="one"
       title={room.name}

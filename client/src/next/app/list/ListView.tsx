@@ -4,7 +4,7 @@ import { minimizer } from "../../core/windowControls";
 import { Button, IconButton, TitleBar } from "../../kit";
 import { LogoMark } from "../LogoMark";
 import "./ListView.css";
-import { ServerBody, type ServerBodyActions } from "./ServerBody";
+import { bodyActions, ServerBody, type ServerBodyActions } from "./ServerBody";
 import { type BlockedListing, BlockedSection, type ServerListing, ServerSection } from "./ServerSection";
 import type { AwayNudge } from "./AwayNudge";
 import { type YouActions, YouCard } from "./YouCard";
@@ -181,17 +181,7 @@ export function ListView(props: ListViewProps) {
             <ServerBody
               model={only.model}
               speaking={only.speaking}
-              onOpenRoom={only.onOpenRoom}
-              onOpenDm={only.onOpenDm}
-              onOpenPerson={only.onOpenPerson}
-              showing={only.showing}
-              onMessage={only.onMessage}
-              onKnock={only.onKnock}
-              safetyFor={only.safetyFor}
-              onReports={only.onReports}
-              onStartDm={only.onStartDm}
-              onLeaveDm={only.onLeaveDm}
-              onHost={only.onHost}
+              {...bodyActions(only)}
             />
           ) : null}
         </div>

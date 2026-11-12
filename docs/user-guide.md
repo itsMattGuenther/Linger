@@ -133,12 +133,31 @@ rooms too, with the phone's own microphone or a headset's. The first time you
 press **Join**, Android asks whether Linger may use the microphone, unless
 you already let it for a voice message.
 
-It never shows a notification about messages or people, open or closed (when
-you open it, it catches up). The one thing it shows is while you're in voice:
-a silent line, *In voice in #general*, with **Mute** and **Leave**, which is
-what keeps the call going with the phone locked or in your pocket. It never
-makes a sound, and it goes when you leave. Android 13 and later ask once
-whether it may show; if you say no, the call still works.
+**Notifications** (from 0.5.5) are off until you turn them on, server by
+server: **Settings → Notifications**, or hold a room's name in the list and
+tap **Turn on notifications**. Android asks once whether Linger may show
+them. Then each kind has its own switch: **Mentions** (somebody names you),
+**DMs**, **Knocks** and **People you follow**, and **Only mentions** turns
+off all but the first in one tap. Rooms stay quiet unless you choose one:
+hold its name and pick **When it wakes up** (its first message after an hour
+with none) or **Every message** (one at a time: the next replaces the last,
+and the room stays quiet until you read it or 15 minutes pass). Tapping a
+notification opens that conversation. There's never a number on the icon.
+
+Nothing arrives while Linger is open on the phone, or while you're using it
+on another device; idle or away there, the phone hears it. Each kind is also
+its own channel in Android's settings for Linger, so the phone can silence
+one, and Do Not Disturb holds them all. Notifications travel through Google
+and Linger's relay encrypted, so neither can read them; a server's host can
+turn them off for that server. Signing out of a server stops its
+notifications. They need Google Play services, which almost every Android
+phone has.
+
+The other thing it shows is while you're in voice: a silent line, *In voice
+in #general*, with **Mute** and **Leave**, which is what keeps the call going
+with the phone locked or in your pocket. It never makes a sound, and it goes
+when you leave. Android 13 and later ask once whether Linger may show
+notifications; if you say no, the call still works.
 
 It doesn't zoom with two fingers, as a web page does, but a photo you open
 does: pinch it, drag it about, or double-tap to zoom in and back out. To make
