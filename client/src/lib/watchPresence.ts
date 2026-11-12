@@ -87,6 +87,8 @@ let focused = false;
 const otherWindows = new Map<string, boolean>();
 let lastInputAt = 0;
 let blurredAt = 0;
+/** The phone app is in the background (`setPutAway`, #830). */
+let putAway = false;
 let attached = false;
 let unlisten: (() => void) | null = null;
 /** Who hears that the person is back at Linger after a while away from it (`onBack`). */
@@ -127,6 +129,7 @@ function sawPerson(now: number): void {
 function clock(watch: Watch): PresenceClock {
   return {
     focused,
+    putAway,
     lastInputAt,
     blurredAt,
     roomId: watch.openRoomId,
@@ -253,6 +256,19 @@ export function reportWindow(label: string, report: { focused: boolean; input?: 
   otherWindows.set(label, report.focused);
   if (report.input === true) sawPerson(Date.now());
   syncFocus();
+  tickAll();
+}
+
+/**
+ * The phone app left the screen, or came back (#830, SPEC §4.15). Put away,
+ * every server is told at once that this phone is idle and in no room, while
+ * its network is still let through: its notifications start then, rather
+ * than when its connection is noticed gone. Back, it's the person again.
+ */
+export function setPutAway(away: boolean): void {
+  if (away === putAway) return;
+  putAway = away;
+  if (!away) sawPerson(Date.now());
   tickAll();
 }
 

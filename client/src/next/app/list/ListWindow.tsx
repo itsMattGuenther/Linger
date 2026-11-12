@@ -36,7 +36,7 @@ import { ANYWHERE, type TalkEdge } from "../../core/talkHold";
 import { forgetNotifications, resetNotifications, setDmAlerts, setQuietServers, showNotice } from "../../../lib/notify";
 import { forgetPreviews } from "../../../lib/previews";
 import { type BlockedServer, type ServerSession, useSessions, type WaitingServer } from "../../../lib/session";
-import { dropPresence, lastInput, onBack, setAway, setPresenceLive, setPresenceRoom, startPresence } from "../../../lib/watchPresence";
+import { dropPresence, lastInput, onBack, setAway, setPresenceLive, setPresenceRoom, setPutAway, startPresence } from "../../../lib/watchPresence";
 import type { MessageId } from "../../../generated/MessageId";
 import type { RoomId } from "../../../generated/RoomId";
 import { OWNER, PROTOCOL, tauriBus } from "../../core/bus";
@@ -414,7 +414,30 @@ function Servers({
   const [prefs, setPrefs] = useState<ServerPrefs>(() => loadServerPrefs(localStore()));
   // The phone app, a while in the background (SPEC §4.15): its connections close.
   const [backgrounded, setBackgrounded] = useState(false);
-  useEffect(() => (onPhone() ? watchBackground(document, BACKGROUND_GRACE_MS, setBackgrounded, () => void retryAllNow(), flushReadMarkers) : undefined), []);
+  // Leaving the screen says idle at once (#830), so the phone's own
+  // notifications start: PROTOCOL §5, "Using Linger".
+  useEffect(
+    () =>
+      onPhone()
+        ? watchBackground(
+            document,
+            BACKGROUND_GRACE_MS,
+            (away) => {
+              setBackgrounded(away);
+              if (!away) setPutAway(false);
+            },
+            () => {
+              setPutAway(false);
+              void retryAllNow();
+            },
+            () => {
+              flushReadMarkers();
+              setPutAway(true);
+            },
+          )
+        : undefined,
+    [],
+  );
   // A screen being watched stops then too (#360): nobody sees it, and it
   // went on costing the phone's data and saying it was watching.
   useEffect(() => {

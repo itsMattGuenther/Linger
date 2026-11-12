@@ -24,6 +24,7 @@ const OTHER = "room-porch";
 function clock(extra: Partial<PresenceClock> = {}): PresenceClock {
   return {
     focused: true,
+    putAway: false,
     lastInputAt: NOW,
     blurredAt: 0,
     roomId: ROOM,
@@ -190,6 +191,31 @@ describe("decide", () => {
         NOW,
       ),
     ).toBeNull();
+  });
+});
+
+// #830: a phone in a pocket is nobody using Linger, so its own notifications
+// start at once rather than after the ten-minute clock.
+describe("a phone put away", () => {
+  it("leaves its room, then says idle, with no clock to wait for", () => {
+    const away = clock({ putAway: true, focused: false, sentRoomId: ROOM });
+    expect(decide(away, NOW)).toEqual({ kind: "focus", roomId: null });
+    expect(decide({ ...away, sentRoomId: null }, NOW)).toEqual({ kind: "state", state: "idle" });
+    expect(decide({ ...away, sentRoomId: null, sentState: "idle" }, NOW)).toBeNull();
+  });
+
+  it("says idle at once when it was in no room", () => {
+    expect(decide(clock({ putAway: true, roomId: null }), NOW)).toEqual({ kind: "state", state: "idle" });
+  });
+
+  it("comes back into its room, and around, once it's back", () => {
+    const back = clock({ sentState: "idle", sentRoomId: null });
+    expect(decide(back, NOW)).toEqual({ kind: "focus", roomId: ROOM });
+    expect(decide({ ...back, sentRoomId: ROOM }, NOW)).toEqual({ kind: "state", state: "around" });
+  });
+
+  it("stays away when its person said they were away", () => {
+    expect(decide(clock({ putAway: true, wantAway: "out", sentState: "away", sentAwayMessage: "out", sentRoomId: null }), NOW)).toBeNull();
   });
 });
 
