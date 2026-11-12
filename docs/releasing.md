@@ -298,25 +298,47 @@ takes only bundles signed with this key. Play Console's App integrity page
 shows the app signing key's SHA-256 fingerprint, and it must match
 `client/src-tauri/android-release-cert.sha256`.
 
-**Once, with the first release that has phone notifications (#830, #888)**,
-update Play Console's **Data safety** form (Policy → App content). The
-answers change because the app now takes Google's Firebase messaging,
-which runs only once somebody turns notifications on:
+**Data safety** (Play Console → the app → App content → Data safety) says
+what the app sends off the phone. Google counts everything the app sends
+anywhere, the person's own server included, so a chat app "collects" its
+messages even though Linger the project never sees them. Nothing is
+"shared": the server is one the person chose to sign in to, and Google's
+push service and Linger's relay only carry things on Linger's behalf.
+Over-declaring is allowed and under-declaring isn't, so the answers below
+can go in before the first release with phone notifications (#830, #888).
+They must agree with linger.im/privacy, which needs the relay and
+notifications added in the same release (step 5).
 
-- **Device or other IDs: collected**, not shared, not optional for
-  notifications but notifications themselves are. It's the push address
-  Google gives the phone, which goes to Linger's relay to be sealed and, in
-  that sealed form, to the person's server. Purpose: app functionality.
-  Processed in transit only, encrypted: yes.
-- **Messages: not collected by Linger.** A notification's words go from the
-  person's own server to the phone encrypted so the relay and Google can't
-  read them; they're processed only on the phone.
-- Nothing else changes: still no analytics, no crash reports, no ads, and
-  nothing sold. The app asks for notification permission (Android 13 and
-  later) the first time somebody turns them on.
+*Data collection and security:* collects or shares required data types:
+**Yes**. All of it encrypted in transit: **Yes** (https and wss only, and
+voice is encrypted by WebRTC). Account creation: **username and
+password**. Delete account URL: `https://linger.im/delete-account`. A way to
+delete some data without deleting the account: **Yes** (a person deletes
+their own messages and files).
 
-The App Store's privacy answers move the same way when the iPhone gets them
-(#889).
+*Data types*, every one collected, **not shared**, **not** processed
+ephemerally (except search), for **App functionality**:
+
+| Type | Required or optional | Also for |
+|---|---|---|
+| Personal info → Name (display name) | Required | Account management |
+| Personal info → User IDs (username) | Required | Account management |
+| Personal info → Other info (time zone, only with "Show my local time") | Optional | |
+| Messages → Other in-app messages | Required | |
+| Photos and videos → Photos, Videos | Optional | |
+| Audio → Voice or sound recordings (voice messages, voice rooms) | Optional | |
+| Files and docs | Optional | |
+| App activity → App interactions (who's around, read position, which room you're in) | Required | |
+| App activity → In-app search history (processed ephemerally: searched, never kept) | Optional | |
+| App activity → Other user-generated content (status, reactions, polls) | Optional | |
+| Device or other IDs (the push address Google gives the phone, from #888) | Optional | |
+
+Nothing else: no location (photos and videos lose theirs before upload),
+contacts, calendar, financial, health, browsing history, or crash logs
+and diagnostics; no analytics, ads or marketing purpose anywhere.
+
+The App Store's privacy answers move the same way when the iPhone gets
+notifications (#889).
 
 ## The iPhone
 

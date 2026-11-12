@@ -922,7 +922,9 @@ macOS runners, or a friend's Mac.
   away. Then the iPhone's notification extension (#889).
   *Release notes, 0.5.5:* phone notifications on Android, which need the
   server on 0.5.5 too (an older one says it needs an update); and update
-  Play's Data safety form first (docs/releasing.md, "Google Play").
+  Play's Data safety form first (docs/releasing.md, "Google Play"). The
+  site's privacy and delete-account pages say Linger "runs no servers" and
+  the phone shows no notifications: both change at 0.5.5's site update.
   *Accept:* with Linger closed and the phone locked, each kind arrives on a
   real Android phone and, through the TestFlight testers, an iPhone; a switch
   turned off stops it; "only mentions" lets only mentions through; Do Not
