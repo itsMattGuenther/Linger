@@ -42,6 +42,10 @@ mod phone_keyboard;
 // go of the scene. Tests read the answers here too.
 #[cfg(any(target_os = "ios", test))]
 mod phone_scene;
+// Phone notifications (#830): permission, the push address, the keys a
+// notification is encrypted to, and the conversation a tapped one opens.
+#[cfg(any(mobile, test))]
+mod phone_push;
 // Downloads on an iPhone (#703): fetched by the app and offered in its share sheet.
 #[cfg(any(mobile, test))]
 mod phone_save;
@@ -565,6 +569,11 @@ fn phone_app() -> tauri::Builder<tauri::Wry> {
             deep_link::link_offered,
             graphics::graphics_started,
             phone_call::phone_call_bar,
+            phone_push::push_permission,
+            phone_push::push_address,
+            phone_push::push_keys,
+            phone_push::push_forget,
+            phone_push::push_opened,
             phone_save::phone_save,
             phone_sound::phone_sound_mode,
             phone_sound::phone_buzz,

@@ -23,6 +23,7 @@ import type { RoomId } from "../generated/RoomId";
 import type { ServerFrame } from "../generated/ServerFrame";
 import type { VoiceControls } from "../generated/VoiceControls";
 import { PageVoice, type PageVoiceEvent, type PageVoiceWorld } from "./pageVoice";
+import { forgetPush } from "./push";
 
 export interface StoredSession {
   /** Origin of the server, e.g. `https://linger.example`. No trailing slash. */
@@ -56,6 +57,9 @@ export async function saveSession(session: StoredSession): Promise<SessionWrite>
 export async function forgetSession(baseUrl: string): Promise<SessionWrite> {
   if (!isTauri()) return { kind: "unavailable", reason: NO_TAURI };
   const result: SessionWrite = await invoke("session_forget", { baseUrl });
+  // Signed out: the server has forgotten this phone, so the phone forgets
+  // its notification keys for that server too (#830). Nothing kept, nothing done.
+  void forgetPush(baseUrl);
   return result;
 }
 

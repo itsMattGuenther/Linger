@@ -17,11 +17,25 @@ const SCRIPT = fileURLToPath(new URL("./android-jni.mjs", import.meta.url));
 const read = (path) => readFileSync(join(ROOT, path), "utf8");
 /** The four classes the crossings are in, cut from 0.5.4's release APK (`dexdump classes*.dex`). */
 const RELEASED = read("scripts/fixtures/dexdump-0.5.4.txt");
-/** The same, with `update` where a release build that kept it has it. */
+/**
+ * The same, with `update` where a release build that kept it has it, and the
+ * crossings added since 0.5.4 (PushBridge, #830): a build that kept
+ * everything Rust calls today.
+ */
 const KEPT = RELEASED.replace(
   /(Class descriptor\s*: 'Lio\/github\/itsmattguenther\/linger\/VoiceCallService;'[\s\S]*?Direct methods\s*-\n)/,
   "$1    #9              : (in Lio/github/itsmattguenther/linger/VoiceCallService;)\n      name          : 'update'\n      type          : '(Landroid/content/Context;Ljava/lang/String;ZZ)V'\n      access        : 0x0019 (PUBLIC STATIC FINAL)\n",
-);
+) + `Class #9            -
+  Class descriptor  : 'Lio/github/itsmattguenther/linger/PushBridge;'
+  Direct methods    -
+    #0              : (in Lio/github/itsmattguenther/linger/PushBridge;)
+      name          : 'answer'
+      type          : '(Landroid/content/Context;Ljava/lang/String;)Ljava/lang/String;'
+      access        : 0x0019 (PUBLIC STATIC FINAL)
+  Virtual methods   -
+`;
+/** What Rust crossed by when 0.5.4 was built: the call bar only. */
+const AT_054 = CROSSINGS.filter((each) => each.class === "io.github.itsmattguenther.linger.VoiceCallService");
 
 test("0.5.4's release build dropped the call bar's update, and kept the Keystore's", () => {
   const classes = dexMethods(RELEASED);
@@ -33,7 +47,7 @@ test("0.5.4's release build dropped the call bar's update, and kept the Keystore
   assert(classes.get("io.github.itsmattguenther.linger.VoiceCallService").has("onStartCommand (Landroid/content/Intent;II)I"));
   assert(![...classes.get("io.github.itsmattguenther.linger.VoiceCallService")].some((method) => method.startsWith("d ")),
     "a field (d) isn't read as a method");
-  assert.deepEqual(missing(classes).map((each) => each.method), ["update"]);
+  assert.deepEqual(missing(classes, AT_054).map((each) => each.method), ["update"]);
 });
 
 test("a build that keeps update is missing nothing", () => {

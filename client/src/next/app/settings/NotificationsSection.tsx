@@ -1,10 +1,22 @@
 import { type KeyboardEvent, useId, useRef, useState } from "react";
 import type { NotifyRule } from "../../../generated/NotifyRule";
+import type { PushSettings } from "../../../generated/PushSettings";
 import type { Room } from "../../../generated/Room";
 import type { User } from "../../../generated/User";
+import { isOnlyMentions, onlyMentions, type PhonePush, type PushSupport, roomChoice, withRoom } from "../../../lib/push";
 import { HEADINGS, ruleSummary } from "../../core/settings";
-import { Button, Icon, Name, SettingRow, Switch } from "../../kit";
+import { Button, Icon, Name, Select, SettingRow, Switch } from "../../kit";
 import { Block, Note, SaveLine, useSave } from "./parts";
+
+/** Phone notifications on this phone, for the server Settings shows (#830, SPEC §4.15). */
+export interface PhonePushProps {
+  support: PushSupport;
+  state: PhonePush;
+  /** Each resolves to the problem in words, or null. */
+  turnOn: () => Promise<string | null>;
+  turnOff: () => Promise<string | null>;
+  change: (settings: PushSettings) => Promise<string | null>;
+}
 
 export interface NotificationsProps {
   /** Everyone else on the server, by name. */
@@ -18,6 +30,8 @@ export interface NotificationsProps {
   arrivals?: { on: boolean; onChange: (on: boolean) => void };
   /** DM alerts (#291): a banner for every DM, and the taskbar. On unless turned off, on this computer. */
   dmAlerts?: { on: boolean; onChange: (on: boolean) => void };
+  /** On the phone: its own notifications, in place of the desktop's banners (#830). */
+  phonePush?: PhonePushProps;
 }
 
 /**
@@ -26,7 +40,7 @@ export interface NotificationsProps {
  * reaches you, and so does a DM unless DM banners are off. There is no
  * @everyone.
  */
-export function NotificationsSection({ people, rooms, rules, setRule, arrivals, dmAlerts }: NotificationsProps) {
+export function NotificationsSection({ people, rooms, rules, setRule, arrivals, dmAlerts, phonePush }: NotificationsProps) {
   const [open, setOpen] = useState<string | null>(null);
   const save = useSave();
   const others = [...people].sort((a, b) => a.display_name.localeCompare(b.display_name));
@@ -34,9 +48,14 @@ export function NotificationsSection({ people, rooms, rules, setRule, arrivals, 
 
   return (
     <>
+      {phonePush ? <PhoneNotifications push={phonePush} rooms={rooms} /> : null}
       <Block
-        heading={HEADINGS.banners}
-        lead="DMs and mentions can show a desktop banner. Choose people whose other messages should also notify you, across this server or in chosen rooms. Banners are separate from chimes."
+        heading={phonePush ? HEADINGS.follows : HEADINGS.banners}
+        lead={
+          phonePush
+            ? "Choose people whose messages should reach you even when they don't name you, across this server or in chosen rooms. People you follow, above, turns these on and off on this phone."
+            : "DMs and mentions can show a desktop banner. Choose people whose other messages should also notify you, across this server or in chosen rooms. Banners are separate from chimes."
+        }
       >
         {dmAlerts ? (
           <SettingRow
@@ -63,7 +82,9 @@ export function NotificationsSection({ people, rooms, rules, setRule, arrivals, 
           </ul>
         )}
         <SaveLine phase={save.phase.kind === "problem" ? save.phase : { kind: "idle" }} />
-        <Note>Somebody naming you always reaches you, and so does a DM while DM banners are on. There is no @everyone to turn on.</Note>
+        {phonePush ? null : (
+          <Note>Somebody naming you always reaches you, and so does a DM while DM banners are on. There is no @everyone to turn on.</Note>
+        )}
       </Block>
       {arrivals ? (
         <Block heading={HEADINGS.arrivals} lead="Who's around, as it happens. On this computer only.">
@@ -75,6 +96,111 @@ export function NotificationsSection({ people, rooms, rules, setRule, arrivals, 
         </Block>
       ) : null}
     </>
+  );
+}
+
+type RoomPick = "off" | "wakes" | "every";
+
+const ROOM_PICKS: readonly { value: RoomPick; label: string }[] = [
+  { value: "off", label: "Off" },
+  { value: "wakes", label: "When it wakes up" },
+  { value: "every", label: "Every message" },
+];
+
+/**
+ * This phone's notifications from this server (#830, SPEC §4.15): off until
+ * turned on, then each kind its own switch, "only mentions" one tap, and a
+ * choice per room. Each change reaches the server at once.
+ */
+function PhoneNotifications({ push, rooms }: { push: PhonePushProps; rooms: readonly Room[] }) {
+  const save = useSave();
+  const { state, support } = push;
+  const settings = state.settings;
+  const set = (next: PushSettings) => void save.run(push.change(next));
+  const kind = (key: "mentions" | "dms" | "knocks" | "follows", title: string, description: string) => (
+    <SettingRow
+      title={title}
+      description={description}
+      control={<Switch label={title} checked={settings[key]} onChange={(on) => set({ ...settings, [key]: on })} />}
+    />
+  );
+
+  if (support === "unknown") {
+    return (
+      <Block heading={HEADINGS.phonePush}>
+        <Note>Asking this server…</Note>
+      </Block>
+    );
+  }
+  if (support !== "on") {
+    return (
+      <Block heading={HEADINGS.phonePush}>
+        <Note tone="status">
+          {support === "old"
+            ? "This server needs an update before it can notify your phone. Its host can update it."
+            : "This server's host turned phone notifications off."}
+        </Note>
+      </Block>
+    );
+  }
+  return (
+    <Block
+      heading={HEADINGS.phonePush}
+      lead="Off until you turn them on. They go through Apple or Google and Linger's relay, encrypted so none of them can read what they say. Nothing while you're using Linger somewhere else."
+    >
+      <SettingRow
+        title="Notifications"
+        description={state.on ? "On, for this server, on this phone." : "Nothing from this server reaches this phone."}
+        control={
+          <Switch
+            label="Notifications on this phone"
+            checked={state.on}
+            onChange={(on) => void save.run(on ? push.turnOn() : push.turnOff())}
+          />
+        }
+      />
+      {state.on ? (
+        <>
+          <SettingRow
+            title="Only when somebody mentions me"
+            description="Mentions, and nothing else from this server."
+            control={
+              <Button size="sm" pressed={isOnlyMentions(settings)} onClick={() => set(onlyMentions(settings))}>
+                Only mentions
+              </Button>
+            }
+          />
+          {kind("mentions", "Mentions", "Somebody names you.")}
+          {kind("dms", "DMs", "Somebody writes to you.")}
+          {kind("knocks", "Knocks", "Somebody knocks on your row.")}
+          {kind("follows", "People you follow", "Somebody you chose below posts.")}
+          <ul className="nx-set-list" aria-label="Rooms on this phone">
+            {rooms.map((room) => (
+              <li key={room.id}>
+                <SettingRow
+                  title={`#${room.name.replace(/^#/, "")}`}
+                  control={
+                    <Select<RoomPick>
+                      label={`Notifications from #${room.name.replace(/^#/, "")}`}
+                      hideLabel
+                      size="sm"
+                      value={roomChoice(settings, room.id) ?? "off"}
+                      options={ROOM_PICKS}
+                      onChange={(pick) => set(withRoom(settings, room.id, pick === "off" ? null : pick))}
+                    />
+                  }
+                />
+              </li>
+            ))}
+          </ul>
+          <Note>
+            When it wakes up is a room's first message after an hour with none. Every message is once a burst: the next replaces the last,
+            and the room is quiet until you read it or 15 minutes pass.
+          </Note>
+        </>
+      ) : null}
+      <SaveLine phase={save.phase.kind === "problem" ? save.phase : { kind: "idle" }} />
+    </Block>
   );
 }
 

@@ -58,10 +58,16 @@ describe("privacy, from the source", () => {
   });
 
   it("talks to nothing but the servers you're signed in to: no telemetry, analytics or crash reporting (PRIV-3)", () => {
-    // Only the two places that talk to a server call fetch, and both address it.
+    // Only the two places that talk to a server call fetch, and both address
+    // it; and one more, which seals the phone's push address with the relay
+    // the server names (#830, lib/pushRelay.ts), only when somebody turns
+    // phone notifications on.
     const fetches = uses(SHIPPED, /\bfetch\(/);
-    expect(fetches.map((line) => line.split(":")[0]).sort()).toEqual(["src/lib/api.ts", "src/lib/upload.ts"]);
-    for (const line of fetches) expect(line).toMatch(/fetch\((`\$\{baseUrl\}|absoluteUrl\(baseUrl,)/);
+    expect(fetches.map((line) => line.split(":")[0]).sort()).toEqual(["src/lib/api.ts", "src/lib/pushRelay.ts", "src/lib/upload.ts"]);
+    for (const line of fetches) {
+      if (line.startsWith("src/lib/pushRelay.ts")) expect(line).toMatch(/fetch\(`\$\{relay\}\/seal`/);
+      else expect(line).toMatch(/fetch\((`\$\{baseUrl\}|absoluteUrl\(baseUrl,)/);
+    }
     // One WebSocket, the screen socket (#360), and it addresses the server too.
     const sockets = uses(SHIPPED, /new WebSocket\(/);
     expect(sockets.map((line) => line.split(":")[0])).toEqual(["src/lib/screen/socket.ts"]);
@@ -79,6 +85,24 @@ describe("privacy, from the source", () => {
       .map((line) => line.split("=")[0]?.trim() ?? "");
     expect(crates.length).toBeGreaterThan(5);
     expect(crates.filter((name) => REPORTERS.test(name))).toEqual([]);
+
+    // The Android app takes Firebase's messaging for phone notifications
+    // (#830) and nothing else of Firebase's or anybody's: no analytics, no
+    // crash reporting, no performance monitoring.
+    const gradle = readFileSync(join(SHELL, "gen/android/app/build.gradle.kts"), "utf8");
+    const dependencies = [...gradle.matchAll(/^\s*(?:implementation|api|runtimeOnly)\((?:platform\()?"([^":]+:[^":]+)/gm)].map((found) => found[1] ?? "");
+    expect(dependencies.length).toBeGreaterThan(3);
+    expect(dependencies.filter((name) => REPORTERS.test(name))).toEqual(["com.google.firebase:firebase-bom", "com.google.firebase:firebase-messaging"]);
+    // And it doesn't start, collect or measure anything until it's needed.
+    const manifest = readFileSync(join(SHELL, "gen/android/app/src/main/AndroidManifest.xml"), "utf8");
+    for (const [name, value] of [
+      ["firebase_messaging_auto_init_enabled", "false"],
+      ["firebase_analytics_collection_deactivated", "true"],
+      ["delivery_metrics_exported_to_big_query_enabled", "false"],
+      ["google_analytics_adid_collection_enabled", "false"],
+    ]) {
+      expect(manifest).toMatch(new RegExp(`<meta-data android:name="${name}" android:value="${value}" />`));
+    }
   });
 
   it("has no way to learn or carry what apps or windows anybody has open (PRIV-2)", () => {

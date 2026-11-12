@@ -1,11 +1,12 @@
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CardSafety } from "../../core/safety";
+import type { PushRoomChoice } from "../../../generated/PushRoomChoice";
 import type { RoomId } from "../../../generated/RoomId";
 import type { User } from "../../../generated/User";
 import { hostsHere } from "../../../lib/host";
 import { type DmRow, type ListModel, type PersonRow, type RoomRow, splitPeople, splitRooms } from "../../core/list";
 import { onPhone } from "../../core/phone";
-import { Button, Icon, IconButton, MarkerCluster, type MenuAnchor, Name, Row, RowList, SectionLabel, VoiceGlyph } from "../../kit";
+import { Button, Icon, IconButton, MarkerCluster, type MenuAnchor, type MenuItem, Name, Row, RowList, SectionLabel, VoiceGlyph } from "../../kit";
 import { markerFor } from "../markers";
 import { useOneLine } from "../useOneLine";
 import { useTheirTime } from "../useTheirTime";
@@ -46,8 +47,23 @@ export interface ServerBodyActions {
   onLeaveDm?: (id: RoomId) => Promise<string | null>;
   /** The host's way from an empty place to Settings → Hosting (decision 17). */
   onHost?: (section: "rooms" | "invites") => void;
+  /**
+   * On the phone (#830): a room held raises its notifications on this phone.
+   * With them off for this server, its one item is the way to turn them on.
+   */
+  roomPush?: RoomPush;
   /** The conversation showing beside the list, on this server: its row, or its person's, is marked (#351). */
   showing?: RoomId | null;
+}
+
+/** A room's notifications on this phone (#830), for its held menu. */
+export interface RoomPush {
+  /** Notifications from this server are on, on this phone. */
+  on: boolean;
+  choice: (room: RoomId) => PushRoomChoice | null;
+  set: (room: RoomId, choice: PushRoomChoice | null) => void;
+  /** Settings → Notifications, for this server. */
+  settings: () => void;
 }
 
 type Fold = "rooms" | "more" | "people" | "away" | "others" | "offline";
@@ -85,6 +101,7 @@ export function ServerBody({
   onStartDm,
   onLeaveDm,
   onHost,
+  roomPush,
   showing = null,
 }: ServerBodyActions & {
   model: ListModel;
@@ -234,7 +251,14 @@ export function ServerBody({
   );
   const rooms = splitRooms(model.rooms);
   const roomRow = (room: RoomRow) => (
-    <RoomItem key={room.id} room={room} selected={room.id === showing} talking={room.people.some(talking)} onOpen={onOpenRoom ? openRoom : undefined} />
+    <RoomItem
+      key={room.id}
+      room={room}
+      selected={room.id === showing}
+      talking={room.people.some(talking)}
+      onOpen={onOpenRoom ? openRoom : undefined}
+      push={phone ? roomPush : undefined}
+    />
   );
   // The + on Rooms: a new group, from the people here.
   const canStart = onStartDm !== undefined;
@@ -520,14 +544,49 @@ const RoomItem = memo(function RoomItem({
   selected,
   talking,
   onOpen,
+  push,
 }: {
   room: RoomRow;
   selected: boolean;
   talking: boolean;
   onOpen?: (id: RoomId) => void;
+  /** The phone (#830): held, the room raises its notifications on this phone. */
+  push?: RoomPush;
 }) {
+  const [held, setHeld] = useState<HTMLButtonElement | null>(null);
+  const choice = push?.on ? push.choice(room.id) : null;
+  const pick = (to: PushRoomChoice | null) => () => push?.set(room.id, to);
+  const items: MenuItem[] = !push
+    ? []
+    : push.on
+      ? [
+          { id: "off", label: "No notifications", checked: choice === null, onSelect: pick(null) },
+          { id: "wakes", label: "When it wakes up", checked: choice === "wakes", onSelect: pick("wakes") },
+          { id: "every", label: "Every message", checked: choice === "every", onSelect: pick("every") },
+          { id: "settings", label: "Notification settings", icon: "bell", onSelect: push.settings },
+        ]
+      : [{ id: "settings", label: "Turn on notifications", icon: "bell", onSelect: push.settings }];
   return (
     <Row
+      hold={
+        push
+          ? {
+              onHold: setHeld,
+              raised: held ? (
+                <HeldSheet
+                  label={`Notifications from ${room.name}`}
+                  head={room.name}
+                  anchor={boxOf(held)}
+                  items={items}
+                  onClose={(reason) => {
+                    setHeld(null);
+                    if (reason === "escape" || reason === "tab") held.focus();
+                  }}
+                />
+              ) : null,
+            }
+          : undefined
+      }
       lead={{ kind: "room" }}
       lines="one"
       title={room.name}

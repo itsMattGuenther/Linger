@@ -36,7 +36,7 @@ export const INFO_RETRY_MS = 2 * 60_000;
  * key), and for the host, how its machine is (#582), which the foot says
  * while something there needs them.
  */
-export type ListedInfo = Pick<ServerInfo, "name" | "accent_key" | "health" | "screens" | "screen_sound">;
+export type ListedInfo = Pick<ServerInfo, "name" | "accent_key" | "health" | "screens" | "screen_sound" | "push" | "push_relay">;
 
 /**
  * The list's held answers with one server's new one. The very same object
@@ -55,6 +55,8 @@ export function withInfo(
     was.accent_key === info.accent_key &&
     was.screens === info.screens &&
     was.screen_sound === info.screen_sound &&
+    was.push === info.push &&
+    was.push_relay === info.push_relay &&
     sameHealth(was.health, info.health)
   )
     return held;

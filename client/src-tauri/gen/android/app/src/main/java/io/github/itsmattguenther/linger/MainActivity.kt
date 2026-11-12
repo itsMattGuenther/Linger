@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.webkit.WebView
 import androidx.activity.enableEdgeToEdge
@@ -35,6 +36,7 @@ class MainActivity : TauriActivity() {
     // opened, from Tauri 2.12 (#850, scripts/android-jni.test.mjs).
     super.onCreate(savedInstanceState)
     VoiceCallService.activity = WeakReference(this)
+    PushBridge.activity = WeakReference(this)
     val actions = IntentFilter().apply {
       addAction(VoiceCallService.MUTE)
       addAction(VoiceCallService.UNMUTE)
@@ -43,7 +45,10 @@ class MainActivity : TauriActivity() {
     ContextCompat.registerReceiver(this, callBar, actions, ContextCompat.RECEIVER_NOT_EXPORTED)
     // A share that started Linger (#785). Not again when Android rebuilds the
     // screen (a turn of the phone), which hands back the same intent.
-    if (savedInstanceState == null) takeShare(intent)
+    if (savedInstanceState == null) {
+      takeShare(intent)
+      if (PushBridge.tapped(intent)) pushOpened()
+    }
   }
 
   // A share to Linger while it's running (#785): the activity is `singleTask`,
@@ -51,6 +56,36 @@ class MainActivity : TauriActivity() {
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
     takeShare(intent)
+    if (PushBridge.tapped(intent)) pushOpened()
+  }
+
+  // A tapped notification (#830, LingerMessagingService): the page asks which
+  // conversation (push_opened) and opens it. A page still loading asks when it
+  // starts, so nothing is lost if this arrives first.
+  private fun pushOpened() {
+    webView?.evaluateJavascript("window.dispatchEvent(new Event('linger:push-opened'))", null)
+  }
+
+  // On screen, the app shows what arrives itself; a notification then would
+  // say it twice (PushBridge.inFront).
+  override fun onResume() {
+    super.onResume()
+    PushBridge.inFront = true
+  }
+
+  override fun onPause() {
+    PushBridge.inFront = false
+    super.onPause()
+  }
+
+  // The answer to Linger's one notification permission ask (#830, PushBridge.ask).
+  override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+    super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    if (requestCode != PushBridge.ASK) return
+    val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
+    if (granted) LingerMessagingService.channels(this)
+    val state = if (granted) "granted" else "denied"
+    webView?.evaluateJavascript("window.dispatchEvent(new CustomEvent('linger:push-permission', { detail: '$state' }))", null)
   }
 
   // Into the inbox (SharedInbox), then the page is told to look
