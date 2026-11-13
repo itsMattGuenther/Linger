@@ -10,6 +10,11 @@ name: share window
 # Rust is built for the iPhone, since code only an iPhone compiles
 # (`#[cfg(target_os = "ios")]`, as the share window's Keychain half is) is
 # built by nothing else on a pull request (#822).
+#
+# The notification extension (#889), the iPhone's other program of its own,
+# is built here the same way, and its tests run on the same Mac: it opens
+# RFC 8291's example and what the server sends, and reads the keys as the
+# app's Rust writes them (gen/apple/NotificationServiceTests).
 on:
   pull_request:
     paths:
@@ -55,6 +60,47 @@ jobs:
             -target LingerShare -sdk iphonesimulator -configuration debug \
             CODE_SIGNING_ALLOWED=NO build | tee "$RUNNER_TEMP/build.log" | grep -E "error:|warning:|BUILD (SUCCEEDED|FAILED)" || true
           grep -q "BUILD SUCCEEDED" "$RUNNER_TEMP/build.log"
+
+  # Phone notifications on an iPhone (#889): the notification extension, built
+  # as the share extension is above, and its tests, which build its own
+  # files for this Mac with a test of their own (no Xcode project needed).
+  notifications:
+    name: the notification extension builds for the iPhone and opens what the server sends
+    runs-on: xcode-27
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The Xcode the release builds with (ios.yml, #779, #839).
+      - name: Xcode 27
+        run: sudo xcode-select -s /Applications/Xcode_27.1.app
+      # For the signature's check, scripts/ios-app-group.mjs.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: its tests
+        run: |
+          set -euo pipefail
+          apple=client/src-tauri/gen/apple
+          xcrun swiftc -O -o "$RUNNER_TEMP/push-tests" \
+            "$apple/NotificationService/PushCrypto.swift" \
+            "$apple/NotificationService/PushNote.swift" \
+            "$apple/NotificationServiceTests/main.swift"
+          "$RUNNER_TEMP/push-tests" crates/linger-server/tests/fixtures/push-notification.json \
+            "$apple/NotificationServiceTests/keys-table.json"
+      # Unsigned, so its build phase signs it ad hoc with its App Group (#811).
+      - name: build the notification extension
+        run: |
+          set -o pipefail
+          xcodebuild -project client/src-tauri/gen/apple/linger-client.xcodeproj \
+            -target LingerNotifications -sdk iphonesimulator -configuration debug \
+            CODE_SIGNING_ALLOWED=NO build | tee "$RUNNER_TEMP/build.log" | grep -E "error:|warning:|BUILD (SUCCEEDED|FAILED)" || true
+          grep -q "BUILD SUCCEEDED" "$RUNNER_TEMP/build.log"
+          # Signed with its App Group, which it reads the keys through.
+          appex="$(find client/src-tauri/gen/apple/build -name LingerNotifications.appex -type d -prune | head -n 1)"
+          [ -n "$appex" ] || { echo "::error::no LingerNotifications.appex was built"; exit 1; }
+          codesign -d --entitlements - --xml "$appex" > "$RUNNER_TEMP/entitlements.plist"
+          node scripts/ios-app-group.mjs "$RUNNER_TEMP/entitlements.plist" \
+            group.io.github.itsmattguenther.linger LingerNotifications.appex
 
   # The app's Rust, for the iPhone, as desktop.yml's nightly build does: the
   # code only an iPhone compiles is checked before it merges, not the morning

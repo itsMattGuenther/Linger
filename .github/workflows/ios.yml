@@ -142,24 +142,28 @@ jobs:
             "$want".*) ;;
             *) echo "::error::built with $sdk, not Xcode $XCODE's iOS SDK ($want)"; exit 1 ;;
           esac
-          # Share to Linger (#785): the share extension is in the app, and has
-          # the app's version, which App Store Connect insists on. Its build
-          # phase copies both numbers from the app's Info.plist.
-          unzip -p "$found" 'Payload/*.app/PlugIns/LingerShare.appex/Info.plist' > "$RUNNER_TEMP/Share.plist" ||
-            { echo "::error::the share extension isn't in the app"; exit 1; }
-          for key in CFBundleIdentifier CFBundleShortVersionString CFBundleVersion; do
-            printf 'share extension %s: %s\n' "$key" "$(plutil -extract "$key" raw "$RUNNER_TEMP/Share.plist")"
-          done
-          for key in CFBundleShortVersionString CFBundleVersion; do
-            [ "$(plutil -extract "$key" raw "$RUNNER_TEMP/Share.plist")" = "$(plutil -extract "$key" raw "$RUNNER_TEMP/Info.plist")" ] ||
-              { echo "::error::the share extension's $key isn't the app's"; exit 1; }
+          # Share to Linger (#785) and phone notifications (#889): each
+          # extension is in the app, and has the app's version, which App
+          # Store Connect insists on. Their build phases copy both numbers
+          # from the app's Info.plist.
+          for extension in LingerShare LingerNotifications; do
+            unzip -p "$found" "Payload/*.app/PlugIns/$extension.appex/Info.plist" > "$RUNNER_TEMP/$extension.plist" ||
+              { echo "::error::$extension isn't in the app"; exit 1; }
+            for key in CFBundleIdentifier CFBundleShortVersionString CFBundleVersion; do
+              printf '%s %s: %s\n' "$extension" "$key" "$(plutil -extract "$key" raw "$RUNNER_TEMP/$extension.plist")"
+            done
+            for key in CFBundleShortVersionString CFBundleVersion; do
+              [ "$(plutil -extract "$key" raw "$RUNNER_TEMP/$extension.plist")" = "$(plutil -extract "$key" raw "$RUNNER_TEMP/Info.plist")" ] ||
+                { echo "::error::$extension's $key isn't the app's"; exit 1; }
+            done
           done
       # The privacy manifest (PrivacyInfo.xcprivacy, #779) has to be in the
       # app. Then which of the calls Apple asks a reason for the app's own
       # code makes: one in a category the manifest doesn't declare is one to
       # add there. Those are printed, not checked: Apple's scan is what counts.
-      # The share extension (#785) is a program of its own, so its calls are
-      # printed too: one making any of them needs a manifest of its own.
+      # The share extension (#785) and the notification extension (#889) are
+      # programs of their own, so their calls are printed too: one making
+      # any of them needs a manifest of its own.
       - name: the calls the privacy manifest answers for
         run: |
           set -euo pipefail
@@ -168,8 +172,7 @@ jobs:
           unzip -q "$IPA" 'Payload/*' -d "$dir"
           app="$(find "$dir/Payload" -maxdepth 1 -name '*.app' -type d)"
           plutil -lint "$app/PrivacyInfo.xcprivacy"
-          share="$app/PlugIns/LingerShare.appex"
-          for bundle in "$app" "$share"; do
+          for bundle in "$app" "$app/PlugIns/LingerShare.appex" "$app/PlugIns/LingerNotifications.appex"; do
             bin="$bundle/$(plutil -extract CFBundleExecutable raw "$bundle/Info.plist")"
             [ -f "$bin" ] || { echo "::error::no binary at $bin"; exit 1; }
             # nm on its own, so an app it can't read fails the step, and only
@@ -190,9 +193,13 @@ jobs:
       # What each part is allowed to do, as signed (#811). The share extension
       # was in the app with the app's version, but signed without its App
       # Group, so it couldn't open the folder a share goes in and every share
-      # failed on a phone. After the artifact, so a build this stops can be
-      # looked at, and before TestFlight.
-      - name: the App Group in both signatures
+      # failed on a phone. The notification extension needs it to read the
+      # keys a notification opens with (#889). And the app is signed for
+      # Apple's own push service, `production`, never its sandbox, whose
+      # addresses the relay's sends to Apple's own would be refused (#889).
+      # After the artifact, so a build this stops can be looked at, and
+      # before TestFlight.
+      - name: the App Group in every signature, and Apple's push service in the app's
         run: |
           set -euo pipefail
           dir="$RUNNER_TEMP/signed"
@@ -201,7 +208,10 @@ jobs:
           app="$(find "$dir/Payload" -maxdepth 1 -name '*.app' -type d)"
           # The reading is scripts/ios-app-group.mjs, tested on a real build's
           # output: a line of shell here split the key on its dots (#812).
-          for bundle in "$app" "$app/PlugIns/LingerShare.appex"; do
+          codesign -d --entitlements - --xml "$app" > "$RUNNER_TEMP/entitlements.plist"
+          node scripts/ios-app-group.mjs "$RUNNER_TEMP/entitlements.plist" \
+            group.io.github.itsmattguenther.linger "${app##*/}" production
+          for bundle in "$app/PlugIns/LingerShare.appex" "$app/PlugIns/LingerNotifications.appex"; do
             codesign -d --entitlements - --xml "$bundle" > "$RUNNER_TEMP/entitlements.plist"
             node scripts/ios-app-group.mjs "$RUNNER_TEMP/entitlements.plist" \
               group.io.github.itsmattguenther.linger "${bundle##*/}"
