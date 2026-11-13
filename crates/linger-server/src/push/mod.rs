@@ -334,7 +334,19 @@ async fn for_knock(
         message_id: None,
     };
     for phone in phones {
-        send(state, pusher, &phone, &payload, PUSH_KNOCK_KEEP_SECS, None).await;
+        // A person's next knock replaces their last, on every phone: an
+        // iPhone only replaces what Apple is told to, and Android's app
+        // already did it itself (`LingerMessagingService`).
+        let collapse = Some(knock_collapse_key(&phone, from));
+        send(
+            state,
+            pusher,
+            &phone,
+            &payload,
+            PUSH_KNOCK_KEEP_SECS,
+            collapse,
+        )
+        .await;
     }
     Ok(())
 }
@@ -396,6 +408,18 @@ fn collapse_key(phone: &Candidate, room_id: RoomId) -> String {
     let mut hash = Sha256::new();
     hash.update(phone.auth_secret);
     hash.update(room_id.to_vec());
+    hex::encode(&hash.finalize()[..16])
+}
+
+/// The same for every knock from one person to one phone, so the next
+/// replaces the last, as a room's do with `collapse_key`. `knock` in front
+/// keeps it apart from every room's, whatever the ids, and like those it
+/// says nothing about who knocked to anybody without the phone's secret.
+fn knock_collapse_key(phone: &Candidate, from: UserId) -> String {
+    let mut hash = Sha256::new();
+    hash.update(phone.auth_secret);
+    hash.update(b"knock");
+    hash.update(from.to_vec());
     hex::encode(&hash.finalize()[..16])
 }
 
@@ -647,5 +671,28 @@ mod tests {
         assert_ne!(collapse_key(&one, room), collapse_key(&other, room));
         assert_ne!(collapse_key(&one, room), collapse_key(&one, RoomId::new()));
         assert!(!collapse_key(&one, room).contains(&hex::encode(room.to_vec())));
+    }
+
+    #[test]
+    fn a_knock_s_collapse_key_differs_by_phone_and_by_person_and_from_any_room_s() {
+        let one = phone();
+        let other = Candidate {
+            auth_secret: [1; 16],
+            ..phone()
+        };
+        let sam = UserId::new();
+        assert_eq!(knock_collapse_key(&one, sam), knock_collapse_key(&one, sam));
+        assert_ne!(
+            knock_collapse_key(&one, sam),
+            knock_collapse_key(&other, sam)
+        );
+        assert_ne!(
+            knock_collapse_key(&one, sam),
+            knock_collapse_key(&one, UserId::new())
+        );
+        assert!(!knock_collapse_key(&one, sam).contains(&hex::encode(sam.to_vec())));
+        // The same sixteen bytes as a room's id still make another key.
+        let room = RoomId::from_slice(sam.as_bytes()).unwrap();
+        assert_ne!(knock_collapse_key(&one, sam), collapse_key(&one, room));
     }
 }
