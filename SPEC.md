@@ -1071,7 +1071,8 @@ phone's details.
   once the person says yes. **Rooms** are off unless chosen, one by one: **When it
   wakes up**, the room's first message after an hour with none, or **Every
   message**, once a burst: a second notification from the room replaces the first,
-  and the room stays quiet until it's read or 15 minutes pass. **Only when somebody
+  and the room stays quiet until it's read or 15 minutes pass. A person's next knock
+  replaces their last. **Only when somebody
   mentions me** and **Nothing** are one tap each, and Nothing makes the server
   forget the phone.
 - **What one says:** who, where, and the start of the message ("Sam in #general:

@@ -1265,10 +1265,13 @@ type RelaySend = {
 ```
 
 `ttl` is a day for a message (`PUSH_KEEP_SECS`) and ten minutes for a knock
-(`PUSH_KNOCK_KEEP_SECS`). `collapse` is set for a `room` notification only: the first 16
-bytes of SHA-256 over the phone's `auth_secret` and the room's id, as hex, so it is the
-same for one phone and one room and says nothing about which room to anybody else. A
-mention, a DM, a follow and a knock stack.
+(`PUSH_KNOCK_KEEP_SECS`). `collapse` is set for a `room` notification and a `knock`. A
+room's is the first 16 bytes of SHA-256 over the phone's `auth_secret` and the room's id,
+as hex, so it is the same for one phone and one room and says nothing about which room to
+anybody else. A knock's is the same over the `auth_secret`, the bytes `knock` and the
+knocker's id, so a person's next knock replaces their last, and never another person's.
+A mention, a DM and a follow stack. A server from before knocks had one sends none, and
+an iPhone then keeps each knock.
 
 The relay answers 2xx when Apple or Google took it, and 404 or 410 when the phone's address
 is gone (the app removed, the phone reset, or a sealed address it can't open). Then the

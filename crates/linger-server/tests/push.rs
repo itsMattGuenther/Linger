@@ -1009,6 +1009,10 @@ async fn a_knock_wakes_a_phone_that_hears_knocks() {
 
     let sent = relay.take_sent();
     assert_eq!(sent.len(), 1, "sam's phone doesn't hear knocks");
+    let first = sent[0]
+        .collapse
+        .clone()
+        .expect("a knock replaces the last one");
     let payload = jo.open(&sent[0]).expect("for jo");
     assert_eq!(payload.kind, PushKind::Knock);
     assert_eq!(payload.title, "Matt knocked");
@@ -1019,6 +1023,21 @@ async fn a_knock_wakes_a_phone_that_hears_knocks() {
         linger_core::limits::PUSH_KNOCK_KEEP_SECS,
         "a knock goes stale fast"
     );
+
+    // Matt again: the same key, so it replaces his last knock on jo's phone.
+    knock(&server, &host.access_token, jo.auth.user.id).await;
+    let again = relay.take_sent();
+    assert_eq!(again.len(), 1);
+    assert_eq!(again[0].collapse.as_deref(), Some(first.as_str()));
+    // Sam knocking is another key: two people's knocks both show.
+    knock(&server, &sam.auth.access_token, jo.auth.user.id).await;
+    let other = relay.take_sent();
+    assert_eq!(other.len(), 1);
+    let theirs = other[0]
+        .collapse
+        .as_deref()
+        .expect("sam's knock replaces sam's");
+    assert_ne!(theirs, first, "one person's knock never replaces another's");
 }
 
 // ---------------------------------------------------------------------------
