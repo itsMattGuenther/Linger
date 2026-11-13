@@ -376,6 +376,22 @@ starting, a screen drawn wrong, signing in or the gateway failing. The
 testers' time is then for what a simulator can't show: a real phone's
 memory, calls, the share sheet, sleep.
 
+**After a merge that changes how the app is signed** (a new target or
+extension, an entitlement, a capability, a new identifier), run `ios.yml`
+from `main` with the upload off:
+
+```bash
+gh workflow run ios.yml -f ref=main -f upload=false
+```
+
+It signs the app as a release does and runs every check on the signatures,
+and sends nothing to TestFlight, so a signing problem shows the day it's
+made, not on release day. Pull requests can't do it: the signing key is the
+`release` environment's, which only `main` and tags reach. The first was
+after #889 (2026-11-13, run 43444218986): it made the notification
+extension's profile and proved the app signed for Apple's own push service
+before any tester saw a build.
+
 - **Signing is automatic.** Xcode makes the distribution certificate and
   profile, and keeps them in the Apple account, through the App Store Connect
   API key: `APPLE_API_KEY_P8` (the `.p8` file's text), `APPLE_API_KEY_ID` and
