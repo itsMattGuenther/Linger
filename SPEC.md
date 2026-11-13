@@ -1089,6 +1089,10 @@ phone's details.
 - **The phone's own settings still apply:** Do Not Disturb and Focus, lock-screen
   previews, and on Android one notification channel per kind, so the phone can
   switch kinds off too. Linger adds no quiet hours of its own on the phone.
+- **On an iPhone** a small part of the app, which iOS runs for a few seconds as
+  each one arrives, opens it and puts the server's words in; a conversation's
+  notifications are grouped together. If it can't in time, the iPhone shows only
+  "Linger: Open Linger to see it." (#889).
 - **Signing out** of a server on the phone ends its notifications from that server,
   and so does anything else that ends the sign-in.
 - **Not yet:** a notification when somebody starts voice in a room, and clearing one

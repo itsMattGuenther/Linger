@@ -917,12 +917,23 @@ macOS runners, or a friend's Mac.
   Cloudflare accounts (#885, 2026-11-12). ✅ The server's side and the docs
   (#886, PR #890): who hears about what, RFC 8291 encryption, the phone's
   endpoints and the host's off switch. ✅ The relay at `push.linger.im` (#887,
-  PR #891). 🟡 Android (#888): Firebase messaging, Settings → Notifications
-  and a held room's choices on the phone, the phone idle as soon as it's put
-  away. Then the iPhone's notification extension (#889).
-  *Release notes, 0.5.5:* phone notifications on Android, which need the
-  server on 0.5.5 too (an older one says it needs an update); and update
-  Play's Data safety form first (docs/releasing.md, "Google Play"). The
+  PR #891). ✅ Android (#888, PR #894): Firebase messaging, Settings →
+  Notifications and a held room's choices on the phone, the phone idle as
+  soon as it's put away; its check on Matt's Pixel is owed. 🟡 The iPhone
+  (#889): the notification extension that opens each notification and shows
+  the server's words, grouped by conversation (`gen/apple/NotificationService`),
+  iOS's permission question, Apple's push address, the keys in the App
+  Group's Keychain group, and a tap opening the conversation
+  (`phone_push/ios.rs`). Built and its tests run on GitHub's Mac; owed the
+  TestFlight testers' check after the next build.
+  *Release notes, 0.5.5:* phone notifications on Android and, through the
+  next TestFlight build, the iPhone, which need the server on 0.5.5 too (an
+  older one says it needs an update); and update Play's Data safety form
+  first (docs/releasing.md, "Google Play"), and the App Store's privacy
+  answers before the iPhone app is submitted for review ("The iPhone"). The
+  first `ios.yml` build with notifications is the first time the extension
+  is signed and the app is signed for Apple's push service: it fails, before
+  TestFlight, if either is wrong. The
   site's privacy and delete-account pages say Linger "runs no servers" and
   the phone shows no notifications: both change at 0.5.5's site update.
   *Accept:* with Linger closed and the phone locked, each kind arrives on a

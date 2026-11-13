@@ -344,8 +344,13 @@ Nothing else: no location (photos and videos lose theirs before upload),
 contacts, calendar, financial, health, browsing history, or crash logs
 and diagnostics; no analytics, ads or marketing purpose anywhere.
 
-The App Store's privacy answers move the same way when the iPhone gets
-notifications (#889).
+The App Store's privacy answers (App Store Connect → the app → App Privacy)
+move the same way now the iPhone has notifications (#889): add
+**Identifiers → Device ID**, the push address Apple gives the phone, which
+the person's server keeps with their sign-in, so it's linked to them; for
+**App Functionality** only, and **not** used for tracking. They must be in
+before the first submission for App Store review, and agree with
+linger.im/privacy (step 5).
 
 ## The iPhone
 
@@ -426,12 +431,30 @@ memory, calls, the share sheet, sleep.
   keeps only the entitlements each was already signed with. Unsigned, the
   extension lost its App Group, and every share failed on a phone with
   "Linger couldn't take that". `ios.yml` fails a build whose app or extension
-  isn't signed with the App Group ("the App Group in both signatures"), and
+  isn't signed with the App Group ("the App Group in every signature"), and
   one whose app doesn't hold the extension, or whose extension's
   version isn't the app's. The extension has no privacy manifest of its own,
   because it makes none of the calls Apple asks a reason for; "the calls the
   privacy manifest answers for" prints its calls under the app's, so one that
   turns up there means it needs one.
+- **The notification extension** (#889) is a third program inside the app,
+  `LingerNotifications`, with its own identifier,
+  `io.github.itsmattguenther.linger.notifications`, in the same App Group:
+  iOS runs it as each phone notification arrives, and it opens the
+  notification with the keys the app keeps in the App Group's Keychain group.
+  Its identifier, and **Push Notifications** on the app's, were registered by
+  hand on 2026-11-12 (#885), for the reason above. It signs itself with its
+  App Group the way the share extension does, and `ios.yml` fails a build
+  that doesn't hold it, whose version isn't the app's, or that isn't signed
+  with the App Group. The app's entitlements file says `aps-environment`
+  `development`, as Xcode writes it, and exporting for App Store Connect signs
+  the app with the distribution profile's `production`: `ios.yml` fails a
+  build signed for anything else ("the App Group in every signature, and
+  Apple's push service in the app's"), since a TestFlight build's push
+  address must be for Apple's own service, which the relay sends a release
+  build's to. `share-window.yml` builds it and runs its tests on every pull
+  request that changes it. It has no privacy manifest of its own, for the
+  same reason the share extension hasn't.
 
 ## Worth knowing
 

@@ -208,21 +208,25 @@ jobs:
           done
           [ "$(plutil -extract DTPlatformName raw "$plist")" = iphonesimulator ] ||
             { echo "::error::not built for the simulator"; exit 1; }
-          # Share to Linger (#785): the extension is in the app, with its version.
-          share="$found/PlugIns/LingerShare.appex/Info.plist"
-          [ -f "$share" ] || { echo "::error::the share extension isn't in the app"; exit 1; }
-          for key in CFBundleIdentifier CFBundleShortVersionString CFBundleVersion; do
-            printf 'share extension %s: %s\n' "$key" "$(plutil -extract "$key" raw "$share")"
-          done
-          for key in CFBundleShortVersionString CFBundleVersion; do
-            [ "$(plutil -extract "$key" raw "$share")" = "$(plutil -extract "$key" raw "$plist")" ] ||
-              { echo "::error::the share extension's $key isn't the app's"; exit 1; }
+          # Share to Linger (#785) and phone notifications (#889): each
+          # extension is in the app, with its version.
+          for extension in LingerShare LingerNotifications; do
+            info="$found/PlugIns/$extension.appex/Info.plist"
+            [ -f "$info" ] || { echo "::error::$extension isn't in the app"; exit 1; }
+            for key in CFBundleIdentifier CFBundleShortVersionString CFBundleVersion; do
+              printf '%s %s: %s\n' "$extension" "$key" "$(plutil -extract "$key" raw "$info")"
+            done
+            for key in CFBundleShortVersionString CFBundleVersion; do
+              [ "$(plutil -extract "$key" raw "$info")" = "$(plutil -extract "$key" raw "$plist")" ] ||
+                { echo "::error::$extension's $key isn't the app's"; exit 1; }
+            done
           done
           codesign -dv "$found" 2>&1 | grep -E '^(Identifier|Signature|TeamIdentifier)=' || true
           # What each part may do as signed for the simulator: the share
           # window needs the App Group in both, for its folder and the
-          # Keychain entry the app leaves it (#820).
-          for bundle in "$found" "$found/PlugIns/LingerShare.appex"; do
+          # Keychain entry the app leaves it (#820), and the notification
+          # extension for the keys it opens notifications with (#889).
+          for bundle in "$found" "$found/PlugIns/LingerShare.appex" "$found/PlugIns/LingerNotifications.appex"; do
             echo "== ${bundle##*/} entitlements"
             codesign -d --entitlements - --xml "$bundle" 2>/dev/null | plutil -convert xml1 -o - - 2>/dev/null || echo "(none in its signature)"
           done

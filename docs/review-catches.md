@@ -165,6 +165,18 @@ to be right for every shape that window takes.
   and only `grep`'s "nothing matched" (status 1) reads as none; tried with
   stand-ins for `nm` and `grep` that fail, find nothing and find some. Rule
   in `docs/testing-strategy.md`.
+- **#897: an iPhone's notification keys that couldn't be read were taken
+  as none.** Making one server's keys read the Keychain entry, took any
+  failure as an empty table, and wrote back a table of that server alone:
+  every other server's notifications would then show only the fallback
+  words. Caught by Greptile. *Missed because* the code was modelled on the
+  share window's table, which reads an unreadable entry as empty on
+  purpose, and the "fallback" question was asked of shell scripts, not of a
+  read. *Changed:* the Keychain read says "no entry" apart from "couldn't
+  read" (`read_found`), and the keys' table (`kept::Book`, tested on Linux)
+  is never written over one it couldn't read or parse; tests read it
+  failing and holding something that isn't a table, and fail with the old
+  fallback put back.
 
 ## Checked when asked, not when it happens
 
@@ -282,6 +294,12 @@ on a world that has changed.
   unless both the app and the extension are signed with the App Group. The
   share's alert now says a failure apart from something it can't take, which
   had pointed the tester at photo types.
+- **#897: new public functions in the iPhone's push code had no doc
+  comments.** AGENTS.md asks each public function for one saying why it
+  exists. Caught by Greptile. *Missed because* no lint reads it: Rust's
+  `missing_docs` sees only what a library exports, and these are in a
+  binary's private modules. *Changed:* the comments are in, and the
+  question for written rules now names this one.
 
 ## Tests written from the case in mind, not from the ways things fail
 
@@ -780,6 +798,15 @@ it, or another program, runs at the same time.
   for what it shows, not for what it made before failing. *Changed:* a
   failed first turning on forgets the keys at once, and signing out always
   asks the phone to forget, with tests of both.
+- **#897: an iPhone's keys whose removal couldn't be saved stayed, with
+  nothing to try again.** Forgetting a server's keys ignored the Keychain
+  write failing, and the page ignores forget's answer on purpose (its
+  server has already forgotten the phone), so nobody would ask again.
+  Caught by Greptile. *Missed because* the failing path was traced for what
+  the page sees, which is nothing either way. *Changed:* a removal that
+  isn't saved is owed, and the next change to the keys saves it with
+  itself (`kept::Book`); tested with the write failing, and failing with
+  the owing taken out.
 
 ## A doc step nobody tried
 

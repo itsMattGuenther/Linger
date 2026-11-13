@@ -141,9 +141,45 @@ ${inner}
   assert.throws(() => urlSchemes({ CFBundleURLTypes: [{ CFBundleURLName: "linger" }] }), /CFBundleURLSchemes list/);
 });
 
-test("gen/apple's own Info.plist and the share extension's read too", () => {
-  for (const path of ["client/src-tauri/gen/apple/linger-client_iOS/Info.plist", "client/src-tauri/gen/apple/ShareExtension/Info.plist"])
+test("gen/apple's own Info.plist and the extensions' read too", () => {
+  for (const path of [
+    "client/src-tauri/gen/apple/linger-client_iOS/Info.plist",
+    "client/src-tauri/gen/apple/ShareExtension/Info.plist",
+    "client/src-tauri/gen/apple/NotificationService/Info.plist",
+  ])
     assert.equal(typeof parsePlist(read(path)), "object", path);
+});
+
+// Phone notifications on an iPhone (#889): iOS runs the extension for each
+// notification the relay marks mutable, finding it by its extension point and
+// making it by the class name its Info.plist gives, which must be the one the
+// Swift registers. Nothing but a phone would show either one wrong.
+test("the notification extension is a notification service, made by the class its Swift names", () => {
+  const extension = parsePlist(read("client/src-tauri/gen/apple/NotificationService/Info.plist")).NSExtension;
+  assert.equal(extension?.NSExtensionPointIdentifier, "com.apple.usernotifications.service");
+  const name = extension?.NSExtensionPrincipalClass;
+  assert.match(name ?? "", /^\w+$/, "a plain class name, as @objc gives it");
+  const swift = read("client/src-tauri/gen/apple/NotificationService/NotificationService.swift");
+  assert.match(swift, new RegExp(`@objc\\(${name}\\)\\s*\\n\\s*final class \\w+: UNNotificationServiceExtension`));
+});
+
+// Every part is in the App Group, through which the extensions read what the
+// app keeps for them (#785, #889), and the app signs up for Apple's push
+// service: `development` in the file, as Xcode writes it, which exporting for
+// App Store Connect signs as `production` (ios.yml checks the signed app).
+test("every part is in the App Group, and the app signs up for Apple's push service", () => {
+  const group = "group.io.github.itsmattguenther.linger";
+  const apple = "client/src-tauri/gen/apple";
+  const app = parsePlist(read(`${apple}/linger-client_iOS/linger-client_iOS.entitlements`));
+  assert.equal(app["aps-environment"], "development");
+  for (const path of [
+    `${apple}/linger-client_iOS/linger-client_iOS.entitlements`,
+    `${apple}/ShareExtension/ShareExtension.entitlements`,
+    `${apple}/NotificationService/NotificationService.entitlements`,
+  ])
+    assert.deepEqual(parsePlist(read(path))["com.apple.security.application-groups"], [group], path);
+  const share = parsePlist(read(`${apple}/ShareExtension/ShareExtension.entitlements`));
+  assert.equal(share["aps-environment"], undefined, "only the app signs up for pushes");
 });
 
 // UIKit's scene life cycle (#838): a build with the iOS 27 SDK that doesn't

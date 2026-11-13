@@ -27,6 +27,10 @@
 		5A4E0C11D2B34F6E8A9B0C42 /* ShareStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A4E0C11D2B34F6E8A9B0C32 /* ShareStore.swift */; };
 		5A4E0C11D2B34F6E8A9B0C43 /* ShareModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A4E0C11D2B34F6E8A9B0C33 /* ShareModel.swift */; };
 		5A4E0C11D2B34F6E8A9B0C44 /* ShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A4E0C11D2B34F6E8A9B0C34 /* ShareView.swift */; };
+		7C3B19E4A2D85F6B1E0D0002 /* LingerNotifications.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 7C3B19E4A2D85F6B1E0D0015 /* LingerNotifications.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		7C3B19E4A2D85F6B1E0D0001 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C3B19E4A2D85F6B1E0D0010 /* NotificationService.swift */; };
+		7C3B19E4A2D85F6B1E0D0003 /* PushCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C3B19E4A2D85F6B1E0D0011 /* PushCrypto.swift */; };
+		7C3B19E4A2D85F6B1E0D0004 /* PushNote.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C3B19E4A2D85F6B1E0D0012 /* PushNote.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -36,6 +40,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 5A4E0C11D2B34F6E8A9B0C0F;
 			remoteInfo = LingerShare;
+		};
+		7C3B19E4A2D85F6B1E0D0030 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C5C747350CD0E43CA41F34E8 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7C3B19E4A2D85F6B1E0D0040;
+			remoteInfo = LingerNotifications;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -47,6 +58,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				5A4E0C11D2B34F6E8A9B0C02 /* LingerShare.appex in Embed Foundation Extensions */,
+				7C3B19E4A2D85F6B1E0D0002 /* LingerNotifications.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -112,6 +124,12 @@
 		5A4E0C11D2B34F6E8A9B0C32 /* ShareStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareStore.swift; sourceTree = "<group>"; };
 		5A4E0C11D2B34F6E8A9B0C33 /* ShareModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareModel.swift; sourceTree = "<group>"; };
 		5A4E0C11D2B34F6E8A9B0C34 /* ShareView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareView.swift; sourceTree = "<group>"; };
+		7C3B19E4A2D85F6B1E0D0015 /* LingerNotifications.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = LingerNotifications.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		7C3B19E4A2D85F6B1E0D0014 /* NotificationService.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NotificationService.entitlements; sourceTree = "<group>"; };
+		7C3B19E4A2D85F6B1E0D0013 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		7C3B19E4A2D85F6B1E0D0010 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
+		7C3B19E4A2D85F6B1E0D0011 /* PushCrypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushCrypto.swift; sourceTree = "<group>"; };
+		7C3B19E4A2D85F6B1E0D0012 /* PushNote.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushNote.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -131,6 +149,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		5A4E0C11D2B34F6E8A9B0C0C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7C3B19E4A2D85F6B1E0D0043 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -158,6 +183,7 @@
 			children = (
 				B2DFD80D4B0B1F1CF1255995 /* linger-client_iOS.app */,
 				5A4E0C11D2B34F6E8A9B0C06 /* LingerShare.appex */,
+				7C3B19E4A2D85F6B1E0D0015 /* LingerNotifications.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -170,6 +196,7 @@
 				AE705E4EC85B45B9E7500E7E /* LaunchScreen.storyboard */,
 				A3E41D311C6DA399A9AB1FEC /* Externals */,
 				87266F1A384C876BC34CFBC8 /* linger-client_iOS */,
+				7C3B19E4A2D85F6B1E0D0020 /* NotificationService */,
 				5A4E0C11D2B34F6E8A9B0C07 /* ShareExtension */,
 				953C8A53888B0D10B8119936 /* Sources */,
 				A3E1D2044475877D3D1DE7F3 /* src */,
@@ -293,6 +320,18 @@
 			path = ShareExtension;
 			sourceTree = "<group>";
 		};
+		7C3B19E4A2D85F6B1E0D0020 /* NotificationService */ = {
+			isa = PBXGroup;
+			children = (
+				7C3B19E4A2D85F6B1E0D0013 /* Info.plist */,
+				7C3B19E4A2D85F6B1E0D0014 /* NotificationService.entitlements */,
+				7C3B19E4A2D85F6B1E0D0010 /* NotificationService.swift */,
+				7C3B19E4A2D85F6B1E0D0011 /* PushCrypto.swift */,
+				7C3B19E4A2D85F6B1E0D0012 /* PushNote.swift */,
+			);
+			path = NotificationService;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -310,6 +349,7 @@
 			);
 			dependencies = (
 				5A4E0C11D2B34F6E8A9B0C09 /* PBXTargetDependency */,
+				7C3B19E4A2D85F6B1E0D0031 /* PBXTargetDependency */,
 			);
 			name = "linger-client_iOS";
 			packageProductDependencies = (
@@ -339,6 +379,27 @@
 			productReference = 5A4E0C11D2B34F6E8A9B0C06 /* LingerShare.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		7C3B19E4A2D85F6B1E0D0040 /* LingerNotifications */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7C3B19E4A2D85F6B1E0D0052 /* Build configuration list for PBXNativeTarget "LingerNotifications" */;
+			buildPhases = (
+				7C3B19E4A2D85F6B1E0D0041 /* Sources */,
+				7C3B19E4A2D85F6B1E0D0042 /* Resources */,
+				7C3B19E4A2D85F6B1E0D0043 /* Frameworks */,
+				7C3B19E4A2D85F6B1E0D0044 /* Same version as Linger */,
+				7C3B19E4A2D85F6B1E0D0045 /* Its App Group in its signature */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = LingerNotifications;
+			packageProductDependencies = (
+			);
+			productName = LingerNotifications;
+			productReference = 7C3B19E4A2D85F6B1E0D0015 /* LingerNotifications.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -366,6 +427,7 @@
 			targets = (
 				887F64E7309D6465DDDC17EA /* linger-client_iOS */,
 				5A4E0C11D2B34F6E8A9B0C0F /* LingerShare */,
+				7C3B19E4A2D85F6B1E0D0040 /* LingerNotifications */,
 			);
 		};
 /* End PBXProject section */
@@ -383,6 +445,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		5A4E0C11D2B34F6E8A9B0C0D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7C3B19E4A2D85F6B1E0D0042 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -453,6 +522,46 @@
 			shellPath = /bin/sh;
 			shellScript = "# tauri ios build builds with signing off, then signs only the app's own\n# binary with its entitlements before the export, which signs every part\n# again but keeps the entitlements each was signed with. Unsigned, this\n# extension lost its App Group and couldn't open the folder a share goes\n# in (#811). So sign it ad hoc with its entitlements, last, for the\n# export to keep. A build that signs for real skips this.\nif [ \"${CODE_SIGNING_ALLOWED}\" = \"NO\" ]; then\n  /usr/bin/codesign --force --sign - --timestamp=none --generate-entitlement-der \\\n    --entitlements \"${SRCROOT}/ShareExtension/ShareExtension.entitlements\" \\\n    \"${CODESIGNING_FOLDER_PATH}\"\nfi\n";
 		};
+		7C3B19E4A2D85F6B1E0D0044 /* Same version as Linger */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/linger-client_iOS/Info.plist",
+			);
+			name = "Same version as Linger";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# App Store Connect refuses an extension whose version isn't its app's (#785).\n# tauri ios build writes both numbers into the app's Info.plist; copy them.\napp=\"${SRCROOT}/linger-client_iOS/Info.plist\"\nmine=\"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\nfor key in CFBundleShortVersionString CFBundleVersion; do\n  value=\"$(/usr/libexec/PlistBuddy -c \"Print :$key\" \"$app\")\"\n  /usr/libexec/PlistBuddy -c \"Set :$key $value\" \"$mine\"\ndone\n";
+		};
+		7C3B19E4A2D85F6B1E0D0045 /* Its App Group in its signature */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/NotificationService/NotificationService.entitlements",
+			);
+			name = "Its App Group in its signature";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# tauri ios build builds with signing off, then signs only the app's own\n# binary with its entitlements before the export, which signs every part\n# again but keeps the entitlements each was signed with. Unsigned, this\n# extension would lose its App Group and couldn't read the keys a\n# notification opens with (#811, #889). So sign it ad hoc with its entitlements, last, for the\n# export to keep. A build that signs for real skips this.\nif [ \"${CODE_SIGNING_ALLOWED}\" = \"NO\" ]; then\n  /usr/bin/codesign --force --sign - --timestamp=none --generate-entitlement-der \\\n    --entitlements \"${SRCROOT}/NotificationService/NotificationService.entitlements\" \\\n    \"${CODESIGNING_FOLDER_PATH}\"\nfi\n";
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -477,6 +586,16 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7C3B19E4A2D85F6B1E0D0041 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7C3B19E4A2D85F6B1E0D0001 /* NotificationService.swift in Sources */,
+				7C3B19E4A2D85F6B1E0D0003 /* PushCrypto.swift in Sources */,
+				7C3B19E4A2D85F6B1E0D0004 /* PushNote.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -484,6 +603,11 @@
 			isa = PBXTargetDependency;
 			target = 5A4E0C11D2B34F6E8A9B0C0F /* LingerShare */;
 			targetProxy = 5A4E0C11D2B34F6E8A9B0C08 /* PBXContainerItemProxy */;
+		};
+		7C3B19E4A2D85F6B1E0D0031 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7C3B19E4A2D85F6B1E0D0040 /* LingerNotifications */;
+			targetProxy = 7C3B19E4A2D85F6B1E0D0030 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -725,6 +849,62 @@
 			};
 			name = release;
 		};
+		7C3B19E4A2D85F6B1E0D0050 /* debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = (
+					arm64,
+				);
+				CODE_SIGN_ENTITLEMENTS = NotificationService/NotificationService.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = SFTT38V54H;
+				ENABLE_BITCODE = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
+				INFOPLIST_FILE = NotificationService/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.itsmattguenther.linger.notifications;
+				PRODUCT_NAME = LingerNotifications;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALID_ARCHS = arm64;
+			};
+			name = debug;
+		};
+		7C3B19E4A2D85F6B1E0D0051 /* release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = (
+					arm64,
+				);
+				CODE_SIGN_ENTITLEMENTS = NotificationService/NotificationService.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = SFTT38V54H;
+				ENABLE_BITCODE = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
+				INFOPLIST_FILE = NotificationService/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.itsmattguenther.linger.notifications;
+				PRODUCT_NAME = LingerNotifications;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALID_ARCHS = arm64;
+			};
+			name = release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -751,6 +931,15 @@
 			buildConfigurations = (
 				5A4E0C11D2B34F6E8A9B0C10 /* debug */,
 				5A4E0C11D2B34F6E8A9B0C11 /* release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = debug;
+		};
+		7C3B19E4A2D85F6B1E0D0052 /* Build configuration list for PBXNativeTarget "LingerNotifications" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7C3B19E4A2D85F6B1E0D0050 /* debug */,
+				7C3B19E4A2D85F6B1E0D0051 /* release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = debug;

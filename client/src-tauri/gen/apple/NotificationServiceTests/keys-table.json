@@ -1,0 +1,15 @@
+{
+  "about": "The Keychain entry the iPhone app keeps its notification keys in, as src-tauri/src/phone_push.rs writes it and the notification extension reads it (PushNote.table). Both sides' tests read this file. The keys are RFC 8291 Appendix A's, which the server's fixture (crates/linger-server/tests/fixtures/push-notification.json) encrypts to; https://a.example has the wrong secret, so only https://linger.example opens that notification.",
+  "table": {
+    "https://a.example": {
+      "private_key": "q1dXpw3UpT5VOmu_cf_v6ih07Aems3njxI-JWgLcM94",
+      "public_key": "BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4",
+      "auth_secret": "AAAAAAAAAAAAAAAAAAAAAA"
+    },
+    "https://linger.example": {
+      "private_key": "q1dXpw3UpT5VOmu_cf_v6ih07Aems3njxI-JWgLcM94",
+      "public_key": "BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4",
+      "auth_secret": "BTBZMqHH6r4Tts7J_aSIgg"
+    }
+  }
+}

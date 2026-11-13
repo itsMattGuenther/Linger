@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { appGroups } from "./ios-app-group.mjs";
+import { appGroups, pushEnvironment } from "./ios-app-group.mjs";
 
 const GROUP = "group.io.github.itsmattguenther.linger";
 const HEAD = `<?xml version="1.0" encoding="UTF-8"?>
@@ -118,4 +118,48 @@ test("run as ios.yml runs it: passes with the group, fails without it or unread"
 
   const usage = spawnSync(process.execPath, [script], { encoding: "utf8" });
   assert.equal(usage.status, 2);
+});
+
+// The app as a TestFlight build with notifications should be signed (#889):
+// build 5.1's, with Apple's own push service.
+const APP_PUSH = APP_5_1.replace(
+  "<key>beta-reports-active</key>",
+  "<key>aps-environment</key>\n\t<string>production</string>\n\t<key>beta-reports-active</key>",
+);
+
+test("which of Apple's push services the app is signed for", () => {
+  assert.equal(pushEnvironment(APP_PUSH), "production");
+  assert.equal(pushEnvironment(APP_5_1), null, "build 5.1 had none");
+  const plist = (dict) => `${HEAD}<plist version="1.0"><dict>${dict}</dict></plist>`;
+  assert.equal(pushEnvironment(plist("<key>aps-environment</key><string>development</string>")), "development");
+  assert.equal(pushEnvironment(plist("<!-- x --><key> aps-environment </key>\n<string> production </string>")), "production");
+  assert.throws(() => pushEnvironment(plist("<key>aps-environment</key><true/>")), /isn't a name/);
+  assert.throws(
+    () => pushEnvironment(plist("<key>aps-environment</key><string>a</string><key>aps-environment</key><string>b</string>")),
+    /more than once/,
+  );
+  assert.throws(() => pushEnvironment("[Dict]"), /not an XML property list/);
+});
+
+test("run as ios.yml runs it on the app: passes signed for production, fails for the sandbox or none", () => {
+  const dir = mkdtempSync(join(tmpdir(), "ios-app-group-push-"));
+  const script = fileURLToPath(new URL("./ios-app-group.mjs", import.meta.url));
+  const run = (xml) => {
+    const file = join(dir, "app.plist");
+    writeFileSync(file, xml);
+    return spawnSync(process.execPath, [script, file, GROUP, "Linger.app", "production"], { encoding: "utf8" });
+  };
+
+  const signed = run(APP_PUSH);
+  assert.equal(signed.status, 0, signed.stdout + signed.stderr);
+  assert.match(signed.stdout, /^Linger\.app: aps-environment production$/m);
+
+  const sandbox = run(APP_PUSH.replace("<string>production</string>", "<string>development</string>"));
+  assert.equal(sandbox.status, 1);
+  assert.match(sandbox.stdout, /::error::Linger\.app is signed for Apple's push service development, not production/);
+
+  const none = run(APP_5_1);
+  assert.equal(none.status, 1);
+  assert.match(none.stdout, /Linger\.app: aps-environment missing/);
+  assert.match(none.stdout, /::error::Linger\.app is signed for Apple's push service not at all, not production/);
 });
