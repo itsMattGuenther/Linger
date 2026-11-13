@@ -105,8 +105,8 @@ pub fn install(app: &AppHandle) {
 
 /// Give the app's delegate (tao's `AppDelegate`) the two methods Apple
 /// answers "register" with. UIKit can note which methods its delegate has
-/// when it's set, so the delegate is set again afterwards, held meanwhile,
-/// the way push libraries that add these at run time do.
+/// when it's set, so the delegate is set again afterwards, the way push
+/// libraries that add these at run time do, and, as they do, kept for good.
 fn answers_to_the_delegate(mtm: MainThreadMarker) {
     let app = UIApplication::sharedApplication(mtm);
     // SAFETY: `delegate` takes no arguments and answers an object or nil.
@@ -148,6 +148,12 @@ fn answers_to_the_delegate(mtm: MainThreadMarker) {
         let _: () = msg_send![&*app, setDelegate: None::<&AnyObject>];
         let _: () = msg_send![&*app, setDelegate: &*delegate];
     }
+    // UIKit keeps hold of the delegate UIApplicationMain made, and lets go
+    // of it when another is set, even the same one, which it then points at
+    // without keeping. So the app keeps it from here on, for its life. Let
+    // go here, it was freed, and the app stopped at its first look up the
+    // responder chain, a second after starting (#897's simulator run).
+    std::mem::forget(delegate);
 }
 
 /// The two methods' shapes: the delegate, the selector, the application and
