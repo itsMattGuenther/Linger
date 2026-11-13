@@ -19,7 +19,11 @@
 //!
 //! On Android all of it is Kotlin's (`PushBridge.kt`), reached through one
 //! method that takes a small JSON request and answers JSON, so one name
-//! crosses between Rust and Kotlin (`scripts/android-jni.mjs`).
+//! crosses between Rust and Kotlin (`scripts/android-jni.mjs`). On an iPhone
+//! it's here, in Rust (`phone_push/ios.rs`), and the notification extension
+//! that opens and shows each notification is Swift
+//! (`gen/apple/NotificationService/`). They share the keys through one
+//! Keychain entry, whose table is `kept` below.
 
 use serde::Serialize;
 
@@ -109,23 +113,148 @@ pub async fn push_opened() -> Option<PushOpened> {
 #[cfg(target_os = "android")]
 use android as platform;
 
-#[cfg(all(mobile, not(target_os = "android")))]
-mod platform {
-    //! The iPhone's comes with #889. Until then it says it can't.
-    use super::{PushAddress, PushKeys, PushOpened, NOT_HERE};
+#[cfg(target_os = "ios")]
+mod ios;
+#[cfg(target_os = "ios")]
+use ios as platform;
+#[cfg(target_os = "ios")]
+pub use ios::install;
 
-    pub fn permission(_ask: bool) -> String {
-        "denied".to_string()
+/// What an iPhone keeps and hands over (#889), in plain Rust so it's tested
+/// here: the table of each server's keys in the Keychain entry the
+/// notification extension reads (`PushNote.table` in
+/// `gen/apple/NotificationService`), and Apple's answers in the words the
+/// page uses.
+#[cfg_attr(not(any(target_os = "ios", test)), allow(dead_code))]
+mod kept {
+    use std::collections::BTreeMap;
+
+    use serde::{Deserialize, Serialize};
+
+    use super::{server_ok, PushKeys, PushOpened};
+
+    /// The Keychain entry the keys are kept in, as a service and an account.
+    /// `NotificationService.swift` (`PushKeyStore`) reads the same.
+    pub const SERVICE: &str = "im.linger.push";
+    pub const ACCOUNT: &str = "keys";
+
+    /// What a shown notification carries for a tap, as the extension writes
+    /// it (`PushNote.opens`): the server, the room and the message.
+    pub const TAP_SERVER: &str = "linger_server";
+    pub const TAP_ROOM: &str = "linger_room";
+    pub const TAP_MESSAGE: &str = "linger_message";
+
+    /// One server's keys, base64url: the P-256 private scalar (32 bytes),
+    /// the public point (65, uncompressed) and the secret (16). The
+    /// extension reads the same names.
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    pub struct Keys {
+        pub private_key: String,
+        pub public_key: String,
+        pub auth_secret: String,
     }
-    pub fn address() -> Result<PushAddress, String> {
-        Err(NOT_HERE.to_string())
+
+    impl Keys {
+        /// Keys from a new P-256 private key as Security.framework hands it
+        /// over (`SecKeyCopyExternalRepresentation`: 04, X, Y, then the
+        /// scalar), and a new secret. `None` for anything else.
+        pub fn from_x963(whole: &[u8], auth: &[u8; 16]) -> Option<Self> {
+            if whole.len() != 97 || whole[0] != 4 {
+                return None;
+            }
+            Some(Self {
+                private_key: base64url(&whole[65..]),
+                public_key: base64url(&whole[..65]),
+                auth_secret: base64url(auth),
+            })
+        }
+
+        /// What a server is given: everything but the private key.
+        pub fn handed_over(&self) -> PushKeys {
+            PushKeys {
+                public_key: self.public_key.clone(),
+                auth_secret: self.auth_secret.clone(),
+            }
+        }
     }
-    pub fn keys(_server: &str) -> Result<PushKeys, String> {
-        Err(NOT_HERE.to_string())
+
+    /// Every server's keys, by the server's address.
+    pub type Table = BTreeMap<String, Keys>;
+
+    /// The table as kept; empty when there's none or it can't be read.
+    pub fn read(bytes: Option<&[u8]>) -> Table {
+        bytes
+            .and_then(|bytes| serde_json::from_slice(bytes).ok())
+            .unwrap_or_default()
     }
-    pub fn forget(_server: &str) {}
-    pub fn opened() -> Option<PushOpened> {
-        None
+
+    pub fn write(table: &Table) -> Option<Vec<u8>> {
+        serde_json::to_vec(table).ok()
+    }
+
+    /// base64url without padding, as the server and the relay write it.
+    pub fn base64url(bytes: &[u8]) -> String {
+        const LETTERS: &[u8; 64] =
+            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        let mut text = String::with_capacity(bytes.len().div_ceil(3) * 4);
+        for chunk in bytes.chunks(3) {
+            let block = chunk.iter().enumerate().fold(0u32, |block, (i, byte)| {
+                block | u32::from(*byte) << (16 - 8 * i)
+            });
+            for i in 0..=chunk.len() {
+                let letter = (block >> (18 - 6 * i)) & 63;
+                text.push(char::from(LETTERS[letter as usize]));
+            }
+        }
+        text
+    }
+
+    /// An APNs device token as the relay takes it: lowercase hex.
+    pub fn hex(bytes: &[u8]) -> String {
+        use std::fmt::Write;
+        bytes.iter().fold(String::new(), |mut text, byte| {
+            let _ = write!(text, "{byte:02x}");
+            text
+        })
+    }
+
+    /// iOS's `UNAuthorizationStatus` in the page's words: not asked yet is
+    /// `ask`; allowed, quietly or not, is `granted`; anything else, or no
+    /// answer, is `denied`.
+    pub fn permission(status: Option<isize>) -> &'static str {
+        match status {
+            Some(0) => "ask",
+            Some(2..=4) => "granted",
+            _ => "denied",
+        }
+    }
+
+    /// Which of Apple's push services this build's address is for
+    /// (`PushService`): a build from TestFlight or the App Store, which
+    /// `ios.yml` makes in release, talks to Apple's own; one run from Xcode,
+    /// a debug build, to Apple's sandbox. `aps-environment` in each one's
+    /// signature says the same.
+    pub fn service(debug: bool) -> &'static str {
+        if debug {
+            "apns_sandbox"
+        } else {
+            "apns"
+        }
+    }
+
+    /// What a tapped notification handed the app (`PushNote.opens` in the
+    /// extension), read back. Nothing without a server that's one.
+    pub fn opened(
+        server: Option<String>,
+        room: Option<String>,
+        message: Option<String>,
+    ) -> Option<PushOpened> {
+        let server = server.filter(|server| server_ok(server))?;
+        Some(PushOpened {
+            server,
+            room,
+            message,
+        })
     }
 }
 
@@ -259,7 +388,7 @@ mod android {
 mod tests {
     use serde_json::json;
 
-    use super::{answers, server_ok, PushAddress, PushKeys, PushOpened, NOT_HERE};
+    use super::{answers, kept, server_ok, PushAddress, PushKeys, PushOpened, NOT_HERE};
 
     #[test]
     fn a_server_is_an_https_address_and_nothing_else() {
@@ -322,5 +451,107 @@ mod tests {
             })
         );
         assert_eq!(answers::opened(&json!({})), None);
+    }
+
+    fn unhex(text: &str) -> Vec<u8> {
+        (0..text.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&text[i..i + 2], 16).unwrap())
+            .collect()
+    }
+
+    // RFC 8291 Appendix A's keys: the public point, the private scalar and
+    // the secret.
+    const UA_PUBLIC: &str = "042571b2becdfde360551aaf1ed0f4cd366c11cebe555f89bcb7b186a53339173168ece2ebe018597bd30479b86e3c8f8eced577ca59187e9246990db682008b0e";
+    const UA_PRIVATE: &str = "ab5757a70dd4a53e553a6bbf71ffefea2874ec07a6b379e3c48f895a02dc33de";
+    const AUTH: &str = "05305932a1c7eabe13b6cec9fda48882";
+
+    #[test]
+    fn an_iphone_s_keys_are_written_as_its_notification_extension_reads_them() {
+        // The file the extension's own test reads too.
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../gen/apple/NotificationServiceTests/keys-table.json"
+        ))
+        .unwrap();
+        let written = serde_json::to_vec(&fixture["table"]).unwrap();
+        let table = kept::read(Some(&written));
+        assert_eq!(table.len(), 2);
+        let again: serde_json::Value =
+            serde_json::from_slice(&kept::write(&table).unwrap()).unwrap();
+        assert_eq!(
+            again, fixture["table"],
+            "written back the same, field for field"
+        );
+
+        // Keys made from Security.framework's form of a key are the RFC's own
+        // when it's the RFC's key.
+        let whole = [unhex(UA_PUBLIC), unhex(UA_PRIVATE)].concat();
+        let auth: [u8; 16] = unhex(AUTH).try_into().unwrap();
+        let keys = kept::Keys::from_x963(&whole, &auth).unwrap();
+        assert_eq!(&keys, &table["https://linger.example"]);
+        assert_eq!(
+            keys.handed_over(),
+            PushKeys {
+                public_key: keys.public_key.clone(),
+                auth_secret: keys.auth_secret.clone()
+            },
+            "a server never gets the private key"
+        );
+        assert!(kept::Keys::from_x963(&whole[1..], &auth).is_none());
+        assert!(kept::Keys::from_x963(&[&[2u8][..], &whole[1..]].concat(), &auth).is_none());
+
+        assert!(kept::read(None).is_empty());
+        assert!(kept::read(Some(b"not json")).is_empty());
+    }
+
+    #[test]
+    fn the_names_the_extension_shares_are_the_ones_it_uses() {
+        let note = include_str!("../gen/apple/NotificationService/PushNote.swift");
+        for name in [kept::TAP_SERVER, kept::TAP_ROOM, kept::TAP_MESSAGE] {
+            assert!(
+                note.contains(&format!("\"{name}\"")),
+                "PushNote.swift writes {name}"
+            );
+        }
+        let service = include_str!("../gen/apple/NotificationService/NotificationService.swift");
+        assert!(service.contains(&format!("static let service = \"{}\"", kept::SERVICE)));
+        assert!(service.contains(&format!("static let account = \"{}\"", kept::ACCOUNT)));
+    }
+
+    #[test]
+    fn base64url_and_hex_are_written_as_the_server_and_the_relay_read_them() {
+        assert_eq!(kept::base64url(b""), "");
+        assert_eq!(kept::base64url(b"f"), "Zg");
+        assert_eq!(kept::base64url(b"fo"), "Zm8");
+        assert_eq!(kept::base64url(b"foo"), "Zm9v");
+        assert_eq!(kept::base64url(b"foob"), "Zm9vYg");
+        assert_eq!(kept::base64url(&[0xfb, 0xff]), "-_8");
+        assert_eq!(kept::hex(&[0x00, 0xab, 0x10, 0xff]), "00ab10ff");
+        assert_eq!(kept::hex(&[]), "");
+    }
+
+    #[test]
+    fn apple_s_answers_are_the_page_s_words() {
+        assert_eq!(kept::permission(Some(0)), "ask");
+        assert_eq!(kept::permission(Some(1)), "denied");
+        for allowed in 2..=4 {
+            assert_eq!(kept::permission(Some(allowed)), "granted");
+        }
+        assert_eq!(kept::permission(Some(9)), "denied");
+        assert_eq!(kept::permission(None), "denied");
+
+        assert_eq!(kept::service(false), "apns");
+        assert_eq!(kept::service(true), "apns_sandbox");
+
+        assert_eq!(
+            kept::opened(Some("https://s".into()), Some("r".into()), None),
+            Some(PushOpened {
+                server: "https://s".into(),
+                room: Some("r".into()),
+                message: None
+            })
+        );
+        assert_eq!(kept::opened(None, Some("r".into()), None), None);
+        assert_eq!(kept::opened(Some("http://s".into()), None, None), None);
     }
 }

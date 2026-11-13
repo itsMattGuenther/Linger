@@ -155,11 +155,15 @@ core-foundation = "0.9"
 # are already in the iPhone's build, under Tauri's window and web view, so
 # they add nothing to the app's size; named here with only the parts used.
 # `NSFileManager` finds the App Group's folder, where the share extension
-# leaves files shared to Linger (#785, `shared.rs`).
+# leaves files shared to Linger (#785, `shared.rs`). Phone notifications
+# (#889, `phone_push/ios.rs`): iOS's permission question and taps
+# (UserNotifications), and Apple's push address (UIApplication, NSData).
+# UserNotifications is in the iPhone's build already, under UIKit's.
 objc2 = "0.6"
 block2 = "0.6"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-foundation", "NSArray", "NSError", "NSFileManager", "NSGeometry", "NSPathUtilities", "NSString", "NSURL", "NSURLResponse", "NSURLSession", "NSValue"] }
-objc2-ui-kit = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-foundation", "UIActivity", "UIActivityViewController", "UIFont", "UIFontDescriptor", "UIPopoverPresentationController", "UIPopoverSupport", "UIPresentationController", "UIResponder", "UIView", "UIViewController"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-foundation", "NSArray", "NSData", "NSDictionary", "NSError", "NSFileManager", "NSGeometry", "NSPathUtilities", "NSString", "NSURL", "NSURLResponse", "NSURLSession", "NSValue"] }
+objc2-ui-kit = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-foundation", "UIActivity", "UIActivityViewController", "UIApplication", "UIFont", "UIFontDescriptor", "UIPopoverPresentationController", "UIPopoverSupport", "UIPresentationController", "UIResponder", "UIView", "UIViewController"] }
+objc2-user-notifications = { version = "0.3", default-features = false, features = ["std", "block2", "bitflags", "UNNotification", "UNNotificationContent", "UNNotificationRequest", "UNNotificationResponse", "UNNotificationSettings", "UNUserNotificationCenter"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 keyring = { version = "3", features = ["windows-native"] }

@@ -421,7 +421,9 @@ privacy manifest, `linger-client_iOS/PrivacyInfo.xcprivacy`, is in the
 target, `LingerShare`, in `client/src-tauri/gen/apple/ShareExtension`: Swift,
 with its own Info.plist kept by hand. The App Group it shares with the app is
 in both entitlements files and in `project.yml`, since XcodeGen writes
-entitlements from there. Anything the phone app writes outside `tmp` and
+entitlements from there. The notification extension (#889) is a third,
+`LingerNotifications`, in `client/src-tauri/gen/apple/NotificationService`,
+with the same App Group ("Phone notifications on an iPhone", below). Anything the phone app writes outside `tmp` and
 `Library/Caches` is marked to stay out of iCloud backups (SPEC §4.15), as the
 extension marks its folder (#792); on Android, `allowBackup="false"` covers
 it.
@@ -484,6 +486,31 @@ makes (`crates/linger-server/tests/fixtures/push-notification.json`); from
 (CI runs it in `desktop.yml`'s Android job). Notifications travel through
 Linger's relay, so a test end to end needs a server with `LINGER_PUSH` on, a
 phone signed in to it over https, and a real message from somebody else.
+
+**Phone notifications on an iPhone (#830, #889)** come through Apple's push
+service. The relay sends each with `mutable-content`, so iOS first runs the
+notification extension, `LingerNotifications`
+(`client/src-tauri/gen/apple/NotificationService`, Swift, its Info.plist kept
+by hand): it opens the notification with the keys the app keeps for each
+server, in one Keychain entry in the App Group's access group, and shows the
+server's words, grouped by conversation. If it can't, iOS shows the relay's
+fallback, "Open Linger to see it." Everything else is the app's Rust
+(`src-tauri/src/phone_push/ios.rs`): iOS's permission question, the push
+address (two methods added to tao's app delegate at the start, since Apple
+answers there), making and keeping the keys, and taps. The app's entitlements
+carry `aps-environment`: `development` in the file, as Xcode writes it, and
+`production` in a TestFlight build's signature, which `ios.yml` checks. A
+debug build's address is for Apple's sandbox and a release build's for
+Apple's own (`PushService`). The extension's tests build its own files for a
+Mac with a test of their own, against RFC 8291's example, the server's
+fixture and the keys as the Rust writes them
+(`gen/apple/NotificationServiceTests/keys-table.json`, which the Rust's test
+reads too); `share-window.yml` runs them, and its comment has the command.
+Without a Mac, `PushCrypto.swift`, `PushNote.swift` and the test run the same
+in Swift's Docker image (`swift:6.1`) as a small package that depends on
+`swift-crypto`, with `PushCrypto.swift`'s `import CryptoKit` changed to
+`import Crypto`, the same API. A notification end to end needs a TestFlight
+build on a real iPhone.
 
 On a virtual phone with an NVIDIA card, the emulator may switch itself to
 drawing on the CPU ("Your GPU drivers may have a bug"). It works, but the

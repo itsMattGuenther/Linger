@@ -774,7 +774,10 @@ E2EE launders a false promise, which is worse than an honest limitation.
    in one Keychain entry in the App Group's access group, this device only, so the
    share extension can read it and write back what it renews, each side
    changing it only while holding a lock on a file in the App Group's folder
-   (`src-tauri/src/share_window.rs`).
+   (`src-tauri/src/share_window.rs`). The keys an iPhone opens its phone
+   notifications with (#889) are kept the same way, in an entry of their own
+   that only the app writes and the notification extension reads
+   (`src-tauri/src/phone_push/ios.rs`).
 4. **No open registration.** Invite code required, always. Codes are 12 chars from a
    CSPRNG, single-use by default.
 5. **Rate limits:** login 5/min/IP, sign-up 60/hour/IP by default (all sixty at once,

@@ -31,10 +31,11 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-/// The App Group the app and its share extension share. The same name is in
-/// both entitlements files, `shared.rs` and `ShareStore.swift`.
+/// The App Group the app and its extensions share. The same name is in
+/// every entitlements file, `shared.rs`, `ShareStore.swift` and
+/// `NotificationService.swift`.
 #[cfg(target_os = "ios")]
-const APP_GROUP: &str = "group.io.github.itsmattguenther.linger";
+pub(crate) const APP_GROUP: &str = "group.io.github.itsmattguenther.linger";
 
 /// The Keychain entry's service and account. `ShareStore.swift` reads the same.
 #[cfg(target_os = "ios")]
@@ -203,7 +204,7 @@ fn now_ms() -> u64 {
 fn store() -> Option<Box<dyn Store + Send>> {
     #[cfg(target_os = "ios")]
     {
-        Some(Box::new(ios::Keychain))
+        Some(Box::new(ios::Keychain::new(SERVICE, ACCOUNT)))
     }
     #[cfg(not(target_os = "ios"))]
     {
@@ -304,8 +305,10 @@ pub async fn share_window_list_save(list: String) -> Result<(), String> {
 
 /// The iPhone's half: the Keychain entry, through Security.framework, and the
 /// App Group's folder. Every `unsafe` is here, each with what makes it sound.
+/// The phone's notification keys are kept in an entry of the same kind
+/// (`phone_push/ios.rs`), for the notification extension to read.
 #[cfg(target_os = "ios")]
-mod ios {
+pub(crate) mod ios {
     use std::path::PathBuf;
 
     use core_foundation::base::{CFType, CFTypeRef, TCFType};
@@ -322,7 +325,7 @@ mod ios {
     };
     use security_framework_sys::keychain_item::{SecItemAdd, SecItemCopyMatching, SecItemUpdate};
 
-    use super::{Store, ACCOUNT, APP_GROUP, FOLDER, SERVICE};
+    use super::{Store, APP_GROUP, FOLDER};
 
     #[link(name = "Security", kind = "framework")]
     extern "C" {
@@ -346,25 +349,43 @@ mod ios {
         unsafe { CFString::wrap_under_get_rule(constant) }
     }
 
-    /// What picks out the entry: a generic password with this service and
-    /// account, in the App Group's access group, so the share extension finds
-    /// the same one. The app's own sign-ins are in its default group, and
-    /// this never touches them.
-    fn entry() -> Vec<(CFString, CFType)> {
-        // SAFETY: the framework's constants.
-        unsafe {
-            vec![
-                (
-                    named(kSecClass),
-                    named(kSecClassGenericPassword).into_CFType(),
-                ),
-                (named(kSecAttrService), CFString::new(SERVICE).into_CFType()),
-                (named(kSecAttrAccount), CFString::new(ACCOUNT).into_CFType()),
-                (
-                    named(kSecAttrAccessGroup),
-                    CFString::new(APP_GROUP).into_CFType(),
-                ),
-            ]
+    /// One Keychain entry the app shares with its extensions: a generic
+    /// password with a service and an account, in the App Group's access
+    /// group, so an extension finds the same one. The app's own sign-ins are
+    /// in its default group, and this never touches them.
+    pub struct Keychain {
+        service: &'static str,
+        account: &'static str,
+    }
+
+    impl Keychain {
+        pub const fn new(service: &'static str, account: &'static str) -> Self {
+            Self { service, account }
+        }
+
+        /// What picks out the entry.
+        fn entry(&self) -> Vec<(CFString, CFType)> {
+            // SAFETY: the framework's constants.
+            unsafe {
+                vec![
+                    (
+                        named(kSecClass),
+                        named(kSecClassGenericPassword).into_CFType(),
+                    ),
+                    (
+                        named(kSecAttrService),
+                        CFString::new(self.service).into_CFType(),
+                    ),
+                    (
+                        named(kSecAttrAccount),
+                        CFString::new(self.account).into_CFType(),
+                    ),
+                    (
+                        named(kSecAttrAccessGroup),
+                        CFString::new(APP_GROUP).into_CFType(),
+                    ),
+                ]
+            }
         }
     }
 
@@ -382,11 +403,9 @@ mod ios {
         }
     }
 
-    pub struct Keychain;
-
     impl Store for Keychain {
         fn read(&self) -> Option<Vec<u8>> {
-            let mut query = entry();
+            let mut query = self.entry();
             // SAFETY: the framework's constants.
             unsafe {
                 query.push((named(kSecReturnData), CFBoolean::true_value().into_CFType()));
@@ -421,7 +440,7 @@ mod ios {
                 unsafe { named(kSecValueData) },
                 CFData::from_buffer(bytes).into_CFType(),
             );
-            let mut new = entry();
+            let mut new = self.entry();
             new.push(contents.clone());
             new.push(protection());
             let new = CFDictionary::from_CFType_pairs(&new);
@@ -430,7 +449,7 @@ mod ios {
             if added != errSecDuplicateItem {
                 return added == errSecSuccess;
             }
-            let query = CFDictionary::from_CFType_pairs(&entry());
+            let query = CFDictionary::from_CFType_pairs(&self.entry());
             let changes = CFDictionary::from_CFType_pairs(&[contents, protection()]);
             // SAFETY: both dictionaries are alive for the call, which only reads them.
             let updated = unsafe {

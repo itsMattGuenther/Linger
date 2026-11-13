@@ -1,12 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  The App Group the app shares with its share extension (#785): the inbox for
-  files shared to Linger is in its folder (src-tauri/src/shared.rs). The same
-  group is in ShareExtension/ShareExtension.entitlements.
+  The App Group the app shares with its extensions: the inbox for files shared
+  to Linger is in its folder (#785, src-tauri/src/shared.rs), and the keys
+  phone notifications open with are in its Keychain group, for the
+  notification extension (#889, src-tauri/src/phone_push/ios.rs). The same
+  group is in ShareExtension.entitlements and NotificationService.entitlements.
+
+  And Apple's push service (#889). `development` is what Xcode writes;
+  exporting for App Store Connect signs the app with its distribution
+  profile's `production`, which ios.yml checks before an upload.
 -->
 <plist version="1.0">
 <dict>
+	<key>aps-environment</key>
+	<string>development</string>
 	<key>com.apple.security.application-groups</key>
 	<array>
 		<string>group.io.github.itsmattguenther.linger</string>

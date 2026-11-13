@@ -555,6 +555,9 @@ fn phone_app() -> tauri::Builder<tauri::Wry> {
             phone_save::clear_leftovers();
             // A share to Linger nobody took (#785).
             shared::clear_leftovers();
+            // Phone notifications' taps and Apple's push address (#889).
+            #[cfg(target_os = "ios")]
+            phone_push::install(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

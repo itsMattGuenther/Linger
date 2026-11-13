@@ -53,11 +53,16 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         CFBundleShortVersionString: 0.5.1
         CFBundleVersion: "0.5.1"
-    # The App Group it shares with LingerShare: files shared to Linger wait
-    # in its folder (#785, src-tauri/src/shared.rs).
+    # The App Group it shares with LingerShare and LingerNotifications: files
+    # shared to Linger wait in its folder (#785, src-tauri/src/shared.rs), and
+    # the notification keys in its Keychain group (#889, phone_push/ios.rs).
+    # And phone notifications through Apple's push service (#889): Xcode
+    # writes `development` here, and exporting for App Store Connect signs
+    # with the distribution profile's `production`, which ios.yml checks.
     entitlements:
       path: linger-client_iOS/linger-client_iOS.entitlements
       properties:
+        aps-environment: development
         com.apple.security.application-groups:
           - group.io.github.itsmattguenther.linger
     scheme:
@@ -89,6 +94,9 @@ targets:
       - sdk: WebKit.framework
       # Share to Linger (#785): built first, and embedded in the app.
       - target: LingerShare
+        embed: true
+      # Phone notifications (#889): the same.
+      - target: LingerNotifications
         embed: true
     preBuildScripts:
       - script: pnpm tauri ios xcode-script -v --platform ${PLATFORM_DISPLAY_NAME:?} --sdk-root ${SDKROOT:?} --framework-search-paths "${FRAMEWORK_SEARCH_PATHS:?}" --header-search-paths "${HEADER_SEARCH_PATHS:?}" --gcc-preprocessor-definitions "${GCC_PREPROCESSOR_DEFINITIONS:-}" --configuration ${CONFIGURATION:?} ${FORCE_COLOR} ${ARCHS:?}
@@ -154,5 +162,62 @@ targets:
           if [ "${CODE_SIGNING_ALLOWED}" = "NO" ]; then
             /usr/bin/codesign --force --sign - --timestamp=none --generate-entitlement-der \
               --entitlements "${SRCROOT}/ShareExtension/ShareExtension.entitlements" \
+              "${CODESIGNING_FOLDER_PATH}"
+          fi
+  # Phone notifications on an iPhone (#889, #830, SPEC §4.15): the
+  # notification service extension. iOS runs it for a few seconds before
+  # showing a notification from Linger's relay, to open the server's
+  # encrypted notification with the keys the app keeps in the App Group's
+  # Keychain group (phone_push/ios.rs) and show its words. Its Info.plist is
+  # kept by hand in NotificationService/, and its two build phases are
+  # LingerShare's, for the same reasons. Its tests are
+  # NotificationServiceTests/, run by ios-simulator.yml.
+  LingerNotifications:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: NotificationService
+    entitlements:
+      path: NotificationService/NotificationService.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.io.github.itsmattguenther.linger
+    settings:
+      base:
+        INFOPLIST_FILE: NotificationService/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.itsmattguenther.linger.notifications
+        PRODUCT_NAME: LingerNotifications
+        DEVELOPMENT_TEAM: SFTT38V54H
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: iPhone Developer
+        ENABLE_BITCODE: false
+        ENABLE_USER_SCRIPT_SANDBOXING: false
+        TARGETED_DEVICE_FAMILY: 1
+        ARCHS: [arm64]
+        VALID_ARCHS: arm64
+        EXCLUDED_ARCHS[sdk=iphoneos*]: x86_64
+        SKIP_INSTALL: true
+    postBuildScripts:
+      - name: Same version as Linger
+        basedOnDependencyAnalysis: false
+        inputFiles:
+          - $(SRCROOT)/linger-client_iOS/Info.plist
+        script: |
+          app="${SRCROOT}/linger-client_iOS/Info.plist"
+          mine="${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"
+          for key in CFBundleShortVersionString CFBundleVersion; do
+            value="$(/usr/libexec/PlistBuddy -c "Print :$key" "$app")"
+            /usr/libexec/PlistBuddy -c "Set :$key $value" "$mine"
+          done
+      # Without its App Group in its signature, it couldn't read the keys
+      # (#811 is the share extension's story).
+      - name: Its App Group in its signature
+        basedOnDependencyAnalysis: false
+        inputFiles:
+          - $(SRCROOT)/NotificationService/NotificationService.entitlements
+        script: |
+          if [ "${CODE_SIGNING_ALLOWED}" = "NO" ]; then
+            /usr/bin/codesign --force --sign - --timestamp=none --generate-entitlement-der \
+              --entitlements "${SRCROOT}/NotificationService/NotificationService.entitlements" \
               "${CODESIGNING_FOLDER_PATH}"
           fi
