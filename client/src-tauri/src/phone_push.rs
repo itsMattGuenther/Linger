@@ -127,7 +127,7 @@ pub use ios::install;
 /// page uses.
 #[cfg_attr(not(any(target_os = "ios", test)), allow(dead_code))]
 mod kept {
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
 
     use serde::{Deserialize, Serialize};
 
@@ -181,15 +181,101 @@ mod kept {
     /// Every server's keys, by the server's address.
     pub type Table = BTreeMap<String, Keys>;
 
-    /// The table as kept; empty when there's none or it can't be read.
-    pub fn read(bytes: Option<&[u8]>) -> Table {
-        bytes
-            .and_then(|bytes| serde_json::from_slice(bytes).ok())
-            .unwrap_or_default()
+    /// Where the table is kept: the Keychain entry the extension reads, on
+    /// an iPhone (`phone_push/ios.rs`), and memory in tests.
+    pub trait Entry {
+        /// The entry's bytes, `Ok(None)` when there's no entry yet, and `Err`
+        /// when it's there and couldn't be read: told apart, since only no
+        /// entry at all means no keys.
+        fn read(&self) -> Result<Option<Vec<u8>>, ()>;
+        /// Replace the entry's bytes, answering whether that was saved.
+        fn write(&self, bytes: &[u8]) -> bool;
     }
 
-    pub fn write(table: &Table) -> Option<Vec<u8>> {
-        serde_json::to_vec(table).ok()
+    /// The keys' table, changed one server at a time, and the servers whose
+    /// keys are to go but couldn't be saved gone yet (#897 review).
+    ///
+    /// A table that couldn't be read is never written over: that would keep
+    /// only the server being changed and lose every other server's keys,
+    /// whose notifications would then all show the fallback words. And
+    /// forgetting a server whose removal can't be saved is owed until the
+    /// next change saves: the page doesn't ask again (its server has already
+    /// forgotten the phone), so the shell remembers. Owed only while the app
+    /// runs; keys left after that are the ones a server gets again if it's
+    /// turned back on.
+    #[derive(Debug, Default)]
+    pub struct Book {
+        owed: BTreeSet<String>,
+    }
+
+    impl Book {
+        /// None owed, as the app starts.
+        pub const fn new() -> Self {
+            Self {
+                owed: BTreeSet::new(),
+            }
+        }
+
+        /// What's kept, with the removals still owed taken out, and whether
+        /// that took anything out. `None` when it couldn't be read.
+        fn current(&self, entry: &dyn Entry) -> Option<(Table, bool)> {
+            let mut table: Table = match entry.read() {
+                Ok(None) => Table::new(),
+                Ok(Some(bytes)) => serde_json::from_slice(&bytes).ok()?,
+                Err(()) => return None,
+            };
+            let before = table.len();
+            table.retain(|server, _| !self.owed.contains(server));
+            let changed = table.len() != before;
+            Some((table, changed))
+        }
+
+        fn save(&mut self, entry: &dyn Entry, table: &Table) -> bool {
+            let saved = serde_json::to_vec(table).is_ok_and(|bytes| entry.write(&bytes));
+            if saved {
+                self.owed.clear();
+            }
+            saved
+        }
+
+        /// `server`'s keys, made with `make` and kept the first time they're
+        /// asked for, so a server is given the same keys each time it
+        /// registers this phone again. `None` when they couldn't be read,
+        /// made or kept.
+        pub fn keys(
+            &mut self,
+            entry: &dyn Entry,
+            server: &str,
+            make: impl FnOnce() -> Option<Keys>,
+        ) -> Option<Keys> {
+            let (mut table, changed) = self.current(entry)?;
+            if let Some(keys) = table.get(server).cloned() {
+                if changed {
+                    // A removal still owed: now's a chance to save it.
+                    self.save(entry, &table);
+                }
+                return Some(keys);
+            }
+            let keys = make()?;
+            table.insert(server.to_string(), keys.clone());
+            self.save(entry, &table).then_some(keys)
+        }
+
+        /// Forget `server`'s keys, so nothing it sends can be opened here.
+        /// Answers whether that's saved; when it isn't, it's owed, and the
+        /// next change saves it.
+        pub fn forget(&mut self, entry: &dyn Entry, server: &str) -> bool {
+            self.owed.insert(server.to_string());
+            let Some((table, changed)) = self.current(entry) else {
+                return false;
+            };
+            if !changed {
+                // Nothing kept for it, or for any server owed: nothing to write.
+                self.owed.clear();
+                return true;
+            }
+            self.save(entry, &table)
+        }
     }
 
     /// base64url without padding, as the server and the relay write it.
@@ -473,11 +559,9 @@ mod tests {
             "../gen/apple/NotificationServiceTests/keys-table.json"
         ))
         .unwrap();
-        let written = serde_json::to_vec(&fixture["table"]).unwrap();
-        let table = kept::read(Some(&written));
+        let table: kept::Table = serde_json::from_value(fixture["table"].clone()).unwrap();
         assert_eq!(table.len(), 2);
-        let again: serde_json::Value =
-            serde_json::from_slice(&kept::write(&table).unwrap()).unwrap();
+        let again = serde_json::to_value(&table).unwrap();
         assert_eq!(
             again, fixture["table"],
             "written back the same, field for field"
@@ -499,9 +583,135 @@ mod tests {
         );
         assert!(kept::Keys::from_x963(&whole[1..], &auth).is_none());
         assert!(kept::Keys::from_x963(&[&[2u8][..], &whole[1..]].concat(), &auth).is_none());
+    }
 
-        assert!(kept::read(None).is_empty());
-        assert!(kept::read(Some(b"not json")).is_empty());
+    /// The Keychain entry, in memory: what it holds, and whether reading or
+    /// writing it fails.
+    #[derive(Default)]
+    struct Memory {
+        bytes: std::cell::RefCell<Option<Vec<u8>>>,
+        unreadable: std::cell::Cell<bool>,
+        unwritable: std::cell::Cell<bool>,
+        writes: std::cell::Cell<usize>,
+    }
+
+    impl kept::Entry for Memory {
+        fn read(&self) -> Result<Option<Vec<u8>>, ()> {
+            if self.unreadable.get() {
+                return Err(());
+            }
+            Ok(self.bytes.borrow().clone())
+        }
+        fn write(&self, bytes: &[u8]) -> bool {
+            if self.unwritable.get() {
+                return false;
+            }
+            self.writes.set(self.writes.get() + 1);
+            *self.bytes.borrow_mut() = Some(bytes.to_vec());
+            true
+        }
+    }
+
+    impl Memory {
+        fn servers(&self) -> Vec<String> {
+            let bytes = self
+                .bytes
+                .borrow()
+                .clone()
+                .unwrap_or_else(|| b"{}".to_vec());
+            let table: kept::Table = serde_json::from_slice(&bytes).unwrap();
+            table.into_keys().collect()
+        }
+    }
+
+    fn made(n: u8) -> impl FnOnce() -> Option<kept::Keys> {
+        move || {
+            let mut whole = [n; 97];
+            whole[0] = 4;
+            kept::Keys::from_x963(&whole, &[n; 16])
+        }
+    }
+
+    const A: &str = "https://a.example";
+    const B: &str = "https://b.example";
+
+    #[test]
+    fn an_iphone_s_keys_are_made_once_and_kept_per_server() {
+        let entry = Memory::default();
+        let mut book = kept::Book::new();
+        let a = book.keys(&entry, A, made(1)).unwrap();
+        assert_eq!(
+            book.keys(&entry, A, made(2)),
+            Some(a.clone()),
+            "the same keys again"
+        );
+        let b = book.keys(&entry, B, made(3)).unwrap();
+        assert_ne!(a, b, "each server its own");
+        assert_eq!(entry.servers(), [A, B]);
+
+        assert!(book.forget(&entry, A));
+        assert_eq!(entry.servers(), [B]);
+        assert_ne!(
+            book.keys(&entry, A, made(4)),
+            Some(a),
+            "new keys once forgotten"
+        );
+
+        // Signing out of a server that never had keys writes nothing.
+        let writes = entry.writes.get();
+        assert!(book.forget(&entry, "https://never.example"));
+        assert_eq!(entry.writes.get(), writes);
+    }
+
+    #[test]
+    fn keys_that_can_t_be_read_are_never_written_over() {
+        let entry = Memory::default();
+        let mut book = kept::Book::new();
+        book.keys(&entry, A, made(1)).unwrap();
+
+        // Locked away for a moment: no keys for B, and A's survive.
+        entry.unreadable.set(true);
+        assert_eq!(book.keys(&entry, B, made(2)), None);
+        assert!(!book.forget(&entry, B));
+        entry.unreadable.set(false);
+        assert_eq!(entry.servers(), [A]);
+
+        // Not a table at all: the same.
+        *entry.bytes.borrow_mut() = Some(b"not json".to_vec());
+        assert_eq!(book.keys(&entry, B, made(2)), None);
+        assert_eq!(entry.bytes.borrow().as_deref(), Some(&b"not json"[..]));
+
+        // No entry yet is the only empty table.
+        let fresh = Memory::default();
+        assert!(kept::Book::new().keys(&fresh, B, made(2)).is_some());
+    }
+
+    #[test]
+    fn a_removal_that_can_t_be_saved_is_owed_until_the_next_change_saves() {
+        let entry = Memory::default();
+        let mut book = kept::Book::new();
+        let a = book.keys(&entry, A, made(1)).unwrap();
+        book.keys(&entry, B, made(2)).unwrap();
+
+        entry.unwritable.set(true);
+        assert!(!book.forget(&entry, A), "said not saved");
+        assert_eq!(entry.servers(), [A, B], "still there");
+        entry.unwritable.set(false);
+
+        // The next change carries it: B asked for again.
+        book.keys(&entry, B, made(3)).unwrap();
+        assert_eq!(entry.servers(), [B], "A's went with it");
+
+        // And A turned back on after a failed forget gets new keys.
+        entry.unwritable.set(true);
+        assert!(!book.forget(&entry, B));
+        entry.unwritable.set(false);
+        assert_ne!(book.keys(&entry, A, made(4)), Some(a));
+        assert_eq!(
+            entry.servers(),
+            [A],
+            "B's owed removal saved with A's new keys"
+        );
     }
 
     #[test]

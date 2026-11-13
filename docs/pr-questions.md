@@ -208,7 +208,8 @@ For: shell, phone, server
 Gaps: A rule the code doesn't check; A rule nothing checks
 
 Read for them by hand: no blocking file work on the async runtime (#792,
-#794), and what the phone app writes stays out of backups (#792). Better,
+#794), what the phone app writes stays out of backups (#792), and every
+public function has a doc comment saying why it exists (#897). Better,
 shape the code so the mistake can't be made, as `Store` did for the update
 files (#794).
 

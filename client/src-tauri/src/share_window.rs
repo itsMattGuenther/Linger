@@ -318,7 +318,7 @@ pub(crate) mod ios {
     use core_foundation::string::{CFString, CFStringRef};
     use objc2_foundation::{NSFileManager, NSString};
     use security_framework_sys::access_control::kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly;
-    use security_framework_sys::base::{errSecDuplicateItem, errSecSuccess};
+    use security_framework_sys::base::{errSecDuplicateItem, errSecItemNotFound, errSecSuccess};
     use security_framework_sys::item::{
         kSecAttrAccessGroup, kSecAttrAccount, kSecAttrService, kSecClass, kSecClassGenericPassword,
         kSecMatchLimit, kSecReturnData, kSecValueData,
@@ -359,8 +359,50 @@ pub(crate) mod ios {
     }
 
     impl Keychain {
+        /// The entry with this service and account, so each use of an
+        /// entry the extensions share names its own.
         pub const fn new(service: &'static str, account: &'static str) -> Self {
             Self { service, account }
+        }
+
+        /// The entry's contents; `Ok(None)` when there's no entry, and
+        /// `Err` when there is one that couldn't be read (the phone not yet
+        /// unlocked since it started, say). The share window's `read` takes
+        /// both as nothing kept; the notification keys tell them apart, so
+        /// one couldn't be read is never written over (`phone_push.rs`).
+        pub fn read_found(&self) -> Result<Option<Vec<u8>>, ()> {
+            let mut query = self.entry();
+            // SAFETY: the framework's constants.
+            unsafe {
+                query.push((named(kSecReturnData), CFBoolean::true_value().into_CFType()));
+                query.push((
+                    named(kSecMatchLimit),
+                    named(kSecMatchLimitOne).into_CFType(),
+                ));
+            }
+            let query = CFDictionary::from_CFType_pairs(&query);
+            let mut found: CFTypeRef = std::ptr::null();
+            // SAFETY: the query is alive for the call, and `found` is where
+            // the framework writes what it found.
+            let status = unsafe { SecItemCopyMatching(query.as_concrete_TypeRef(), &mut found) };
+            if status == errSecItemNotFound {
+                return Ok(None);
+            }
+            if status != errSecSuccess || found.is_null() {
+                return Err(());
+            }
+            // SAFETY: asked for one entry's data, the framework hands back a
+            // CFData the caller owns (Apple's "Create Rule" for Copy functions).
+            let data = unsafe { CFData::wrap_under_create_rule(found as CFDataRef) };
+            // Empty data has no bytes to point at, and core-foundation 0.9
+            // makes that a slice from a null pointer (#844), which
+            // `is_empty`, through the slice, would make too.
+            #[allow(clippy::len_zero)]
+            Ok(Some(if data.len() == 0 {
+                Vec::new()
+            } else {
+                data.bytes().to_vec()
+            }))
         }
 
         /// What picks out the entry.
@@ -405,33 +447,7 @@ pub(crate) mod ios {
 
     impl Store for Keychain {
         fn read(&self) -> Option<Vec<u8>> {
-            let mut query = self.entry();
-            // SAFETY: the framework's constants.
-            unsafe {
-                query.push((named(kSecReturnData), CFBoolean::true_value().into_CFType()));
-                query.push((
-                    named(kSecMatchLimit),
-                    named(kSecMatchLimitOne).into_CFType(),
-                ));
-            }
-            let query = CFDictionary::from_CFType_pairs(&query);
-            let mut found: CFTypeRef = std::ptr::null();
-            // SAFETY: the query is alive for the call, and `found` is where
-            // the framework writes what it found.
-            let status = unsafe { SecItemCopyMatching(query.as_concrete_TypeRef(), &mut found) };
-            if status != errSecSuccess || found.is_null() {
-                return None;
-            }
-            // SAFETY: asked for one entry's data, the framework hands back a
-            // CFData the caller owns (Apple's "Create Rule" for Copy functions).
-            let data = unsafe { CFData::wrap_under_create_rule(found as CFDataRef) };
-            // Empty data has no bytes to point at, and core-foundation 0.9
-            // makes that a slice from a null pointer (#844).
-            Some(if data.len() == 0 {
-                Vec::new()
-            } else {
-                data.bytes().to_vec()
-            })
+            self.read_found().ok().flatten()
         }
 
         fn write(&self, bytes: &[u8]) -> bool {

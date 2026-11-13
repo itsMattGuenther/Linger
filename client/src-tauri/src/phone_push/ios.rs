@@ -42,7 +42,7 @@ use rand::RngCore;
 use security_framework::key::{GenerateKeyOptions, KeyType, SecKey};
 use tauri::{AppHandle, Manager};
 
-use super::kept::{self, Keys};
+use super::kept::{self, Book, Entry, Keys};
 use super::{PushAddress, PushKeys, PushOpened, NOT_HERE};
 use crate::share_window::ios::Keychain;
 use crate::share_window::Store;
@@ -70,10 +70,21 @@ static APP: OnceLock<AppHandle> = OnceLock::new();
 static OPENED: Mutex<Option<PushOpened>> = Mutex::new(None);
 /// Everybody waiting for Apple's answer to "register": each gets the same.
 static WAITING: Mutex<Vec<Sender<Result<String, String>>>> = Mutex::new(Vec::new());
-/// The keys' table is read, changed and written back holding this, so two
-/// servers' keys made at once can't write over each other. The extension
-/// only reads it.
-static KEYS_HELD: Mutex<()> = Mutex::new(());
+/// The keys' table, read, changed and written back holding this, so two
+/// servers' keys made at once can't write over each other, with any
+/// removal still owed (`kept::Book`). The extension only reads it.
+static BOOK: Mutex<Book> = Mutex::new(Book::new());
+
+/// The Keychain entry as `kept` reads it: no entry is no keys, and an entry
+/// that couldn't be read is never mistaken for none.
+impl Entry for Keychain {
+    fn read(&self) -> Result<Option<Vec<u8>>, ()> {
+        self.read_found()
+    }
+    fn write(&self, bytes: &[u8]) -> bool {
+        Store::write(self, bytes)
+    }
+}
 
 /// At the start, on the main thread (the app's setup): taps come here, and
 /// Apple's answer about the address has somewhere to go. Before the app
@@ -198,6 +209,9 @@ fn status() -> Option<isize> {
     told.recv_timeout(Duration::from_secs(10)).ok()
 }
 
+/// `push_permission` on an iPhone: whether iOS lets Linger notify, and, with
+/// `ask`, iOS's question, once, waited for here, so the page gets the answer
+/// rather than an event (`lib/push.ts`, `permitted`).
 pub fn permission(ask: bool) -> String {
     let now = kept::permission(status());
     if !ask || now != "ask" {
@@ -220,6 +234,9 @@ pub fn permission(ask: bool) -> String {
     .to_string()
 }
 
+/// `push_address` on an iPhone: Apple's device token for this copy of the
+/// app, for the page to have the relay seal. Asked for at every start, as
+/// Apple asks, since it can change.
 pub fn address() -> Result<PushAddress, String> {
     let app = APP.get().ok_or_else(|| NOT_HERE.to_string())?;
     let (tell, told) = mpsc::channel();
@@ -244,19 +261,15 @@ pub fn address() -> Result<PushAddress, String> {
     }
 }
 
+/// `push_keys` on an iPhone: what `server` encrypts this phone's
+/// notifications to, made the first time and kept where the extension reads
+/// them. The private key never leaves the phone.
 pub fn keys(server: &str) -> Result<PushKeys, String> {
-    let _held = KEYS_HELD.lock().unwrap_or_else(PoisonError::into_inner);
-    let mut table = kept::read(KEYS.read().as_deref());
-    if let Some(keys) = table.get(server) {
-        return Ok(keys.handed_over());
-    }
-    let keys = make().ok_or_else(|| NO_KEYS.to_string())?;
-    table.insert(server.to_string(), keys.clone());
-    let written = kept::write(&table).is_some_and(|bytes| KEYS.write(&bytes));
-    if !written {
-        return Err(NO_KEYS.to_string());
-    }
-    Ok(keys.handed_over())
+    BOOK.lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .keys(&KEYS, server, make)
+        .map(|keys| keys.handed_over())
+        .ok_or_else(|| NO_KEYS.to_string())
 }
 
 /// A new P-256 key pair, made by Security.framework and never stored by it,
@@ -275,19 +288,24 @@ fn make() -> Option<Keys> {
     Keys::from_x963(whole.bytes(), &auth)
 }
 
-/// Forget `server`'s keys, so nothing it sends can be opened here. The
-/// address stays: Apple asks apps not to give it up, and no server holds it
-/// once each has forgotten this phone.
+/// `push_forget` on an iPhone: forget `server`'s keys, so nothing it sends
+/// can be opened here. One that can't be saved yet is owed, and saved with
+/// the next change (`kept::Book`). The address stays: Apple asks apps not to
+/// give it up, and no server holds it once each has forgotten this phone.
 pub fn forget(server: &str) {
-    let _held = KEYS_HELD.lock().unwrap_or_else(PoisonError::into_inner);
-    let mut table = kept::read(KEYS.read().as_deref());
-    if table.remove(server).is_some() {
-        if let Some(bytes) = kept::write(&table) {
-            KEYS.write(&bytes);
-        }
+    let saved = BOOK
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .forget(&KEYS, server);
+    if !saved {
+        eprintln!(
+            "linger: a server's notification keys couldn't be forgotten yet; the next change will"
+        );
     }
 }
 
+/// `push_opened` on an iPhone: the conversation the last tapped notification
+/// is about, once.
 pub fn opened() -> Option<PushOpened> {
     OPENED.lock().unwrap_or_else(PoisonError::into_inner).take()
 }
