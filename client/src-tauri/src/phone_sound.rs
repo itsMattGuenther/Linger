@@ -121,7 +121,7 @@ pub async fn sound_play(samples: Vec<i16>, output: Option<String>) -> bool {
 
 #[cfg(target_os = "android")]
 pub(crate) mod android {
-    use jni::objects::{JObject, JValue};
+    use jni::objects::{JClass, JObject, JValue};
     use jni::{AttachGuard, JNIEnv, JavaVM};
 
     use super::{from_android, SoundMode};
@@ -161,6 +161,34 @@ pub(crate) mod android {
             let _ = env.exception_clear();
         }
         answer
+    }
+
+    /// One of the app's own Kotlin classes, by its Java name, through the
+    /// app's class loader: a thread Rust attached sees only Android's
+    /// classes by name. `phone_call.rs`, `phone_push.rs` and
+    /// `phone_network.rs` reach their Kotlin through it.
+    pub(crate) fn app_class<'local>(
+        env: &mut JNIEnv<'local>,
+        app: &JObject,
+        name: &str,
+    ) -> Option<JClass<'local>> {
+        let loader = env
+            .call_method(app, "getClassLoader", "()Ljava/lang/ClassLoader;", &[])
+            .ok()?
+            .l()
+            .ok()?;
+        let name = env.new_string(name).ok()?;
+        let class = env
+            .call_method(
+                &loader,
+                "loadClass",
+                "(Ljava/lang/String;)Ljava/lang/Class;",
+                &[JValue::Object(&name)],
+            )
+            .ok()?
+            .l()
+            .ok()?;
+        Some(JClass::from(class))
     }
 
     fn service<'local>(

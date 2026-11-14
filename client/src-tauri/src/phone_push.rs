@@ -399,35 +399,16 @@ mod answers {
 
 #[cfg(target_os = "android")]
 mod android {
-    use jni::objects::{JClass, JString, JValue};
+    use jni::objects::{JString, JValue};
     use serde_json::{json, Value};
 
     use super::{answers, PushAddress, PushKeys, PushOpened};
-    use crate::phone_sound::android::with_env;
+    use crate::phone_sound::android::{app_class, with_env};
 
-    /// One request to `PushBridge.answer`, through the app's class loader
-    /// (a thread Rust attached sees only the system's classes by name).
+    /// One request to `PushBridge.answer`.
     fn ask(request: &Value) -> Value {
         let answer = with_env(|env, app| {
-            let loader = env
-                .call_method(app, "getClassLoader", "()Ljava/lang/ClassLoader;", &[])
-                .ok()?
-                .l()
-                .ok()?;
-            let name = env
-                .new_string("io.github.itsmattguenther.linger.PushBridge")
-                .ok()?;
-            let class = env
-                .call_method(
-                    &loader,
-                    "loadClass",
-                    "(Ljava/lang/String;)Ljava/lang/Class;",
-                    &[JValue::Object(&name)],
-                )
-                .ok()?
-                .l()
-                .ok()?;
-            let class = JClass::from(class);
+            let class = app_class(env, app, "io.github.itsmattguenther.linger.PushBridge")?;
             let text = env.new_string(request.to_string()).ok()?;
             let answer = env
                 .call_static_method(
