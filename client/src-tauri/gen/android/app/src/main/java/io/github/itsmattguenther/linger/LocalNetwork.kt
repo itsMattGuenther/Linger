@@ -26,13 +26,7 @@ object LocalNetwork {
   /** The app's screen, while it has one: asking needs it. */
   var activity: WeakReference<Activity>? = null
 
-  /**
-   * When the dialog went up, so a page that asks again while it's showing
-   * waits for the same answer instead of putting up a second one, which
-   * Android would turn down unseen. A minute on, an answer that never came
-   * (the screen went away under it) no longer holds anything up.
-   */
-  @Volatile private var askedAt = 0L
+  private val dialog = OneAsk()
 
   /**
    * `granted` when Linger may reach the phone's network: always before
@@ -48,15 +42,39 @@ object LocalNetwork {
     }
     if (!ask) return "denied"
     val screen = activity?.get() ?: return "denied"
-    val now = SystemClock.elapsedRealtime()
-    if (askedAt != 0L && now - askedAt < 60_000) return "asking"
-    askedAt = now
+    if (!dialog.claim(SystemClock.elapsedRealtime())) return "asking"
     screen.runOnUiThread { screen.requestPermissions(arrayOf(Manifest.permission.ACCESS_LOCAL_NETWORK), ASK) }
     return "asking"
   }
 
   /** The dialog has gone: the next ask may put up another. */
   fun answered() {
-    askedAt = 0L
+    dialog.answered()
+  }
+}
+
+/**
+ * One dialog at a time. A page that asks again while it's showing waits for
+ * the same answer instead of putting up a second one, which Android would
+ * turn down unseen. Rust asks from more than one thread at once, so whether
+ * one is up and marking it up are one step (#900 review). A minute on, an
+ * answer that never came (the screen went away under it) no longer holds
+ * anything up.
+ */
+class OneAsk(private val wait: Long = 60_000) {
+  private var askedAt: Long? = null
+
+  /** Whether the caller, at [now], may put the dialog up: once, until [answered] or [wait]. */
+  @Synchronized
+  fun claim(now: Long): Boolean {
+    val asked = askedAt
+    if (asked != null && now - asked < wait) return false
+    askedAt = now
+    return true
+  }
+
+  @Synchronized
+  fun answered() {
+    askedAt = null
   }
 }

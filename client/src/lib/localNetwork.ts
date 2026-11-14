@@ -13,6 +13,8 @@
  * itself, there's nothing to wait for.
  */
 
+import type { IceServer } from "../generated/IceServer";
+
 /**
  * What the phone says about reaching `server`, asking the person if `ask`
  * (`phone_local_network`): `allowed`, `public`, `unresolved`, `asking` or
@@ -119,4 +121,50 @@ function listen(answers: EventTarget): { answer: Promise<string>; stop: () => vo
     };
   });
   return { answer, stop };
+}
+
+/**
+ * The addresses a phone's voice call reaches (#842): the server's own, from
+ * the candidates in its offer, and its relay's, as `udp://host:port`,
+ * `tcp://host:port` or `turn://host:port` (the phone looks at the host and
+ * port; the scheme only says which). Android 17 holds a voice address on the
+ * phone's network back as it does a server's, and a call's address can be
+ * there when its server's isn't: a voice address the host set to a home
+ * one, or the emulator reaching this computer at 10.0.2.2.
+ */
+export function voiceAddresses(sdp: string, ice: readonly IceServer[]): string[] {
+  const found = new Set<string>();
+  for (const line of sdp.split(/\r?\n/)) {
+    const [, transport, host, port] = /^a=candidate:\S+ \d+ (\w+) \d+ (\S+) (\d+) typ\b/i.exec(line) ?? [];
+    if (transport && host && port) found.add(address(transport.toLowerCase(), host, port));
+  }
+  for (const server of ice) {
+    for (const url of server.urls) {
+      const [, scheme, host, port] = /^(stuns?|turns?):(\[[^\]]+\]|[^:?\s]+)(?::(\d+))?/i.exec(url.trim()) ?? [];
+      if (scheme && host) found.add(address("turn", host, port ?? (scheme.toLowerCase().endsWith("s") ? "5349" : "3478")));
+    }
+  }
+  return [...found];
+}
+
+function address(scheme: string, host: string, port: string): string {
+  const bare = host.replace(/^\[|\]$/g, "");
+  return `${scheme}://${bare.includes(":") ? `[${bare}]` : bare}:${port}`;
+}
+
+/**
+ * Wait, before a voice call reaches its addresses (`voiceAddresses`), until
+ * the phone has said whether Linger may, each as `reachLocal`. `null` when
+ * there's nothing to wait for, so a call off the phone starts as it always
+ * did. Never rejects.
+ */
+export function reachVoice(sdp: string, ice: readonly IceServer[]): Promise<void> | null {
+  if (phone === null || answer === "granted") return null;
+  const addresses = voiceAddresses(sdp, ice);
+  return (async () => {
+    for (const each of addresses) {
+      const reach = reachLocal(each);
+      if (typeof reach !== "string") await reach;
+    }
+  })();
 }

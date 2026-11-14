@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ANSWER_EVENT, askAboutLocalNetwork, reachLocal, resetLocalNetwork } from "./localNetwork";
+import { ANSWER_EVENT, askAboutLocalNetwork, reachLocal, reachVoice, resetLocalNetwork, voiceAddresses } from "./localNetwork";
 
 /** A phone that answers as told, and writes down what it was asked. */
 function phone(answers: Record<string, string>) {
@@ -112,5 +112,56 @@ describe("a server on the phone's own network (#842)", () => {
       throw new Error("no such command");
     }, new EventTarget());
     await expect(Promise.resolve(reachLocal(HOME))).resolves.toBe("clear");
+  });
+});
+
+describe("a voice call's addresses (#842 review)", () => {
+  const OFFER = [
+    "v=0",
+    "a=ice-ufrag:aaaa",
+    "m=audio 9 UDP/TLS/RTP/SAVPF 111",
+    "a=candidate:1 1 udp 2130706431 10.0.2.2 3479 typ host",
+    "a=candidate:2 1 UDP 2130706175 fd00::5 3479 typ host generation 0",
+    "a=candidate:3 1 tcp 1518280447 voice.linger.example 3479 typ host tcptype passive",
+    "a=candidate:1 1 udp 2130706431 10.0.2.2 3479 typ host",
+    "a=candidate:broken",
+    "a=end-of-candidates",
+    "",
+  ].join("\r\n");
+
+  it("are the offer's candidates and the relay's, each once", () => {
+    expect(voiceAddresses(OFFER, [
+      { urls: ["turn:relay.linger.example:3478?transport=udp", "turns:relay.linger.example?transport=tcp"], username: "u", credential: "c" },
+      { urls: ["stun:[fd00::7]:3478", "not a relay"], username: null, credential: null },
+    ])).toEqual([
+      "udp://10.0.2.2:3479",
+      "udp://[fd00::5]:3479",
+      "tcp://voice.linger.example:3479",
+      "turn://relay.linger.example:3478",
+      "turn://relay.linger.example:5349",
+      "turn://[fd00::7]:3478",
+    ]);
+    expect(voiceAddresses("v=0\r\n", [])).toEqual([]);
+  });
+
+  it("waits for nothing off the phone app, or once Linger's allowed", async () => {
+    expect(reachVoice(OFFER, [])).toBeNull();
+    phone({ "udp://10.0.2.2:3479": "allowed" });
+    await reachVoice(OFFER, []);
+    expect(reachVoice(OFFER, [])).toBeNull();
+  });
+
+  it("asks the phone about each address, and waits for the person's answer", async () => {
+    const { asked, said } = phone({ "udp://10.0.2.2:3479": "asking" });
+    let done = false;
+    const reach = reachVoice(OFFER, [{ urls: ["turn:relay.linger.example:3478"], username: null, credential: null }]);
+    void reach?.then(() => (done = true));
+    await vi.waitFor(() => expect(asked).toHaveLength(1));
+    await Promise.resolve();
+    expect(done).toBe(false);
+    said("granted");
+    await reach;
+    // Allowed for one, allowed for all: the rest needn't be asked about.
+    expect(asked).toEqual([{ server: "udp://10.0.2.2:3479", ask: true }]);
   });
 });

@@ -23,9 +23,11 @@ use std::time::Duration;
 /// and says so if it can't.
 const LOOKUP: Duration = Duration::from_secs(5);
 
-/// Whether Linger may reach `server` (a base address, `https://linger.example`)
-/// from this phone, asking the person, with `ask`, when it's on their network
-/// and they haven't allowed it:
+/// Whether Linger may reach `server` from this phone: a server's base
+/// address (`https://linger.example`), or an address its voice call reaches
+/// (`udp://10.0.2.2:3479`, `turn://relay.example:3478`, from
+/// `voiceAddresses` in `localNetwork.ts`). Asks the person, with `ask`, when
+/// it's on their network and they haven't allowed it:
 ///
 /// - `allowed`: it may, and so may every server, since the permission is the
 ///   app's.
@@ -214,6 +216,14 @@ mod tests {
         assert_eq!(on_this_network("https://167.99.152.132").await, Some(false));
         // The phone itself (`adb reverse` in development) isn't its network.
         assert_eq!(on_this_network("http://localhost:8420").await, Some(false));
+        // A voice call's addresses, as the page writes them (#900 review).
+        assert_eq!(on_this_network("udp://10.0.2.2:3479").await, Some(true));
+        assert_eq!(on_this_network("udp://[fd00::5]:3479").await, Some(true));
+        assert_eq!(
+            on_this_network("tcp://167.99.152.132:3479").await,
+            Some(false)
+        );
+        assert_eq!(on_this_network("turn://localhost:3478").await, Some(false));
         assert_eq!(on_this_network("not an address").await, None);
         assert_eq!(on_this_network("https://nothing.invalid").await, None);
     }
