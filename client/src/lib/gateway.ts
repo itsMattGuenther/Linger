@@ -68,6 +68,7 @@ import { clampVolume, loadVoiceVolumes, type RefusedMicrophone, saveVoiceVolume 
 import { ApiError, type AuthedApi } from "./api";
 import { START, advance, type Position } from "./catchup";
 import { hostsHere } from "./host";
+import { reachLocal } from "./localNetwork";
 import { isQuietLine } from "./quietLines";
 import { toggled, withGroup } from "./reactions";
 
@@ -1493,6 +1494,11 @@ async function open(api: AuthedApi): Promise<void> {
   // that arrived meanwhile runs next and closes what we just opened.
   const token = await api.accessToken();
   link.givenToken = token.token;
+  // The connection is the shell's, and Android 17 would hold it back from a
+  // server on the phone's own network without saying so: the same answer
+  // the page's requests wait for comes first (#842, localNetwork.ts).
+  const reaching = reachLocal(server);
+  if (typeof reaching !== "string") await reaching;
   await invoke("gateway_connect", {
     baseUrl: server,
     token: token.token,

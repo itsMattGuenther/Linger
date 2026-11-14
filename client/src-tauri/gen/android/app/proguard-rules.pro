@@ -32,3 +32,8 @@
 # through JNI (src-tauri/src/phone_push.rs). scripts/android-jni.mjs checks a
 # release build keeps it.
 -keep class io.github.itsmattguenther.linger.PushBridge { *; }
+
+# A server on the phone's own network (#842): Rust calls LocalNetwork.state
+# by its Java name, through JNI (src-tauri/src/phone_network.rs).
+# scripts/android-jni.mjs checks a release build keeps it.
+-keep class io.github.itsmattguenther.linger.LocalNetwork { *; }

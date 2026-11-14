@@ -59,6 +59,7 @@ import type { VoteRequest } from "../generated/VoteRequest";
 import type { UseSignInLinkRequest } from "../generated/UseSignInLinkRequest";
 import type { User } from "../generated/User";
 import type { UserId } from "../generated/UserId";
+import { reachLocal } from "./localNetwork";
 
 /** Everything REST lives under this prefix (PROTOCOL §1). */
 const API_PREFIX = "/api/v1";
@@ -100,6 +101,13 @@ export class UnconfirmedError extends TransportError {
     this.name = "UnconfirmedError";
   }
 }
+
+/**
+ * Nothing came back at all: the request never reached a server that
+ * answered. Kept apart from an answer that wasn't Linger's, so only this is
+ * put down to a phone holding the server back (#842).
+ */
+class NoAnswer extends TransportError {}
 
 /**
  * Every error code the client recognises. This list exists so a code coming off
@@ -178,7 +186,7 @@ async function send(
       signal: options.signal,
     });
   } catch {
-    throw new TransportError(
+    throw new NoAnswer(
       `Couldn't reach ${baseUrl}. Check the address and that the server is running.`,
     );
   }
@@ -193,11 +201,26 @@ async function send(
   );
 }
 
-/** Bound response headers and bodies alike, so pending controls always recover. */
+/**
+ * What a request to a server on the phone's own network says when the
+ * person hasn't let Linger reach it there (#842, `localNetwork.ts`): it
+ * never fails by itself, it only waits.
+ */
+const LOCAL_NETWORK_BLOCKED =
+  "Your phone isn't letting Linger reach this server, which is on the same network as the phone. Allow Nearby devices for Linger in the phone's settings, then try again.";
+
+/**
+ * Bound response headers and bodies alike, so pending controls always
+ * recover. A phone may first ask the person whether Linger may reach
+ * `baseUrl` at all (`localNetwork.ts`), before the clock starts.
+ */
 async function withDeadline<T>(
+  baseUrl: string,
   options: RequestOptions,
   request: (bounded: RequestOptions) => Promise<T>,
 ): Promise<T> {
+  const reaching = reachLocal(baseUrl);
+  const reach = typeof reaching === "string" ? reaching : await reaching;
   const controller = new AbortController();
   const cancel = (): void => controller.abort();
   if (options.signal?.aborted) cancel();
@@ -207,6 +230,7 @@ async function withDeadline<T>(
   try {
     return await request({ ...options, signal: controller.signal });
   } catch (error) {
+    if (reach === "blocked" && error instanceof NoAnswer) throw new TransportError(LOCAL_NETWORK_BLOCKED);
     if (expired) throw new UnconfirmedError(
       "The server did not confirm the request. Check whether it arrived before trying again.",
     );
@@ -223,7 +247,7 @@ async function requestJson<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  return withDeadline(options, async (bounded) => {
+  return withDeadline(baseUrl, options, async (bounded) => {
   const response = await send(baseUrl, method, path, bounded);
   // The one place the wire becomes typed. `Response.json()` is untyped, and `T`
   // is always a ts-rs type generated from the server's own definition, so a
@@ -239,7 +263,7 @@ async function requestVoid(
   path: string,
   options: RequestOptions = {},
 ): Promise<void> {
-  await withDeadline(options, (bounded) => send(baseUrl, method, path, bounded));
+  await withDeadline(baseUrl, options, (bounded) => send(baseUrl, method, path, bounded));
 }
 
 /**
@@ -253,7 +277,7 @@ async function requestJsonOrNothing<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T | null> {
-  return withDeadline(options, async (bounded) => {
+  return withDeadline(baseUrl, options, async (bounded) => {
     const response = await send(baseUrl, method, path, bounded);
     if (response.status === 204) return null;
     // Typed as `requestJson` types it: `T` is a ts-rs type from the server.
@@ -336,7 +360,7 @@ export class PublicApi {
    * from before it), or one that can't be read, says nothing about apps.
    */
   async health(signal?: AbortSignal): Promise<{ oldestClient: string | null }> {
-    const said = await withDeadline({ signal }, async (bounded) => {
+    const said = await withDeadline(this.baseUrl, { signal }, async (bounded) => {
       const response = await send(this.baseUrl, "GET", "/health", bounded);
       return response.status === 204 ? null : await response.json().catch(() => null);
     });

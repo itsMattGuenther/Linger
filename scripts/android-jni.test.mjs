@@ -33,6 +33,14 @@ const KEPT = RELEASED.replace(
       type          : '(Landroid/content/Context;Ljava/lang/String;)Ljava/lang/String;'
       access        : 0x0019 (PUBLIC STATIC FINAL)
   Virtual methods   -
+Class #10           -
+  Class descriptor  : 'Lio/github/itsmattguenther/linger/LocalNetwork;'
+  Direct methods    -
+    #0              : (in Lio/github/itsmattguenther/linger/LocalNetwork;)
+      name          : 'state'
+      type          : '(Landroid/content/Context;Z)Ljava/lang/String;'
+      access        : 0x0019 (PUBLIC STATIC FINAL)
+  Virtual methods   -
 `;
 /** What Rust crossed by when 0.5.4 was built: the call bar only. */
 const AT_054 = CROSSINGS.filter((each) => each.class === "io.github.itsmattguenther.linger.VoiceCallService");

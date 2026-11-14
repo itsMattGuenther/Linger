@@ -455,7 +455,11 @@ of the porch artwork ("Icons and Windows packaging" above).
 
 A server on this computer is reachable from the virtual phone after
 `adb reverse tcp:8420 tcp:8420`, as `http://localhost:8420`. Dev builds may use
-`http://localhost`; release builds can't, as on desktop.
+`http://localhost`; release builds can't, as on desktop. The emulator's other
+name for this computer, `10.0.2.2`, is a home-network address to Android 17,
+so Linger asks for Nearby devices before reaching it, as it would for a server
+at home (#842); a voice address there (`LINGER_VOICE_ADDRESS=10.0.2.2:3479`)
+needs that too, since `adb reverse` carries no UDP.
 
 **If `adb` starts crashing every few seconds** during `pnpm tauri android dev`
 (seen on one machine, 2026-10-02: one core dump of `adb -L tcp:5037

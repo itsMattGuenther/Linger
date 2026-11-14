@@ -21,6 +21,12 @@
          ask before it may show (POST_NOTIFICATIONS), and before phone
          notifications may (#830, LingerMessagingService), asked once, when
          somebody turns those on (SPEC §4.15). -->
+    <!-- A server on the phone's own network, such as one at home (#842):
+         Android 17 blocks reaching it until the person allows it, under
+         "Nearby devices". Asked only when a server's address is on the
+         Wi-Fi or Ethernet the phone is on (src-tauri/src/phone_network.rs,
+         LocalNetwork); a server on the internet never asks. -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />

@@ -1211,6 +1211,16 @@ to a key that never leaves the old one, and on an iPhone they're in the Keychain
 for that phone only (#790), and messages and pictures live on the server. A new phone
 signs in again.
 
+**A server at home.** A phone asks before Linger reaches a server on the network the
+phone is on, such as one run at home and reached at a home address (#842). An iPhone
+asks by itself, the first time. Android asks from Android 17, under **Nearby devices**,
+and only when a server's address turns out to be on the phone's Wi-Fi or Ethernet:
+never for a server on the internet. Without it, Android 17 doesn't refuse the
+connection, it just never answers, so the ask comes before the first request and
+doesn't count against its time. Told no, Linger still tries, since a server reached
+through a VPN gets through anyway, and when it can't, it says to allow Nearby devices
+rather than only that the server didn't answer.
+
 **Getting it, before the stores** (Matt, 2026-10-03). Android friends install the
 signed `.apk` from each GitHub release; Android asks them once to allow installs
 from their browser. It doesn't update itself: a newer release installs over the old
