@@ -355,13 +355,17 @@ export class PageVoice {
     // without a word, until the person allows it, and a call's address can
     // be there when its server's isn't: the phone is asked before the
     // connection reaches it (#842, localNetwork.ts).
+    const microphone = call.mic;
     const reaching = reachVoice(sdp, call.ice);
     if (reaching !== null || call.reaching !== null) {
       const mine = (call.reaching ?? Promise.resolve()).then(() => reaching ?? undefined);
       call.reaching = mine;
       await mine;
       if (call.reaching === mine) call.reaching = null;
-      if (this.calls.get(server) !== call || call.room === null || call.mic === null) return;
+      // Left meanwhile, or left and joined again: every join opens the
+      // microphone afresh, so this offer was for a call that's over (#900
+      // review).
+      if (this.calls.get(server) !== call || call.room === null || call.mic !== microphone) return;
     }
     call.bits = bitrate;
     const named = new Map(tracks.map((track) => [track.mid, track.session_id]));

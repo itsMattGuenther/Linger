@@ -257,6 +257,17 @@ on a world that has changed.
   only while that's still its address, with a test that changes it while
   the relay holds the answer.
 
+- **#900: an offer that waited on the local network dialog could set up the
+  next call.** After the wait it checked that a call was going, not that it
+  was the same call: leaving and joining again meanwhile reuses the call, so
+  the old offer went on into the new one and could keep it from connecting.
+  Caught by Greptile. *Missed because* the check after the wait was the
+  start's check again, and no test left voice while an offer waited.
+  *Changed:* the offer keeps the microphone it came with, and every join
+  opens a new one, so a different one means another call
+  (`PageVoice.offer`), with a test of leaving and joining while the dialog
+  is up (`pageVoice.test.ts`).
+
 ## A check nobody could run before it mattered
 
 - **#812: the iPhone build's App Group check could never pass.** The new

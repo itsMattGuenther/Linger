@@ -104,7 +104,8 @@ describe("a voice address on the phone's own network (#842)", () => {
     const voice = new PageVoice(
       { send: async () => undefined, emit: () => undefined },
       {
-        getMicrophone: async () => new EventTarget() as unknown as MediaStream,
+        // A microphone with no tracks: each join opens a new one.
+        getMicrophone: async () => Object.assign(new EventTarget(), { getAudioTracks: () => [], getTracks: () => [] }) as unknown as MediaStream,
         connect: (config) => {
           opened.push((config.iceServers ?? []).flatMap((server) => server.urls));
           const conn = Object.assign(new EventTarget(), {
@@ -136,27 +137,39 @@ describe("a voice address on the phone's own network (#842)", () => {
       return address === "udp://10.0.2.2:3479" ? (ask ? "asking" : "denied") : "public";
     }, page);
     const { voice, opened, told } = engine();
-    // The microphone has no tracks here: `getAudioTracks` on a stand-in.
-    Object.defineProperty(EventTarget.prototype, "getAudioTracks", { value: () => [], configurable: true });
-    try {
-      await voice.join(SERVER, "s-me", "r-general", [{ urls: ["turn:relay.example:3478"], username: "u", credential: "c" }]);
-      const first = voice.offer(SERVER, offer("aaaa"), [{ mid: "1", session_id: "s-eli" }], null);
-      await vi.waitFor(() => expect(asked).toContain("udp://10.0.2.2:3479"));
-      // A restart's offer while the person reads the dialog waits behind it.
-      const second = voice.offer(SERVER, offer("cccc"), [{ mid: "1", session_id: "s-eli" }], null);
-      await new Promise((settle) => setTimeout(settle, 10));
-      expect(opened).toEqual([]);
-      expect(told).toEqual([]);
+    await voice.join(SERVER, "s-me", "r-general", [{ urls: ["turn:relay.example:3478"], username: "u", credential: "c" }]);
+    void voice.offer(SERVER, offer("aaaa"), [{ mid: "1", session_id: "s-eli" }], null);
+    await vi.waitFor(() => expect(asked).toContain("udp://10.0.2.2:3479"));
+    // A restart's offer while the person reads the dialog waits behind it.
+    void voice.offer(SERVER, offer("cccc"), [{ mid: "1", session_id: "s-eli" }], null);
+    await new Promise((settle) => setTimeout(settle, 10));
+    expect(opened).toEqual([]);
+    expect(told).toEqual([]);
 
-      page.dispatchEvent(new CustomEvent(ANSWER_EVENT, { detail: "granted" }));
-      await vi.waitFor(() => expect(told).toHaveLength(2));
-      expect(told.map((sdp) => /a=ice-ufrag:(\w+)/.exec(sdp)?.[1])).toEqual(["aaaa", "cccc"]);
-      expect(opened).toEqual([["turn:relay.example:3478"]]);
-      expect(asked.filter((each) => each === "udp://10.0.2.2:3479")).toHaveLength(1);
-      void first;
-      void second;
-    } finally {
-      Reflect.deleteProperty(EventTarget.prototype, "getAudioTracks");
-    }
+    page.dispatchEvent(new CustomEvent(ANSWER_EVENT, { detail: "granted" }));
+    await vi.waitFor(() => expect(told).toHaveLength(2));
+    expect(told.map((sdp) => /a=ice-ufrag:(\w+)/.exec(sdp)?.[1])).toEqual(["aaaa", "cccc"]);
+    expect(opened).toEqual([["turn:relay.example:3478"]]);
+    expect(asked.filter((each) => each === "udp://10.0.2.2:3479")).toHaveLength(1);
+  });
+
+  it("drops an offer for a call left while the dialog was up, and takes the next call's (#900 review)", async () => {
+    const page = new EventTarget();
+    askAboutLocalNetwork(async (_address, ask) => (ask ? "asking" : "denied"), page);
+    const { voice, told } = engine();
+    await voice.join(SERVER, "s-me", "r-general", []);
+    void voice.offer(SERVER, offer("aaaa"), [{ mid: "1", session_id: "s-eli" }], null);
+    await new Promise((settle) => setTimeout(settle, 10));
+    // Left, and joined again in the same room, while the person reads the dialog.
+    await voice.leave(SERVER);
+    await voice.join(SERVER, "s-me-2", "r-general", []);
+    page.dispatchEvent(new CustomEvent(ANSWER_EVENT, { detail: "granted" }));
+    await new Promise((settle) => setTimeout(settle, 10));
+    expect(told).toEqual([]);
+
+    // The stand-in connection never finishes taking an offer, so it isn't waited for.
+    void voice.offer(SERVER, offer("cccc"), [{ mid: "1", session_id: "s-eli" }], null);
+    await vi.waitFor(() => expect(told).toHaveLength(1));
+    expect(told[0]).toContain("a=ice-ufrag:cccc");
   });
 });

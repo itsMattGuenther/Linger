@@ -112,8 +112,9 @@ Gaps: Checked when asked, not when it happens; Counted after the work it limits
 
 A check made before something slow (a request, a download, a prompt) can be
 stale after it: an update restarted somebody out of a call they'd joined
-meanwhile (#794). A limit counted after the work let a table grow (#822).
-Check again right before acting, and test the state changing in between.
+meanwhile (#794), and an offer that waited on a dialog set up the next call
+(#900). A limit counted after the work let a table grow (#822). Check again,
+that it's the same thing, right before acting, and test it changing between.
 
 ### Is it tested going wrong partway, not only going through?
 
