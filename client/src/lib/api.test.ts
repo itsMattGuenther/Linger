@@ -5,6 +5,7 @@ import type { ErrorCode } from "../generated/ErrorCode";
 import type { ErrorEnvelope } from "../generated/ErrorEnvelope";
 import type { RefreshResponse } from "../generated/RefreshResponse";
 import { ApiError, AuthedApi, BorrowedTokens, type Lent, PublicApi, TransportError } from "./api";
+import { ANSWER_EVENT, askAboutLocalNetwork, resetLocalNetwork } from "./localNetwork";
 
 const BASE_URL = "https://linger.example";
 const FRESH: RefreshResponse = {
@@ -33,7 +34,7 @@ function client() {
   return { api, fetcher, onTokens, onSignedOut };
 }
 
-afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); resetLocalNetwork(); });
 
 describe("sign-in renewal", () => {
   it.each([
@@ -327,6 +328,50 @@ describe("request deadlines (#118)", () => {
     const result = Promise.allSettled([api.get("/rooms")]);
     await vi.advanceTimersByTimeAsync(30_000);
     expect(await result).toEqual([{ status: "rejected", reason: expect.objectContaining({ message: expect.stringContaining("did not confirm") }) }]);
+  });
+});
+
+describe("a server on the phone's own network (#842)", () => {
+  /** A phone whose server is on its network, and that asks the person about it. */
+  function askingPhone(answer: string) {
+    const page = new EventTarget();
+    askAboutLocalNetwork(async (_server, ask) => (ask ? "asking" : answer), page);
+    return () => page.dispatchEvent(new CustomEvent(ANSWER_EVENT, { detail: answer }));
+  }
+
+  it("waits for the person's answer before the request's clock starts", async () => {
+    vi.useFakeTimers();
+    const say = askingPhone("granted");
+    const { api, fetcher } = client();
+    fetcher.mockResolvedValueOnce(Response.json([]));
+    const rooms = api.get("/rooms");
+    // A long look at the dialog: longer than any request may take.
+    await vi.advanceTimersByTimeAsync(45_000);
+    expect(fetcher).not.toHaveBeenCalled();
+    say();
+    await expect(rooms).resolves.toEqual([]);
+  });
+
+  it("after a no, a request that can't get through says what to allow", async () => {
+    vi.useFakeTimers();
+    const say = askingPhone("denied");
+    const { api, fetcher } = client();
+    // Android holds the connection back: it waits, and never fails by itself.
+    fetcher.mockImplementation((_url, options) => new Promise((_resolve, reject) => {
+      options?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+    }));
+    const rooms = Promise.allSettled([api.get("/rooms")]);
+    await vi.advanceTimersByTimeAsync(0);
+    say();
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(await rooms).toEqual([{ status: "rejected", reason: expect.objectContaining({ message: expect.stringContaining("Allow Nearby devices for Linger") }) }]);
+    // And a server that answers, answers: the no changes only the words.
+    fetcher.mockReset();
+    fetcher.mockResolvedValueOnce(Response.json([]));
+    await expect(api.get("/rooms")).resolves.toEqual([]);
+    // Something answered, so nothing held it back: its own words stand.
+    fetcher.mockResolvedValueOnce(new Response("<html>a router's page</html>", { status: 502 }));
+    await expect(api.get("/rooms")).rejects.toThrow("not in Linger's format");
   });
 });
 

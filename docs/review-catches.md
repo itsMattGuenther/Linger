@@ -257,6 +257,17 @@ on a world that has changed.
   only while that's still its address, with a test that changes it while
   the relay holds the answer.
 
+- **#900: an offer that waited on the local network dialog could set up the
+  next call.** After the wait it checked that a call was going, not that it
+  was the same call: leaving and joining again meanwhile reuses the call, so
+  the old offer went on into the new one and could keep it from connecting.
+  Caught by Greptile. *Missed because* the check after the wait was the
+  start's check again, and no test left voice while an offer waited.
+  *Changed:* the offer keeps the microphone it came with, and every join
+  opens a new one, so a different one means another call
+  (`PageVoice.offer`), with a test of leaving and joining while the dialog
+  is up (`pageVoice.test.ts`).
+
 ## A check nobody could run before it mattered
 
 - **#812: the iPhone build's App Group check could never pass.** The new
@@ -754,6 +765,15 @@ it, or another program, runs at the same time.
   turn comes, so passing a whole copy built from the screen doesn't fit the
   type; a unit test of three at once, and a browser test of two taps while
   the server is slow (`?pushslow`).
+- **#900: two requests could each put up Android 17's local network
+  dialog.** Kotlin checked whether one was up and marked it up in two
+  steps, and Rust asks from more than one thread at once, so both could
+  see none and both ask; Android turns the second down unseen. Caught by
+  Greptile. *Missed because* the page's own waiting was tested through a
+  stand-in phone, and the Kotlin had no test. *Changed:* the check and the
+  mark are one locked step (`OneAsk`, `LocalNetwork.kt`), with a test of
+  sixteen threads claiming at once (`OneAskTest.kt`) that fails with the
+  lock taken out.
 
 ## Counted after the work it limits
 
@@ -859,3 +879,24 @@ it, or another program, runs at the same time.
   has its own life, and the tests only had the one. *Changed:* no copy: the
   page reads back the file the window reads (`share_window_list_read`), which
   signing out of every server empties.
+
+## One connection checked when the app opens several
+
+The app reaches a server by more than one road: the page's requests, the
+gateway, uploads, pictures, voice and its relay. A rule about reaching a
+server holds only if every road takes it.
+
+- **#900: voice never asked to reach a voice address on the phone's
+  network.** Android 17's local network check asked before the page's
+  requests and the gateway reached a server, but a call reaches the
+  addresses in the server's offer and its relay's, which can be on the
+  phone's network when the server's web address isn't: with the server at
+  `localhost` and voice at 10.0.2.2, nothing asked and voice couldn't
+  connect. Caught by Greptile. *Missed because* the rule was written for
+  "the server", and the emulator test granted the permission by hand
+  before joining voice. *Changed:* the offer's candidates and the relay's
+  addresses are checked before the connection reaches them, in the order
+  offers come (`voiceAddresses` and `reachVoice` in `localNetwork.ts`,
+  `pageVoice.ts`), with a test that no connection opens before the answer
+  (`pageVoice.test.ts`), and a question in
+  [pr-questions.md](pr-questions.md).

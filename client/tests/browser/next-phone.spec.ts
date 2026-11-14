@@ -1623,6 +1623,24 @@ test("voice: the call bar shows while in voice, follows mute, and its buttons wo
   await expect(page.getByRole("group", { name: "Voice in this conversation" }).getByRole("button", { name: "Join" })).toBeVisible();
 });
 
+// Android starts the call bar's service only once Linger may use the
+// microphone, and stopped the app when the bar came while Android was still
+// asking (#842): joining showed you in voice at once, and the bar with it.
+test("voice: the call bar waits for the microphone to open (#842)", async ({ page }) => {
+  await open(page, "?one&shell=phone&micwait");
+  await settled(page);
+  await room(page, "general").click();
+  await page.getByRole("group", { name: "Voice in this conversation" }).getByRole("button", { name: "Join" }).click();
+  await expect(page.getByRole("group", { name: "Your voice" }).first()).toBeVisible();
+  // The join has got as far as the microphone: it asked for the relay first.
+  await expect.poll(async () => (await did(page)).some((line) => line.endsWith("/voice/ice"))).toBe(true);
+  const bars = async () => (await did(page)).filter((line) => line.startsWith("phone_call_bar:") && line !== 'phone_call_bar:{"bar":null}');
+  expect(await bars()).toEqual([]);
+
+  await page.evaluate(() => window.core?.allowMicrophone());
+  await expect.poll(async () => (await bars()).at(-1)).toBe('phone_call_bar:{"bar":{"where":"#general","muted":false,"deafened":false}}');
+});
+
 // A shared file (#703). On an iPhone, Download handed to Safari opened a blank
 // tab that seemed to do nothing, and the address shown after couldn't be
 // selected with a finger. Now the iPhone's shell fetches the file and its

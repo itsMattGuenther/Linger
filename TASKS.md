@@ -689,7 +689,24 @@ macOS runners, or a friend's Mac.
   (SPEC §4.15; the opt-in was dropped 2026-10-03): Android's
   `allowBackup="false"` does it there, and on the iPhone the app marks its
   folders "don't back up" and keeps its sign-ins to that phone (#790,
-  T-1604), for TestFlight testers to confirm.
+  T-1604), for TestFlight testers to confirm. **It targets Android 17 (API
+  37)** since #842 (2026-11-14; Play requires it from August 2027). What that
+  changed for Linger: Android 17 holds back a connection to a server on the
+  phone's own Wi-Fi without a word, so the app asks for Nearby devices for
+  such a server, and only then (`phone_network.rs`, `LocalNetwork.kt`,
+  `lib/localNetwork.ts`, SPEC §4.15); and sound in the background needs a
+  foreground service started while the app is on screen, which the call bar
+  is. In the emulator on Android 17: voice kept sending and playing with the
+  phone locked (a tone played with no call was silenced, so the check
+  works), notifications arrived and opened their conversation, a photo sent,
+  and "Open in Linger" filled the box. Joining voice before the microphone
+  was allowed closed the app: the call bar's service started while Android
+  was still asking, which Android refuses from target 34, so 0.5.4 did it
+  too. The bar now waits for the microphone. Owed: the same checks on Matt's
+  Pixel through Play's internal test.
+  *Release notes, 0.5.5:* the Android app targets Android 17; a server at a
+  home address asks once for Nearby devices; and joining voice on an Android
+  phone that hadn't allowed the microphone no longer closes the app.
   *Accept:* the app opens on a real phone, signs in, and stays connected across
   a wifi-to-mobile-data switch.
 

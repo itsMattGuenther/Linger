@@ -67,6 +67,12 @@ class VoiceCallService : Service() {
         }
         return
       }
+      // Android starts a microphone service only for an app that may use the
+      // microphone, and stops the app when asked sooner, as when the bar came
+      // while Android was still asking (#842). The page shows the bar once
+      // the microphone is open; this holds if it ever doesn't. A service
+      // that's been started can't be called off without that stop too.
+      if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
       askToShow()
       val start = Intent(context, VoiceCallService::class.java)
         .putExtra(PLACE, place)

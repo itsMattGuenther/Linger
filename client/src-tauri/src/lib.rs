@@ -47,6 +47,10 @@ mod phone_scene;
 // notification is encrypted to, and the conversation a tapped one opens.
 #[cfg(any(mobile, test))]
 mod phone_push;
+// A server on the phone's own network (#842): Android 17 asks the person
+// before Linger reaches one. Tests read which addresses count here too.
+#[cfg(any(mobile, test))]
+mod phone_network;
 // Downloads on an iPhone (#703): fetched by the app and offered in its share sheet.
 #[cfg(any(mobile, test))]
 mod phone_save;
@@ -573,6 +577,7 @@ fn phone_app() -> tauri::Builder<tauri::Wry> {
             deep_link::link_offered,
             graphics::graphics_started,
             phone_call::phone_call_bar,
+            phone_network::phone_local_network,
             phone_push::push_permission,
             phone_push::push_address,
             phone_push::push_keys,

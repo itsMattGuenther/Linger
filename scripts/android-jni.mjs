@@ -40,6 +40,14 @@ export const CROSSINGS = [
     type: "(Landroid/content/Context;Ljava/lang/String;)Ljava/lang/String;",
     from: "client/src-tauri/src/phone_push.rs",
   },
+  {
+    // Rust calls it (phone_network.rs): whether Linger may reach a server on
+    // the phone's own network, and asking (#842).
+    class: "io.github.itsmattguenther.linger.LocalNetwork",
+    method: "state",
+    type: "(Landroid/content/Context;Z)Ljava/lang/String;",
+    from: "client/src-tauri/src/phone_network.rs",
+  },
 ];
 
 /**

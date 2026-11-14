@@ -54,6 +54,7 @@ const COMMANDS: &[&str] = &[
     "phone_sound_mode",
     "phone_buzz",
     "phone_call_bar",
+    "phone_local_network",
     "phone_voice_ended",
     "phone_text_scale",
     "phone_save",

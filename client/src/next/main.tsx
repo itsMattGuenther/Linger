@@ -16,6 +16,7 @@ import { refuseStrayDrops } from "../lib/drops";
 import { voiceEndedAwayFrom } from "../lib/gateway";
 import { hearShellDrops, takeDropsFromTheShell } from "../lib/shellDrops";
 import { voiceInThePage } from "../lib/ipc";
+import { askAboutLocalNetwork } from "../lib/localNetwork";
 import { followMediaKeys } from "../lib/mediaKeys";
 import { setNoNotifications } from "../lib/notify";
 import { type DeviceSound, followDeviceSound, unlockAudioOnGesture } from "../lib/sound";
@@ -40,6 +41,10 @@ if (onPhone()) {
   // Chimes follow the phone's ringer: silent is silent, vibrate buzzes, and
   // both go out as notification sounds (src-tauri/src/phone_sound.rs).
   if (isTauri()) {
+    // A server on the phone's own network, such as one at home: Android 17
+    // asks the person before Linger may reach it, and only then (#842,
+    // lib/localNetwork.ts, src-tauri/src/phone_network.rs).
+    askAboutLocalNetwork((server, ask) => invoke("phone_local_network", { server, ask }), window);
     followDeviceSound(
       async (): Promise<DeviceSound> => {
         const mode: unknown = await invoke("phone_sound_mode");

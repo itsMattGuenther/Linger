@@ -344,6 +344,12 @@ Nothing else: no location (photos and videos lose theirs before upload),
 contacts, calendar, financial, health, browsing history, or crash logs
 and diagnostics; no analytics, ads or marketing purpose anywhere.
 
+The app targets Android 17 from 0.5.5 (#842; Play requires it from August
+2027), and with it declares Android 17's local network permission, which
+Play's listing shows under Nearby devices. It changes none of the answers
+above: Linger asks for it only to reach a server on the phone's own network
+(SPEC §4.15), and sends nothing new anywhere.
+
 The App Store's privacy answers (App Store Connect → the app → App Privacy)
 move the same way now the iPhone has notifications (#889): add
 **Identifiers → Device ID**, the push address Apple gives the phone, which

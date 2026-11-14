@@ -60,9 +60,9 @@ Gaps: Two at once
 
 Two share sign-ins at once signed the app out (#822). A release job run
 again undated a release (#794). Turns per server let one delete the push
-address all of them share (#894), and a second quick tap undid the first
-(#894). Take turns or share a lock, around all they share, and test two at
-once, and one run twice.
+address all of them share (#894), a second quick tap undid the first
+(#894), and two requests both put up one dialog (#900). Take turns or share
+a lock, around all they share, and test two at once, and one run twice.
 
 ### What happens offline, in the background, or just restarted?
 
@@ -112,8 +112,9 @@ Gaps: Checked when asked, not when it happens; Counted after the work it limits
 
 A check made before something slow (a request, a download, a prompt) can be
 stale after it: an update restarted somebody out of a call they'd joined
-meanwhile (#794). A limit counted after the work let a table grow (#822).
-Check again right before acting, and test the state changing in between.
+meanwhile (#794), and an offer that waited on a dialog set up the next call
+(#900). A limit counted after the work let a table grow (#822). Check again,
+that it's the same thing, right before acting, and test it changing between.
 
 ### Is it tested going wrong partway, not only going through?
 
@@ -236,6 +237,17 @@ before a registration failed were never forgotten (#894). Look for the
 files, timers, listeners and entries it makes, after it succeeds, fails and
 is cancelled; trace the failing path too: Node's `process.exit` skips
 `finally` (#846).
+
+### Does a rule about reaching a server hold for every connection the app opens?
+
+For: page, shell, phone
+Gaps: One connection checked when the app opens several
+
+A phone asked before Linger reached a server at home, but voice reaches
+addresses of its own, from the server's offer and its relay, and nothing
+asked about them (#900). The app reaches a server through its requests, the
+gateway, uploads, pictures, voice and its relay: check the rule holds on
+each one it's about.
 
 ## Kinds a check covers
 

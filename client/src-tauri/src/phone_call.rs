@@ -44,35 +44,19 @@ pub fn phone_call_bar(bar: Option<CallBar>) {
 
 #[cfg(target_os = "android")]
 mod android {
-    use jni::objects::{JClass, JObject, JValue};
+    use jni::objects::{JObject, JValue};
 
     use super::CallBar;
-    use crate::phone_sound::android::with_env;
+    use crate::phone_sound::android::{app_class, with_env};
 
-    /// `VoiceCallService.update(context, place, muted, deafened)`. The class
-    /// is the app's own, so it's found through the app's class loader: a
-    /// thread Rust attached sees only Android's classes by name.
+    /// `VoiceCallService.update(context, place, muted, deafened)`.
     pub fn update(bar: Option<&CallBar>) -> Option<()> {
         with_env(|env, app| {
-            let loader = env
-                .call_method(app, "getClassLoader", "()Ljava/lang/ClassLoader;", &[])
-                .ok()?
-                .l()
-                .ok()?;
-            let name = env
-                .new_string("io.github.itsmattguenther.linger.VoiceCallService")
-                .ok()?;
-            let class = env
-                .call_method(
-                    &loader,
-                    "loadClass",
-                    "(Ljava/lang/String;)Ljava/lang/Class;",
-                    &[JValue::Object(&name)],
-                )
-                .ok()?
-                .l()
-                .ok()?;
-            let class = JClass::from(class);
+            let class = app_class(
+                env,
+                app,
+                "io.github.itsmattguenther.linger.VoiceCallService",
+            )?;
             let place = match bar {
                 Some(bar) => JObject::from(env.new_string(&bar.place).ok()?),
                 None => JObject::null(),

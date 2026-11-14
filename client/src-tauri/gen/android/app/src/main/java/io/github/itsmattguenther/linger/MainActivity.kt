@@ -37,6 +37,7 @@ class MainActivity : TauriActivity() {
     super.onCreate(savedInstanceState)
     VoiceCallService.activity = WeakReference(this)
     PushBridge.activity = WeakReference(this)
+    LocalNetwork.activity = WeakReference(this)
     val actions = IntentFilter().apply {
       addAction(VoiceCallService.MUTE)
       addAction(VoiceCallService.UNMUTE)
@@ -78,14 +79,26 @@ class MainActivity : TauriActivity() {
     super.onPause()
   }
 
-  // The answer to Linger's one notification permission ask (#830, PushBridge.ask).
+  // The answers to the asks the page waits on: notifications (#830,
+  // PushBridge.ask), and reaching a server on the phone's own network (#842,
+  // LocalNetwork.state).
   override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
     super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-    if (requestCode != PushBridge.ASK) return
     val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
-    if (granted) LingerMessagingService.channels(this)
-    val state = if (granted) "granted" else "denied"
-    webView?.evaluateJavascript("window.dispatchEvent(new CustomEvent('linger:push-permission', { detail: '$state' }))", null)
+    when (requestCode) {
+      PushBridge.ASK -> {
+        if (granted) LingerMessagingService.channels(this)
+        val state = if (granted) "granted" else "denied"
+        webView?.evaluateJavascript("window.dispatchEvent(new CustomEvent('linger:push-permission', { detail: '$state' }))", null)
+      }
+      LocalNetwork.ASK -> {
+        LocalNetwork.answered()
+        // No answer at all is Android dropping the ask (another was up), not
+        // the person saying no: the page asks again next time.
+        val state = if (granted) "granted" else if (grantResults.isEmpty()) "unanswered" else "denied"
+        webView?.evaluateJavascript("window.dispatchEvent(new CustomEvent('linger:local-network', { detail: '$state' }))", null)
+      }
+    }
   }
 
   // Into the inbox (SharedInbox), then the page is told to look
