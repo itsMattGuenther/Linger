@@ -1310,8 +1310,12 @@ function Servers({
   }, [voiceServer, trayMuted, trayDeafened, trayPushToTalk, trayPlace, traySharing, trayUpdateText, trayUpdateTip]);
   // The phone's call bar (#429): while in voice, the one notification it
   // shows, which keeps the call going with the phone locked
-  // (src-tauri/src/phone_call.rs). Gone when the call is.
-  const barPlace = onPhone() && voice ? voice.where : null;
+  // (src-tauri/src/phone_call.rs). Gone when the call is. Not before the
+  // microphone is open: Android runs the call's service only once Linger may
+  // use the microphone, and stopped the app when the bar came while it was
+  // still asking (#842).
+  const micOpen = voiceState?.myVoice ? voiceState.myVoice.audio !== "opening" : false;
+  const barPlace = onPhone() && voice && micOpen ? voice.where : null;
   const barMuted = voice?.muted ?? false;
   const barDeafened = voice?.deafened ?? false;
   useEffect(() => {

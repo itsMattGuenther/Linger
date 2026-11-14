@@ -568,6 +568,8 @@ declare global {
       refuseNext: () => void;
       /** The voice engine hears somebody start or stop talking (`peer` null for you). */
       speaking: (server: string, peer: string | null, speaking: boolean) => void;
+      /** With `?micwait`, the phone has stopped asking whether Linger may use the microphone, and it opens (#842). */
+      allowMicrophone: () => void;
       /** With `?sfu`, the server's voice forwarding as the phone's engine meets it (#429). */
       sfu?: {
         received: () => Promise<Received>;
@@ -640,6 +642,7 @@ window.core = {
     refusing = true;
   },
   speaking: (server, peer, speaking) => deliver("voice:speaking", { server, peer, speaking }),
+  allowMicrophone: () => allowMicrophone(),
   sfu: {
     received: async () => (await sfu?.received()) ?? { packets: 0, level: 0 },
     drop: () => sfu?.drop(),
@@ -1167,10 +1170,21 @@ if (query.get("shell") === "phone") {
 const micAudio = query.get("shell") === "phone" ? realAudio() : null;
 /** The phone's microphone as last opened, for a phone call to take (`core.sfu.call`). */
 let microphone: MediaStream | null = null;
+/**
+ * `?micwait`: the phone is still asking whether Linger may use the
+ * microphone, until `window.core.allowMicrophone()` (#842).
+ */
+let allowMicrophone: () => void = () => undefined;
+const micAllowed = query.has("micwait")
+  ? new Promise<void>((settle) => {
+      allowMicrophone = settle;
+    })
+  : Promise.resolve();
 if (micAudio) {
   voiceInThePage({
     ...browserWorld(),
     getMicrophone: async () => {
+      await micAllowed;
       await micAudio.resume().catch(() => undefined);
       microphone = fakeMicrophone(micAudio, query.has("micquiet") ? 0 : 0.5);
       return microphone;
