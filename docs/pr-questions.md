@@ -164,15 +164,15 @@ what it waits on dies (#877).
 
 ### Does a check that reads code, commands or docs take every form, and fail on what it can't read?
 
-For: ci
+For: ci, tests
 Gaps: Tests written from the case in mind, not from the ways things fail
 
 Every form the language has: how a thing is written, where its line may
 start, what may follow it there, and every way the code is reached. Checks
-took a review a form (#763, #771, #831, #833, #850, #880). Start from a table
+took a review a form (#763, #771, #831, #833, #850, #880, #903). Start from a table
 of tricky inputs. Then list every place the reader skips a line, a section
 or a field, or forgets what it knew, and justify each: one you can't is a
-quiet path, as two were in #841 and #880.
+quiet path, as in #841 and #880.
 
 ### Does every step a doc tells somebody to take work as written?
 

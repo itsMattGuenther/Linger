@@ -789,6 +789,14 @@ How the rest fits together is [ARCHITECTURE.md](../ARCHITECTURE.md).
   one.** `pnpm tauri dev` may reach `http://localhost:*`; nothing you ship can.
   Tighten one and you must tighten both — `client/src-tauri/tests/csp.rs` fails
   if they drift apart.
+- **A dev build and an installed copy share the keyring.** Both keep sign-ins
+  under `com.linger.desktop`, so whatever `pnpm tauri dev` signed in to is
+  still there for an installed copy on the same computer, even after Linger
+  is removed. An installed copy passes over the ones it can't reach, anything
+  not https, and leaves them for the dev build (`secrets.rs` `reachable`,
+  #902). Before, a computer that had run a dev build against
+  `http://localhost:8420` opened a newly installed Linger on "Can't reach
+  localhost:8420 yet" instead of the sign-in screen.
 - **File names that differ only in case break Windows and macOS.** They are the
   same file on both, so `Foo.tsx` beside `foo.ts` typechecks on Linux and fails
   everywhere else. `scripts/lint-rules.sh` rejects it.

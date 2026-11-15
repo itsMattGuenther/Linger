@@ -314,6 +314,17 @@ on a world that has changed.
 
 ## Tests written from the case in mind, not from the ways things fail
 
+- **#903: the check that a shipped build reaches https only passed `*`.**
+  It listed the plain-http sources it refused (`http:`, `ws:`, `http://…`,
+  `ws://…`), so `*` or a host with no scheme, which a policy can also use to
+  let plain http in, got past it. Caught by Greptile. *Missed because* I
+  wrote the refusals from the forms I thought of, not from every form the
+  policy language has. *Changed:* `tests/csp.rs` checks `connect-src`
+  against a fixed list of what's allowed, and a second test feeds it `*`, a
+  bare host, a wildcard host and the plain schemes; with the old refusal
+  list it fails on `*`. The question about checks taking every form is now
+  asked of tests too.
+
 - **#894: a room's notification choice that failed said nothing.** The held
   sheet closes as you choose, and the answer, a problem in words, was
   dropped, so offline the old choice simply stayed. Caught by Greptile.
