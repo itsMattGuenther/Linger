@@ -100,24 +100,73 @@ fn release_policy_still_reaches_a_real_server() {
     }
 }
 
-/// A shipped build reaches a server over https and nothing else: no `http:`,
-/// no plain-http address, no `ws:`. `secrets::reachable` counts on it to pass
-/// over a development build's sign-in at `http://localhost`, left in the same
-/// keyring, which an installed copy would otherwise wait on forever (#902).
-/// Allowing plain http here means changing that too.
+/// The `connect-src` sources that aren't known to reach only https and
+/// Tauri's IPC. A fixed list, not a list of what's refused: a policy can
+/// allow plain http in more ways than one thinks of, `*` or a host with no
+/// scheme among them (#903's review).
+fn beyond_https(connect: &[String]) -> Vec<&str> {
+    const ALLOWED: [&str; 5] = ["'self'", "ipc:", "http://ipc.localhost", "https:", "wss:"];
+    connect
+        .iter()
+        .map(String::as_str)
+        .filter(|source| {
+            !ALLOWED.contains(source)
+                && !source.starts_with("https://")
+                && !source.starts_with("wss://")
+        })
+        .collect()
+}
+
+/// A shipped build reaches a server over https and nothing else.
+/// `secrets::reachable` counts on it to pass over a development build's
+/// sign-in at `http://localhost`, left in the same keyring, which an
+/// installed copy would otherwise wait on forever (#902). A source added
+/// here that reaches plain http means changing that too; one that doesn't
+/// goes in `beyond_https`'s list.
 #[test]
 fn release_policy_reaches_servers_over_https_only() {
-    for source in sources(&release(), "connect-src") {
-        let plain = source == "http:"
-            || source == "ws:"
-            || (source.starts_with("http://") && source != "http://ipc.localhost")
-            || source.starts_with("ws://");
-        assert!(
-            !plain,
-            "connect-src allows {source} in the shipped build; secrets.rs `reachable` assumes \
-             https only"
-        );
+    let release = release();
+    let beyond = beyond_https(sources(&release, "connect-src"));
+    assert!(
+        beyond.is_empty(),
+        "connect-src allows {beyond:?} in the shipped build; secrets.rs `reachable` assumes \
+         https only"
+    );
+}
+
+/// The check above, against the ways a policy can let plain http in.
+#[test]
+fn every_way_to_allow_plain_http_is_beyond_https() {
+    for source in [
+        "*",
+        "http:",
+        "ws:",
+        "http://linger.example",
+        "http://localhost:*",
+        "ws://127.0.0.1:*",
+        "linger.example",
+        "localhost:8420",
+        "*.example",
+        "http://ipc.localhost.example",
+    ] {
+        let connect = vec![
+            "'self'".to_string(),
+            "https:".to_string(),
+            source.to_string(),
+        ];
+        assert_eq!(beyond_https(&connect), [source], "{source} slipped through");
     }
+    let shipped = [
+        "'self'",
+        "ipc:",
+        "http://ipc.localhost",
+        "https:",
+        "wss:",
+        "https://linger.example",
+        "wss://linger.example",
+    ];
+    let shipped: Vec<String> = shipped.iter().map(ToString::to_string).collect();
+    assert!(beyond_https(&shipped).is_empty());
 }
 
 /// `invoke()` is a fetch at `ipc://localhost` (Linux, macOS) or
