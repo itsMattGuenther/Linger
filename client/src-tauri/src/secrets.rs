@@ -93,6 +93,44 @@ pub enum SessionsLoad {
     },
 }
 
+impl SessionsLoad {
+    /// Only the sign-ins this build can reach (`reachable`), so a fresh
+    /// install with nothing else saved opens on the sign-in screen (#902).
+    /// The rest stay in the keyring, index and all, for the development
+    /// build that saved them: nothing is deleted.
+    fn reachable(self, dev: bool) -> Self {
+        match self {
+            Self::Found { sessions } => {
+                let sessions: Vec<StoredSession> = sessions
+                    .into_iter()
+                    .filter(|session| reachable(&session.base_url, dev))
+                    .collect();
+                if sessions.is_empty() {
+                    Self::Empty
+                } else {
+                    Self::Found { sessions }
+                }
+            }
+            other => other,
+        }
+    }
+}
+
+/// Whether this build can reach a server at `base_url` at all (#902). The
+/// page's content-security policy decides, and Tauri's own `is_dev()` picks
+/// it at compile time (`tests/csp.rs`): `pnpm tauri dev` may reach
+/// `http://localhost`, and anything the bundler makes reaches https only.
+///
+/// Both kinds keep sign-ins under the same `SERVICE`, so a development
+/// build's sign-in at a local test server is still in the keyring when an
+/// installed copy starts on that computer, even after Linger was removed
+/// and installed again. Restored, it never answers: a fresh install opened
+/// on "Can't reach localhost:8420 yet" instead of asking where to go, and
+/// went on trying it forever.
+fn reachable(base_url: &str, dev: bool) -> bool {
+    dev || base_url.starts_with("https://")
+}
+
 /// Result of writing or forgetting one server's session.
 #[derive(Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -217,12 +255,13 @@ fn put_index(ns: &str, urls: &[String]) -> SessionWrite {
     }
 }
 
+/// Every saved sign-in this build can reach, oldest server first.
 pub fn load() -> SessionsLoad {
     // Sign-ins an older iPhone build wrote go to this phone only first
     // (#790). Every launch, so one that couldn't be moved is tried again.
     #[cfg(target_os = "ios")]
     ios::keep_on_this_phone(SERVICE);
-    load_in(NS)
+    load_in(NS).reachable(tauri::is_dev())
 }
 
 pub fn save(session: &StoredSession) -> SessionWrite {
@@ -607,6 +646,66 @@ mod tests {
         let json = serde_json::to_string(&one).expect("serialize");
         let back: StoredSession = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(one, back);
+    }
+
+    fn urls(load: &SessionsLoad) -> Vec<&str> {
+        match load {
+            SessionsLoad::Found { sessions } => {
+                sessions.iter().map(|s| s.base_url.as_str()).collect()
+            }
+            SessionsLoad::Empty | SessionsLoad::Unavailable { .. } => Vec::new(),
+        }
+    }
+
+    /// An installed copy reaches https only, so a development build's
+    /// sign-in at a local test server, left in the same keyring, isn't
+    /// restored: with nothing else saved, a fresh install asks where to go
+    /// rather than waiting on localhost forever (#902).
+    #[test]
+    fn an_installed_copy_passes_over_a_development_sign_in() {
+        let found = || SessionsLoad::Found {
+            sessions: vec![
+                session("http://localhost:8420"),
+                session("https://linger.example"),
+                session("http://127.0.0.1:8080"),
+            ],
+        };
+        assert_eq!(urls(&found().reachable(false)), ["https://linger.example"]);
+        let only_local = SessionsLoad::Found {
+            sessions: vec![session("http://localhost:8420")],
+        };
+        assert!(matches!(only_local.reachable(false), SessionsLoad::Empty));
+    }
+
+    /// The development build that saved it still gets it back.
+    #[test]
+    fn a_development_build_keeps_its_local_sign_in() {
+        let found = SessionsLoad::Found {
+            sessions: vec![
+                session("http://localhost:8420"),
+                session("https://linger.example"),
+            ],
+        };
+        assert_eq!(
+            urls(&found.reachable(true)),
+            ["http://localhost:8420", "https://linger.example"]
+        );
+    }
+
+    /// The no-keyring answer passes through untouched: the sign-in screen
+    /// still says sign-ins aren't kept here.
+    #[test]
+    fn no_keyring_is_still_no_keyring() {
+        let none = SessionsLoad::Unavailable {
+            reason: "no wallet".into(),
+        };
+        assert!(
+            matches!(none.reachable(false), SessionsLoad::Unavailable { reason } if reason == "no wallet")
+        );
+        assert!(matches!(
+            SessionsLoad::Empty.reachable(false),
+            SessionsLoad::Empty
+        ));
     }
 
     /// Account names have to be stable and distinct per server, because they

@@ -100,6 +100,26 @@ fn release_policy_still_reaches_a_real_server() {
     }
 }
 
+/// A shipped build reaches a server over https and nothing else: no `http:`,
+/// no plain-http address, no `ws:`. `secrets::reachable` counts on it to pass
+/// over a development build's sign-in at `http://localhost`, left in the same
+/// keyring, which an installed copy would otherwise wait on forever (#902).
+/// Allowing plain http here means changing that too.
+#[test]
+fn release_policy_reaches_servers_over_https_only() {
+    for source in sources(&release(), "connect-src") {
+        let plain = source == "http:"
+            || source == "ws:"
+            || (source.starts_with("http://") && source != "http://ipc.localhost")
+            || source.starts_with("ws://");
+        assert!(
+            !plain,
+            "connect-src allows {source} in the shipped build; secrets.rs `reachable` assumes \
+             https only"
+        );
+    }
+}
+
 /// `invoke()` is a fetch at `ipc://localhost` (Linux, macOS) or
 /// `http://ipc.localhost` (Windows). Without these the call is not refused, it
 /// falls back to `postMessage` with a console warning — working software with a
