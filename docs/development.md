@@ -228,6 +228,37 @@ real people without a browser decoding every copy. It passes when every
 watcher gets as many frames as the best one. Run `docker stats` on the server
 meanwhile to see what it costs.
 
+## Sound on Linux
+
+The desktop app asks the desktop's sound server for microphones and speakers
+when one is running (PulseAudio, or PipeWire answering as PulseAudio), and
+ALSA when none is (#905, `voice::device::host`). The sound server lists what
+the desktop's own sound settings list, by those names. ALSA lists every card
+several ways and its plugins beside them: 43 outputs and 24 inputs on a
+computer whose desktop shows 9 and 6. Three things go with the sound server,
+all in `client/src-tauri/src/voice/device.rs`:
+
+- every stream asks for one 20 ms frame at a time (`stream_config`). Left to
+  itself the server buffers about two seconds;
+- the "Monitor of …" inputs, recordings of what each output plays, are left
+  out of the list (`microphones`);
+- "System default" follows the desktop's default when it changes
+  (`Following`): a stream opened on the server is on one device, where ALSA's
+  `default` was whatever the server's default was.
+
+`LINGER_AUDIO=alsa` keeps the app on ALSA, for telling whether a sound problem
+is the sound server's way in. A device picked in Settings is remembered by
+its name, and the two list different names, so switching between them puts
+the choice back on the system default.
+
+`scripts/linux-voice-check.sh` runs the path on real streams: it starts a
+private PulseAudio with one speaker that plays to nowhere and one microphone
+that hears it, and checks that the lists hold those two and that a tone
+played comes back within half a second (it takes about 40 ms). It needs the
+`pulseaudio` daemon itself, which a desktop on PipeWire doesn't have, and
+says so and passes without it; CI's shell job runs it on every change to the
+shell.
+
 ## How the desktop app starts on Linux
 
 Linux v0.3.3 selects native Wayland when a Wayland display is available, so

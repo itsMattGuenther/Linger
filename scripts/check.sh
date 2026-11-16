@@ -133,6 +133,9 @@ if on shell; then
   if pkg-config --exists webkit2gtk-4.1 2>/dev/null; then
     mkdir -p client/dist
     (cd client/src-tauri && cargo clippy --all-targets -- -D warnings && cargo test)
+    # The voice path through a sound server, on real streams (#905). It
+    # needs the PulseAudio daemon and says so where there's none.
+    scripts/linux-voice-check.sh
   else
     echo "skipped: system webview deps not installed here (CI still runs this pass)"
   fi

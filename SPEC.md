@@ -1058,6 +1058,13 @@ messages recorded there too. With all off, the microphone is sent as it came, to
 sample. The phone app's microphone is cleaned by the phone's own web engine (§4.15) and
 has no switches.
 
+**The microphone and speakers are the ones your computer shows** (#905). Settings →
+Sound & Voice lists them by the names the system's own sound settings use, with the
+system default first. On Linux that's the desktop's sound server's list, where there is
+one: not the forty-odd names the layer under it has for the same few devices. "System
+default" stays the system's default: change it in the desktop's settings in the middle
+of a call, and the call moves to it.
+
 **Leaving is leaving.** Closing the app, losing the network, or joining voice somewhere
 else all end it, and the people you were talking to see you go. You are in voice in at
 most one room at a time, for the same reason you are in one room at a time.

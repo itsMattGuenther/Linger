@@ -3030,6 +3030,90 @@ mod tests {
         );
     }
 
+    /// The whole path through a sound server, on real streams (#905), run by
+    /// `scripts/linux-voice-check.sh` against a private PulseAudio that has
+    /// one speaker, which plays to nowhere, and one microphone, which hears
+    /// that speaker.
+    ///
+    /// The lists are those two and nothing else: the speaker's monitor is
+    /// left out. A tone played through `Speaker` comes out of `Microphone`
+    /// within half a second, where the server's own buffering took two
+    /// (`stream_config`), and frames keep coming at their pace.
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    #[ignore = "needs a sound server: scripts/linux-voice-check.sh starts a private one"]
+    async fn through_a_sound_server_a_sound_comes_back_at_once() {
+        use crate::voice::cleanup::sounds::CHOICE;
+        use crate::voice::level;
+        let _settings = CHOICE.lock().await;
+        assert_eq!(
+            host().id(),
+            cpal::HostId::PulseAudio,
+            "no sound server answered: is PULSE_SERVER set?"
+        );
+        let devices = list().expect("the sound server's devices");
+        assert_eq!(devices.outputs.len(), 1, "outputs: {:?}", devices.outputs);
+        assert_eq!(devices.inputs.len(), 1, "inputs: {:?}", devices.inputs);
+        assert_eq!(devices.default_input.as_ref(), devices.inputs.first());
+        assert_eq!(devices.default_output.as_ref(), devices.outputs.first());
+
+        // As it comes: the clean-up would take a steady tone for noise.
+        let was = cleanup::chosen();
+        cleanup::choose(Cleanup::NONE);
+        let (microphone, speaker) = tokio::task::spawn_blocking(|| {
+            (
+                Microphone::open(None).expect("the microphone opens"),
+                Speaker::open(None).expect("the speakers open"),
+            )
+        })
+        .await
+        .expect("opened");
+        // A second of quiet first, so both streams are running.
+        let begun = Instant::now();
+        while begun.elapsed() < Duration::from_secs(1) {
+            microphone.frame().await.expect("a frame of quiet");
+        }
+        let tone: Vec<i16> = (0..SAMPLE_RATE as usize / 5)
+            .map(|n| {
+                #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+                let sample = ((n as f32 * 1000.0 * std::f32::consts::TAU / SAMPLE_RATE as f32)
+                    .sin()
+                    * 12_000.0) as i16;
+                sample
+            })
+            .collect();
+        let played = Instant::now();
+        speaker.cue(&tone);
+        let heard = loop {
+            let frame = microphone.frame().await.expect("a frame");
+            if level::rms(&frame) > 2_000.0 {
+                break played.elapsed();
+            }
+            assert!(
+                played.elapsed() < Duration::from_secs(5),
+                "the tone never came back"
+            );
+        };
+        eprintln!("played to heard: {} ms", heard.as_millis());
+        assert!(
+            heard < Duration::from_millis(500),
+            "a sound took {} ms to come back",
+            heard.as_millis()
+        );
+        // Fifty frames a second: a hundred take about two, not four.
+        let pace = Instant::now();
+        for _ in 0..100 {
+            microphone.frame().await.expect("a frame");
+        }
+        let took = pace.elapsed();
+        assert!(
+            (Duration::from_millis(1500)..Duration::from_millis(3000)).contains(&took),
+            "100 frames took {} ms",
+            took.as_millis()
+        );
+        cleanup::choose(was);
+    }
+
     // --- the reopen schedule (T-1405), with no device anywhere near it ---
 
     /// A stream that is nothing but a handle. What matters is that it was
