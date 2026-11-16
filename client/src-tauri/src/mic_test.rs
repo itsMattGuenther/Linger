@@ -98,15 +98,42 @@ pub fn heard(samples: &[i16]) -> Heard {
 /// feed it a tone.
 pub async fn listen(
     source: &dyn Source,
-    mut stop: oneshot::Receiver<()>,
+    stop: oneshot::Receiver<()>,
     level: impl Fn(f32),
 ) -> Vec<i16> {
-    let mut kept = Vec::with_capacity(LONGEST_FRAMES * FRAME_SAMPLES);
+    listen_for(
+        source,
+        stop,
+        level,
+        Duration::from_millis(u64::from(LONGEST_MS)),
+    )
+    .await
+}
+
+/// [`listen`], for at most `longest` by the clock, and at most that much
+/// sound.
+///
+/// Both, because they aren't the same thing: a microphone that's unplugged
+/// gives no frames while its worker tries to get it back, for twenty
+/// seconds, and counting frames alone the test would sit on "Listening"
+/// for all of them. The count is what stops a source faster than a clock,
+/// which the tests' are.
+async fn listen_for(
+    source: &dyn Source,
+    mut stop: oneshot::Receiver<()>,
+    level: impl Fn(f32),
+    longest: Duration,
+) -> Vec<i16> {
+    let most = usize::try_from(longest.as_millis() / u128::from(FRAME_MS)).unwrap_or(usize::MAX);
+    let over = tokio::time::sleep(longest);
+    tokio::pin!(over);
+    let mut kept = Vec::with_capacity(most.min(LONGEST_FRAMES) * FRAME_SAMPLES);
     let (mut frames, mut loudest) = (0_usize, 0.0_f32);
-    while frames < LONGEST_FRAMES {
+    while frames < most {
         let frame = tokio::select! {
             biased;
             _ = &mut stop => break,
+            () = &mut over => break,
             frame = source.frame() => frame,
         };
         let Some(frame) = frame else { break };
@@ -132,14 +159,116 @@ const PLAYED_OUT: Duration = Duration::from_millis(400);
 
 /// The test under way, if one is.
 #[derive(Default)]
-pub struct MicTests(Mutex<Option<Running>>);
+pub struct MicTests(Mutex<Held>);
+
+#[derive(Default)]
+struct Held {
+    /// The next test's number: how a test tells itself from a later one.
+    next: u64,
+    running: Option<Running>,
+}
 
 struct Running {
+    id: u64,
     /// The window that started it, and the only one told about it.
     window: String,
-    /// Taken when listening is stopped by hand: what's left is the playing.
+    /// There once it's listening, and taken when listening is stopped by
+    /// hand: what's left is the playing.
     stop: Option<oneshot::Sender<()>>,
-    task: JoinHandle<()>,
+    /// There once it's listening. Before that the microphone is still being
+    /// opened, and the test is only a name on the books.
+    task: Option<JoinHandle<()>>,
+}
+
+impl MicTests {
+    /// Put a test on the books for `window`, before anything is waited for:
+    /// opening a microphone takes a moment, and a window closed in that
+    /// moment has to find its test here to take it away (`forget`). Refused
+    /// while another is under way.
+    fn begin(&self, window: &str) -> Result<u64, &'static str> {
+        let mut held = self.lock();
+        if held.running.is_some() {
+            return Err(ALREADY);
+        }
+        held.next += 1;
+        let id = held.next;
+        held.running = Some(Running {
+            id,
+            window: window.to_owned(),
+            stop: None,
+            task: None,
+        });
+        Ok(id)
+    }
+
+    /// Whether test `id` is still wanted: its window hasn't gone.
+    fn wanted(&self, id: u64) -> bool {
+        self.lock()
+            .running
+            .as_ref()
+            .is_some_and(|running| running.id == id)
+    }
+
+    /// Test `id` is listening: keep the way to stop it and its task. When
+    /// its window went meanwhile, the task is stopped here instead, and
+    /// that's said.
+    fn listening(&self, id: u64, stop: oneshot::Sender<()>, task: JoinHandle<()>) -> bool {
+        let mut held = self.lock();
+        match held.running.as_mut().filter(|running| running.id == id) {
+            Some(running) => {
+                running.stop = Some(stop);
+                running.task = Some(task);
+                true
+            }
+            None => {
+                task.abort();
+                false
+            }
+        }
+    }
+
+    /// Test `id` is over: off the books, unless a later one is there now.
+    fn over(&self, id: u64) {
+        let mut held = self.lock();
+        if held
+            .running
+            .as_ref()
+            .is_some_and(|running| running.id == id)
+        {
+            held.running = None;
+        }
+    }
+
+    /// Stop the listening by hand. Nothing to do while the microphone is
+    /// still opening, or once it's playing.
+    fn stop(&self) {
+        if let Some(stop) = self
+            .lock()
+            .running
+            .as_mut()
+            .and_then(|running| running.stop.take())
+        {
+            let _ = stop.send(());
+        }
+    }
+
+    /// `window` has gone: its test goes with it, listening or not yet.
+    fn forget(&self, window: &str) {
+        let mut held = self.lock();
+        if held
+            .running
+            .as_ref()
+            .is_some_and(|running| running.window == window)
+        {
+            if let Some(task) = held.running.take().and_then(|running| running.task) {
+                task.abort();
+            }
+        }
+    }
+
+    fn lock(&self) -> MutexGuard<'_, Held> {
+        self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    }
 }
 
 const ALREADY: &str = "A microphone test is already under way.";
@@ -147,6 +276,15 @@ const ALREADY: &str = "A microphone test is already under way.";
 const NO_SPEAKERS: &str = "Linger heard you, but couldn't play it back: the speakers wouldn't open. Check the Speakers picked above.";
 /// Said in Settings as it is.
 pub const IN_VOICE: &str = "You're in voice. Leave it to test your microphone: the test plays out loud, and the room would hear it.";
+
+/// What the window is told once the listening is over (`mictest:heard`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct Said {
+    pub heard: Heard,
+    /// The microphone picked wouldn't open, and this was the default in its
+    /// place.
+    pub stood_in: bool,
+}
 
 /// What comes after the listening.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -177,7 +315,8 @@ pub fn then(heard: Heard, in_voice: bool) -> Then {
 
 /// Start the test: listen to the chosen microphone (the default for `None`)
 /// for up to [`LONGEST_MS`], then play it on `output`. The window hears
-/// `mictest:level` while it listens; then `mictest:heard` with the verdict,
+/// `mictest:level` while it listens; then `mictest:heard` with the verdict
+/// ([`Said`]),
 /// or `mictest:cut` with the reason when nothing will be played (voice was
 /// joined meanwhile, or the speakers wouldn't open); and `mictest:done` when
 /// the playing is over.
@@ -188,41 +327,43 @@ pub async fn mic_test_start(
     input: Option<String>,
     output: Option<String>,
 ) -> Result<(), String> {
-    if lock(&app.state::<MicTests>()).is_some() {
-        return Err(ALREADY.into());
-    }
+    let tests = app.state::<MicTests>();
+    let label = window.label().to_string();
+    // On the books first, with nothing waited for before it: the window
+    // can close at any moment from here, and `forget` has to find this.
+    let id = tests.begin(&label)?;
     if crate::voice_commands::in_voice(&app).await {
+        tests.over(id);
         return Err(IN_VOICE.into());
     }
-    let microphone = tokio::task::spawn_blocking(move || {
+    let opened = tokio::task::spawn_blocking(move || {
         crate::voice::device::Microphone::open(input.as_deref())
     })
     .await
-    .map_err(|error| error.to_string())?
-    .map_err(|error| error.to_string())?;
-    let label = window.label().to_string();
-    let (stop, stopped) = oneshot::channel();
-    let tests = app.state::<MicTests>();
-    // Held from here to the entry being kept, with nothing awaited between:
-    // the task takes the entry out when it ends, and has to find it there
-    // even when its microphone gives it nothing at all.
-    let mut held = lock(&tests);
-    if held.is_some() {
-        // Another window started one while this microphone was opening.
-        return Err(ALREADY.into());
+    .map_err(|error| error.to_string())
+    .and_then(|opened| opened.map_err(|error| error.to_string()));
+    let microphone = match opened {
+        Ok(microphone) => microphone,
+        Err(error) => {
+            tests.over(id);
+            return Err(error);
+        }
+    };
+    // The window closed while the microphone opened: nothing listens, and
+    // the microphone is let go here.
+    if !tests.wanted(id) {
+        return Ok(());
     }
-    let task = tokio::spawn(run(app.clone(), label.clone(), microphone, stopped, output));
-    *held = Some(Running {
-        window: label,
-        stop: Some(stop),
-        task,
-    });
+    let (stop, stopped) = oneshot::channel();
+    let task = tokio::spawn(run(app.clone(), id, label, microphone, stopped, output));
+    tests.listening(id, stop, task);
     Ok(())
 }
 
 /// The whole of one test, from the open microphone to "done".
 async fn run(
     app: AppHandle,
+    id: u64,
     label: String,
     microphone: crate::voice::device::Microphone,
     stopped: oneshot::Receiver<()>,
@@ -233,29 +374,36 @@ async fn run(
         let _ = told.0.emit_to(told.1.as_str(), "mictest:level", loud);
     })
     .await;
+    // Whether that was the microphone picked: one that's listed and won't
+    // open (another program has it) is stood in for by the default, as in a
+    // call, and the advice for a silent microphone would be about the wrong
+    // one. Read before it's let go.
+    let stood_in = microphone.refused().is_some();
     // The microphone is let go before anything plays: the test never hears
     // itself.
     drop(microphone);
+    let said = |heard| Said { heard, stood_in };
     match then(heard(&samples), crate::voice_commands::in_voice(&app).await) {
         Then::Leave => {
             let _ = app.emit_to(label.as_str(), "mictest:cut", IN_VOICE);
         }
         Then::Say(verdict) => {
-            let _ = app.emit_to(label.as_str(), "mictest:heard", verdict);
+            let _ = app.emit_to(label.as_str(), "mictest:heard", said(verdict));
         }
         Then::Play(verdict) => {
             // Handed to the speakers first: "playing it back" is only said
             // once it is, and speakers that won't open are said instead.
+            // Whole: a sound is held to four seconds, and this isn't one.
             let wait = playing_for(samples.len());
-            if crate::voice_commands::play_out_of_voice(&app, samples, output).await {
-                let _ = app.emit_to(label.as_str(), "mictest:heard", verdict);
+            if crate::voice_commands::play_out_of_voice(&app, samples, output, true).await {
+                let _ = app.emit_to(label.as_str(), "mictest:heard", said(verdict));
                 tokio::time::sleep(wait).await;
             } else {
                 let _ = app.emit_to(label.as_str(), "mictest:cut", NO_SPEAKERS);
             }
         }
     }
-    lock(&app.state::<MicTests>()).take();
+    app.state::<MicTests>().over(id);
     let _ = app.emit_to(label.as_str(), "mictest:done", ());
 }
 
@@ -263,27 +411,12 @@ async fn run(
 /// is nothing to stop: it's eight seconds at most.
 #[tauri::command]
 pub fn mic_test_stop(app: AppHandle) {
-    if let Some(stop) = lock(&app.state::<MicTests>())
-        .as_mut()
-        .and_then(|running| running.stop.take())
-    {
-        let _ = stop.send(());
-    }
+    app.state::<MicTests>().stop();
 }
 
 /// A window has gone: a test it started goes with it, unplayed.
 pub fn forget(app: &AppHandle, label: &str) {
-    let tests = app.state::<MicTests>();
-    let mut held = lock(&tests);
-    if held.as_ref().is_some_and(|running| running.window == label) {
-        if let Some(running) = held.take() {
-            running.task.abort();
-        }
-    }
-}
-
-fn lock(tests: &MicTests) -> MutexGuard<'_, Option<Running>> {
-    tests.0.lock().unwrap_or_else(PoisonError::into_inner)
+    app.state::<MicTests>().forget(label);
 }
 
 #[cfg(test)]
@@ -440,5 +573,83 @@ mod tests {
             .map(|heard| serde_json::to_string(heard).unwrap())
             .collect();
         assert_eq!(words, ["\"nothing\"", "\"quiet\"", "\"voice\""]);
+        // With whether the default stood in for the microphone picked.
+        let said = Said {
+            heard: Heard::Quiet,
+            stood_in: true,
+        };
+        assert_eq!(
+            serde_json::to_string(&said).unwrap(),
+            r#"{"heard":"quiet","stood_in":true}"#
+        );
+    }
+
+    /// The limit is by the clock too (#912's review): a microphone that's
+    /// unplugged gives no frames for as long as its worker tries to get it
+    /// back, and counting frames alone the test would listen for all of it.
+    #[tokio::test]
+    async fn a_microphone_that_gives_nothing_is_listened_to_no_longer_than_the_limit() {
+        let (_stop, stopped) = oneshot::channel();
+        let since = std::time::Instant::now();
+        let kept = listen_for(&Forever, stopped, |_| {}, Duration::from_millis(80)).await;
+        assert!(kept.is_empty());
+        let took = since.elapsed();
+        assert!(
+            (Duration::from_millis(80)..Duration::from_secs(2)).contains(&took),
+            "listened for {took:?}"
+        );
+    }
+
+    /// A test is on the books before its microphone opens (#912's review),
+    /// so a window that closes in that moment takes it away: nothing
+    /// listens afterwards, and nothing plays to a Settings that's gone.
+    #[tokio::test]
+    async fn a_window_closed_while_the_microphone_opens_takes_its_test_with_it() {
+        let tests = MicTests::default();
+        let id = tests.begin("settings").expect("the first test");
+        assert!(tests.wanted(id));
+        tests.forget("settings");
+        assert!(!tests.wanted(id), "the test outlived its window");
+        // The microphone is open now, and too late: what would have listened
+        // is stopped, not started.
+        let (stop, _stopped) = oneshot::channel();
+        let ran = Arc::new(AtomicUsize::new(0));
+        let running = Arc::clone(&ran);
+        let task = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            running.fetch_add(1, Ordering::SeqCst);
+        });
+        assert!(!tests.listening(id, stop, task));
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert_eq!(ran.load(Ordering::SeqCst), 0, "it listened anyway");
+        // And the next test starts as if nothing had happened.
+        assert!(tests.begin("settings").is_ok());
+    }
+
+    #[tokio::test]
+    async fn one_test_at_a_time_and_each_ends_only_itself() {
+        let tests = MicTests::default();
+        let first = tests.begin("settings").expect("the first test");
+        // A second, from any window, while the first is opening or running.
+        assert_eq!(tests.begin("main"), Err(ALREADY));
+        assert_eq!(tests.begin("settings"), Err(ALREADY));
+        // Another window closing isn't this one's.
+        tests.forget("main");
+        assert!(tests.wanted(first));
+        // Stop does nothing while the microphone is still opening.
+        tests.stop();
+        assert!(tests.wanted(first));
+        // Listening: stop reaches it, once.
+        let (stop, mut stopped) = oneshot::channel();
+        assert!(tests.listening(first, stop, tokio::spawn(async {})));
+        assert!(stopped.try_recv().is_err());
+        tests.stop();
+        assert!(stopped.try_recv().is_ok());
+        tests.stop();
+        // Over, and a late "over" from it can't end the one after.
+        tests.over(first);
+        let second = tests.begin("settings").expect("the next test");
+        tests.over(first);
+        assert!(tests.wanted(second));
     }
 }

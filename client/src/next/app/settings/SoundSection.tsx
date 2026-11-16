@@ -274,13 +274,13 @@ function MicTestRow({ test, cleanUp, onGo }: { test: MicTest; cleanUp: VoicePref
       : test.step === "listening"
         ? "Listening. Say something."
         : test.step === "playing"
-          ? test.heard === "nothing"
-            ? micTestLine("nothing", cleanUp)
+          ? test.said.heard === "nothing"
+            ? micTestLine(test.said, cleanUp)
             : "Playing it back…"
           : test.problem !== null
             ? test.problem
-            : test.heard !== null
-              ? micTestLine(test.heard, cleanUp)
+            : test.said !== null
+              ? micTestLine(test.said, cleanUp)
               : null;
   return (
     <div className="nx-set-mictest-block">

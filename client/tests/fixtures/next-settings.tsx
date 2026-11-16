@@ -190,13 +190,14 @@ function Fixture() {
   };
   const talkReach = reaches[query.get("reach") ?? ""] ?? null;
   // The microphone test (#907), at rest unless `?mictest` names one of its
-  // moments: the lines moving, playing back, its longest line, a refusal.
+  // moments: the lines moving, playing back, its longest lines, a refusal.
   const micTests: Record<string, MicTest> = {
     opening: { step: "opening" },
     listening: { step: "listening", levels: [0.1, 0.5, 0.9, 0.3, 0.6] },
-    playing: { step: "playing", heard: "voice" },
-    nothing: { step: "idle", heard: "nothing", problem: null },
-    refused: { step: "idle", heard: null, problem: "You're in voice. Leave it to test your microphone: the test plays out loud, and the room would hear it." },
+    playing: { step: "playing", said: { heard: "voice", stoodIn: false } },
+    nothing: { step: "idle", said: { heard: "nothing", stoodIn: false }, problem: null },
+    stoodin: { step: "idle", said: { heard: "nothing", stoodIn: true }, problem: null },
+    refused: { step: "idle", said: null, problem: "You're in voice. Leave it to test your microphone: the test plays out loud, and the room would hear it." },
   };
   const micTest = micTests[query.get("mictest") ?? ""] ?? MIC_TEST_IDLE;
 

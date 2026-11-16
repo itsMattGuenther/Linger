@@ -581,6 +581,15 @@ test.describe("the microphone test (#907)", () => {
     await expect(said(page)).toHaveText("That was very quiet. Turn on Even out my volume below, or move closer to the microphone.");
   });
 
+  test("says so first when the microphone picked wouldn't open and the default stood in", async ({ page }) => {
+    await open(page, "?section=sound&mictest=busy");
+    await row(page).getByRole("button", { name: "Test" }).click();
+    await expect(said(page)).toHaveText(
+      "The Microphone you picked wouldn't open, so Linger listened to your computer's default one, and heard nothing. Close whatever else is using the one you picked, or pick another above.",
+    );
+    await expect(row(page).getByRole("button", { name: "Test" })).toBeEnabled();
+  });
+
   test("plays nothing when voice was joined while it listened, and says why", async ({ page }) => {
     await open(page, "?section=sound&mictest=joined");
     await row(page).getByRole("button", { name: "Test" }).click();

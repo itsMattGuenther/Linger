@@ -330,7 +330,7 @@ pub async fn sound_play(app: AppHandle, samples: Vec<i16>, output: Option<String
             return true;
         }
     }
-    play_out_of_voice(&app, samples, output).await
+    play_out_of_voice(&app, samples, output, false).await
 }
 
 /// Every server's voice engine there is.
@@ -353,15 +353,25 @@ pub(crate) async fn in_voice(app: &AppHandle) -> bool {
 /// Play samples on the Speakers picked in Settings, on the sounds' own
 /// speaker (`sounds.rs`), which is closed again once nothing has played on
 /// it for a while. Answers whether it played. For when there's no call to
-/// play into: one of Linger's sounds, or the microphone test's recording.
+/// play into: one of Linger's sounds, or, `whole`, the microphone test's
+/// recording, which is longer than a sound is let be.
 pub(crate) async fn play_out_of_voice(
     app: &AppHandle,
     samples: Vec<i16>,
     output: Option<String>,
+    whole: bool,
 ) -> bool {
     let sounds = std::sync::Arc::clone(app.state::<std::sync::Arc<sounds::Sounds>>().inner());
     let playing = std::sync::Arc::clone(&sounds);
-    match tokio::task::spawn_blocking(move || playing.play(&samples, output.as_deref())).await {
+    let played = tokio::task::spawn_blocking(move || {
+        if whole {
+            playing.play_recording(&samples, output.as_deref())
+        } else {
+            playing.play(&samples, output.as_deref())
+        }
+    })
+    .await;
+    match played {
         Ok(Ok(())) => {
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(sounds::KEEP_OPEN).await;

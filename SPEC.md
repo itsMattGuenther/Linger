@@ -1066,8 +1066,9 @@ press Stop), and Linger plays it back once, through the same clean-up a call use
 the Speakers picked there. While it listens, lines move with your voice. Afterwards it
 says in a sentence what it heard and what to do: nothing (the wrong microphone is
 picked, or it's muted), very little (move closer, turn it up in the computer's sound
-settings, or turn on Even out my volume), or simply that this is how you sound. The
-recording is never sent anywhere and never kept: the desktop app listens and plays it
+settings, or turn on Even out my volume), or simply that this is how you sound. When
+the Microphone picked wouldn't open and the system default stood in for it, as in a
+call, it says that first. The recording is never sent anywhere and never kept: the desktop app listens and plays it
 back itself and then drops it, and the Settings window is told only how loud it is and
 that one word. It isn't offered in a call, where what it played would go back into the
 room; it says to leave voice first. Desktop only: the phone app has no test.

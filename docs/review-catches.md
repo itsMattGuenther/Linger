@@ -180,6 +180,17 @@ to be right for every shape that window takes.
 
 ## Checked when asked, not when it happens
 
+- **#912: a microphone test outlived the window that started it.** Closing
+  a window takes its test with it, but the test was written down only once
+  its microphone had opened, which takes a moment: a window closed in that
+  moment found nothing to take, and the test then listened and played to
+  nobody. Caught by Greptile. *Missed because* I followed the voice message
+  recorder, which has the same gap (#913), and tested closing a window only
+  with a test already running. *Changed:* a test is on the books before
+  anything is waited for (`MicTests::begin`), and is checked for still
+  being wanted once the microphone is open, with a test for a window gone
+  in between.
+
 A check that guards an action passes when the action is asked for, then
 something slow runs (a request, a download, a prompt), and the action happens
 on a world that has changed.
@@ -326,6 +337,23 @@ on a world that has changed.
   question for written rules now names this one.
 
 ## Tests written from the case in mind, not from the ways things fail
+
+- **#912: the microphone test played half of a long recording, listened
+  past its limit, and blamed the wrong microphone.** Three of Greptile's
+  four on it. The recording went to the speakers as one of Linger's sounds,
+  which are cut at four seconds, so an eight-second test played its first
+  four. The limit counted frames, and an unplugged microphone gives none
+  for the twenty seconds its worker tries to get it back, so "Listening"
+  could last that long. And a microphone that's listed but won't open is
+  stood in for by the default, as in a call (#398), so the test could hear
+  nothing from the default and tell somebody to unmute their headset.
+  *Missed because* each test fed it the easy case: a stand-in speaker with
+  no ceiling, a stand-in microphone faster than a clock, and a microphone
+  that opened. *Changed:* a recording has its own way to the speakers,
+  played whole (`Speaker::recording`), tested through the real queue and
+  through `Sounds`; the listening ends by the clock as well as by the
+  count, tested with a microphone that never answers; and what's said
+  carries whether the default stood in (`Said`), which Settings says first.
 
 - **#909: the echo canceller was told the average of the two speakers.**
   A shared screen's sound is stereo, and what's opposite in the left and

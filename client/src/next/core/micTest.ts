@@ -17,28 +17,39 @@ import { tauriBus } from "./bus";
 /** What the test heard, as the shell says it. */
 export type Heard = "nothing" | "quiet" | "voice";
 
+/**
+ * What the shell says once it has listened: what it heard, and whether the
+ * Microphone picked wouldn't open, so that this was the system default
+ * standing in for it. As a call does (#398): Linger keeps you talking, and
+ * says which microphone it is.
+ */
+export interface Said {
+  heard: Heard;
+  stoodIn: boolean;
+}
+
 /** Where the test is. */
 export type MicTest =
-  /** Not running. After one, what it heard, or why it couldn't start. */
-  | { step: "idle"; heard: Heard | null; problem: string | null }
+  /** Not running. After one, what it said, or why it couldn't start. */
+  | { step: "idle"; said: Said | null; problem: string | null }
   /** Asked for, and the microphone is being opened. */
   | { step: "opening" }
   /** Listening: the latest levels, oldest first, each from 0 to 1. */
   | { step: "listening"; levels: readonly number[] }
   /** Playing back what it heard. */
-  | { step: "playing"; heard: Heard };
+  | { step: "playing"; said: Said };
 
 export type MicTestEvent =
   | { kind: "asked" }
   | { kind: "started" }
   | { kind: "refused"; why: string }
   | { kind: "level"; level: number }
-  | { kind: "heard"; heard: Heard }
+  | { kind: "heard"; said: Said }
   /** It stopped with nothing played, and why: voice was joined while it listened, or the speakers wouldn't open. */
   | { kind: "cut"; why: string }
   | { kind: "done" };
 
-export const MIC_TEST_IDLE: MicTest = { step: "idle", heard: null, problem: null };
+export const MIC_TEST_IDLE: MicTest = { step: "idle", said: null, problem: null };
 
 /** How many levels the moving lines show: about a second and a half at 25 a second. */
 export const MIC_TEST_LINES = 36;
@@ -54,25 +65,32 @@ export function micTestNext(state: MicTest, event: MicTestEvent): MicTest {
     case "started":
       return state.step === "opening" ? { step: "listening", levels: [] } : state;
     case "refused":
-      return state.step === "opening" ? { step: "idle", heard: null, problem: event.why } : state;
+      return state.step === "opening" ? { step: "idle", said: null, problem: event.why } : state;
     case "level":
       return state.step === "listening" ? { step: "listening", levels: [...state.levels, Math.min(1, Math.max(0, event.level))].slice(-MIC_TEST_LINES) } : state;
     case "heard":
       // A microphone that gave nothing at all can be heard before "started" lands.
-      return state.step === "listening" || state.step === "opening" ? { step: "playing", heard: event.heard } : state;
+      return state.step === "listening" || state.step === "opening" ? { step: "playing", said: event.said } : state;
     case "cut":
-      return state.step === "listening" || state.step === "opening" ? { step: "idle", heard: null, problem: event.why } : state;
+      return state.step === "listening" || state.step === "opening" ? { step: "idle", said: null, problem: event.why } : state;
     case "done":
-      if (state.step === "playing") return { step: "idle", heard: state.heard, problem: null };
+      if (state.step === "playing") return { step: "idle", said: state.said, problem: null };
       return state.step === "idle" ? state : MIC_TEST_IDLE;
   }
 }
 
 /**
  * What to say after a test, and what to do about it. With the levelling off
- * a quiet voice has an answer in Settings itself.
+ * a quiet voice has an answer in Settings itself. When the Microphone
+ * picked wouldn't open, that comes first: what was heard was another
+ * microphone, and advice about the one picked would be about the wrong one.
  */
-export function micTestLine(heard: Heard, cleanUp: MicrophoneCleanUp): string {
+export function micTestLine({ heard, stoodIn }: Said, cleanUp: MicrophoneCleanUp): string {
+  if (stoodIn) {
+    const fix = "Close whatever else is using the one you picked, or pick another above.";
+    if (heard === "nothing") return `The Microphone you picked wouldn't open, so Linger listened to your computer's default one, and heard nothing. ${fix}`;
+    return `The Microphone you picked wouldn't open, so that was your computer's default one${heard === "quiet" ? ", and it was very quiet" : ""}. ${fix}`;
+  }
   if (heard === "voice") return "That's how you sound to the others.";
   if (heard === "nothing") {
     return "Linger heard nothing. Check that the Microphone picked above is the one you're talking into, and that it isn't muted, on the microphone itself or in your computer's sound settings.";
@@ -121,7 +139,8 @@ export function shellMicTester(on: (event: MicTestEvent) => void): MicTester {
     else stops.push(unlisten);
   };
   void bus.listen<number>("mictest:level", (level) => on({ kind: "level", level })).then(hold);
-  void bus.listen<Heard>("mictest:heard", (heard) => on({ kind: "heard", heard })).then(hold);
+  // As the shell writes it (`Said` in mic_test.rs): `stood_in`, not `stoodIn`.
+  void bus.listen<{ heard: Heard; stood_in: boolean }>("mictest:heard", (said) => on({ kind: "heard", said: { heard: said.heard, stoodIn: said.stood_in } })).then(hold);
   void bus.listen<string>("mictest:cut", (why) => on({ kind: "cut", why })).then(hold);
   void bus.listen("mictest:done", () => on({ kind: "done" })).then(hold);
   return {

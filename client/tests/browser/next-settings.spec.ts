@@ -1116,7 +1116,7 @@ for (const [width, height] of [
     });
 
     test("the microphone test fits at each of its moments, and nothing is cut off (#907)", async ({ page }) => {
-      for (const moment of ["opening", "listening", "playing", "nothing", "refused"]) {
+      for (const moment of ["opening", "listening", "playing", "nothing", "stoodin", "refused"]) {
         await open(page, `?section=sound&mictest=${moment}`);
         await expect(page.locator(".nx-set-mictest")).toBeVisible();
         expect(await misSized(page), moment).toEqual([]);

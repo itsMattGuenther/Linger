@@ -72,9 +72,14 @@ let rules: NotifyRule[] = [];
 const startup = query.get("autostart");
 let startsAtSignIn = startup === "on";
 
-/** The shell's microphone test stops listening: what it heard, then "done" once it has played. */
-const micTestOver = (heard: string) => {
-  desktop.deliver("mictest:heard", heard);
+/**
+ * The shell's microphone test stops listening: what it heard, then "done"
+ * once it has played. `busy`: the microphone picked wouldn't open, and what
+ * it heard nothing from was the default standing in.
+ */
+const micTestOver = (how: string) => {
+  desktop.deliver("mictest:heard", how === "busy" ? { heard: "nothing", stood_in: true } : { heard: how, stood_in: false });
+  const heard = how === "busy" ? "nothing" : how;
   window.setTimeout(() => desktop.deliver("mictest:done", null), heard === "nothing" ? 10 : query.has("long") ? 2500 : 400);
 };
 
@@ -118,8 +123,9 @@ const desktop = fakeDesktop({
     "plugin:opener|open_url": (args) => desktop.note(`open:${String(args.url)}`),
     voice_devices: () => ({ inputs: ["Built-in microphone"], outputs: ["Headphones"], default_input: "Built-in microphone", default_output: "Headphones" }),
     // The microphone test (#907). `?mictest` says how it goes: `voice`,
-    // `quiet` or `nothing` is what the shell heard; `invoice`, that Linger is
-    // in voice; `nomic`, that no microphone opened. The shell's part is
+    // `quiet` or `nothing` is what the shell heard; `busy`, nothing, from the
+    // default standing in for a microphone that wouldn't open; `invoice`,
+    // that Linger is in voice; `nomic`, that no microphone opened. The shell's part is
     // played out in a moment: levels, then the verdict, then "done" (at once
     // for nothing, which isn't played back).
     mic_test_start: (args) => {

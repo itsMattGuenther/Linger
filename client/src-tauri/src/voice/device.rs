@@ -993,22 +993,39 @@ impl Speaker {
     /// mixed over whatever is playing. Deafen doesn't hold it back: the
     /// deafen sound is one of them, and it is the answer to pressing Deafen.
     pub fn cue(&self, samples: &[i16]) {
+        self.lay(samples, true);
+    }
+
+    /// Play a recording (#907): [`Speaker::cue`], without its ceiling. A
+    /// sound is held to [`MAX_CUE_MS`] because sounds can pile up; the
+    /// microphone test's recording is one thing, up to eight seconds of it,
+    /// and cut at four it lost its second half.
+    pub fn recording(&self, samples: &[i16]) {
+        self.lay(samples, false);
+    }
+
+    fn lay(&self, samples: &[i16], held_to_the_ceiling: bool) {
         let rate = self.rate.load(Ordering::Relaxed);
         if rate == SAMPLE_RATE {
-            overlay(&self.cues, samples, rate);
+            overlay(&self.cues, samples, rate, held_to_the_ceiling);
         } else {
             let mut resampled =
                 Vec::with_capacity(samples.len() * rate as usize / SAMPLE_RATE as usize + 2);
             Linear::new(SAMPLE_RATE, rate).push(samples, &mut resampled);
-            overlay(&self.cues, &resampled, rate);
+            overlay(&self.cues, &resampled, rate, held_to_the_ceiling);
         }
     }
 }
 
 /// Lay a sound over the queue from its front: summed with what is already
-/// there, and longer than it where it runs past the end.
-fn overlay(cues: &Mutex<VecDeque<i32>>, samples: &[i16], rate: u32) {
-    let cap = (rate / 1000 * MAX_CUE_MS) as usize;
+/// there, and longer than it where it runs past the end. Held to the
+/// ceiling ([`MAX_CUE_MS`]), or whole.
+fn overlay(cues: &Mutex<VecDeque<i32>>, samples: &[i16], rate: u32, held_to_the_ceiling: bool) {
+    let cap = if held_to_the_ceiling {
+        (rate / 1000 * MAX_CUE_MS) as usize
+    } else {
+        usize::MAX
+    };
     let mut bed = lock(cues);
     for (at, sample) in samples.iter().take(cap).enumerate() {
         match bed.get_mut(at) {
@@ -2799,6 +2816,24 @@ mod tests {
             lock(&speaker.cues).len(),
             (SAMPLE_RATE / 1000 * MAX_CUE_MS) as usize
         );
+    }
+
+    /// The microphone test's recording plays whole (#912's review): as a
+    /// sound it was cut at the ceiling, and an eight-second test played its
+    /// first four.
+    #[test]
+    fn a_recording_plays_whole_past_the_ceiling_for_sounds() {
+        let longest = (crate::mic_test::LONGEST_MS * (SAMPLE_RATE / 1000)) as usize;
+        assert!(longest > (SAMPLE_RATE / 1000 * MAX_CUE_MS) as usize);
+        let speaker = quiet_speaker(SAMPLE_RATE);
+        speaker.recording(&vec![1; longest]);
+        assert_eq!(lock(&speaker.cues).len(), longest);
+        // And on a device at another rate, all of it at that rate.
+        let speaker = quiet_speaker(44_100);
+        speaker.recording(&vec![1; longest]);
+        let held = lock(&speaker.cues).len();
+        let at_its_rate = longest / 48_000 * 44_100;
+        assert!(held.abs_diff(at_its_rate) < 100, "{held} of {at_its_rate}");
     }
 
     /// Your volume for somebody is a multiply with a ceiling, not a way to
