@@ -393,12 +393,20 @@ jobs:
           cargo test --manifest-path client/src-tauri/Cargo.toml
       - name: the voice path through a sound server
         # Linger's microphone and speakers on real streams, through a private
-        # PulseAudio with one of each: the lists hold those two, and a sound
-        # played comes back at once, not after the server's own two seconds
-        # of buffering (#905).
+        # PulseAudio with two of each: the lists hold those, a sound played
+        # comes back at once, not after the server's own two seconds of
+        # buffering, streams on the default follow it when it moves, and
+        # sound comes back after the server restarts (#905).
         run: |
           command -v pulseaudio
           scripts/linux-voice-check.sh
+          # And it fails when its one test doesn't run, as with a test
+          # renamed or a binary built before it existed: `true` stands in
+          # for one, running nothing and exiting 0.
+          if scripts/linux-voice-check.sh "$(command -v true)"; then
+            echo "::error::linux-voice-check passed with no test run"
+            exit 1
+          fi
 
   rules:
     # The AGENTS.md hard rules a grep can catch: no AI attribution in commits,

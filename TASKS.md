@@ -1118,15 +1118,16 @@ out loud.
   (PulseAudio, or PipeWire as it) through cpal's `pulseaudio` host, and
   ALSA where there's none; streams ask for one frame at a time (the server's
   own buffering is two seconds); monitors are left out; "System default"
-  follows a changed default; one connection to the server is kept for
-  everything (a host each time left connections behind on PipeWire);
-  `LINGER_AUDIO=alsa` keeps to ALSA.
+  follows a changed default, also when the stream is on the default in
+  place of a device that's gone; what's asked of the server goes to one
+  kept connection (a host each time left connections behind on PipeWire),
+  and each stream has its own; `LINGER_AUDIO=alsa` keeps to ALSA.
   `scripts/linux-voice-check.sh` runs it on real streams against a private
-  PulseAudio, in CI, the server restarted under the streams included.
-  `docs/development.md`, "Sound on Linux".
-  The same check passed by hand against a private PipeWire 1.6 (63 ms, one
-  connection, sound back 0.7 s after PipeWire restarted); CI's runs on
-  PulseAudio.
+  PulseAudio, in CI: the default moved and the server restarted under the
+  streams included. `docs/development.md`, "Sound on Linux".
+  The same check passed by hand against a private PipeWire 1.6 (63 ms, the
+  default followed in 1.3 s, sound back 0.7 s after PipeWire restarted);
+  CI's runs on PulseAudio.
   **Left:** Matt's own check on Omarchy at the next release: the lists, a
   call, switching devices in it, changing the desktop's default in it, and
   a long call.

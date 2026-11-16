@@ -245,11 +245,16 @@ all in `client/src-tauri/src/voice/device.rs`:
 - "System default" follows the desktop's default when it changes
   (`Following`): a stream opened on the server is on one device, where ALSA's
   `default` was whatever the server's default was.
-- the app keeps one connection to the server for everything (`host`). The
-  library makes a connection for each host it's asked for, and against
-  PipeWire a host let go often left its connection and a thread behind for
-  good: 43 of 120. When the server is restarted the connection goes with it,
-  the streams hear of that, and they're built again on a new one.
+- what's asked of the server (the lists, which device is the default) goes
+  to one connection the app keeps (`host`). The library makes a connection
+  for each host it's asked for, and against PipeWire a host let go after a
+  question often left its connection and a thread behind for good: 43 of
+  120. Each stream has a connection of its own (`stream_host`), which ends
+  cleanly with the stream. They can't share the kept one: PulseAudio
+  refuses a second playback stream on a connection while the first plays,
+  so the speakers for a call wouldn't open while a chime's were still open.
+  When the server is restarted every connection goes with it, the streams
+  hear of that, and they're built again on new ones.
 
 The library that talks to the server (`pulseaudio`) is built optimized even
 in debug builds (`profile.dev.package` in `client/src-tauri/Cargo.toml`).
@@ -262,12 +267,14 @@ its name, and the two list different names, so switching between them puts
 the choice back on the system default.
 
 `scripts/linux-voice-check.sh` runs the path on real streams: it starts a
-private PulseAudio with one speaker that plays to nowhere and one microphone
-that hears it, and checks that the lists hold those two, that a tone played
-comes back within half a second (it takes about 50 ms), that the app holds
-one connection to the server with a call's streams up, and that after the
-server is stopped and started again a tone comes back by itself (about two
-seconds). It needs the `pulseaudio` daemon itself, which a desktop on
+private PulseAudio with two pairs of pretend devices, each a speaker that
+plays to nowhere and a microphone that hears it, and checks that the lists
+hold those four, that a tone played comes back within half a second (it
+takes about 60 ms), that asking the server things opens no connections and
+a stream's connection goes when it does, that a microphone and speakers on
+the default in place of ones that are gone follow the default to the other
+pair when it moves, and that after the server is stopped and started again
+a tone comes back by itself (about two seconds). It needs the `pulseaudio` daemon itself, which a desktop on
 PipeWire doesn't have, and says so and passes without it; CI's shell job
 runs it on every change to the shell. On such a desktop it runs in a
 container that has the daemon, given the tests already built:
@@ -278,9 +285,11 @@ CI's is PulseAudio because it starts with one command. Most desktops run
 PipeWire, so the same test was run by hand against a private PipeWire 1.6
 (`pipewire`, `wireplumber` and `pipewire-pulse` under `dbus-run-session`,
 the pretend speaker and microphone made with `pactl load-module`) when this
-was built: 63 ms, one connection, and sound back 0.7 s after all three were
-stopped and started. Worth doing again after a change to how streams are
-opened.
+was built: 63 ms, the default followed in 1.3 s, no connection left behind,
+and sound back 0.7 s after all three were stopped and started. PipeWire
+doesn't move a stream when the default moves, where PulseAudio does, so
+there the following is Linger's own doing. Worth doing again after a change
+to how streams are opened.
 
 ## How the desktop app starts on Linux
 

@@ -68,6 +68,21 @@ to be right for every shape that window takes.
 
 ## A check its surroundings can fool
 
+- **#910: the voice check on real streams passed with no test run, and its
+  deadline couldn't end it.** Two of Greptile's. Given a test binary built
+  before the test existed (or the test renamed), Rust's runner matches
+  nothing and exits 0, and the script read only the exit code. And the
+  test's own 30-second deadline around opening the streams panics while
+  the thread that's stuck opening carries on, which the test's runtime
+  then waits for: the hang it was there to end went on. *Missed because*
+  I'd asked "does it fail without its sound server?" and stopped at the
+  one way I'd thought of for it to run nothing; and the deadline was never
+  tried against something that doesn't return. *Changed:* the script
+  requires the line that says the one test ran and passed, and runs the
+  test under `timeout`, which ends the process whatever its threads are
+  doing. CI and `check.sh` also run the script on a binary that runs no
+  test and require it to fail.
+
 - **#858: the warm-up's test would pass a wait that waited for nothing.**
   The run's own check from the Mac finishes a handshake at the front before
   Safari's request, so a wait for more than none finished at once, and the
@@ -326,6 +341,25 @@ on a world that has changed.
   question for written rules now names this one.
 
 ## Tests written from the case in mind, not from the ways things fail
+
+- **#910: a stream on the default in place of a device that's gone didn't
+  follow the default.** "System default" follows the desktop's default when
+  it moves, and whether to follow was decided by whether a device had been
+  picked, not by whether the stream was on it. A device picked and not
+  there any more, or there and refusing to open, puts the stream on the
+  default with a name still picked, so it stayed on the old default. On
+  Linux that was everybody who'd picked a device before: the names changed
+  with #905. Caught by Greptile. *Missed because* the tests followed a
+  default nobody had picked anything over, and a named device that opened:
+  the two cases in mind, not the fallbacks between them. *Changed:* `find`
+  says whether what it found is the device named, `or_default` hands back
+  the default it fell back to, and `on_the_one_picked` is the one place the
+  two meet, with a test of each. The check on real streams opens a
+  microphone and speakers by a name that isn't there and counts the
+  watches started (none without the fix), then moves the default and hears
+  both follow. Counted as well as heard, because PulseAudio moves such a
+  stream by itself, so there the sound arriving proves nothing; PipeWire
+  doesn't.
 
 - **#909: the echo canceller was told the average of the two speakers.**
   A shared screen's sound is stereo, and what's opposite in the left and

@@ -40,11 +40,13 @@ strip = true
 
 # The client for a Linux desktop's sound server (cpal's `pulseaudio`
 # feature, #905) clears a megabyte before every read from the server. Built
-# unoptimized that's a loop a byte at a time, and the one thread that reads
-# for a call's microphone, its speakers and everything asked of the server
-# never caught up: opening the speakers hung in a debug build. Optimized it
-# is one fill. So this one crate is optimized in debug builds too, which is
-# what `pnpm tauri dev` and the tests run.
+# unoptimized that's a loop a byte at a time, for every 20 ms of sound: with
+# one connection carrying a call's microphone and speakers its reading
+# thread never caught up, and opening the speakers hung. Each stream has its
+# own connection now (`voice::device::stream_host`), which copes, but only
+# just on a busy machine, and the voice check on real streams measures
+# delay. Optimized it is one fill. So this one crate is optimized in debug
+# builds too, which is what `pnpm tauri dev` and the tests run.
 [profile.dev.package.pulseaudio]
 opt-level = 3
 

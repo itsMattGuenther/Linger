@@ -134,8 +134,14 @@ if on shell; then
     mkdir -p client/dist
     (cd client/src-tauri && cargo clippy --all-targets -- -D warnings && cargo test)
     # The voice path through a sound server, on real streams (#905). It
-    # needs the PulseAudio daemon and says so where there's none.
+    # needs the PulseAudio daemon and says so where there's none. With one,
+    # it also has to fail when its one test doesn't run, as CI checks:
+    # `true` stands in for a binary that runs nothing and exits 0.
     scripts/linux-voice-check.sh
+    if command -v pulseaudio >/dev/null && command -v pactl >/dev/null && scripts/linux-voice-check.sh "$(command -v true)"; then
+      echo "linux-voice-check passed with no test run" >&2
+      exit 1
+    fi
   else
     echo "skipped: system webview deps not installed here (CI still runs this pass)"
   fi
