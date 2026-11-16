@@ -198,7 +198,7 @@ export function SoundSection({ sound, onSound, onPreview, voice, onVoice, device
               <Note>Linger's own sounds play on these Speakers too. A change applies at once, in a call too. If a device you picked isn't plugged in, Linger uses the system default rather than stopping you talking.</Note>
             </>
           )}
-          {/* What the desktop app does to the microphone before sending it (#904). Both on unless turned off. */}
+          {/* What the desktop app does to the microphone before sending it (#904, #906). All on unless turned off. */}
           <SettingRow
             title="Even out my volume"
             description="Brings your voice to a normal speaking level, so nobody has to turn you up. A quiet room stays quiet. Turn it off if your own audio gear already does this."
@@ -212,6 +212,11 @@ export function SoundSection({ sound, onSound, onPreview, voice, onVoice, device
             control={
               <Switch label="Remove background noise" checked={voice.cleanUp.noise} onChange={(noise) => onVoice({ ...voice, cleanUp: { ...voice.cleanUp, noise } })} />
             }
+          />
+          <SettingRow
+            title="Remove echo"
+            description="Stops what comes out of your speakers going back in through your microphone, so nobody hears themselves. With headphones there's nothing to remove, and it leaves your voice alone."
+            control={<Switch label="Remove echo" checked={voice.cleanUp.echo} onChange={(echo) => onVoice({ ...voice, cleanUp: { ...voice.cleanUp, echo } })} />}
           />
           <SettingRow
             title="Push to talk"

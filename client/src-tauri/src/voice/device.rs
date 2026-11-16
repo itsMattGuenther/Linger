@@ -50,7 +50,7 @@ use cpal::{
 use tokio::sync::mpsc;
 
 use crate::voice::audio::{Devices, Refused, Sink, Source, CHANNELS, FRAME_SAMPLES, SAMPLE_RATE};
-use crate::voice::cleanup::{self, Cleaner};
+use crate::voice::cleanup::{self, Cleaner, Cleanup};
 
 /// Why a device could not be opened, in words the voice surface can show.
 #[derive(Debug, thiserror::Error)]
@@ -89,10 +89,13 @@ pub fn open_default() -> Result<Devices, DeviceError> {
 /// is present and won't open is said in the voice bar, with why
 /// (`Source::refused`, #398).
 pub fn open(input: Option<&str>, output: Option<&str>) -> Result<Devices, DeviceError> {
-    let source = Microphone::open(input)
+    // What the speakers play is kept for the microphone's echo canceller
+    // (#906): the two are opened together, so they share it.
+    let played = Played::default();
+    let source = Microphone::beside(input, Some(played.clone()))
         .map_err(|error| DeviceError::Opening("microphone", Box::new(error)))?;
-    let sink =
-        Speaker::open(output).map_err(|error| DeviceError::Opening("speakers", Box::new(error)))?;
+    let sink = Speaker::beside(output, Some(played))
+        .map_err(|error| DeviceError::Opening("speakers", Box::new(error)))?;
     Ok(Devices {
         source: Arc::new(source),
         sink: Arc::new(sink),
@@ -165,11 +168,50 @@ pub struct Microphone {
     /// The device asked for when it wouldn't open and the default is in its
     /// place (#398). Set on every build, so a later build clears it.
     refused: Arc<Mutex<Option<Refused>>>,
-    /// What's done to each frame before anybody gets it (#904), with the
-    /// build whose frames it has been cleaning: levelling and noise learned
-    /// on one microphone are forgotten at the first frame from the next.
-    cleaner: Mutex<(Cleaner, u64)>,
+    /// What's done to each frame before anybody gets it (#904).
+    cleaning: Mutex<Cleaning>,
+    /// What the speakers opened beside this microphone play (#906), or
+    /// `None` for one opened alone, as a voice message's is.
+    played: Option<Played>,
     worker: Worker,
+}
+
+/// A microphone's cleaner and what goes with it from one frame to the next.
+struct Cleaning {
+    cleaner: Cleaner,
+    /// The build whose frames it has been cleaning: levelling and noise
+    /// learned on one microphone are forgotten at the first frame from the
+    /// next.
+    build: u64,
+    /// What the speakers played since the last frame, at their device's
+    /// rate, and then at [`SAMPLE_RATE`]: kept between frames only to save
+    /// making them again fifty times a second.
+    at_device_rate: Vec<i16>,
+    at_our_rate: Vec<i16>,
+    /// From the speakers' rate to ours, when they differ, with the rate
+    /// it was made for: the speakers can change in a call (#249).
+    to_our_rate: Option<(u32, Linear)>,
+}
+
+impl Cleaning {
+    /// Tell the echo canceller what the speakers have played since the last
+    /// frame, before the frame that may hold its echo (#906).
+    fn hear(&mut self, played: &Played) {
+        self.at_device_rate.clear();
+        let rate = played.take(&mut self.at_device_rate);
+        if rate == SAMPLE_RATE {
+            self.cleaner.played(&self.at_device_rate);
+        } else if rate != 0 {
+            if self.to_our_rate.as_ref().map(|(from, _)| *from) != Some(rate) {
+                self.to_our_rate = Some((rate, Linear::new(rate, SAMPLE_RATE)));
+            }
+            if let Some((_, linear)) = self.to_our_rate.as_mut() {
+                self.at_our_rate.clear();
+                linear.push(&self.at_device_rate, &mut self.at_our_rate);
+                self.cleaner.played(&self.at_our_rate);
+            }
+        }
+    }
 }
 
 /// A microphone frame, with which build of the stream made it: the first is
@@ -201,11 +243,19 @@ impl Microphone {
     /// Blocks while the device is opened, which on some hosts is tens of
     /// milliseconds — call it from a blocking task, not from the reactor.
     pub fn open(name: Option<&str>) -> Result<Self, DeviceError> {
+        Self::beside(name, None)
+    }
+
+    /// [`Microphone::open`], beside speakers that keep what they play in
+    /// `played`, so this microphone's echo canceller can take it out of what
+    /// it hears (#906): a call's microphone. One opened alone cancels no
+    /// echo.
+    fn beside(name: Option<&str>, played: Option<Played>) -> Result<Self, DeviceError> {
         let wanted = Arc::new(Mutex::new(name.map(str::to_owned)));
         let chosen = Arc::clone(&wanted);
         let refused = Arc::new(Mutex::new(None));
         let noted = Arc::clone(&refused);
-        Self::over(wanted, refused, move |frames, alarm| {
+        Self::over(wanted, refused, played, move |frames, alarm| {
             let host = cpal::default_host();
             let name = lock(&chosen).clone();
             let device = find(
@@ -233,6 +283,7 @@ impl Microphone {
     fn over<S, B>(
         wanted: Arc<Mutex<Option<String>>>,
         refused: Arc<Mutex<Option<Refused>>>,
+        played: Option<Played>,
         mut build: B,
     ) -> Result<Self, DeviceError>
     where
@@ -266,8 +317,15 @@ impl Microphone {
             frames: tokio::sync::Mutex::new(rx),
             wanted,
             refused,
-            // The first build's frames are the ones a new cleaner is for.
-            cleaner: Mutex::new((Cleaner::new(cleanup::chosen()), 1)),
+            cleaning: Mutex::new(Cleaning {
+                cleaner: Cleaner::new(Self::chosen(played.as_ref())),
+                // The first build's frames are the ones a new cleaner is for.
+                build: 1,
+                at_device_rate: Vec::new(),
+                at_our_rate: Vec::new(),
+                to_our_rate: None,
+            }),
+            played,
             worker,
         })
     }
@@ -280,15 +338,27 @@ impl Microphone {
     /// cleaner starts afresh at the first frame from another build, not
     /// when that build was made: the last one's frames may still be queued.
     fn cleaned(&self, build: u64, mut frame: Vec<i16>) -> Vec<i16> {
-        let mut held = lock(&self.cleaner);
-        let (cleaner, cleaning) = &mut *held;
-        if *cleaning != build {
-            cleaner.restart();
-            *cleaning = build;
+        let mut cleaning = lock(&self.cleaning);
+        if cleaning.build != build {
+            cleaning.cleaner.restart();
+            cleaning.build = build;
         }
-        cleaner.follow(cleanup::chosen());
-        cleaner.clean(&mut frame);
+        cleaning.cleaner.follow(Self::chosen(self.played.as_ref()));
+        if let Some(played) = &self.played {
+            cleaning.hear(played);
+        }
+        cleaning.cleaner.clean(&mut frame);
         frame
+    }
+
+    /// What Settings chose, for a microphone with these speakers beside it,
+    /// or none: alone, there's no echo to cancel and nothing to cancel it
+    /// with.
+    fn chosen(played: Option<&Played>) -> Cleanup {
+        match played {
+            Some(_) => cleanup::chosen(),
+            None => cleanup::chosen().with_nothing_played(),
+        }
     }
 }
 
@@ -396,7 +466,7 @@ where
 fn output_as<T>(
     device: &cpal::Device,
     config: cpal::StreamConfig,
-    (lanes, cues, screen, deafened): Playback,
+    (lanes, cues, screen, deafened, played): Playback,
     channels: usize,
     died: impl FnMut(cpal::Error) + Send + 'static,
 ) -> Result<cpal::Stream, DeviceError>
@@ -411,6 +481,7 @@ where
                 &cues,
                 &screen,
                 &deafened,
+                played.as_ref(),
                 channels,
                 out,
                 T::from_sample,
@@ -492,13 +563,65 @@ type Cues = Arc<Mutex<VecDeque<i32>>>;
 type Screen = Arc<Mutex<ScreenLane>>;
 
 /// What an output stream's callback mixes: the lanes, the sounds, the
-/// screen's sound and the deafen gate.
+/// screen's sound and the deafen gate, and where to keep what it played.
 type Playback = (
     Arc<Mutex<HashMap<String, Lane>>>,
     Cues,
     Screen,
     Arc<AtomicBool>,
+    Option<Played>,
 );
+
+/// What the speakers have been given to play, kept for the microphone
+/// opened beside them (#906): its echo canceller needs to know what's
+/// coming out of the speakers to take it out of what it hears
+/// (`cleanup.rs`). Everything the output callback mixes goes in, one sample
+/// a frame, at the device's rate: the voices, Linger's own sounds and a
+/// shared screen's sound. The microphone takes it out again as it reads its
+/// frames (`Microphone::cleaned`).
+#[derive(Clone, Default)]
+pub struct Played(Arc<Mutex<PlayedSamples>>);
+
+#[derive(Default)]
+struct PlayedSamples {
+    /// One channel: both sides of a shared screen's sound as their average.
+    samples: VecDeque<i16>,
+    /// The device's rate, which the samples are at. Zero until a stream is up.
+    rate: u32,
+}
+
+/// The most kept of what was played, in milliseconds. A microphone reads a
+/// frame every twenty; past this nobody is reading (the microphone is being
+/// opened again, say), and the oldest goes, so it can't grow.
+const PLAYED_MOST_MS: usize = 500;
+
+impl Played {
+    /// A stream is up at `rate`: what the last one played was at another
+    /// rate, perhaps, and is let go.
+    fn start(&self, rate: u32) {
+        let mut played = lock(&self.0);
+        played.samples.clear();
+        played.rate = rate;
+    }
+
+    /// Take what's been played since the last time, onto the end of `into`,
+    /// and say what rate it's at.
+    fn take(&self, into: &mut Vec<i16>) -> u32 {
+        let mut played = lock(&self.0);
+        into.extend(played.samples.drain(..));
+        played.rate
+    }
+}
+
+impl PlayedSamples {
+    fn push(&mut self, sample: i16) {
+        let most = self.rate as usize / 1000 * PLAYED_MOST_MS;
+        if self.samples.len() >= most.max(1) {
+            self.samples.pop_front();
+        }
+        self.samples.push_back(sample);
+    }
+}
 
 /// How far behind a shared screen's sound plays (#736): enough for its
 /// packets coming unevenly over the screen socket, a TCP connection that
@@ -779,17 +902,28 @@ impl Speaker {
     /// Open an output device by name, or the default for `None`. Blocks like
     /// [`Microphone::open`].
     pub fn open(name: Option<&str>) -> Result<Self, DeviceError> {
+        Self::beside(name, None)
+    }
+
+    /// [`Speaker::open`], keeping what it plays in `played` for the
+    /// microphone opened with it (#906): a call's speakers. Linger's own
+    /// sounds outside a call have no microphone beside them, and keep
+    /// nothing.
+    fn beside(name: Option<&str>, played: Option<Played>) -> Result<Self, DeviceError> {
         let wanted = Arc::new(Mutex::new(name.map(str::to_owned)));
         let chosen = Arc::clone(&wanted);
         let lanes: Arc<Mutex<HashMap<String, Lane>>> = Arc::new(Mutex::new(HashMap::new()));
         let cues: Cues = Arc::default();
         let screen: Screen = Arc::default();
-        let shared_screen = Arc::clone(&screen);
         let rate = Arc::new(AtomicU32::new(SAMPLE_RATE));
         let deafened = Arc::new(AtomicBool::new(false));
-        let shared_deafened = Arc::clone(&deafened);
-        let shared = Arc::clone(&lanes);
-        let shared_cues = Arc::clone(&cues);
+        let playback: Playback = (
+            Arc::clone(&lanes),
+            Arc::clone(&cues),
+            Arc::clone(&screen),
+            Arc::clone(&deafened),
+            played,
+        );
         let shared_rate = Arc::clone(&rate);
         let worker = Worker::start(
             move |alarm: &Alarm| {
@@ -806,17 +940,7 @@ impl Speaker {
                     &device,
                     || host.default_output_device(),
                     "speaker",
-                    |device| {
-                        output_stream(
-                            device,
-                            &shared,
-                            &shared_cues,
-                            &shared_screen,
-                            &shared_deafened,
-                            &shared_rate,
-                            alarm,
-                        )
-                    },
+                    |device| output_stream(device, &playback, &shared_rate, alarm),
                 )?;
                 Ok((stream, ()))
             },
@@ -869,19 +993,10 @@ fn overlay(cues: &Mutex<VecDeque<i32>>, samples: &[i16], rate: u32) {
 /// A stream to an output device, mixing every lane and every sound into it.
 fn output_stream(
     device: &cpal::Device,
-    lanes: &Arc<Mutex<HashMap<String, Lane>>>,
-    cues: &Cues,
-    screen: &Screen,
-    deafened: &Arc<AtomicBool>,
+    playback: &Playback,
     rate: &AtomicU32,
     alarm: &Alarm,
 ) -> Result<cpal::Stream, DeviceError> {
-    let playback = (
-        Arc::clone(lanes),
-        Arc::clone(cues),
-        Arc::clone(screen),
-        Arc::clone(deafened),
-    );
     opened(
         preferred(device.supported_output_configs()?),
         || Ok(device.default_output_config()?),
@@ -893,7 +1008,7 @@ fn output_stream(
 fn open_output(
     device: &cpal::Device,
     config: SupportedStreamConfig,
-    (lanes, cues, screen, deafened): Playback,
+    (lanes, cues, screen, deafened, played): Playback,
     rate: &AtomicU32,
     alarm: &Alarm,
 ) -> Result<cpal::Stream, DeviceError> {
@@ -909,6 +1024,9 @@ fn open_output(
     // A sound half played on the old device was at its rate; let it go.
     lock(&cues).clear();
     rate.store(device_rate, Ordering::Relaxed);
+    if let Some(played) = &played {
+        played.start(device_rate);
+    }
     let died = on_error("speaker", alarm.clone());
     let format = config.sample_format();
     let config = config.config();
@@ -916,7 +1034,16 @@ fn open_output(
         SampleFormat::I16 => device.build_output_stream(
             config,
             move |out: &mut [i16], _| {
-                mix_all(&lanes, &cues, &screen, &deafened, channels, out, |s| s);
+                mix_all(
+                    &lanes,
+                    &cues,
+                    &screen,
+                    &deafened,
+                    played.as_ref(),
+                    channels,
+                    out,
+                    |s| s,
+                );
             },
             died,
             None,
@@ -924,7 +1051,16 @@ fn open_output(
         SampleFormat::F32 => device.build_output_stream(
             config,
             move |out: &mut [f32], _| {
-                mix_all(&lanes, &cues, &screen, &deafened, channels, out, to_f32);
+                mix_all(
+                    &lanes,
+                    &cues,
+                    &screen,
+                    &deafened,
+                    played.as_ref(),
+                    channels,
+                    out,
+                    to_f32,
+                );
             },
             died,
             None,
@@ -933,70 +1069,70 @@ fn open_output(
         SampleFormat::I8 => output_as::<i8>(
             device,
             config,
-            (lanes, cues, screen, deafened),
+            (lanes, cues, screen, deafened, played),
             channels,
             died,
         )?,
         SampleFormat::I24 => output_as::<I24>(
             device,
             config,
-            (lanes, cues, screen, deafened),
+            (lanes, cues, screen, deafened, played),
             channels,
             died,
         )?,
         SampleFormat::I32 => output_as::<i32>(
             device,
             config,
-            (lanes, cues, screen, deafened),
+            (lanes, cues, screen, deafened, played),
             channels,
             died,
         )?,
         SampleFormat::I64 => output_as::<i64>(
             device,
             config,
-            (lanes, cues, screen, deafened),
+            (lanes, cues, screen, deafened, played),
             channels,
             died,
         )?,
         SampleFormat::U8 => output_as::<u8>(
             device,
             config,
-            (lanes, cues, screen, deafened),
+            (lanes, cues, screen, deafened, played),
             channels,
             died,
         )?,
         SampleFormat::U16 => output_as::<u16>(
             device,
             config,
-            (lanes, cues, screen, deafened),
+            (lanes, cues, screen, deafened, played),
             channels,
             died,
         )?,
         SampleFormat::U24 => output_as::<U24>(
             device,
             config,
-            (lanes, cues, screen, deafened),
+            (lanes, cues, screen, deafened, played),
             channels,
             died,
         )?,
         SampleFormat::U32 => output_as::<u32>(
             device,
             config,
-            (lanes, cues, screen, deafened),
+            (lanes, cues, screen, deafened, played),
             channels,
             died,
         )?,
         SampleFormat::U64 => output_as::<u64>(
             device,
             config,
-            (lanes, cues, screen, deafened),
+            (lanes, cues, screen, deafened, played),
             channels,
             died,
         )?,
         SampleFormat::F64 => output_as::<f64>(
             device,
             config,
-            (lanes, cues, screen, deafened),
+            (lanes, cues, screen, deafened, played),
             channels,
             died,
         )?,
@@ -1159,6 +1295,7 @@ fn mix<T: Copy>(
         cues,
         &Mutex::default(),
         deafened,
+        None,
         channels,
         out,
         convert,
@@ -1170,16 +1307,20 @@ fn mix<T: Copy>(
 /// queued contributes silence, which is what a pause between words is, once
 /// its last sample has eased to zero: a lane that runs dry mid-word fades
 /// out rather than clicks (#462), and says how long it waited (`starved`).
-/// Deafened, the voices are silent and the sounds still play (#250).
+/// Deafened, the voices are silent and the sounds still play (#250). What
+/// it mixes is kept in `played`, when there is one, for the echo canceller
+/// of the microphone beside these speakers (#906).
 ///
 /// A shared screen's sound (#736) is stereo: its left goes to the first
 /// channel and its right to the second, both halves to any other, and to a
 /// one-channel device. Deafened, it's silent with the voices.
+#[allow(clippy::too_many_arguments)]
 fn mix_all<T: Copy>(
     lanes: &Mutex<HashMap<String, Lane>>,
     cues: &Mutex<VecDeque<i32>>,
     screen: &Mutex<ScreenLane>,
     deafened: &AtomicBool,
+    played: Option<&Played>,
     channels: usize,
     out: &mut [T],
     convert: impl Fn(i16) -> T,
@@ -1187,6 +1328,7 @@ fn mix_all<T: Copy>(
     let mut lanes = lock(lanes);
     let mut cues = lock(cues);
     let mut screen = lock(screen);
+    let mut played = played.map(|played| lock(&played.0));
     let voices = !deafened.load(Ordering::Relaxed);
     for frame in out.chunks_mut(channels.max(1)) {
         let mut acc: i32 = cues.pop_front().unwrap_or(0);
@@ -1210,6 +1352,10 @@ fn mix_all<T: Copy>(
         };
         let (left, right) = (i32::from(left), i32::from(right));
         let both = (left + right) / 2;
+        if let Some(played) = played.as_mut() {
+            #[allow(clippy::cast_possible_truncation)]
+            played.push((acc + both).clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16);
+        }
         let only = frame.len() == 1;
         for (at, slot) in frame.iter_mut().enumerate() {
             let side = match at {
@@ -2523,6 +2669,7 @@ mod tests {
             &speaker.cues,
             &speaker.screen,
             &speaker.deafened,
+            None,
             2,
             &mut out,
             |s| s,
@@ -2540,6 +2687,7 @@ mod tests {
             &speaker.cues,
             &speaker.screen,
             &speaker.deafened,
+            None,
             1,
             &mut mono,
             |s| s,
@@ -2879,11 +3027,12 @@ mod tests {
         let _settings = CHOICE.lock().await;
         let streams: Arc<Mutex<Vec<Frames>>> = Arc::default();
         let held = Arc::clone(&streams);
-        let microphone = Microphone::over(Arc::default(), Arc::default(), move |frames, _| {
-            held.lock().unwrap().push(frames.clone());
-            Ok(Fake)
-        })
-        .expect("a microphone over a stand-in");
+        let microphone =
+            Microphone::over(Arc::default(), Arc::default(), None, move |frames, _| {
+                held.lock().unwrap().push(frames.clone());
+                Ok(Fake)
+            })
+            .expect("a microphone over a stand-in");
         // The stand-in for each device built: what it sends is its frames.
         let device = |nth: usize| {
             for _ in 0..400 {
@@ -2936,6 +3085,133 @@ mod tests {
         assert!(
             learned - afresh >= 8.0,
             "on a new device the gain was {afresh:.1} dB, against {learned:.1} dB learned on the last"
+        );
+    }
+
+    /// What the output callback mixes is kept for the microphone beside the
+    /// speakers (#906): one sample a frame at the device's rate, a shared
+    /// screen's two sides as their average, with the voices and the sounds.
+    /// No more than half a second of it, and none at all without a
+    /// microphone to keep it for.
+    #[test]
+    fn what_the_speakers_mix_is_kept_for_the_microphone() {
+        let speaker = quiet_speaker(SAMPLE_RATE);
+        let played = Played::default();
+        played.start(SAMPLE_RATE);
+        speaker.cue(&[1000, 2000, 3000]);
+        // Two channels: three frames of the sounds, then one of silence.
+        let mut out = vec![0i16; 8];
+        mix_all(
+            &speaker.lanes,
+            &speaker.cues,
+            &speaker.screen,
+            &speaker.deafened,
+            Some(&played),
+            2,
+            &mut out,
+            |s| s,
+        );
+        let mut kept = Vec::new();
+        assert_eq!(played.take(&mut kept), SAMPLE_RATE);
+        assert_eq!(kept, [1000, 2000, 3000, 0]);
+        // Taken is gone: the next frame's worth is only what's new.
+        kept.clear();
+        played.take(&mut kept);
+        assert!(kept.is_empty());
+
+        // Nobody reading: the oldest goes, so it holds half a second at most.
+        let mut long = vec![0i16; SAMPLE_RATE as usize * 2];
+        mix_all(
+            &speaker.lanes,
+            &speaker.cues,
+            &speaker.screen,
+            &speaker.deafened,
+            Some(&played),
+            1,
+            &mut long,
+            |s| s,
+        );
+        played.take(&mut kept);
+        assert_eq!(kept.len(), SAMPLE_RATE as usize / 1000 * PLAYED_MOST_MS);
+
+        // Another device at another rate: what the last one played is let go.
+        mix_all(
+            &speaker.lanes,
+            &speaker.cues,
+            &speaker.screen,
+            &speaker.deafened,
+            Some(&played),
+            1,
+            &mut [0i16; 16],
+            |s| s,
+        );
+        played.start(44_100);
+        kept.clear();
+        assert_eq!(played.take(&mut kept), 44_100);
+        assert!(kept.is_empty());
+    }
+
+    /// A call's microphone and speakers, end to end (#906): what the
+    /// speakers play comes back into the microphone 60 ms later, 10 dB down,
+    /// and what `frame()` hands the engine has next to none of it. The
+    /// speakers run at 44.1 kHz here, so what they played is brought to the
+    /// microphone's rate on the way. A microphone opened alone, as a voice
+    /// message's is, sends the same echo on: it has nothing to cancel with.
+    #[tokio::test]
+    async fn a_microphone_beside_speakers_sends_no_echo_of_them() {
+        use crate::voice::cleanup::sounds::{another_voice, dbfs, CHOICE};
+        let _settings = CHOICE.lock().await;
+        let theirs = another_voice(10.0, 0.0);
+        let delay = SAMPLE_RATE as usize * 60 / 1000;
+        let rate = 44_100u32;
+        let device_frame = rate as usize * FRAME_SAMPLES / SAMPLE_RATE as usize;
+        let mut left = Vec::new();
+        for beside in [true, false] {
+            let speaker = quiet_speaker(rate);
+            let played = Played::default();
+            played.start(rate);
+            let streams: Arc<Mutex<Vec<Frames>>> = Arc::default();
+            let held = Arc::clone(&streams);
+            let microphone = Microphone::over(
+                Arc::default(),
+                Arc::default(),
+                beside.then(|| played.clone()),
+                move |frames, _| {
+                    held.lock().unwrap().push(frames.clone());
+                    Ok(Fake)
+                },
+            )
+            .expect("a microphone over a stand-in");
+            let device = streams.lock().unwrap()[0].clone();
+            let mut heard = Vec::with_capacity(theirs.len());
+            for (at, frame) in theirs.as_chunks::<FRAME_SAMPLES>().0.iter().enumerate() {
+                // The speakers: twenty milliseconds of their voice, mixed.
+                speaker.cue(frame);
+                mix_all(
+                    &speaker.lanes,
+                    &speaker.cues,
+                    &speaker.screen,
+                    &speaker.deafened,
+                    Some(&played),
+                    2,
+                    &mut vec![0i16; device_frame * 2],
+                    |s| s,
+                );
+                // The microphone: what the speakers played a moment ago.
+                let start = at * FRAME_SAMPLES;
+                let echo: Vec<i16> = (start..start + FRAME_SAMPLES)
+                    .map(|i| if i >= delay { theirs[i - delay] / 3 } else { 0 })
+                    .collect();
+                device.send(echo);
+                heard.extend(microphone.frame().await.expect("a frame"));
+            }
+            let last = heard.len() - 4 * SAMPLE_RATE as usize;
+            left.push(dbfs(&heard[last..]));
+        }
+        let (beside, alone) = (left[0], left[1]);
+        assert!(
+            alone - beside >= 25.0,
+            "beside speakers the echo came out at {beside:.1} dBFS, and alone at {alone:.1} dBFS"
         );
     }
 

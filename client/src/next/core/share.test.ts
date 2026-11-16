@@ -1239,14 +1239,21 @@ describe("a viewer window sharing the owner's connection", () => {
     await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]));
     evening().slice(0, 3).forEach(core);
     const told = () => invoked.filter((call) => call.cmd === "voice_clean_up").map((call) => call.args.cleanup);
-    await vi.waitFor(() => expect(told()).toEqual([{ level: false, noise: true }]));
+    await vi.waitFor(() => expect(told()).toEqual([{ level: false, noise: true, echo: true }]));
 
     // Out of voice as well: a voice message's microphone follows it too.
     const follower = await viewer.mirror.followOwner(viewer.bus);
-    await follower.intend({ kind: "voice.cleanup", level: true, noise: false });
-    await vi.waitFor(() => expect(told()).toEqual([{ level: false, noise: true }, { level: true, noise: false }]));
+    await follower.intend({ kind: "voice.cleanup", level: true, noise: false, echo: false });
+    await vi.waitFor(() =>
+      expect(told()).toEqual([
+        { level: false, noise: true, echo: true },
+        { level: true, noise: false, echo: false },
+      ]),
+    );
     // Something that isn't a switch is dropped, not passed on.
-    await follower.intend({ kind: "voice.cleanup", level: "loud", noise: false } as never);
+    await follower.intend({ kind: "voice.cleanup", level: "loud", noise: false, echo: true } as never);
+    // So is one from a Settings that knows no echo switch: all three, or nothing.
+    await follower.intend({ kind: "voice.cleanup", level: true, noise: false } as never);
     await new Promise((settle) => setTimeout(settle, 20));
     expect(told()).toHaveLength(2);
     follower.stop();

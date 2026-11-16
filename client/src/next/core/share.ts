@@ -193,11 +193,12 @@ export type Intent =
    */
   | { kind: "voice.devices"; input: string | null; output: string | null }
   /**
-   * Settings switched part of the microphone's clean-up on or off (#904):
-   * levelling, or noise suppression. The list window tells the shell, and
-   * any microphone that's open follows from its next frame.
+   * Settings switched part of the microphone's clean-up on or off (#904,
+   * #906): levelling, noise suppression or echo cancelling. The list window
+   * tells the shell, and any microphone that's open follows from its next
+   * frame.
    */
-  | { kind: "voice.cleanup"; level: boolean; noise: boolean }
+  | { kind: "voice.cleanup"; level: boolean; noise: boolean; echo: boolean }
   /**
    * How loud somebody in your voice plays for you, 0 to 2, from their chip
    * on a conversation's voice line (#747). Kept on this computer, never sent
@@ -559,8 +560,8 @@ export async function shareAsOwner(
         // Saved on this computer by Settings already; the shell is told
         // now, in a call or out of one: a voice message's microphone
         // follows it too (#904).
-        if (typeof intent.level !== "boolean" || typeof intent.noise !== "boolean") return;
-        void voiceCleanUp({ level: intent.level, noise: intent.noise }).catch(() => undefined);
+        if (typeof intent.level !== "boolean" || typeof intent.noise !== "boolean" || typeof intent.echo !== "boolean") return;
+        void voiceCleanUp({ level: intent.level, noise: intent.noise, echo: intent.echo }).catch(() => undefined);
         return;
       }
       case "voice.volume":

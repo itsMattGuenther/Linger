@@ -650,8 +650,8 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
             void intend({ kind: "voice.devices", input: prefs.devices.input, output: prefs.devices.output }).catch(() => undefined);
           }
           // And the microphone's clean-up (#904): the list window tells the shell.
-          if (prefs.cleanUp.level !== voice.cleanUp.level || prefs.cleanUp.noise !== voice.cleanUp.noise) {
-            void intend({ kind: "voice.cleanup", level: prefs.cleanUp.level, noise: prefs.cleanUp.noise }).catch(() => undefined);
+          if (prefs.cleanUp.level !== voice.cleanUp.level || prefs.cleanUp.noise !== voice.cleanUp.noise || prefs.cleanUp.echo !== voice.cleanUp.echo) {
+            void intend({ kind: "voice.cleanup", ...prefs.cleanUp }).catch(() => undefined);
           }
         },
         devices,
