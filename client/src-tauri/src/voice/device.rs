@@ -133,8 +133,14 @@ pub struct DeviceList {
 /// as it was. `LINGER_AUDIO=alsa` keeps to ALSA, for a setup where the
 /// server's way goes wrong (docs/development.md).
 fn host() -> cpal::Host {
+    host_for(std::env::var_os("LINGER_AUDIO").as_deref())
+}
+
+/// [`host`], for what `LINGER_AUDIO` says.
+#[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
+fn host_for(chosen: Option<&std::ffi::OsStr>) -> cpal::Host {
     #[cfg(target_os = "linux")]
-    if std::env::var_os("LINGER_AUDIO").is_some_and(|chosen| chosen == "alsa") {
+    if chosen.is_some_and(|chosen| chosen == "alsa") {
         if let Ok(alsa) = cpal::host_from_id(cpal::HostId::Alsa) {
             return alsa;
         }
@@ -174,6 +180,102 @@ fn microphones(devices: impl Iterator<Item = cpal::Device>) -> impl Iterator<Ite
         !device
             .id()
             .is_ok_and(|id| is_sound_server(id.host()) && is_monitor(id.id()))
+    })
+}
+
+/// How often a stream on the sound server's default device looks whether
+/// the default is still that device.
+const DEFAULT_LOOK: Duration = Duration::from_secs(2);
+
+/// A stream, and something watching for the day it should be built again
+/// on another device (#905).
+///
+/// "System default" has to mean the system's default now, not when the call
+/// was joined. Through ALSA it did by itself: ALSA's `default` is the sound
+/// server, which plays it wherever its own default is. A stream opened on
+/// the sound server directly is opened on one device, by name, and stays on
+/// it when somebody picks other headphones in the desktop's sound settings.
+/// So while the default is what was asked for, the watch looks every two
+/// seconds whether the server's default is still the device this stream is
+/// on, and has the worker build it again when it isn't, as choosing a
+/// device in Settings does.
+struct Following<S> {
+    stream: S,
+    /// Dropped with the stream, which is what stops it.
+    _watch: Watch,
+}
+
+impl<S: Playing> Playing for Following<S> {
+    fn play(&self) -> Result<(), cpal::Error> {
+        self.stream.play()
+    }
+}
+
+/// A thread that asks `moved` every `every`, and switches the worker's
+/// stream the first time it says yes. It ends then, or within a look of
+/// being dropped.
+struct Watch(Arc<AtomicBool>);
+
+impl Watch {
+    /// Nothing to watch: a device picked by name, or a system whose default
+    /// streams follow by themselves.
+    fn none() -> Self {
+        Self(Arc::new(AtomicBool::new(true)))
+    }
+
+    fn start(
+        alarm: Alarm,
+        every: Duration,
+        mut moved: impl FnMut() -> bool + Send + 'static,
+    ) -> Self {
+        let over = Arc::new(AtomicBool::new(false));
+        let watched = Arc::clone(&over);
+        let spawned = std::thread::Builder::new()
+            .name("linger-audio-default".into())
+            .spawn(move || loop {
+                std::thread::sleep(every);
+                if watched.load(Ordering::Relaxed) {
+                    return;
+                }
+                if moved() {
+                    alarm.switch();
+                    return;
+                }
+            });
+        if let Err(error) = spawned {
+            eprintln!("voice: the default device isn't being followed: {error}");
+        }
+        Self(over)
+    }
+}
+
+impl Drop for Watch {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Relaxed);
+    }
+}
+
+/// The watch for a stream just built on `device`: when the default was what
+/// was asked for (`name` is `None`) and the device is the sound server's,
+/// one that looks whether `default` still names it; otherwise none.
+fn following(
+    name: Option<&str>,
+    device: &cpal::Device,
+    alarm: &Alarm,
+    default: impl Fn(&cpal::Host) -> Option<cpal::Device> + Send + 'static,
+) -> Watch {
+    if name.is_some() || !on_sound_server(device) {
+        return Watch::none();
+    }
+    let Ok(opened) = device.id() else {
+        return Watch::none();
+    };
+    Watch::start(alarm.clone(), DEFAULT_LOOK, move || {
+        // No answer says nothing: a server that has gone takes the stream
+        // with it, and that's the worker's to hear from the stream.
+        default(&host())
+            .and_then(|device| device.id().ok())
+            .is_some_and(|now| now.id() != opened.id())
     })
 }
 
@@ -371,8 +473,14 @@ impl Microphone {
                 "microphone",
                 |device| input_stream(device, frames, alarm),
             )?;
+            let watch = following(name.as_deref(), &device, alarm, |host| {
+                host.default_input_device()
+            });
             *lock(&noted) = name.zip(why).map(|(name, why)| Refused { name, why });
-            Ok(stream)
+            Ok(Following {
+                stream,
+                _watch: watch,
+            })
         })
     }
 
@@ -1047,7 +1155,16 @@ impl Speaker {
                     "speaker",
                     |device| output_stream(device, &playback, &shared_rate, alarm),
                 )?;
-                Ok((stream, ()))
+                let watch = following(name.as_deref(), &device, alarm, |host| {
+                    host.default_output_device()
+                });
+                Ok((
+                    Following {
+                        stream,
+                        _watch: watch,
+                    },
+                    (),
+                ))
             },
             // Given up: nothing plays, and the lanes fill to their ceiling and
             // then drop. There is no sink-side sentinel — the call continues
@@ -1753,6 +1870,12 @@ pub(crate) struct Alarm(std::sync::mpsc::Sender<Wake>);
 impl Alarm {
     pub(crate) fn ring(&self) {
         let _ = self.0.send(Wake::Died);
+    }
+
+    /// Have the worker build its stream again now, as `Worker::switch` does:
+    /// the default device moved under a stream that follows it (#905).
+    fn switch(&self) {
+        let _ = self.0.send(Wake::Switch);
     }
 }
 
@@ -3365,6 +3488,132 @@ mod tests {
             alone - beside >= 25.0,
             "beside speakers the echo came out at {beside:.1} dBFS, and alone at {alone:.1} dBFS"
         );
+    }
+
+    /// #905: a sound server's "Monitor of …" inputs are told by the
+    /// server's own name for them, whatever language the name shown is in,
+    /// and a real input never is.
+    #[test]
+    fn a_monitor_is_told_by_its_id() {
+        assert!(is_monitor(
+            "alsa_output.usb-TC-Helicon_GoXLRMini-00.HiFi__Line1__sink.monitor"
+        ));
+        assert!(!is_monitor(
+            "alsa_input.usb-TC-Helicon_GoXLRMini-00.HiFi__Line2__source"
+        ));
+        // ALSA's names never end so: nothing of ALSA's is hidden.
+        for alsa in [
+            "default",
+            "pipewire",
+            "sysdefault:CARD=GoXLRMini",
+            "hw:CARD=Audio,DEV=0",
+        ] {
+            assert!(!is_monitor(alsa));
+        }
+    }
+
+    /// On a sound server a stream asks for one voice frame at a time, at
+    /// whatever rate it runs: left to the server it's about two seconds
+    /// (#905). Anywhere else the size stays the system's.
+    #[test]
+    fn a_sound_servers_stream_asks_for_one_frame_at_a_time() {
+        let offered = |rate| {
+            SupportedStreamConfig::new(
+                2,
+                rate,
+                cpal::SupportedBufferSize::Unknown,
+                SampleFormat::I16,
+            )
+        };
+        assert_eq!(
+            stream_config(&offered(48_000), true).buffer_size,
+            cpal::BufferSize::Fixed(960)
+        );
+        assert_eq!(
+            stream_config(&offered(44_100), true).buffer_size,
+            cpal::BufferSize::Fixed(882)
+        );
+        let elsewhere = stream_config(&offered(48_000), false);
+        assert_eq!(elsewhere.buffer_size, cpal::BufferSize::Default);
+        assert_eq!((elsewhere.channels, elsewhere.sample_rate), (2, 48_000));
+    }
+
+    /// `LINGER_AUDIO=alsa` keeps to ALSA, whatever sound server is there.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn alsa_can_be_asked_for_by_name() {
+        let alsa = host_for(Some(std::ffi::OsStr::new("alsa")));
+        assert_eq!(alsa.id(), cpal::HostId::Alsa);
+    }
+
+    /// "System default" follows the system (#905): when the default device
+    /// is another one than the stream is on, the stream is built again, as a
+    /// device chosen in Settings is. A default that stays put builds nothing.
+    #[test]
+    fn a_default_that_moves_builds_the_stream_again() {
+        let builds = Arc::new(AtomicUsize::new(0));
+        let moved = Arc::new(AtomicBool::new(false));
+        let looks = Arc::new(AtomicUsize::new(0));
+        let (b, m, l) = (Arc::clone(&builds), Arc::clone(&moved), Arc::clone(&looks));
+        let _worker = Worker::start(
+            move |alarm: &Alarm| {
+                b.fetch_add(1, Ordering::SeqCst);
+                let (m, l) = (Arc::clone(&m), Arc::clone(&l));
+                let watch = Watch::start(alarm.clone(), Duration::from_millis(5), move || {
+                    l.fetch_add(1, Ordering::SeqCst);
+                    // Moved once: the stream built for it is on the new default.
+                    m.swap(false, Ordering::SeqCst)
+                });
+                Ok((
+                    Following {
+                        stream: Fake,
+                        _watch: watch,
+                    },
+                    (),
+                ))
+            },
+            || panic!("gave up on a default that moved"),
+            SLOW,
+        )
+        .expect("first open");
+        // Looked at several times, and still where it was: one build.
+        assert!(wait_until(&looks, 5) >= 5, "nothing looked at the default");
+        assert_eq!(builds.load(Ordering::SeqCst), 1);
+        moved.store(true, Ordering::SeqCst);
+        assert_eq!(wait_until(&builds, 2), 2, "a moved default built nothing");
+        // And the new stream is watched in its turn.
+        let before = looks.load(Ordering::SeqCst);
+        assert!(wait_until(&looks, before + 3) >= before + 3);
+        assert_eq!(builds.load(Ordering::SeqCst), 2);
+    }
+
+    /// A watch ends with its stream: once dropped, nothing looks again, and
+    /// nothing is switched for a default that moves afterwards.
+    #[test]
+    fn a_watch_ends_with_its_stream() {
+        let (wake_tx, wake_rx) = std::sync::mpsc::channel::<Wake>();
+        let looks = Arc::new(AtomicUsize::new(0));
+        let l = Arc::clone(&looks);
+        let watch = Watch::start(Alarm(wake_tx), Duration::from_millis(5), move || {
+            l.fetch_add(1, Ordering::SeqCst);
+            false
+        });
+        assert!(wait_until(&looks, 2) >= 2);
+        drop(watch);
+        std::thread::sleep(Duration::from_millis(30));
+        let after = looks.load(Ordering::SeqCst);
+        std::thread::sleep(Duration::from_millis(50));
+        assert_eq!(
+            looks.load(Ordering::SeqCst),
+            after,
+            "a dropped watch looked again"
+        );
+        assert!(
+            wake_rx.try_recv().is_err(),
+            "a watch that saw nothing move switched"
+        );
+        // One with nothing to watch never looks at all.
+        drop(Watch::none());
     }
 
     /// Picking what is already picked opens nothing again.
