@@ -402,7 +402,8 @@ jobs:
       # (signed in by now, connected to its server), given half a minute to
       # finish starting, then three looks of twenty seconds. One quiet look
       # passes it, since a busy Mac can make an idle app late but can't make
-      # it work: at rest it measured 0.1 s in twenty, and spinning 19.
+      # it work. Measured here: 0.04 to 0.05 s in twenty at rest, and 19.9
+      # to 20.2 with its main loop awake.
       - name: the app at rest leaves the processor alone
         run: |
           set -uo pipefail
