@@ -274,6 +274,14 @@ container that has the daemon, given the tests already built:
 `scripts/linux-voice-check.sh <test binary>`, where
 `cargo test --lib --no-run` in `client/src-tauri` names the file.
 
+CI's is PulseAudio because it starts with one command. Most desktops run
+PipeWire, so the same test was run by hand against a private PipeWire 1.6
+(`pipewire`, `wireplumber` and `pipewire-pulse` under `dbus-run-session`,
+the pretend speaker and microphone made with `pactl load-module`) when this
+was built: 63 ms, one connection, and sound back 0.7 s after all three were
+stopped and started. Worth doing again after a change to how streams are
+opened.
+
 ## How the desktop app starts on Linux
 
 Linux v0.3.3 selects native Wayland when a Wayland display is available, so

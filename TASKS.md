@@ -1124,10 +1124,12 @@ out loud.
   `scripts/linux-voice-check.sh` runs it on real streams against a private
   PulseAudio, in CI, the server restarted under the streams included.
   `docs/development.md`, "Sound on Linux".
+  The same check passed by hand against a private PipeWire 1.6 (63 ms, one
+  connection, sound back 0.7 s after PipeWire restarted); CI's runs on
+  PulseAudio.
   **Left:** Matt's own check on Omarchy at the next release: the lists, a
   call, switching devices in it, changing the desktop's default in it, and
-  an hour's call on PipeWire (the connection count was measured against
-  PipeWire, but the automated check runs on PulseAudio).
+  a long call.
   Anybody on Linux who'd picked a device in Settings picks it again: the
   names are new, and the old one falls back to the system default.
   *Release notes, 0.5.5:* on Linux, Settings lists the same microphones and
