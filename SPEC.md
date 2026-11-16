@@ -1037,6 +1037,22 @@ volume opens from their chip in the voice bar, and from their chip on the
 voice line of the conversation you're in voice in (#747). On any other room's
 line the chips open nothing: there's nobody to set a volume for until you join.
 
+**Your microphone is cleaned up before it's sent** (Matt, 2026-11-16, #904). A
+microphone as a computer hands it over is often a fraction as loud as a voice should
+be, with the room's fan under it, and until 0.5.5 the desktop app sent exactly that:
+people had to be turned up to be heard, and twice as loud is as far as that goes. Now
+the desktop app does what a browser does for a call, before anything is encoded: it
+takes out rumble below the voice and steady background noise, brings the voice to a
+normal speaking level, and holds it under clipping. The levelling follows speech only,
+so a quiet room isn't turned up into hiss, and a noise gate's silence stays silence.
+Settings → Sound & Voice has a switch for each, **Even out my volume** and **Remove
+background noise**, both on, each saying in a sentence what it does and when to turn it
+off (your own audio gear already does it; you're sending music). They're kept on each
+computer, apply at once in a call, and cover voice messages recorded there too. With
+both off, the microphone is sent as it came, to the sample. The phone app's microphone
+is cleaned by the phone's own web engine (§4.15) and has no switches. Cancelling the
+echo of a computer's speakers is not in yet (#904).
+
 **Leaving is leaving.** Closing the app, losing the network, or joining voice somewhere
 else all end it, and the people you were talking to see you go. You are in voice in at
 most one room at a time, for the same reason you are in one room at a time.
