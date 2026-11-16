@@ -93,7 +93,8 @@ Consequences:
 1. **Test on Linux first, every milestone.** If it works on WebKitGTK it works
    everywhere. The reverse is not true.
 2. **Keep V2 audio in Rust, not in the WebView.** Use a Rust WebRTC stack (`webrtc-rs`)
-   with `cpal` for device I/O. This is the better architecture anyway and it removes
+   with `cpal` for device I/O (on Linux, through the desktop's sound server where
+   there is one, #905). This is the better architecture anyway and it removes
    WebKitGTK from the critical path for voice. **The phone is the exception** (#429):
    its web engine is Chromium on Android and WebKit on the iPhone, both with WebRTC
    and the phone's own echo cancelling, which a phone on speaker needs and the Rust

@@ -43,7 +43,7 @@ echo "== version check, and the checks' own tests =="
 scripts/version-check.sh
 node --test --test-reporter=dot scripts/ci-scope.test.mjs scripts/ci-gate.test.mjs scripts/changed-tests.test.mjs scripts/action-pins.test.mjs scripts/workflow-downloads.test.mjs
 node --test --test-reporter=dot scripts/csp-assets.test.mjs scripts/doc-paths.test.mjs scripts/overview-docs.test.mjs scripts/ios-app-group.test.mjs scripts/https-front.test.mjs scripts/linux-next-env.test.mjs scripts/package-deps.test.mjs scripts/playwright-image.test.mjs scripts/issue-label.test.mjs scripts/startup-time.test.mjs scripts/updater-urls.test.mjs scripts/release-draft.test.mjs client/scripts/webview2-wait.test.mjs
-node --test --test-reporter=dot scripts/pr-questions.test.mjs scripts/review-catches.test.mjs scripts/tauri-versions.test.mjs scripts/ios-flows.test.mjs scripts/ios-plist.test.mjs scripts/upstream-fixes.test.mjs scripts/android-jni.test.mjs scripts/android-manifest.test.mjs scripts/installed-packages.test.mjs scripts/maestro-driver.test.mjs scripts/browser-fakes.test.mjs
+node --test --test-reporter=dot scripts/pr-questions.test.mjs scripts/review-catches.test.mjs scripts/tauri-versions.test.mjs scripts/ios-flows.test.mjs scripts/ios-plist.test.mjs scripts/upstream-fixes.test.mjs scripts/android-jni.test.mjs scripts/android-manifest.test.mjs scripts/installed-packages.test.mjs scripts/maestro-driver.test.mjs scripts/app-at-rest.test.mjs scripts/browser-fakes.test.mjs
 echo "== Tauri's Rust crates and JavaScript packages on one version =="
 node scripts/tauri-versions.mjs
 python3 scripts/linux-audio-check.test.py -q
@@ -133,6 +133,15 @@ if on shell; then
   if pkg-config --exists webkit2gtk-4.1 2>/dev/null; then
     mkdir -p client/dist
     (cd client/src-tauri && cargo clippy --all-targets -- -D warnings && cargo test)
+    # The voice path through a sound server, on real streams (#905). It
+    # needs the PulseAudio daemon and says so where there's none. With one,
+    # it also has to fail when its one test doesn't run, as CI checks:
+    # `true` stands in for a binary that runs nothing and exits 0.
+    scripts/linux-voice-check.sh
+    if command -v pulseaudio >/dev/null && command -v pactl >/dev/null && scripts/linux-voice-check.sh "$(command -v true)"; then
+      echo "linux-voice-check passed with no test run" >&2
+      exit 1
+    fi
   else
     echo "skipped: system webview deps not installed here (CI still runs this pass)"
   fi

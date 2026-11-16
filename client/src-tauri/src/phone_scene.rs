@@ -35,10 +35,20 @@ pub enum Answer {
 
 /// The phone app never quits because its window went, and opens its window
 /// again when a scene comes back to one that has none.
-pub fn answer(happened: Happened, window_open: bool) -> Answer {
+///
+/// `window_open` is asked only when a scene comes back, and that matters
+/// (#901). Every event Tauri has comes through here, several for each pass
+/// of the app's main loop. Asking for the windows copies each one, and on
+/// the iPhone a copy of a window wakes the main loop: tao's
+/// `EventLoopProxy::clone` adds a source to the run loop and calls
+/// `CFRunLoopWakeUp`. Asked on every event, the loop woke itself for good,
+/// and the app's main thread used a whole processor for as long as it was
+/// open. So it's something to call, not a value somebody has to have
+/// worked out first.
+pub fn answer(happened: Happened, window_open: impl FnOnce() -> bool) -> Answer {
     match happened {
         Happened::LastWindowGone => Answer::Stay,
-        Happened::SceneBack if !window_open => Answer::OpenWindow,
+        Happened::SceneBack if !window_open() => Answer::OpenWindow,
         Happened::SceneBack | Happened::Other => Answer::Nothing,
     }
 }
@@ -54,7 +64,7 @@ pub fn handle(app: &tauri::AppHandle, event: tauri::RunEvent) {
         RunEvent::SceneRequested { .. } => Happened::SceneBack,
         _ => Happened::Other,
     };
-    match answer(happened, !app.webview_windows().is_empty()) {
+    match answer(happened, || !app.webview_windows().is_empty()) {
         Answer::Stay => {
             if let RunEvent::ExitRequested { api, .. } = event {
                 eprintln!(
@@ -94,21 +104,27 @@ pub fn handle(app: &tauri::AppHandle, event: tauri::RunEvent) {
 mod tests {
     use super::{answer, Answer, Happened};
 
+    /// Asking for the windows wakes the iPhone's main loop (`answer`), so
+    /// where the answer doesn't depend on them, nobody may ask.
+    fn never_asked() -> bool {
+        panic!("the windows were asked for, which wakes the iPhone's main loop")
+    }
+
     #[test]
     fn the_last_window_going_never_quits_the_phone_app() {
-        assert_eq!(answer(Happened::LastWindowGone, false), Answer::Stay);
-        assert_eq!(answer(Happened::LastWindowGone, true), Answer::Stay);
+        assert_eq!(answer(Happened::LastWindowGone, never_asked), Answer::Stay);
     }
 
     #[test]
     fn a_scene_coming_back_opens_the_window_only_when_there_is_none() {
-        assert_eq!(answer(Happened::SceneBack, false), Answer::OpenWindow);
-        assert_eq!(answer(Happened::SceneBack, true), Answer::Nothing);
+        assert_eq!(answer(Happened::SceneBack, || false), Answer::OpenWindow);
+        assert_eq!(answer(Happened::SceneBack, || true), Answer::Nothing);
     }
 
+    /// Every pass of the main loop is one of these, several times over: the
+    /// windows are never asked for (#901).
     #[test]
-    fn anything_else_is_left_alone() {
-        assert_eq!(answer(Happened::Other, false), Answer::Nothing);
-        assert_eq!(answer(Happened::Other, true), Answer::Nothing);
+    fn anything_else_is_left_alone_and_never_looks_at_the_windows() {
+        assert_eq!(answer(Happened::Other, never_asked), Answer::Nothing);
     }
 }
