@@ -1094,18 +1094,22 @@ out loud.
   (`docs/decisions.md`). **Built:** `voice/cleanup.rs` puts every microphone
   frame through `sonora` (a Rust port of WebRTC's audio processing) before
   the encoder: rumble filter, noise suppression, automatic levelling and a
-  limiter, with two switches in Settings → Sound & Voice, both on. Voice
-  messages recorded on a computer go through it too.
-  **Left:** echo cancelling, which needs what the speakers play as well as
-  the microphone (#906); a microphone test that plays you back as others
-  hear you (#907); and the real check, which no test here can be: a call
-  with Matt and a few friends on Windows and Linux at the next release,
-  with the switches on and off.
+  limiter, with switches in Settings → Sound & Voice, all on. Voice
+  messages recorded on a computer go through it too. **Echo cancelling**
+  (#906) is built the same way: the output mix is tapped (`Played`) and told
+  to the canceller before each microphone frame, for a call's microphone
+  and speakers; with headphones it lets the voice through after a few
+  seconds (`NO_ECHO_BY`).
+  **Left:** a microphone test that plays you back as others hear you (#907);
+  and the real check, which no test here can be: a call with Matt and a few
+  friends on Windows and Linux at the next release, with the switches on
+  and off, and one of them on speakers.
   *Release notes, 0.5.5:* people on the desktop app are no longer too quiet:
   it brings each microphone to a normal speaking level and takes out
-  background noise, as the phone app's does, with a switch for each in
-  Settings → Sound & Voice. Everybody you talk with needs 0.5.5 for you to
-  hear the difference in them.
+  background noise, as the phone app's does, and somebody on speakers no
+  longer sends your voice back to you, with a switch for each in Settings →
+  Sound & Voice. Everybody you talk with needs 0.5.5 for you to hear the
+  difference in them.
 
 ### M13 — ambient voice: cut 2026-10-11
 

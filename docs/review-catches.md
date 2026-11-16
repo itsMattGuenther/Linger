@@ -327,6 +327,18 @@ on a world that has changed.
 
 ## Tests written from the case in mind, not from the ways things fail
 
+- **#909: the echo canceller was told the average of the two speakers.**
+  A shared screen's sound is stereo, and what's opposite in the left and
+  the right averages to silence while both speakers play it. The microphone
+  hears one speaker more than the other, so it came back into the call, and
+  a canceller told "nothing played" let it through. Caught by Greptile.
+  *Missed because* every test played the same sound in both speakers, where
+  an average is the sound. *Changed:* what's played is kept and told with
+  its left and its right (`Played`, `Cleaner::played`), and a test plays a
+  sound opposite in the two, heard more from one: averaged, its echo comes
+  out as it went in (−30.5 to −30.7 dBFS); told both sides, 30 dB or more
+  down. `mix_all`'s test keeps a stereo screen sound's two sides apart.
+
 - **#903: the check that a shipped build reaches https only passed `*`.**
   It listed the plain-http sources it refused (`http:`, `ws:`, `http://…`,
   `ws://…`), so `*` or a host with no scheme, which a policy can also use to

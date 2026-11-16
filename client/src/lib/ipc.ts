@@ -194,15 +194,16 @@ export async function voiceChooseDevices(devices: VoiceDeviceChoice): Promise<vo
 }
 
 /**
- * Which parts of the microphone's clean-up are on (#904): levelling and
- * noise suppression, for every microphone the desktop app opens, a call's
- * and a voice message's. It applies from the next frame, so a switch
- * changed in a call is heard in that call. The shell starts with both on.
+ * Which parts of the microphone's clean-up are on (#904, #906): levelling,
+ * noise suppression and echo cancelling, for every microphone the desktop
+ * app opens, a call's and a voice message's. It applies from the next
+ * frame, so a switch changed in a call is heard in that call. The shell
+ * starts with all of them on.
  */
-export async function voiceCleanUp(cleanUp: { level: boolean; noise: boolean }): Promise<void> {
+export async function voiceCleanUp(cleanUp: { level: boolean; noise: boolean; echo: boolean }): Promise<void> {
   // A phone's web engine cleans its microphone itself (pageVoice.ts).
   if (inPage !== null || !isTauri()) return;
-  await invoke("voice_clean_up", { cleanup: { level: cleanUp.level, noise: cleanUp.noise } });
+  await invoke("voice_clean_up", { cleanup: { level: cleanUp.level, noise: cleanUp.noise, echo: cleanUp.echo } });
 }
 
 // --- the talk key with another app in front (#500, src-tauri/src/talk_key) ---
