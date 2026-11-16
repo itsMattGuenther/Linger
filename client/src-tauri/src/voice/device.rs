@@ -3105,12 +3105,18 @@ mod tests {
         // The connections this program has open, to anything: what's open
         // before the sound server is asked is the test's own.
         let connections = || {
-            std::fs::read_dir("/proc/self/fd").map_or(0, |open| {
-                open.filter_map(Result::ok)
-                    .filter_map(|file| std::fs::read_link(file.path()).ok())
-                    .filter(|what| what.to_string_lossy().starts_with("socket:"))
-                    .count()
-            })
+            (0..1024)
+                .filter(|file| {
+                    // SAFETY: `fstat` writes only into `about`, which is
+                    // whole and ours, and a number that isn't an open file
+                    // is an error, not a fault.
+                    unsafe {
+                        let mut about: libc::stat = std::mem::zeroed();
+                        libc::fstat(*file, &raw mut about) == 0
+                            && about.st_mode & libc::S_IFMT == libc::S_IFSOCK
+                    }
+                })
+                .count()
         };
         let before = connections();
         assert_eq!(
