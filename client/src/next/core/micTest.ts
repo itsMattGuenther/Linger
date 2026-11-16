@@ -45,7 +45,7 @@ export type MicTestEvent =
   | { kind: "refused"; why: string }
   | { kind: "level"; level: number }
   | { kind: "heard"; said: Said }
-  /** It stopped with nothing played, and why: voice was joined while it listened, or the speakers wouldn't open. */
+  /** It was cut off, and why: voice was joined while it listened or played, or the speakers wouldn't open. */
   | { kind: "cut"; why: string }
   | { kind: "done" };
 
@@ -72,7 +72,8 @@ export function micTestNext(state: MicTest, event: MicTestEvent): MicTest {
       // A microphone that gave nothing at all can be heard before "started" lands.
       return state.step === "listening" || state.step === "opening" ? { step: "playing", said: event.said } : state;
     case "cut":
-      return state.step === "listening" || state.step === "opening" ? { step: "idle", said: null, problem: event.why } : state;
+      // Whatever it was doing: joining voice cuts off the playing too, and what it had said it heard goes with it.
+      return state.step === "idle" ? state : { step: "idle", said: null, problem: event.why };
     case "done":
       if (state.step === "playing") return { step: "idle", said: state.said, problem: null };
       return state.step === "idle" ? state : MIC_TEST_IDLE;

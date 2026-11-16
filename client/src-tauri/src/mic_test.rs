@@ -20,7 +20,8 @@
 //! into the call's microphone as somebody talking over the room. It says so
 //! instead ([`IN_VOICE`]).
 
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use serde::Serialize;
@@ -178,6 +179,11 @@ struct Running {
     /// There once it's listening. Before that the microphone is still being
     /// opened, and the test is only a name on the books.
     task: Option<JoinHandle<()>>,
+    /// Set when the test is called off (its window closed, or voice was
+    /// joined). Stopping the task isn't enough: the speaker is opened on
+    /// another thread, which a stopped task doesn't stop, and that thread
+    /// looks at this before it plays anything.
+    called_off: Arc<AtomicBool>,
 }
 
 impl MicTests {
@@ -185,20 +191,22 @@ impl MicTests {
     /// opening a microphone takes a moment, and a window closed in that
     /// moment has to find its test here to take it away (`forget`). Refused
     /// while another is under way.
-    fn begin(&self, window: &str) -> Result<u64, &'static str> {
+    fn begin(&self, window: &str) -> Result<(u64, Arc<AtomicBool>), &'static str> {
         let mut held = self.lock();
         if held.running.is_some() {
             return Err(ALREADY);
         }
         held.next += 1;
         let id = held.next;
+        let called_off = Arc::new(AtomicBool::new(false));
         held.running = Some(Running {
             id,
             window: window.to_owned(),
             stop: None,
             task: None,
+            called_off: Arc::clone(&called_off),
         });
-        Ok(id)
+        Ok((id, called_off))
     }
 
     /// Whether test `id` is still wanted: its window hasn't gone.
@@ -252,18 +260,25 @@ impl MicTests {
         }
     }
 
-    /// `window` has gone: its test goes with it, listening or not yet.
-    fn forget(&self, window: &str) {
+    /// Call the test off, whatever it's doing: `window`'s, because that
+    /// window has gone, or anybody's for `None`, because voice is being
+    /// joined. Answers the window it was for, when there was one to call
+    /// off. What it was playing is the caller's to stop ([`called_off`]).
+    fn call_off(&self, window: Option<&str>) -> Option<String> {
         let mut held = self.lock();
-        if held
+        if !held
             .running
             .as_ref()
-            .is_some_and(|running| running.window == window)
+            .is_some_and(|running| window.is_none_or(|window| running.window == window))
         {
-            if let Some(task) = held.running.take().and_then(|running| running.task) {
-                task.abort();
-            }
+            return None;
         }
+        let running = held.running.take()?;
+        running.called_off.store(true, Ordering::SeqCst);
+        if let Some(task) = running.task {
+            task.abort();
+        }
+        Some(running.window)
     }
 
     fn lock(&self) -> MutexGuard<'_, Held> {
@@ -331,7 +346,7 @@ pub async fn mic_test_start(
     let label = window.label().to_string();
     // On the books first, with nothing waited for before it: the window
     // can close at any moment from here, and `forget` has to find this.
-    let id = tests.begin(&label)?;
+    let (id, called_off) = tests.begin(&label)?;
     if crate::voice_commands::in_voice(&app).await {
         tests.over(id);
         return Err(IN_VOICE.into());
@@ -355,7 +370,14 @@ pub async fn mic_test_start(
         return Ok(());
     }
     let (stop, stopped) = oneshot::channel();
-    let task = tokio::spawn(run(app.clone(), id, label, microphone, stopped, output));
+    let task = tokio::spawn(run(
+        app.clone(),
+        (id, called_off),
+        label,
+        microphone,
+        stopped,
+        output,
+    ));
     tests.listening(id, stop, task);
     Ok(())
 }
@@ -363,7 +385,7 @@ pub async fn mic_test_start(
 /// The whole of one test, from the open microphone to "done".
 async fn run(
     app: AppHandle,
-    id: u64,
+    (id, called_off): (u64, Arc<AtomicBool>),
     label: String,
     microphone: crate::voice::device::Microphone,
     stopped: oneshot::Receiver<()>,
@@ -395,7 +417,9 @@ async fn run(
             // once it is, and speakers that won't open are said instead.
             // Whole: a sound is held to four seconds, and this isn't one.
             let wait = playing_for(samples.len());
-            if crate::voice_commands::play_out_of_voice(&app, samples, output, true).await {
+            if crate::voice_commands::play_out_of_voice(&app, samples, output, Some(called_off))
+                .await
+            {
                 let _ = app.emit_to(label.as_str(), "mictest:heard", said(verdict));
                 tokio::time::sleep(wait).await;
             } else {
@@ -414,15 +438,37 @@ pub fn mic_test_stop(app: AppHandle) {
     app.state::<MicTests>().stop();
 }
 
-/// A window has gone: a test it started goes with it, unplayed.
+/// A window has gone: a test it started goes with it, and what it was
+/// playing stops.
 pub fn forget(app: &AppHandle, label: &str) {
-    app.state::<MicTests>().forget(label);
+    if app.state::<MicTests>().call_off(Some(label)).is_some() {
+        called_off(app);
+    }
+}
+
+/// Voice is being joined (`voice_commands::voice_join`): a test under way
+/// ends now, whatever it's doing, and its window is told why. The check
+/// before playing can't do this alone: a room can be joined in the moment
+/// between that check and the first sample, or any time in the eight
+/// seconds after it.
+pub fn voice_joined(app: &AppHandle) {
+    if let Some(window) = app.state::<MicTests>().call_off(None) {
+        called_off(app);
+        let _ = app.emit_to(window.as_str(), "mictest:cut", IN_VOICE);
+        let _ = app.emit_to(window.as_str(), "mictest:done", ());
+    }
+}
+
+/// What a test called off was playing stops: the sounds' own speaker is
+/// closed, which is the only way to take back what it was handed. A chime
+/// playing on it at that moment is cut off with it.
+fn called_off(app: &AppHandle) {
+    app.state::<Arc<crate::sounds::Sounds>>().stop();
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Arc;
+    use std::sync::atomic::AtomicUsize;
 
     use async_trait::async_trait;
 
@@ -606,10 +652,15 @@ mod tests {
     #[tokio::test]
     async fn a_window_closed_while_the_microphone_opens_takes_its_test_with_it() {
         let tests = MicTests::default();
-        let id = tests.begin("settings").expect("the first test");
+        let (id, called_off) = tests.begin("settings").expect("the first test");
         assert!(tests.wanted(id));
-        tests.forget("settings");
+        assert_eq!(
+            tests.call_off(Some("settings")).as_deref(),
+            Some("settings")
+        );
         assert!(!tests.wanted(id), "the test outlived its window");
+        // And whatever was opening the speakers for it is told not to play.
+        assert!(called_off.load(Ordering::SeqCst));
         // The microphone is open now, and too late: what would have listened
         // is stopped, not started.
         let (stop, _stopped) = oneshot::channel();
@@ -629,13 +680,14 @@ mod tests {
     #[tokio::test]
     async fn one_test_at_a_time_and_each_ends_only_itself() {
         let tests = MicTests::default();
-        let first = tests.begin("settings").expect("the first test");
+        let (first, called_off) = tests.begin("settings").expect("the first test");
         // A second, from any window, while the first is opening or running.
-        assert_eq!(tests.begin("main"), Err(ALREADY));
-        assert_eq!(tests.begin("settings"), Err(ALREADY));
+        assert_eq!(tests.begin("main").err(), Some(ALREADY));
+        assert_eq!(tests.begin("settings").err(), Some(ALREADY));
         // Another window closing isn't this one's.
-        tests.forget("main");
+        assert_eq!(tests.call_off(Some("main")), None);
         assert!(tests.wanted(first));
+        assert!(!called_off.load(Ordering::SeqCst));
         // Stop does nothing while the microphone is still opening.
         tests.stop();
         assert!(tests.wanted(first));
@@ -648,8 +700,40 @@ mod tests {
         tests.stop();
         // Over, and a late "over" from it can't end the one after.
         tests.over(first);
-        let second = tests.begin("settings").expect("the next test");
+        let (second, _) = tests.begin("settings").expect("the next test");
         tests.over(first);
         assert!(tests.wanted(second));
+    }
+
+    /// Joining voice calls off whoever's test it is (#912's review): the
+    /// task is stopped, the thread opening the speakers is told not to
+    /// play, and the window it was for is named, to be told why.
+    #[tokio::test]
+    async fn joining_voice_calls_off_a_test_whatever_it_is_doing() {
+        let tests = MicTests::default();
+        // Nothing under way: nothing to call off, and nobody to tell.
+        assert_eq!(tests.call_off(None), None);
+        // Still opening its microphone.
+        let (id, called_off) = tests.begin("settings").expect("a test");
+        assert_eq!(tests.call_off(None).as_deref(), Some("settings"));
+        assert!(called_off.load(Ordering::SeqCst));
+        assert!(!tests.wanted(id));
+        // Listening, or playing: its task is stopped where it stands.
+        let (id, called_off) = tests.begin("settings").expect("another");
+        let (stop, _stopped) = oneshot::channel();
+        let ran = Arc::new(AtomicUsize::new(0));
+        let running = Arc::clone(&ran);
+        let task = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            running.fetch_add(1, Ordering::SeqCst);
+        });
+        assert!(tests.listening(id, stop, task));
+        assert_eq!(tests.call_off(None).as_deref(), Some("settings"));
+        assert!(called_off.load(Ordering::SeqCst));
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert_eq!(ran.load(Ordering::SeqCst), 0, "it carried on");
+        // And the next test starts clean.
+        let (_, called_off) = tests.begin("settings").expect("the next test");
+        assert!(!called_off.load(Ordering::SeqCst));
     }
 }

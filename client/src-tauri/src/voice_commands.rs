@@ -251,6 +251,9 @@ pub async fn voice_join(
 ) -> Result<(), String> {
     let engine = engine_for(&app, &base_url);
     engine.set_session(session_id).await;
+    // A microphone test under way ends here, before the call's devices
+    // open: what it plays would go into the room (`mic_test.rs`).
+    crate::mic_test::voice_joined(&app);
     let devices = tokio::task::spawn_blocking(move || {
         voice::device::open(input.as_deref(), output.as_deref())
     })
@@ -330,7 +333,7 @@ pub async fn sound_play(app: AppHandle, samples: Vec<i16>, output: Option<String
             return true;
         }
     }
-    play_out_of_voice(&app, samples, output, false).await
+    play_out_of_voice(&app, samples, output, None).await
 }
 
 /// Every server's voice engine there is.
@@ -353,39 +356,47 @@ pub(crate) async fn in_voice(app: &AppHandle) -> bool {
 /// Play samples on the Speakers picked in Settings, on the sounds' own
 /// speaker (`sounds.rs`), which is closed again once nothing has played on
 /// it for a while. Answers whether it played. For when there's no call to
-/// play into: one of Linger's sounds, or, `whole`, the microphone test's
-/// recording, which is longer than a sound is let be.
+/// play into: one of Linger's sounds, or, with `recording`, the microphone
+/// test's recording, which is played whole, and not at all once what's
+/// handed in has been set (it was called off while the speaker opened).
+///
+/// The opening, the playing and the closing afterwards are a task of their
+/// own: whoever asked can be stopped while the speaker opens (the
+/// microphone test is, when its window closes), and the speaker would then
+/// have been left open with nothing to close it.
 pub(crate) async fn play_out_of_voice(
     app: &AppHandle,
     samples: Vec<i16>,
     output: Option<String>,
-    whole: bool,
+    recording: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
 ) -> bool {
     let sounds = std::sync::Arc::clone(app.state::<std::sync::Arc<sounds::Sounds>>().inner());
-    let playing = std::sync::Arc::clone(&sounds);
-    let played = tokio::task::spawn_blocking(move || {
-        if whole {
-            playing.play_recording(&samples, output.as_deref())
-        } else {
-            playing.play(&samples, output.as_deref())
+    let played = tauri::async_runtime::spawn(async move {
+        let playing = std::sync::Arc::clone(&sounds);
+        let played = tokio::task::spawn_blocking(move || match recording {
+            Some(called_off) => playing.play_recording(&samples, output.as_deref(), &called_off),
+            None => playing.play(&samples, output.as_deref()).map(|()| true),
+        })
+        .await;
+        match played {
+            // Open now, whether or not anything was played on it.
+            Ok(Ok(played)) => {
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(sounds::KEEP_OPEN).await;
+                    let _ =
+                        tokio::task::spawn_blocking(move || sounds.close_idle(sounds::KEEP_OPEN))
+                            .await;
+                });
+                played
+            }
+            Ok(Err(error)) => {
+                eprintln!("sounds: {error}");
+                false
+            }
+            Err(_) => false,
         }
-    })
-    .await;
-    match played {
-        Ok(Ok(())) => {
-            tauri::async_runtime::spawn(async move {
-                tokio::time::sleep(sounds::KEEP_OPEN).await;
-                let _ =
-                    tokio::task::spawn_blocking(move || sounds.close_idle(sounds::KEEP_OPEN)).await;
-            });
-            true
-        }
-        Ok(Err(error)) => {
-            eprintln!("sounds: {error}");
-            false
-        }
-        Err(_) => false,
-    }
+    });
+    played.await.unwrap_or(false)
 }
 
 /// How loud one peer plays for you, 1.0 being as sent.

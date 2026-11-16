@@ -1078,8 +1078,9 @@ Microphone picked wouldn't open and the system default stood in for it, as in a 
 says that first. The recording is never sent anywhere and never kept: the desktop app
 listens and plays it back itself and then drops it, and the Settings window is told only
 how loud it is and that one word. It isn't offered in a call, where what it played would
-go back into the room; it says to leave voice first. Desktop only: the phone app has no
-test.
+go back into the room; it says to leave voice first. Joining voice while a test is under
+way ends the test at once, and so does closing Settings. Desktop only: the phone app has
+no test.
 
 **Leaving is leaving.** Closing the app, losing the network, or joining voice somewhere
 else all end it, and the people you were talking to see you go. You are in voice in at

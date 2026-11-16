@@ -598,6 +598,16 @@ test.describe("the microphone test (#907)", () => {
     await expect(row(page).getByRole("button", { name: "Test" })).toBeEnabled();
   });
 
+  test("is cut off when voice is joined while it plays back, and says why instead of what it heard", async ({ page }) => {
+    await open(page, "?section=sound&mictest=joinedplaying");
+    await row(page).getByRole("button", { name: "Test" }).click();
+    await expect(said(page)).toHaveText("You're in voice. Leave it to test your microphone: the test plays out loud, and the room would hear it.");
+    await expect(row(page).getByRole("button", { name: "Test" })).toBeEnabled();
+    // The line stays: nothing afterwards says "That's how you sound".
+    await page.waitForTimeout(500);
+    await expect(said(page)).toHaveText("You're in voice. Leave it to test your microphone: the test plays out loud, and the room would hear it.");
+  });
+
   test("says so when it heard you and the speakers wouldn't open", async ({ page }) => {
     await open(page, "?section=sound&mictest=nospeakers");
     await row(page).getByRole("button", { name: "Test" }).click();

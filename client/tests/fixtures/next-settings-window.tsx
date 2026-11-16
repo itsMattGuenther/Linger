@@ -147,6 +147,17 @@ const desktop = fakeDesktop({
         return null;
       }
       for (const [at, level] of [0.2, 0.7, 0.4].entries()) window.setTimeout(() => desktop.deliver("mictest:level", level), 40 + at * 40);
+      // `joinedplaying`: voice is joined once it's playing back, which cuts it off.
+      if (how === "joinedplaying") {
+        window.setTimeout(() => {
+          desktop.deliver("mictest:heard", { heard: "voice", stood_in: false });
+          window.setTimeout(() => {
+            desktop.deliver("mictest:cut", "You're in voice. Leave it to test your microphone: the test plays out loud, and the room would hear it.");
+            desktop.deliver("mictest:done", null);
+          }, 150);
+        }, 200);
+        return null;
+      }
       // `?mictest=...&hold`: it listens until Stop is pressed.
       if (!query.has("hold")) window.setTimeout(() => micTestOver(how), 400);
       return null;

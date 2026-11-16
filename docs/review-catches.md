@@ -195,6 +195,24 @@ to be right for every shape that window takes.
 
 ## Checked when asked, not when it happens
 
+- **#912: a microphone test could still play into a room, or to a window
+  that had gone.** Greptile's third look, after the first fixes. Whether to
+  play was checked after the listening, and then the speakers were opened
+  on another thread, which takes a moment: a room joined in that moment
+  heard the test. And stopping a test stopped its task but not that
+  thread, which went on to play, with nothing left to close the speaker
+  afterwards. *Missed because* each fix checked a little later than the
+  last, and a check before something slow is still a check before it; and
+  I took stopping a task to stop what it had started elsewhere. *Changed:*
+  it's the event that ends the test, not a check that tries to see it
+  coming: joining voice calls a test off (`mic_test::voice_joined`), as
+  closing its window does. Calling off sets a flag the speaker-opening
+  thread reads before it plays, and closes the speaker to stop what's
+  playing. The opening, playing and closing are a task of their own, so
+  the speaker is closed whoever is stopped. Tests: called off while the
+  speaker opened, called off whatever it's doing, and the page cut off
+  while it played.
+
 - **#912: a microphone test outlived the window that started it.** Closing
   a window takes its test with it, but the test was written down only once
   its microphone had opened, which takes a moment: a window closed in that

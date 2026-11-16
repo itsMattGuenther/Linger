@@ -53,9 +53,11 @@ describe("the microphone test (#907)", () => {
     const why = "You're in voice. Leave it to test your microphone: the test plays out loud, and the room would hear it.";
     const state = run([{ kind: "asked" }, { kind: "started" }, { kind: "level", level: 0.4 }, { kind: "cut", why }, { kind: "done" }]);
     expect(state).toEqual({ step: "idle", said: null, problem: why });
-    // Once it's playing there's nothing to cut.
+    // Joined while it played: the playing stops, and what's said is why, not what it heard.
     const playing: MicTest = { step: "playing", said: heard("voice") };
-    expect(micTestNext(playing, { kind: "cut", why })).toBe(playing);
+    expect(run([{ kind: "cut", why }, { kind: "done" }], playing)).toEqual({ step: "idle", said: null, problem: why });
+    // And with nothing under way there's nothing to cut.
+    expect(micTestNext(MIC_TEST_IDLE, { kind: "cut", why })).toBe(MIC_TEST_IDLE);
   });
 
   it("takes a verdict that beats the answer to the ask", () => {

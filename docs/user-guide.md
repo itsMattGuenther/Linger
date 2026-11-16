@@ -879,7 +879,7 @@ microphone**, talk for a few seconds, and Linger plays it back to you. If
 it heard nothing, or very little, it says so and what to try. The recording
 is played once and thrown away: it's never sent or kept. You can't test
 while you're in voice, because the room would hear the playback; leave
-voice first.
+voice first. If you join voice while a test is going, the test stops.
 
 **If voice won't start**, the room's voice strip says why, where it would
 say who's talking. Click it for the whole reason, including your computer's
