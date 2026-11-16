@@ -1087,6 +1087,26 @@ out loud.
   (a forwarding server, 0.4.1). The mesh it first built is gone (#306): voice
   goes only through the server. Its notes are in `m12.md`.
 
+- ⏳ **#904 · The desktop microphone, cleaned up before it's sent** — effort:
+  **treacherous** — Matt, 2026-11-16. People on the desktop app were too
+  quiet: its voice sent the microphone exactly as the computer handed it
+  over, while a browser, and so the phone app, levels and cleans one first
+  (`docs/decisions.md`). **Built:** `voice/cleanup.rs` puts every microphone
+  frame through `sonora` (a Rust port of WebRTC's audio processing) before
+  the encoder: rumble filter, noise suppression, automatic levelling and a
+  limiter, with two switches in Settings → Sound & Voice, both on. Voice
+  messages recorded on a computer go through it too.
+  **Left:** echo cancelling, which needs what the speakers play as well as
+  the microphone; a microphone test that plays you back as others hear you;
+  and the real check, which no test here can be: a call with Matt and a few
+  friends on Windows and Linux, before and after, with the switches on and
+  off.
+  *Release notes, 0.5.5:* people on the desktop app are no longer too quiet:
+  it brings each microphone to a normal speaking level and takes out
+  background noise, as the phone app's does, with a switch for each in
+  Settings → Sound & Voice. Everybody you talk with needs 0.5.5 for you to
+  hear the difference in them.
+
 ### M13 — ambient voice: cut 2026-10-11
 
 Matt cut it before it started: "it's antiquated. It doesn't apply anymore"
