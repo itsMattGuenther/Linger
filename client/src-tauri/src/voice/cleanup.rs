@@ -163,11 +163,10 @@ impl Cleaner {
         let Some(processing) = self.processing.as_mut() else {
             return;
         };
-        let mut raw = [0i16; PIECE];
-        for piece in frame.chunks_exact_mut(PIECE) {
-            raw.copy_from_slice(piece);
+        for piece in frame.as_chunks_mut::<PIECE>().0 {
+            let raw = *piece;
             if let Err(error) = processing.process_capture_i16(&raw, piece) {
-                piece.copy_from_slice(&raw);
+                *piece = raw;
                 if !self.failed {
                     eprintln!("voice: microphone clean-up: {error}");
                     self.failed = true;
@@ -195,8 +194,8 @@ pub(crate) mod sounds {
 
     /// Held by a test that changes Settings' choice, or reads it through a
     /// microphone: the choice is one for the whole app, and tests run at the
-    /// same time.
-    pub(crate) static CHOICE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    /// same time. Tokio's, since one of them holds it across its awaits.
+    pub(crate) static CHOICE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
     /// Somebody talking, `db` decibels down from a well-recorded voice
     /// (about −21 dBFS, peaks at −6): a pitched buzz whose pitch wanders,
@@ -462,9 +461,7 @@ mod tests {
     /// on. Put back at the end: other tests read it.
     #[test]
     fn what_settings_chose_is_what_microphones_read() {
-        let _settings = super::sounds::CHOICE
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _settings = super::sounds::CHOICE.blocking_lock();
         let was = chosen();
         choose(Cleanup {
             level: false,

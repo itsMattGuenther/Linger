@@ -1097,10 +1097,10 @@ out loud.
   limiter, with two switches in Settings → Sound & Voice, both on. Voice
   messages recorded on a computer go through it too.
   **Left:** echo cancelling, which needs what the speakers play as well as
-  the microphone; a microphone test that plays you back as others hear you;
-  and the real check, which no test here can be: a call with Matt and a few
-  friends on Windows and Linux, before and after, with the switches on and
-  off.
+  the microphone (#906); a microphone test that plays you back as others
+  hear you (#907); and the real check, which no test here can be: a call
+  with Matt and a few friends on Windows and Linux at the next release,
+  with the switches on and off.
   *Release notes, 0.5.5:* people on the desktop app are no longer too quiet:
   it brings each microphone to a normal speaking level and takes out
   background noise, as the phone app's does, with a switch for each in

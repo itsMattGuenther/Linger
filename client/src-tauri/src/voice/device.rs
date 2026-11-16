@@ -2854,9 +2854,7 @@ mod tests {
     async fn a_microphones_frames_are_cleaned_and_a_new_device_starts_afresh() {
         use crate::voice::cleanup::sounds::{dbfs, voice, CHOICE};
         // Settings' choice is one for the whole app, and a test changes it.
-        let _settings = CHOICE
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _settings = CHOICE.lock().await;
         let sender: Arc<Mutex<Option<mpsc::Sender<Vec<i16>>>>> = Arc::default();
         let builds = Arc::new(AtomicUsize::new(0));
         let (held, built) = (Arc::clone(&sender), Arc::clone(&builds));
@@ -2874,7 +2872,7 @@ mod tests {
 
         let said = voice(10.0, -30.0);
         let mut heard = Vec::with_capacity(said.len());
-        for frame in said.chunks_exact(FRAME_SAMPLES) {
+        for frame in said.as_chunks::<FRAME_SAMPLES>().0 {
             tx.send(frame.to_vec())
                 .await
                 .expect("the microphone is listening");
@@ -2891,7 +2889,7 @@ mod tests {
         microphone.choose(Some("Another microphone"));
         assert_eq!(wait_until(&builds, 2), 2, "choosing a device built nothing");
         let mut again = Vec::with_capacity(second);
-        for frame in said[..second].chunks_exact(FRAME_SAMPLES) {
+        for frame in said[..second].as_chunks::<FRAME_SAMPLES>().0 {
             tx.send(frame.to_vec())
                 .await
                 .expect("the microphone is listening");
