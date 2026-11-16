@@ -419,6 +419,28 @@ test.describe("this app", () => {
     await expect(panel(page)).toContainText("Microphones and speakers are picked in the desktop app.");
   });
 
+  test("the microphone's clean-up is two switches, both on, each saying what it does (#904)", async ({ page }) => {
+    await open(page, "?section=sound");
+    const level = page.getByRole("switch", { name: "Even out my volume" });
+    const noise = page.getByRole("switch", { name: "Remove background noise" });
+    await expect(level).toBeChecked();
+    await expect(noise).toBeChecked();
+    await expect(panel(page)).toContainText("so nobody has to turn you up");
+    await expect(panel(page)).toContainText("like a fan or a hum");
+    const saved = async () => {
+      const voice = (await did(page)).filter((line) => line.startsWith("voice:"));
+      return JSON.parse(voice.at(-1)?.slice("voice:".length) ?? "{}") as Record<string, unknown>;
+    };
+    // Each is its own: turning one off leaves the other on.
+    await level.click();
+    await expect(level).not.toBeChecked();
+    expect(await saved()).toMatchObject({ cleanUp: { level: false, noise: true } });
+    await noise.click();
+    expect(await saved()).toMatchObject({ cleanUp: { level: false, noise: false } });
+    await level.click();
+    expect(await saved()).toMatchObject({ cleanUp: { level: true, noise: false } });
+  });
+
   test("push-to-talk names its key, and the key is chosen by pressing it", async ({ page }) => {
     await open(page, "?section=sound");
     await expect(page.locator("kbd")).toHaveText("Right Ctrl");

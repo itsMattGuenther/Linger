@@ -198,6 +198,21 @@ export function SoundSection({ sound, onSound, onPreview, voice, onVoice, device
               <Note>Linger's own sounds play on these Speakers too. A change applies at once, in a call too. If a device you picked isn't plugged in, Linger uses the system default rather than stopping you talking.</Note>
             </>
           )}
+          {/* What the desktop app does to the microphone before sending it (#904). Both on unless turned off. */}
+          <SettingRow
+            title="Even out my volume"
+            description="Brings your voice to a normal speaking level, so nobody has to turn you up. A quiet room stays quiet. Turn it off if your own audio gear already does this."
+            control={
+              <Switch label="Even out my volume" checked={voice.cleanUp.level} onChange={(level) => onVoice({ ...voice, cleanUp: { ...voice.cleanUp, level } })} />
+            }
+          />
+          <SettingRow
+            title="Remove background noise"
+            description="Takes out steady sounds behind your voice, like a fan or a hum. Turn it off to send music or an instrument as it is."
+            control={
+              <Switch label="Remove background noise" checked={voice.cleanUp.noise} onChange={(noise) => onVoice({ ...voice, cleanUp: { ...voice.cleanUp, noise } })} />
+            }
+          />
           <SettingRow
             title="Push to talk"
             description="Opens the microphone only while you hold the key. Not holding it isn't muting: nobody sees you as muted. Off by default: a room you leave running shouldn't need a key held down."

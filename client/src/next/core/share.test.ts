@@ -1229,6 +1229,29 @@ describe("a viewer window sharing the owner's connection", () => {
     follower.stop();
   });
 
+  it("the owner tells the shell the microphone's clean-up as it starts, and again when Settings changes it (#904)", async () => {
+    // Somebody who turned levelling off: the shell starts with everything on.
+    const saved = new Map([["linger.voice.cleanUp.level", "false"]]);
+    vi.stubGlobal("window", { localStorage: { getItem: (key: string) => saved.get(key) ?? null, setItem: () => undefined } });
+    const { owner, viewer, core } = await windows("settings");
+    const api = fakeOwnerApi(["token-1"]);
+    await owner.gateway.connect(api as never);
+    await owner.share.shareAsOwner(owner.bus, () => new Map([[HOME, api as never]]));
+    evening().slice(0, 3).forEach(core);
+    const told = () => invoked.filter((call) => call.cmd === "voice_clean_up").map((call) => call.args.cleanup);
+    await vi.waitFor(() => expect(told()).toEqual([{ level: false, noise: true }]));
+
+    // Out of voice as well: a voice message's microphone follows it too.
+    const follower = await viewer.mirror.followOwner(viewer.bus);
+    await follower.intend({ kind: "voice.cleanup", level: true, noise: false });
+    await vi.waitFor(() => expect(told()).toEqual([{ level: false, noise: true }, { level: true, noise: false }]));
+    // Something that isn't a switch is dropped, not passed on.
+    await follower.intend({ kind: "voice.cleanup", level: "loud", noise: false } as never);
+    await new Promise((settle) => setTimeout(settle, 20));
+    expect(told()).toHaveLength(2);
+    follower.stop();
+  });
+
   it("a volume from a conversation's own window is played by the owner, and anything else is dropped (#747)", async () => {
     const { owner, viewer, core } = await windows();
     const api = fakeOwnerApi(["token-1"]);

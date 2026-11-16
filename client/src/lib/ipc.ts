@@ -193,6 +193,18 @@ export async function voiceChooseDevices(devices: VoiceDeviceChoice): Promise<vo
   await invoke("voice_choose_devices", { input: devices.input, output: devices.output });
 }
 
+/**
+ * Which parts of the microphone's clean-up are on (#904): levelling and
+ * noise suppression, for every microphone the desktop app opens, a call's
+ * and a voice message's. It applies from the next frame, so a switch
+ * changed in a call is heard in that call. The shell starts with both on.
+ */
+export async function voiceCleanUp(cleanUp: { level: boolean; noise: boolean }): Promise<void> {
+  // A phone's web engine cleans its microphone itself (pageVoice.ts).
+  if (inPage !== null || !isTauri()) return;
+  await invoke("voice_clean_up", { cleanup: { level: cleanUp.level, noise: cleanUp.noise } });
+}
+
 // --- the talk key with another app in front (#500, src-tauri/src/talk_key) ---
 
 /** What the shell says it heard: the talk key went `"down"` or `"up"`. To the list window only. */
