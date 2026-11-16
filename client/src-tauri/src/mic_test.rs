@@ -146,10 +146,38 @@ const ALREADY: &str = "A microphone test is already under way.";
 /// Said in Settings as it is.
 pub const IN_VOICE: &str = "You're in voice. Leave it to test your microphone: the test plays out loud, and the room would hear it.";
 
+/// What comes after the listening.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Then {
+    /// Say what was heard, and play it back.
+    Play(Heard),
+    /// Say what was heard, with nothing to play: silence isn't played, the
+    /// line about it says enough.
+    Say(Heard),
+    /// Say nothing and play nothing: voice was joined while it listened,
+    /// and playing now would put it into the room.
+    Leave,
+}
+
+/// Decided once the listening is over, not before it: the eight seconds are
+/// long enough to join a room in (the list window is right there), and
+/// "not in voice" when Test was pressed says nothing about now.
+#[must_use]
+pub fn then(heard: Heard, in_voice: bool) -> Then {
+    if in_voice {
+        Then::Leave
+    } else if heard == Heard::Nothing {
+        Then::Say(heard)
+    } else {
+        Then::Play(heard)
+    }
+}
+
 /// Start the test: listen to the chosen microphone (the default for `None`)
 /// for up to [`LONGEST_MS`], then play it on `output`. The window hears
-/// `mictest:level` while it listens, `mictest:heard` with the verdict when
-/// it stops listening, and `mictest:done` when the playing is over.
+/// `mictest:level` while it listens; then `mictest:heard` with the verdict,
+/// or `mictest:cut` with the reason when voice was joined meanwhile; and
+/// `mictest:done` when the playing is over.
 #[tauri::command]
 pub async fn mic_test_start(
     app: AppHandle,
@@ -205,13 +233,19 @@ async fn run(
     // The microphone is let go before anything plays: the test never hears
     // itself.
     drop(microphone);
-    let verdict = heard(&samples);
-    let _ = app.emit_to(label.as_str(), "mictest:heard", verdict);
-    // Silence isn't played: there's nothing to hear, and the line says so.
-    if verdict != Heard::Nothing {
-        let wait = playing_for(samples.len());
-        if crate::voice_commands::play_out_of_voice(&app, samples, output).await {
-            tokio::time::sleep(wait).await;
+    match then(heard(&samples), crate::voice_commands::in_voice(&app).await) {
+        Then::Leave => {
+            let _ = app.emit_to(label.as_str(), "mictest:cut", IN_VOICE);
+        }
+        Then::Say(verdict) => {
+            let _ = app.emit_to(label.as_str(), "mictest:heard", verdict);
+        }
+        Then::Play(verdict) => {
+            let _ = app.emit_to(label.as_str(), "mictest:heard", verdict);
+            let wait = playing_for(samples.len());
+            if crate::voice_commands::play_out_of_voice(&app, samples, output).await {
+                tokio::time::sleep(wait).await;
+            }
         }
     }
     lock(&app.state::<MicTests>()).take();
@@ -372,6 +406,18 @@ mod tests {
         let mut word = vec![0; 48_000];
         word.extend(tone(20_000.0, 0, ENOUGH * FRAME_SAMPLES));
         assert_eq!(heard(&word), Heard::Voice);
+    }
+
+    /// Whether to play is decided after the listening: a room joined while
+    /// it listened hears none of it, and silence isn't played at all.
+    #[test]
+    fn what_was_heard_is_played_unless_voice_was_joined_or_it_was_silence() {
+        assert_eq!(then(Heard::Voice, false), Then::Play(Heard::Voice));
+        assert_eq!(then(Heard::Quiet, false), Then::Play(Heard::Quiet));
+        assert_eq!(then(Heard::Nothing, false), Then::Say(Heard::Nothing));
+        for heard in [Heard::Voice, Heard::Quiet, Heard::Nothing] {
+            assert_eq!(then(heard, true), Then::Leave);
+        }
     }
 
     #[test]

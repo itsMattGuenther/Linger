@@ -75,7 +75,7 @@ let startsAtSignIn = startup === "on";
 /** The shell's microphone test stops listening: what it heard, then "done" once it has played. */
 const micTestOver = (heard: string) => {
   desktop.deliver("mictest:heard", heard);
-  window.setTimeout(() => desktop.deliver("mictest:done", null), heard === "nothing" ? 10 : 400);
+  window.setTimeout(() => desktop.deliver("mictest:done", null), heard === "nothing" ? 10 : query.has("long") ? 2500 : 400);
 };
 
 const desktop = fakeDesktop({
@@ -127,6 +127,14 @@ const desktop = fakeDesktop({
       const how = query.get("mictest") ?? "voice";
       if (how === "invoice") throw "You're in voice. Leave it to test your microphone: the test plays out loud, and the room would hear it.";
       if (how === "nomic") throw "no input device";
+      // `joined`: voice was joined while it listened, so nothing is played.
+      if (how === "joined") {
+        window.setTimeout(() => {
+          desktop.deliver("mictest:cut", "You're in voice. Leave it to test your microphone: the test plays out loud, and the room would hear it.");
+          desktop.deliver("mictest:done", null);
+        }, 200);
+        return null;
+      }
       for (const [at, level] of [0.2, 0.7, 0.4].entries()) window.setTimeout(() => desktop.deliver("mictest:level", level), 40 + at * 40);
       // `?mictest=...&hold`: it listens until Stop is pressed.
       if (!query.has("hold")) window.setTimeout(() => micTestOver(how), 400);

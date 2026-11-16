@@ -537,8 +537,9 @@ test.describe("the microphone test (#907)", () => {
   const row = (page: Page) => page.getByRole("group", { name: "Test your microphone" });
   const said = (page: Page) => page.locator(".nx-set-mictest");
 
-  test("listens to the microphone picked, plays it back on the speakers picked, and says how you sound", async ({ page }) => {
-    await open(page, "?section=sound");
+  test("listens to the microphone picked until Stop, plays it back on the speakers picked, and says how you sound", async ({ page }) => {
+    // `hold`: it listens until Stop. `long`: the playing lasts long enough to look at.
+    await open(page, "?section=sound&mictest=voice&hold&long");
     await page.getByLabel("Microphone", { exact: true }).selectOption("Built-in microphone");
     // Nothing is said under the row until a test has run.
     await expect(said(page)).toHaveCount(0);
@@ -546,24 +547,24 @@ test.describe("the microphone test (#907)", () => {
     // The shell is asked with the devices picked: one by name, one the system default.
     await expect.poll(() => did(page)).toContain("mictest:start:Built-in microphone:null");
     await expect(said(page)).toHaveText("Listening. Say something.");
-    // While it listens the button stops it, and the lines move with the voice.
-    await expect(row(page).getByRole("button", { name: "Stop" })).toBeVisible();
+    // The lines move with the voice: the newest isn't the dot silence leaves.
     await expect(page.locator(".nx-set-mictest-lines i").last()).not.toHaveAttribute("style", "height: 12%;");
-    // Then it plays back, with nothing to press, and says what it heard.
-    await expect(said(page)).toHaveText("Playing it back…");
-    await expect(row(page).getByRole("button", { name: "Test" })).toBeDisabled();
-    await expect(said(page)).toHaveText("That's how you sound to the others.");
-    await expect(row(page).getByRole("button", { name: "Test" })).toBeEnabled();
-    await expect(page.locator(".nx-set-mictest-lines")).toHaveCount(0);
-  });
-
-  test("Stop ends the listening and plays what there is", async ({ page }) => {
-    await open(page, "?section=sound&mictest=voice&hold");
-    await row(page).getByRole("button", { name: "Test" }).click();
-    await expect(said(page)).toHaveText("Listening. Say something.");
+    // While it listens the button stops it. Then it plays back, with nothing to press.
     await row(page).getByRole("button", { name: "Stop" }).click();
     await expect.poll(() => did(page)).toContain("mictest:stop");
+    await expect(said(page)).toHaveText("Playing it back…");
+    await expect(row(page).getByRole("button", { name: "Test" })).toBeDisabled();
+    await expect(page.locator(".nx-set-mictest-lines")).toHaveCount(0);
+    // And says what it heard, ready for another.
     await expect(said(page)).toHaveText("That's how you sound to the others.");
+    await expect(row(page).getByRole("button", { name: "Test" })).toBeEnabled();
+  });
+
+  test("stops listening by itself, and says how you sound", async ({ page }) => {
+    await open(page, "?section=sound&mictest=voice");
+    await row(page).getByRole("button", { name: "Test" }).click();
+    await expect(said(page)).toHaveText("That's how you sound to the others.");
+    expect(await did(page)).not.toContain("mictest:stop");
   });
 
   test("says what to do when it heard nothing, or too little", async ({ page }) => {
@@ -578,6 +579,14 @@ test.describe("the microphone test (#907)", () => {
     // With the levelling off, the first thing to try is the switch right below.
     await page.getByRole("switch", { name: "Even out my volume" }).click();
     await expect(said(page)).toHaveText("That was very quiet. Turn on Even out my volume below, or move closer to the microphone.");
+  });
+
+  test("plays nothing when voice was joined while it listened, and says why", async ({ page }) => {
+    await open(page, "?section=sound&mictest=joined");
+    await row(page).getByRole("button", { name: "Test" }).click();
+    await expect(said(page)).toHaveText("You're in voice. Leave it to test your microphone: the test plays out loud, and the room would hear it.");
+    await expect(said(page).locator(".nx-set-note")).toHaveAttribute("data-tone", "status");
+    await expect(row(page).getByRole("button", { name: "Test" })).toBeEnabled();
   });
 
   test("says why when it can't start, and can be tried again", async ({ page }) => {

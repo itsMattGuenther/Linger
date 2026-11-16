@@ -47,6 +47,15 @@ describe("the microphone test (#907)", () => {
     expect(run([{ kind: "asked" }, { kind: "started" }, { kind: "done" }])).toEqual(MIC_TEST_IDLE);
   });
 
+  it("says why when voice was joined while it listened, and plays nothing", () => {
+    const why = "You're in voice. Leave it to test your microphone: the test plays out loud, and the room would hear it.";
+    const state = run([{ kind: "asked" }, { kind: "started" }, { kind: "level", level: 0.4 }, { kind: "cut", why }, { kind: "done" }]);
+    expect(state).toEqual({ step: "idle", heard: null, problem: why });
+    // Once it's playing there's nothing to cut.
+    const playing: MicTest = { step: "playing", heard: "voice" };
+    expect(micTestNext(playing, { kind: "cut", why })).toBe(playing);
+  });
+
   it("takes a verdict that beats the answer to the ask", () => {
     // A microphone that gives nothing at once: "heard" can land before `start` resolves.
     const state = run([{ kind: "asked" }, { kind: "heard", heard: "nothing" }, { kind: "started" }, { kind: "done" }]);

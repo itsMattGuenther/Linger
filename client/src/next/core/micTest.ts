@@ -34,6 +34,8 @@ export type MicTestEvent =
   | { kind: "refused"; why: string }
   | { kind: "level"; level: number }
   | { kind: "heard"; heard: Heard }
+  /** It stopped with nothing played, and why: voice was joined while it listened. */
+  | { kind: "cut"; why: string }
   | { kind: "done" };
 
 export const MIC_TEST_IDLE: MicTest = { step: "idle", heard: null, problem: null };
@@ -58,6 +60,8 @@ export function micTestNext(state: MicTest, event: MicTestEvent): MicTest {
     case "heard":
       // A microphone that gave nothing at all can be heard before "started" lands.
       return state.step === "listening" || state.step === "opening" ? { step: "playing", heard: event.heard } : state;
+    case "cut":
+      return state.step === "listening" || state.step === "opening" ? { step: "idle", heard: null, problem: event.why } : state;
     case "done":
       if (state.step === "playing") return { step: "idle", heard: state.heard, problem: null };
       return state.step === "idle" ? state : MIC_TEST_IDLE;
@@ -118,6 +122,7 @@ export function shellMicTester(on: (event: MicTestEvent) => void): MicTester {
   };
   void bus.listen<number>("mictest:level", (level) => on({ kind: "level", level })).then(hold);
   void bus.listen<Heard>("mictest:heard", (heard) => on({ kind: "heard", heard })).then(hold);
+  void bus.listen<string>("mictest:cut", (why) => on({ kind: "cut", why })).then(hold);
   void bus.listen("mictest:done", () => on({ kind: "done" })).then(hold);
   return {
     start: async (input, output) => {
