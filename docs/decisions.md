@@ -2218,9 +2218,11 @@ and an iPhone has none (#816).
   WebRTC's audio processing module: the same steps and tuning a browser has,
   with nothing to install and no C++ to build on three systems. Matt asked
   for Rust over wrapping the C++ library, so the app stays one build.
-- **All of it, in the end:** rumble filter, noise suppression, automatic
-  levelling and a limiter first (#904), then echo cancelling, which needs
-  what the speakers play as well as the microphone.
+- **All of it:** rumble filter, noise suppression, automatic levelling and
+  a limiter first (#904), then echo cancelling (#906), which needs what the
+  speakers play as well as the microphone: a call's microphone and speakers
+  are opened together and share a tap on what's played. It can't cancel
+  what other apps play.
 - **On by default, and each part a switch** that says in a sentence what it
   does and when to turn it off. Not everybody is technical, so nothing has to
   be set up: levelling adapts by itself. Somebody whose own audio gear levels

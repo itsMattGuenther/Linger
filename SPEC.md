@@ -1045,13 +1045,18 @@ the desktop app does what a browser does for a call, before anything is encoded:
 takes out rumble below the voice and steady background noise, brings the voice to a
 normal speaking level, and holds it under clipping. The levelling follows speech only,
 so a quiet room isn't turned up into hiss, and a noise gate's silence stays silence.
-Settings → Sound & Voice has a switch for each, **Even out my volume** and **Remove
-background noise**, both on, each saying in a sentence what it does and when to turn it
-off (your own audio gear already does it; you're sending music). They're kept on each
-computer, apply at once in a call, and cover voice messages recorded there too. With
-both off, the microphone is sent as it came, to the sample. The phone app's microphone
-is cleaned by the phone's own web engine (§4.15) and has no switches. Cancelling the
-echo of a computer's speakers is not in yet (#904).
+In a call it also takes out the echo of your own speakers (#906): what Linger plays
+(the voices, its sounds, a shared screen's sound) is removed from what your microphone
+hears, so somebody on speakers doesn't send everybody back to themselves. With
+headphones there's no echo, and within a few seconds it leaves your voice alone. It
+can't remove what other apps play: Linger never sees that.
+Settings → Sound & Voice has a switch for each, **Even out my volume**, **Remove
+background noise** and **Remove echo**, all on, each saying in a sentence what it does
+and when to turn it off (your own audio gear already does it; you're sending music).
+They're kept on each computer, apply at once in a call, and the first two cover voice
+messages recorded there too. With all off, the microphone is sent as it came, to the
+sample. The phone app's microphone is cleaned by the phone's own web engine (§4.15) and
+has no switches.
 
 **Leaving is leaving.** Closing the app, losing the network, or joining voice somewhere
 else all end it, and the people you were talking to see you go. You are in voice in at

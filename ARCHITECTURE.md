@@ -97,12 +97,15 @@ Consequences:
    WebKitGTK from the critical path for voice. **The phone is the exception** (#429):
    its web engine is Chromium on Android and WebKit on the iPhone, both with WebRTC
    and the phone's own echo cancelling, which a phone on speaker needs and the Rust
-   engine doesn't have. So on the phone voice runs in the page (`lib/pageVoice.ts`),
+   engine didn't have then. So on the phone voice runs in the page (`lib/pageVoice.ts`),
    by the Rust engine's rules and raising its events, and `ipc.ts` routes the same
    calls there; the server can't tell the two apart. The Rust engine cleans its
-   microphone as a browser would (#904, `voice/cleanup.rs`): rumble filter, noise
-   suppression, automatic levelling and a limiter, from `sonora`, a Rust port of
-   WebRTC's audio processing, on each frame between the device and the encoder.
+   microphone as a browser would (#904, #906, `voice/cleanup.rs`): rumble filter,
+   echo cancelling, noise suppression, automatic levelling and a limiter, from
+   `sonora`, a Rust port of WebRTC's audio processing, on each frame between the
+   device and the encoder. The echo canceller is told what the speakers play by a
+   tap on the output mix (`Played` in `voice/device.rs`), shared by a call's
+   microphone and speakers, which are opened together.
    Mute and deafen are enforced here too: the outgoing encoder receives silence
    while muted, and the speaker mixer discards voice while deafened, including
    queued samples. The page requests both controls together; the native engine

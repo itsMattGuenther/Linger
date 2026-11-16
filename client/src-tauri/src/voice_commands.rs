@@ -306,8 +306,8 @@ pub async fn voice_choose_devices(app: AppHandle, input: Option<String>, output:
     }
 }
 
-/// Which parts of the microphone's clean-up are on (#904, `voice::cleanup`):
-/// Settings' two switches, told by the list window when it starts and when
+/// Which parts of the microphone's clean-up are on (#904, #906, `voice::cleanup`):
+/// Settings' three switches, told by the list window when it starts and when
 /// one changes. It applies to every microphone the app opens, a call's and a
 /// voice message's, from its next frame, so nothing waits for the next join.
 #[tauri::command]
