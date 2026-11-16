@@ -15,6 +15,8 @@ const INPUT_KEY = "linger.voice.input";
 const OUTPUT_KEY = "linger.voice.output";
 const PTT_KEY = "linger.voice.pushToTalk";
 const TALK_KEY = "linger.voice.pushToTalkKey";
+const LEVEL_KEY = "linger.voice.cleanUp.level";
+const NOISE_KEY = "linger.voice.cleanUp.noise";
 
 /**
  * The key you hold to talk, when push-to-talk is on. `Control` because it
@@ -24,10 +26,26 @@ const TALK_KEY = "linger.voice.pushToTalkKey";
  */
 export const PUSH_TO_TALK_KEY = "Control";
 
+/**
+ * What the desktop app does to your microphone before sending it (#904,
+ * `src-tauri/src/voice/cleanup.rs`), each part a switch in Settings. Both
+ * are on until somebody turns one off: a raw microphone is often a fraction
+ * as loud as a voice should be. A phone's microphone is cleaned by its web
+ * engine (`pageVoice.ts`) and has no switches.
+ */
+export interface MicrophoneCleanUp {
+  /** Bring your voice to a normal speaking level, held under clipping. */
+  level: boolean;
+  /** Take out steady background noise: a fan, a hum, hiss. */
+  noise: boolean;
+}
+
 /** What voice remembers on this machine between runs. */
 export interface VoicePrefs {
   /** Devices by name, or the system default for `null`. */
   devices: VoiceDeviceChoice;
+  /** The microphone's clean-up (#904). */
+  cleanUp: MicrophoneCleanUp;
   /** Keep the microphone closed, without muting, except while the key is held (#232). */
   pushToTalk: boolean;
   /**
@@ -38,6 +56,7 @@ export interface VoicePrefs {
 
 export const DEFAULT_VOICE_PREFS: VoicePrefs = {
   devices: { input: null, output: null },
+  cleanUp: { level: true, noise: true },
   pushToTalk: false,
   pushToTalkKey: "ControlRight",
 };
@@ -52,6 +71,11 @@ export function loadVoicePrefs(): VoicePrefs {
       devices: {
         input: input === null || input === "" ? null : input,
         output: output === null || output === "" ? null : output,
+      },
+      // On unless turned off: nothing kept is everything on.
+      cleanUp: {
+        level: window.localStorage.getItem(LEVEL_KEY) !== "false",
+        noise: window.localStorage.getItem(NOISE_KEY) !== "false",
       },
       pushToTalk: ptt === "true",
       pushToTalkKey: window.localStorage.getItem(TALK_KEY) || DEFAULT_VOICE_PREFS.pushToTalkKey,
@@ -68,6 +92,8 @@ export function saveVoicePrefs(prefs: VoicePrefs): void {
     else store.setItem(INPUT_KEY, prefs.devices.input);
     if (prefs.devices.output === null) store.removeItem(OUTPUT_KEY);
     else store.setItem(OUTPUT_KEY, prefs.devices.output);
+    store.setItem(LEVEL_KEY, prefs.cleanUp.level ? "true" : "false");
+    store.setItem(NOISE_KEY, prefs.cleanUp.noise ? "true" : "false");
     store.setItem(PTT_KEY, prefs.pushToTalk ? "true" : "false");
     store.setItem(TALK_KEY, prefs.pushToTalkKey);
   } catch {

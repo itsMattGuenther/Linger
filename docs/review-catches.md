@@ -268,6 +268,19 @@ on a world that has changed.
   (`PageVoice.offer`), with a test of leaving and joining while the dialog
   is up (`pageVoice.test.ts`).
 
+- **#908: a microphone's last frames were cleaned as the next
+  microphone's.** Frames wait in a queue between the device and the engine,
+  up to a third of a second of them. The clean-up started afresh when the
+  count of devices built had moved on, read as each frame was taken off, so
+  frames the old device left queued went through the new cleaner and taught
+  it the wrong level and noise. Caught by Greptile. *Missed because* the
+  test switched devices with the queue empty: what the frame was checked
+  against was read at the far end of the queue, not carried with it.
+  *Changed:* each frame says which build of the stream made it (`Frame`,
+  `Frames` in `voice/device.rs`), and the cleaner starts afresh at the first
+  frame from another; the test switches with eight frames still queued, and
+  fails with the old read (they gained −3 dB against 26 dB learned).
+
 ## A check nobody could run before it mattered
 
 - **#812: the iPhone build's App Group check could never pass.** The new

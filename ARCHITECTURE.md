@@ -99,7 +99,10 @@ Consequences:
    and the phone's own echo cancelling, which a phone on speaker needs and the Rust
    engine doesn't have. So on the phone voice runs in the page (`lib/pageVoice.ts`),
    by the Rust engine's rules and raising its events, and `ipc.ts` routes the same
-   calls there; the server can't tell the two apart.
+   calls there; the server can't tell the two apart. The Rust engine cleans its
+   microphone as a browser would (#904, `voice/cleanup.rs`): rumble filter, noise
+   suppression, automatic levelling and a limiter, from `sonora`, a Rust port of
+   WebRTC's audio processing, on each frame between the device and the encoder.
    Mute and deafen are enforced here too: the outgoing encoder receives silence
    while muted, and the speaker mixer discards voice while deafened, including
    queued samples. The page requests both controls together; the native engine

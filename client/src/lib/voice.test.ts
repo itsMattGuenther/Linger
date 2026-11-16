@@ -74,18 +74,32 @@ describe("preferences", () => {
   });
 
   it("round-trip, and forget a device set back to the default", () => {
-    saveVoicePrefs({ devices: { input: "USB Mic", output: null }, pushToTalk: true, pushToTalkKey: "AltRight" });
+    const cleanUp = { level: true, noise: true };
+    saveVoicePrefs({ devices: { input: "USB Mic", output: null }, cleanUp, pushToTalk: true, pushToTalkKey: "AltRight" });
     expect(loadVoicePrefs()).toEqual({
       devices: { input: "USB Mic", output: null },
+      cleanUp,
       pushToTalk: true,
       pushToTalkKey: "AltRight",
     });
-    saveVoicePrefs({ devices: { input: null, output: "Headphones" }, pushToTalk: false, pushToTalkKey: "ControlRight" });
+    saveVoicePrefs({ devices: { input: null, output: "Headphones" }, cleanUp, pushToTalk: false, pushToTalkKey: "ControlRight" });
     expect(loadVoicePrefs()).toEqual({
       devices: { input: null, output: "Headphones" },
+      cleanUp,
       pushToTalk: false,
       pushToTalkKey: "ControlRight",
     });
+  });
+
+  it("the microphone's clean-up is on until a part is turned off, and each part is kept by itself (#904)", () => {
+    expect(loadVoicePrefs().cleanUp).toEqual({ level: true, noise: true });
+    saveVoicePrefs({ ...DEFAULT_VOICE_PREFS, cleanUp: { level: false, noise: true } });
+    expect(loadVoicePrefs().cleanUp).toEqual({ level: false, noise: true });
+    saveVoicePrefs({ ...DEFAULT_VOICE_PREFS, cleanUp: { level: true, noise: false } });
+    expect(loadVoicePrefs().cleanUp).toEqual({ level: true, noise: false });
+    // Something else kept there isn't "off": only what Settings wrote is.
+    window.localStorage.setItem("linger.voice.cleanUp.level", "maybe");
+    expect(loadVoicePrefs().cleanUp.level).toBe(true);
   });
 });
 

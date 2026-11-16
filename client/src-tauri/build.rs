@@ -26,6 +26,7 @@ const COMMANDS: &[&str] = &[
     "voice_push_to_talk",
     "voice_volume",
     "voice_choose_devices",
+    "voice_clean_up",
     "voice_devices",
     "voice_talk_key",
     "voice_talk_key_reach",

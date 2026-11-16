@@ -50,6 +50,7 @@ use cpal::{
 use tokio::sync::mpsc;
 
 use crate::voice::audio::{Devices, Refused, Sink, Source, CHANNELS, FRAME_SAMPLES, SAMPLE_RATE};
+use crate::voice::cleanup::{self, Cleaner};
 
 /// Why a device could not be opened, in words the voice surface can show.
 #[derive(Debug, thiserror::Error)]
@@ -157,14 +158,41 @@ fn find(
 
 /// The frames a microphone produces, and a way to stop it.
 pub struct Microphone {
-    frames: tokio::sync::Mutex<mpsc::Receiver<Vec<i16>>>,
+    frames: tokio::sync::Mutex<mpsc::Receiver<Frame>>,
     /// The device asked for by name, or `None` for the default. Read on every
     /// build, so changing it and waking the worker is a switch (#249).
     wanted: Arc<Mutex<Option<String>>>,
     /// The device asked for when it wouldn't open and the default is in its
     /// place (#398). Set on every build, so a later build clears it.
     refused: Arc<Mutex<Option<Refused>>>,
+    /// What's done to each frame before anybody gets it (#904), with the
+    /// build whose frames it has been cleaning: levelling and noise learned
+    /// on one microphone are forgotten at the first frame from the next.
+    cleaner: Mutex<(Cleaner, u64)>,
     worker: Worker,
+}
+
+/// A microphone frame, with which build of the stream made it: the first is
+/// 1, and each switch or reopen is the next (#249). A frame says so itself
+/// because frames wait in a queue: read at the time a frame is taken off, the
+/// latest build could be a later one than the frame's, and the last third of
+/// a second of one microphone would be cleaned as if it were the next's
+/// (#908's review).
+type Frame = (u64, Vec<i16>);
+
+/// Where one build's frames go.
+#[derive(Clone)]
+struct Frames {
+    tx: mpsc::Sender<Frame>,
+    build: u64,
+}
+
+impl Frames {
+    /// Dropped rather than queued if the engine is behind: see the queue's
+    /// size in [`Microphone::over`].
+    fn send(&self, frame: Vec<i16>) {
+        let _ = self.tx.try_send((self.build, frame));
+    }
 }
 
 impl Microphone {
@@ -177,35 +205,60 @@ impl Microphone {
         let chosen = Arc::clone(&wanted);
         let refused = Arc::new(Mutex::new(None));
         let noted = Arc::clone(&refused);
+        Self::over(wanted, refused, move |frames, alarm| {
+            let host = cpal::default_host();
+            let name = lock(&chosen).clone();
+            let device = find(
+                name.as_deref(),
+                host.input_devices()?,
+                host.default_input_device(),
+                "input",
+            )?;
+            let (stream, why) = or_default(
+                name.as_deref(),
+                &device,
+                || host.default_input_device(),
+                "microphone",
+                |device| input_stream(device, frames, alarm),
+            )?;
+            *lock(&noted) = name.zip(why).map(|(name, why)| Refused { name, why });
+            Ok(stream)
+        })
+    }
+
+    /// A microphone over whatever stream `build` makes, each time one is
+    /// wanted: a device's, from [`Microphone::open`], or a stand-in's in the
+    /// tests, so what happens to a frame between the stream and the engine
+    /// is tested without a sound card.
+    fn over<S, B>(
+        wanted: Arc<Mutex<Option<String>>>,
+        refused: Arc<Mutex<Option<Refused>>>,
+        mut build: B,
+    ) -> Result<Self, DeviceError>
+    where
+        S: Playing + 'static,
+        B: FnMut(&Frames, &Alarm) -> Result<S, DeviceError> + Send + 'static,
+    {
         // Sixteen frames is a third of a second. The callback drops frames if
         // the engine falls further behind than that, because a queue that
         // grows is latency nobody asked for.
-        let (tx, rx) = mpsc::channel::<Vec<i16>>(16);
+        let (tx, rx) = mpsc::channel::<Frame>(16);
         let sentinel = tx.clone();
+        let mut builds = 0u64;
         let worker = Worker::start(
             move |alarm: &Alarm| {
-                let host = cpal::default_host();
-                let name = lock(&chosen).clone();
-                let device = find(
-                    name.as_deref(),
-                    host.input_devices()?,
-                    host.default_input_device(),
-                    "input",
-                )?;
-                let (stream, why) = or_default(
-                    name.as_deref(),
-                    &device,
-                    || host.default_input_device(),
-                    "microphone",
-                    |device| input_stream(device, &tx, alarm),
-                )?;
-                *lock(&noted) = name.zip(why).map(|(name, why)| Refused { name, why });
+                builds += 1;
+                let frames = Frames {
+                    tx: tx.clone(),
+                    build: builds,
+                };
+                let stream = build(&frames, alarm)?;
                 Ok((stream, ()))
             },
             // Given up: an empty frame is the sentinel `frame()` reads as "the
             // device is gone". `blocking_send` is fine on the worker thread.
             move || {
-                let _ = sentinel.blocking_send(Vec::new());
+                let _ = sentinel.blocking_send((0, Vec::new()));
             },
             Retry::default(),
         )?;
@@ -213,15 +266,36 @@ impl Microphone {
             frames: tokio::sync::Mutex::new(rx),
             wanted,
             refused,
+            // The first build's frames are the ones a new cleaner is for.
+            cleaner: Mutex::new((Cleaner::new(cleanup::chosen()), 1)),
             worker,
         })
+    }
+}
+
+impl Microphone {
+    /// A frame as it goes out: levelled and cleaned as Settings says (#904,
+    /// `cleanup.rs`), or as it came with both switches off. Settings is read
+    /// on every frame, so a switch takes effect in the call you're in. The
+    /// cleaner starts afresh at the first frame from another build, not
+    /// when that build was made: the last one's frames may still be queued.
+    fn cleaned(&self, build: u64, mut frame: Vec<i16>) -> Vec<i16> {
+        let mut held = lock(&self.cleaner);
+        let (cleaner, cleaning) = &mut *held;
+        if *cleaning != build {
+            cleaner.restart();
+            *cleaning = build;
+        }
+        cleaner.follow(cleanup::chosen());
+        cleaner.clean(&mut frame);
+        frame
     }
 }
 
 #[async_trait]
 impl Source for Microphone {
     async fn frame(&self) -> Option<Vec<i16>> {
-        let frame = self.frames.lock().await.recv().await?;
+        let (build, frame) = self.frames.lock().await.recv().await?;
         // The sentinel the worker sends when it has given up reopening the
         // device: this source is over. Returning `None` is what ends the
         // engine's sending loop and lights `stopped` on the surface. While the
@@ -231,7 +305,7 @@ impl Source for Microphone {
         if frame.is_empty() {
             return None;
         }
-        Some(frame)
+        Some(self.cleaned(build, frame))
     }
 
     fn choose(&self, name: Option<&str>) {
@@ -248,13 +322,13 @@ impl Source for Microphone {
 /// A stream from an input device, turning what it delivers into frames.
 fn input_stream(
     device: &cpal::Device,
-    tx: &mpsc::Sender<Vec<i16>>,
+    frames: &Frames,
     alarm: &Alarm,
 ) -> Result<cpal::Stream, DeviceError> {
     opened(
         preferred(device.supported_input_configs()?),
         || Ok(device.default_input_config()?),
-        |config| open_input(device, config, tx, alarm),
+        |config| open_input(device, config, frames, alarm),
     )
 }
 
@@ -262,10 +336,10 @@ fn input_stream(
 fn open_input(
     device: &cpal::Device,
     config: SupportedStreamConfig,
-    tx: &mpsc::Sender<Vec<i16>>,
+    frames: &Frames,
     alarm: &Alarm,
 ) -> Result<cpal::Stream, DeviceError> {
-    let mut framer = Framer::new(config.channels(), config.sample_rate(), tx.clone());
+    let mut framer = Framer::new(config.channels(), config.sample_rate(), frames.clone());
     let config_format = config.sample_format();
     let died = on_error("microphone", alarm.clone());
     let config = config.config();
@@ -1292,16 +1366,16 @@ struct Framer {
     channels: usize,
     resampler: Option<Linear>,
     pending: Vec<i16>,
-    tx: mpsc::Sender<Vec<i16>>,
+    frames: Frames,
 }
 
 impl Framer {
-    fn new(channels: u16, rate: u32, tx: mpsc::Sender<Vec<i16>>) -> Self {
+    fn new(channels: u16, rate: u32, frames: Frames) -> Self {
         Self {
             channels: usize::from(channels).max(1),
             resampler: (rate != SAMPLE_RATE).then(|| Linear::new(rate, SAMPLE_RATE)),
             pending: Vec::with_capacity(FRAME_SAMPLES * 2),
-            tx,
+            frames,
         }
     }
 
@@ -1314,9 +1388,7 @@ impl Framer {
         }
         while self.pending.len() >= FRAME_SAMPLES {
             let frame: Vec<i16> = self.pending.drain(..FRAME_SAMPLES).collect();
-            // Dropped rather than queued if the engine is behind — see the
-            // channel size in `Microphone::open`.
-            let _ = self.tx.try_send(frame);
+            self.frames.send(frame);
         }
     }
 }
@@ -1946,11 +2018,12 @@ mod tests {
     #[test]
     fn a_framer_cuts_frames_at_exactly_twenty_milliseconds() {
         let (tx, mut rx) = mpsc::channel(4);
-        let mut framer = Framer::new(1, SAMPLE_RATE, tx);
+        let mut framer = Framer::new(1, SAMPLE_RATE, Frames { tx, build: 3 });
         framer.push(std::iter::repeat_n(7i16, FRAME_SAMPLES - 1));
         assert!(rx.try_recv().is_err(), "a frame was cut short");
         framer.push(std::iter::once(7i16));
-        let frame = rx.try_recv().expect("a whole frame");
+        let (build, frame) = rx.try_recv().expect("a whole frame");
+        assert_eq!(build, 3, "a frame says which build of the stream made it");
         assert_eq!(frame.len(), FRAME_SAMPLES);
         assert!(frame.iter().all(|s| *s == 7));
     }
@@ -2791,6 +2864,78 @@ mod tests {
         assert_eq!(
             *opened.lock().unwrap(),
             vec![Some("Speakers".into()), Some("Headphones".into()), None]
+        );
+    }
+
+    /// What a microphone hands the engine has been cleaned (#904): a voice
+    /// 30 dB quiet comes out of `frame()` at a speaking level. When another
+    /// device is built under it (#249), the levelling starts afresh at that
+    /// device's first frame, and not before: the frames the last one left in
+    /// the queue are still the last one's (#908's review).
+    #[tokio::test]
+    async fn a_microphones_frames_are_cleaned_and_a_new_device_starts_afresh() {
+        use crate::voice::cleanup::sounds::{dbfs, voice, CHOICE};
+        // Settings' choice is one for the whole app, and a test changes it.
+        let _settings = CHOICE.lock().await;
+        let streams: Arc<Mutex<Vec<Frames>>> = Arc::default();
+        let held = Arc::clone(&streams);
+        let microphone = Microphone::over(Arc::default(), Arc::default(), move |frames, _| {
+            held.lock().unwrap().push(frames.clone());
+            Ok(Fake)
+        })
+        .expect("a microphone over a stand-in");
+        // The stand-in for each device built: what it sends is its frames.
+        let device = |nth: usize| {
+            for _ in 0..400 {
+                if let Some(frames) = streams.lock().unwrap().get(nth - 1) {
+                    return frames.clone();
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            panic!("device {nth} was never built");
+        };
+
+        let first = device(1);
+        let said = voice(10.0, -30.0);
+        let mut heard = Vec::with_capacity(said.len());
+        for frame in said.as_chunks::<FRAME_SAMPLES>().0 {
+            first.send(frame.to_vec());
+            heard.extend(microphone.frame().await.expect("a frame"));
+        }
+        let second = SAMPLE_RATE as usize;
+        let last = said.len() / FRAME_SAMPLES * FRAME_SAMPLES - 2 * second;
+        let learned = dbfs(&heard[last..]) - dbfs(&said[last..last + 2 * second]);
+        assert!(
+            learned >= 20.0,
+            "a voice 30 dB quiet gained {learned:.1} dB through the microphone"
+        );
+
+        // The first device's last frames are still queued when the next is built.
+        let queued = &said[..8 * FRAME_SAMPLES];
+        for frame in queued.as_chunks::<FRAME_SAMPLES>().0 {
+            first.send(frame.to_vec());
+        }
+        microphone.choose(Some("Another microphone"));
+        let next = device(2);
+        let mut still = Vec::with_capacity(queued.len());
+        for _ in 0..8 {
+            still.extend(microphone.frame().await.expect("a queued frame"));
+        }
+        let kept = dbfs(&still) - dbfs(queued);
+        assert!(
+            learned - kept <= 6.0,
+            "frames the last device left queued gained {kept:.1} dB, against {learned:.1} dB learned on it"
+        );
+
+        let mut again = Vec::with_capacity(second);
+        for frame in said[..second].as_chunks::<FRAME_SAMPLES>().0 {
+            next.send(frame.to_vec());
+            again.extend(microphone.frame().await.expect("a frame"));
+        }
+        let afresh = dbfs(&again) - dbfs(&said[..again.len()]);
+        assert!(
+            learned - afresh >= 8.0,
+            "on a new device the gain was {afresh:.1} dB, against {learned:.1} dB learned on the last"
         );
     }
 

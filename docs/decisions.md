@@ -2196,3 +2196,43 @@ and goes when it ends. "Using Linger" is a session with its socket open that
 says `around`, so a phone app put in the background says `idle`, or its own
 notifications would wait for its socket to drop.
 
+## Decided — the desktop app cleans up its microphone, as a browser does (#904)
+
+**Matt, 2026-11-16.** People on the desktop app were too quiet. Matt turned
+everybody up to hear them, and a friend on Windows gave up and used another
+app, where the same people were fine.
+
+**The cause.** The desktop app's voice is its own, in Rust (`webrtc` for the
+connection, `cpal` for the devices, `opus` for the codec), and that stack
+carries sound; it doesn't process it. So the microphone went out exactly as
+the computer handed it over, as loud as its hardware and the system's input
+volume made it. A browser's WebRTC, and so the phone app's voice (#429) and
+the other voice apps people compare Linger with, puts a microphone through a
+high-pass filter, echo cancelling, noise suppression and automatic gain
+first. Per-person volume couldn't make up for it: it stops at twice as loud,
+and an iPhone has none (#816).
+
+**What was decided.**
+
+- **The desktop app does the same clean-up**, with `sonora`, a Rust port of
+  WebRTC's audio processing module: the same steps and tuning a browser has,
+  with nothing to install and no C++ to build on three systems. Matt asked
+  for Rust over wrapping the C++ library, so the app stays one build.
+- **All of it, in the end:** rumble filter, noise suppression, automatic
+  levelling and a limiter first (#904), then echo cancelling, which needs
+  what the speakers play as well as the microphone.
+- **On by default, and each part a switch** that says in a sentence what it
+  does and when to turn it off. Not everybody is technical, so nothing has to
+  be set up: levelling adapts by itself. Somebody whose own audio gear levels
+  and gates their microphone turns it off and is sent as they were.
+- **It follows speech only.** Digital silence stays silence, and a quiet room
+  isn't turned up: Matt's own noise gate makes perfect silence on purpose,
+  and a warning about a silent microphone was turned down for that reason
+  (2026-10-03).
+
+**Measured before building** (a speaking voice, and a voice-like test signal,
+through `sonora` 0.3.0): a normal microphone comes out where it went in; one
+20 dB quiet and one 30 dB quiet both come out about 5 dB under a normal one;
+steady noise drops about 10 dB between words; all of it takes about a third
+of a percent of one processor core, and adds well under a megabyte to the
+app.

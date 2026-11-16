@@ -110,11 +110,12 @@ code: voice is in Rust on a computer and in the page on a phone (#850).
 For: page, shell, server, ci
 Gaps: Checked when asked, not when it happens; Counted after the work it limits
 
-A check made before something slow (a request, a download, a prompt) can be
-stale after it: an update restarted somebody out of a call they'd joined
-meanwhile (#794), and an offer that waited on a dialog set up the next call
-(#900). A limit counted after the work let a table grow (#822). Check again,
-that it's the same thing, right before acting, and test it changing between.
+A check made before something slow (a request, a prompt, a queue) can be
+stale after it: an update restarted somebody out of a call joined meanwhile
+(#794), a waiting offer set up the next call (#900), and queued frames were
+cleaned as the next microphone's (#908). A limit counted after the work let
+a table grow (#822). Check again, that it's the same thing, right before
+acting, and test it changing between.
 
 ### Is it tested going wrong partway, not only going through?
 

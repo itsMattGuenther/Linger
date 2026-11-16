@@ -33,7 +33,7 @@ import {
   SHARED_FIELDS,
   snapshotOf,
 } from "../../lib/gateway";
-import { voiceChooseDevices } from "../../lib/ipc";
+import { voiceChooseDevices, voiceCleanUp } from "../../lib/ipc";
 import { loadVoicePrefs } from "../../lib/voice";
 import { setViewing } from "../../lib/notify";
 import type { SoundCue } from "../../lib/sound";
@@ -192,6 +192,12 @@ export type Intent =
    * default): the call you're in carries on through them at once (#249).
    */
   | { kind: "voice.devices"; input: string | null; output: string | null }
+  /**
+   * Settings switched part of the microphone's clean-up on or off (#904):
+   * levelling, or noise suppression. The list window tells the shell, and
+   * any microphone that's open follows from its next frame.
+   */
+  | { kind: "voice.cleanup"; level: boolean; noise: boolean }
   /**
    * How loud somebody in your voice plays for you, 0 to 2, from their chip
    * on a conversation's voice line (#747). Kept on this computer, never sent
@@ -364,6 +370,11 @@ export async function shareAsOwner(
   sessions: () => ReadonlyMap<string, AuthedApi>,
   { opener, store = null, accounts, list }: ShareOptions = {},
 ): Promise<Sharing> {
+  // What Settings last chose for the microphone's clean-up (#904), told to
+  // the shell as the owner starts: the shell begins with everything on, and
+  // somebody who turned a part off must not be levelled until they open
+  // Settings again.
+  void voiceCleanUp(loadVoicePrefs().cleanUp).catch(() => undefined);
   const lend = async (api: AuthedApi, stale?: string): Promise<Lent> => {
     const current = await api.accessToken();
     if (stale === undefined || current.token !== stale) return current;
@@ -542,6 +553,14 @@ export async function shareAsOwner(
         if (!named(intent.input) || !named(intent.output)) return;
         if (voiceServer(sessions().keys()) === null) return;
         void voiceChooseDevices({ input: intent.input, output: intent.output }).catch(() => undefined);
+        return;
+      }
+      case "voice.cleanup": {
+        // Saved on this computer by Settings already; the shell is told
+        // now, in a call or out of one: a voice message's microphone
+        // follows it too (#904).
+        if (typeof intent.level !== "boolean" || typeof intent.noise !== "boolean") return;
+        void voiceCleanUp({ level: intent.level, noise: intent.noise }).catch(() => undefined);
         return;
       }
       case "voice.volume":

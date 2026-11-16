@@ -491,6 +491,7 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
             voice_commands::voice_push_to_talk,
             voice_commands::voice_volume,
             voice_commands::voice_choose_devices,
+            voice_commands::voice_clean_up,
             voice_commands::voice_devices,
             talk_key::voice_talk_key,
             talk_key::voice_talk_key_reach,

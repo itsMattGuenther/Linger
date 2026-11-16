@@ -306,6 +306,15 @@ pub async fn voice_choose_devices(app: AppHandle, input: Option<String>, output:
     }
 }
 
+/// Which parts of the microphone's clean-up are on (#904, `voice::cleanup`):
+/// Settings' two switches, told by the list window when it starts and when
+/// one changes. It applies to every microphone the app opens, a call's and a
+/// voice message's, from its next frame, so nothing waits for the next join.
+#[tauri::command]
+pub fn voice_clean_up(cleanup: voice::cleanup::Cleanup) {
+    voice::cleanup::choose(cleanup);
+}
+
 /// Play one of Linger's own sounds on the Speakers picked in Settings (#250):
 /// mono samples at 48 kHz, already at the sound volume. In a call it is mixed
 /// into the call's own speaker; otherwise a speaker is opened for it, and

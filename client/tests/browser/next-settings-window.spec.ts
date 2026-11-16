@@ -516,6 +516,20 @@ test.describe("starting Linger when you sign in to the computer (#228)", () => {
   });
 });
 
+test("the microphone's clean-up is told to the list window as it changes, and kept on this computer (#904)", async ({ page }) => {
+  await open(page, "?section=sound");
+  const told = async () => intents(await did(page)).filter((intent) => intent.kind === "voice.cleanup");
+  await page.getByRole("switch", { name: "Even out my volume" }).click();
+  await expect.poll(told).toEqual([{ kind: "voice.cleanup", level: false, noise: true }]);
+  await page.getByRole("switch", { name: "Remove background noise" }).click();
+  await expect.poll(async () => (await told()).at(-1)).toEqual({ kind: "voice.cleanup", level: false, noise: false });
+  expect(await page.evaluate(() => window.localStorage.getItem("linger.voice.cleanUp.level"))).toBe("false");
+  expect(await page.evaluate(() => window.localStorage.getItem("linger.voice.cleanUp.noise"))).toBe("false");
+  // Another change tells nothing new about clean-up.
+  await page.getByRole("switch", { name: "Push to talk" }).click();
+  await expect.poll(told).toHaveLength(2);
+});
+
 test("push-to-talk and its key are told to the list window as they change, for the call you're in (#231)", async ({ page }) => {
   await open(page, "?section=sound");
   const told = async () => intents(await did(page)).filter((intent) => intent.kind === "voice.pushtotalk");
