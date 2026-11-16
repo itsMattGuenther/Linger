@@ -120,6 +120,14 @@ ashpd = { version = "0.13", default-features = false, features = ["async-io", "g
 # in a release build (2026-10-25). Only the core and appsink, no plugin crates.
 gstreamer = "0.21"
 gstreamer-app = "0.21"
+# The desktop's own list of microphones and speakers (#905,
+# `voice::device::host`). By ALSA alone, cpal lists every card several ways
+# and ALSA's plugins: 43 outputs on one computer whose desktop shows 9. With
+# this, cpal talks to the sound server (PulseAudio, or PipeWire answering as
+# it) when there is one, and lists what the desktop lists, by those names;
+# without one it's ALSA as before. A Rust client of the server's protocol,
+# so nothing new to install or link.
+cpal = { version = "0.18", features = ["pulseaudio"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3", features = ["apple-native"] }

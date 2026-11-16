@@ -49,7 +49,9 @@ use cpal::{
 };
 use tokio::sync::mpsc;
 
-use crate::voice::audio::{Devices, Refused, Sink, Source, CHANNELS, FRAME_SAMPLES, SAMPLE_RATE};
+use crate::voice::audio::{
+    Devices, Refused, Sink, Source, CHANNELS, FRAME_MS, FRAME_SAMPLES, SAMPLE_RATE,
+};
 use crate::voice::cleanup::{self, Cleaner, Cleanup, PLAYED_CHANNELS};
 
 /// Why a device could not be opened, in words the voice surface can show.
@@ -116,11 +118,86 @@ pub struct DeviceList {
     pub default_output: Option<String>,
 }
 
+/// What the app asks for sound: the system's own way in, and on Linux the
+/// desktop's sound server when there is one (#905).
+///
+/// On Linux `cpal` can talk to ALSA, the layer under everything, or to the
+/// sound server over it that a desktop runs (PulseAudio, or PipeWire
+/// answering as PulseAudio). ALSA names every card several ways and its own
+/// plugins beside them: one computer listed 43 outputs and 24 inputs where
+/// its desktop's sound settings show 9 and 6, and most of the rest go around
+/// the sound server to hardware it's holding. The server lists what the
+/// desktop lists, by the names the desktop shows. With `cpal`'s
+/// `pulseaudio` feature (Cargo.toml) `default_host` asks the server first
+/// and falls back to ALSA when none answers, so a computer without one is
+/// as it was. `LINGER_AUDIO=alsa` keeps to ALSA, for a setup where the
+/// server's way goes wrong (docs/development.md).
+fn host() -> cpal::Host {
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("LINGER_AUDIO").is_some_and(|chosen| chosen == "alsa") {
+        if let Ok(alsa) = cpal::host_from_id(cpal::HostId::Alsa) {
+            return alsa;
+        }
+    }
+    cpal::default_host()
+}
+
+/// Whether a device is the sound server's (#905), not ALSA's or another
+/// system's: what `host` reached.
+fn on_sound_server(device: &cpal::Device) -> bool {
+    device.id().is_ok_and(|id| is_sound_server(id.host()))
+}
+
+#[cfg(target_os = "linux")]
+fn is_sound_server(host: cpal::HostId) -> bool {
+    host == cpal::HostId::PulseAudio
+}
+
+#[cfg(not(target_os = "linux"))]
+fn is_sound_server(_host: cpal::HostId) -> bool {
+    false
+}
+
+/// A sound server offers, beside each real input, a "monitor" of every
+/// output: a recording of what that output plays. It's not a microphone and
+/// nobody picks one to talk through, so they're left out (#905). Told by the
+/// server's own name for it, which ends `.monitor`; the name shown,
+/// "Monitor of …", is translated.
+fn is_monitor(id: &str) -> bool {
+    id.ends_with(".monitor")
+}
+
+/// The inputs somebody could talk through: all of them, but a sound
+/// server's monitors.
+fn microphones(devices: impl Iterator<Item = cpal::Device>) -> impl Iterator<Item = cpal::Device> {
+    devices.filter(|device| {
+        !device
+            .id()
+            .is_ok_and(|id| is_sound_server(id.host()) && is_monitor(id.id()))
+    })
+}
+
+/// How a stream is asked for on a device, in one of the formats it offered.
+///
+/// Left to itself a sound server buffers about two seconds: measured through
+/// a private PulseAudio, a click took 1,960 ms from the output callback back
+/// to the input callback, and 20 ms when one frame's worth was asked for
+/// (#905). So on a sound server every stream asks for one voice frame at a
+/// time. ALSA, Windows and the Mac keep their own sizes, which were never
+/// the problem.
+fn stream_config(config: &SupportedStreamConfig, sound_server: bool) -> cpal::StreamConfig {
+    let mut config = config.config();
+    if sound_server {
+        config.buffer_size = cpal::BufferSize::Fixed(config.sample_rate * FRAME_MS / 1000);
+    }
+    config
+}
+
 /// Enumerate the sound devices. Blocks briefly, like the opens.
 pub fn list() -> Result<DeviceList, DeviceError> {
-    let host = cpal::default_host();
+    let host = host();
     Ok(DeviceList {
-        inputs: names(host.input_devices()?),
+        inputs: names(microphones(host.input_devices()?)),
         outputs: names(host.output_devices()?),
         default_input: host.default_input_device().and_then(|d| name_of(&d)),
         default_output: host.default_output_device().and_then(|d| name_of(&d)),
@@ -279,11 +356,11 @@ impl Microphone {
         let refused = Arc::new(Mutex::new(None));
         let noted = Arc::clone(&refused);
         Self::over(wanted, refused, played, move |frames, alarm| {
-            let host = cpal::default_host();
+            let host = host();
             let name = lock(&chosen).clone();
             let device = find(
                 name.as_deref(),
-                host.input_devices()?,
+                microphones(host.input_devices()?),
                 host.default_input_device(),
                 "input",
             )?;
@@ -437,7 +514,7 @@ fn open_input(
     let mut framer = Framer::new(config.channels(), config.sample_rate(), frames.clone());
     let config_format = config.sample_format();
     let died = on_error("microphone", alarm.clone());
-    let config = config.config();
+    let config = stream_config(&config, on_sound_server(device));
     Ok(match config_format {
         SampleFormat::I16 => device.build_input_stream(
             config,
@@ -955,7 +1032,7 @@ impl Speaker {
         let shared_rate = Arc::clone(&rate);
         let worker = Worker::start(
             move |alarm: &Alarm| {
-                let host = cpal::default_host();
+                let host = host();
                 let name = lock(&chosen).clone();
                 let device = find(
                     name.as_deref(),
@@ -1057,7 +1134,7 @@ fn open_output(
     }
     let died = on_error("speaker", alarm.clone());
     let format = config.sample_format();
-    let config = config.config();
+    let config = stream_config(&config, on_sound_server(device));
     Ok(match format {
         SampleFormat::I16 => device.build_output_stream(
             config,
