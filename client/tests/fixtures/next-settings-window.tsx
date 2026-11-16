@@ -128,9 +128,14 @@ const desktop = fakeDesktop({
       if (how === "invoice") throw "You're in voice. Leave it to test your microphone: the test plays out loud, and the room would hear it.";
       if (how === "nomic") throw "no input device";
       // `joined`: voice was joined while it listened, so nothing is played.
-      if (how === "joined") {
+      // `nospeakers`: it listened, and the speakers wouldn't open.
+      if (how === "joined" || how === "nospeakers") {
+        const why =
+          how === "joined"
+            ? "You're in voice. Leave it to test your microphone: the test plays out loud, and the room would hear it."
+            : "Linger heard you, but couldn't play it back: the speakers wouldn't open. Check the Speakers picked above.";
         window.setTimeout(() => {
-          desktop.deliver("mictest:cut", "You're in voice. Leave it to test your microphone: the test plays out loud, and the room would hear it.");
+          desktop.deliver("mictest:cut", why);
           desktop.deliver("mictest:done", null);
         }, 200);
         return null;

@@ -34,7 +34,7 @@ export type MicTestEvent =
   | { kind: "refused"; why: string }
   | { kind: "level"; level: number }
   | { kind: "heard"; heard: Heard }
-  /** It stopped with nothing played, and why: voice was joined while it listened. */
+  /** It stopped with nothing played, and why: voice was joined while it listened, or the speakers wouldn't open. */
   | { kind: "cut"; why: string }
   | { kind: "done" };
 

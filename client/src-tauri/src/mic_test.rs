@@ -143,6 +143,8 @@ struct Running {
 }
 
 const ALREADY: &str = "A microphone test is already under way.";
+/// Said in Settings as it is, when what it heard couldn't be played back.
+const NO_SPEAKERS: &str = "Linger heard you, but couldn't play it back: the speakers wouldn't open. Check the Speakers picked above.";
 /// Said in Settings as it is.
 pub const IN_VOICE: &str = "You're in voice. Leave it to test your microphone: the test plays out loud, and the room would hear it.";
 
@@ -176,8 +178,9 @@ pub fn then(heard: Heard, in_voice: bool) -> Then {
 /// Start the test: listen to the chosen microphone (the default for `None`)
 /// for up to [`LONGEST_MS`], then play it on `output`. The window hears
 /// `mictest:level` while it listens; then `mictest:heard` with the verdict,
-/// or `mictest:cut` with the reason when voice was joined meanwhile; and
-/// `mictest:done` when the playing is over.
+/// or `mictest:cut` with the reason when nothing will be played (voice was
+/// joined meanwhile, or the speakers wouldn't open); and `mictest:done` when
+/// the playing is over.
 #[tauri::command]
 pub async fn mic_test_start(
     app: AppHandle,
@@ -241,10 +244,14 @@ async fn run(
             let _ = app.emit_to(label.as_str(), "mictest:heard", verdict);
         }
         Then::Play(verdict) => {
-            let _ = app.emit_to(label.as_str(), "mictest:heard", verdict);
+            // Handed to the speakers first: "playing it back" is only said
+            // once it is, and speakers that won't open are said instead.
             let wait = playing_for(samples.len());
             if crate::voice_commands::play_out_of_voice(&app, samples, output).await {
+                let _ = app.emit_to(label.as_str(), "mictest:heard", verdict);
                 tokio::time::sleep(wait).await;
+            } else {
+                let _ = app.emit_to(label.as_str(), "mictest:cut", NO_SPEAKERS);
             }
         }
     }

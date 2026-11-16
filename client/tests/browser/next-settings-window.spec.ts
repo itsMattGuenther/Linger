@@ -589,6 +589,14 @@ test.describe("the microphone test (#907)", () => {
     await expect(row(page).getByRole("button", { name: "Test" })).toBeEnabled();
   });
 
+  test("says so when it heard you and the speakers wouldn't open", async ({ page }) => {
+    await open(page, "?section=sound&mictest=nospeakers");
+    await row(page).getByRole("button", { name: "Test" }).click();
+    await expect(said(page)).toHaveText("Linger heard you, but couldn't play it back: the speakers wouldn't open. Check the Speakers picked above.");
+    await expect(said(page).locator(".nx-set-note")).toHaveAttribute("data-tone", "problem");
+    await expect(row(page).getByRole("button", { name: "Test" })).toBeEnabled();
+  });
+
   test("says why when it can't start, and can be tried again", async ({ page }) => {
     await open(page, "?section=sound&mictest=invoice");
     await row(page).getByRole("button", { name: "Test" }).click();
