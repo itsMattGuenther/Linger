@@ -968,7 +968,7 @@ macOS runners, or a friend's Mac.
   and battery. No release has it; the TestFlight builds since 2026-11-03
   do. **Fixed:** the windows are asked for only when iOS brings a scene
   back (`phone_scene.rs`), and the simulator check now measures the app at
-  rest (`ios-simulator.yml`). **Left:** the TestFlight testers' word, after
+  rest (`scripts/app-at-rest.mjs`). **Left:** the TestFlight testers' word, after
   the next build, that the phone stays cool with Linger open.
   *Release notes, 0.5.5 (testers only, nobody else had it):* Linger on the
   iPhone no longer keeps the phone busy while it's open, which warmed it
