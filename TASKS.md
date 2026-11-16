@@ -1126,6 +1126,33 @@ out loud.
   Sound & Voice. Everybody you talk with needs 0.5.5 for you to hear the
   difference in them.
 
+- ⏳ **#905 · Linux: the desktop's own microphones and speakers** — effort:
+  **treacherous** — Matt, 2026-11-16. Settings listed ALSA's names: 43
+  outputs and 24 inputs on his Omarchy computer, where its sound settings
+  show 9 and 6. **Built:** on Linux the app asks the sound server
+  (PulseAudio, or PipeWire as it) through cpal's `pulseaudio` host, and
+  ALSA where there's none; streams ask for one frame at a time (the server's
+  own buffering is two seconds); monitors are left out; "System default"
+  follows a changed default, also when the stream is on the default in
+  place of a device that's gone; what's asked of the server goes to one
+  kept connection (a host each time left connections behind on PipeWire),
+  and each stream has its own; `LINGER_AUDIO=alsa` keeps to ALSA.
+  `scripts/linux-voice-check.sh` runs it on real streams against a private
+  PulseAudio, in CI: the default moved and the server restarted under the
+  streams included. `docs/development.md`, "Sound on Linux".
+  The same check passed by hand against a private PipeWire 1.6 (63 ms, the
+  default followed in 1.3 s, sound back 0.7 s after PipeWire restarted);
+  CI's runs on PulseAudio.
+  **Left:** Matt's own check on Omarchy at the next release: the lists, a
+  call, switching devices in it, changing the desktop's default in it, and
+  a long call.
+  Anybody on Linux who'd picked a device in Settings picks it again: the
+  names are new, and the old one falls back to the system default.
+  *Release notes, 0.5.5:* on Linux, Settings lists the same microphones and
+  speakers your desktop's sound settings do, by the same names. If you'd
+  picked one before, pick it again: until then Linger uses the system
+  default.
+
 ### M13 — ambient voice: cut 2026-10-11
 
 Matt cut it before it started: "it's antiquated. It doesn't apply anymore"

@@ -49,7 +49,9 @@ use cpal::{
 };
 use tokio::sync::mpsc;
 
-use crate::voice::audio::{Devices, Refused, Sink, Source, CHANNELS, FRAME_SAMPLES, SAMPLE_RATE};
+use crate::voice::audio::{
+    Devices, Refused, Sink, Source, CHANNELS, FRAME_MS, FRAME_SAMPLES, SAMPLE_RATE,
+};
 use crate::voice::cleanup::{self, Cleaner, Cleanup, PLAYED_CHANNELS};
 
 /// Why a device could not be opened, in words the voice surface can show.
@@ -116,11 +118,296 @@ pub struct DeviceList {
     pub default_output: Option<String>,
 }
 
+/// What the app asks for sound: the system's own way in, and on Linux the
+/// desktop's sound server when there is one (#905).
+///
+/// On Linux `cpal` can talk to ALSA, the layer under everything, or to the
+/// sound server over it that a desktop runs (PulseAudio, or PipeWire
+/// answering as PulseAudio). ALSA names every card several ways and its own
+/// plugins beside them: one computer listed 43 outputs and 24 inputs where
+/// its desktop's sound settings show 9 and 6, and most of the rest go around
+/// the sound server to hardware it's holding. The server lists what the
+/// desktop lists, by the names the desktop shows. With `cpal`'s
+/// `pulseaudio` feature (Cargo.toml) `default_host` asks the server first
+/// and falls back to ALSA when none answers, so a computer without one is
+/// as it was. `LINGER_AUDIO=alsa` keeps to ALSA, for a setup where the
+/// server's way goes wrong (docs/development.md).
+///
+/// A host on the sound server is a connection with a thread reading it, and
+/// there are two kinds of use, each with a host of its own kind:
+///
+/// **What's asked of the server goes to one host, made once and kept**
+/// (this, [`SERVER`]): the lists, and which device is the default.
+/// Letting a host go doesn't reliably end its connection: the thread finds
+/// it's no longer wanted only when the server next says something, and
+/// after a question nothing does. Measured against PipeWire, 120 hosts made
+/// and let go left 43 threads and 43 connections behind for as long as the
+/// program ran (against PulseAudio itself, none). A stream that follows the
+/// default asks every two seconds (`following`), so a host each time would
+/// have left one behind every few seconds of every call. The kept one is
+/// made again only when it stops answering: the server was restarted, and
+/// took the connection with it. ALSA's host is only a name and isn't kept,
+/// so a sound server started later is found.
+///
+/// **Each stream is on a host of its own** ([`stream_host`]), which nothing
+/// else holds once the stream is built, and why is said there.
+fn host() -> Arc<cpal::Host> {
+    #[cfg(target_os = "linux")]
+    {
+        let chosen = std::env::var_os("LINGER_AUDIO");
+        kept_or_made(
+            &mut lock(&SERVER),
+            |host| host.devices().is_ok(),
+            || host_for(chosen.as_deref()),
+            |host| is_sound_server(host.id()),
+        )
+    }
+    #[cfg(not(target_os = "linux"))]
+    Arc::new(host_for(None))
+}
+
+/// The sound server's host, once it has answered: see [`host`]. Held while
+/// one is made, so two askers at once make one between them.
+#[cfg(target_os = "linux")]
+static SERVER: Mutex<Option<Arc<cpal::Host>>> = Mutex::new(None);
+
+/// The kept one while it still `answers`; otherwise one newly made, which
+/// takes its place if it's one to `keep` and empties the place if it isn't.
+#[cfg(any(target_os = "linux", test))]
+fn kept_or_made<H>(
+    kept: &mut Option<Arc<H>>,
+    answers: impl Fn(&H) -> bool,
+    make: impl FnOnce() -> H,
+    keep: impl Fn(&H) -> bool,
+) -> Arc<H> {
+    if let Some(host) = kept.as_ref() {
+        if answers(host) {
+            return Arc::clone(host);
+        }
+    }
+    let host = Arc::new(make());
+    *kept = keep(&host).then(|| Arc::clone(&host));
+    host
+}
+
+/// The host one stream is found and built on, and nothing else: a
+/// connection of its own on a sound server.
+///
+/// Not the kept one ([`host`]), for the server's sake and ours. PulseAudio
+/// puts every playback stream one program makes on one connection into a
+/// group that plays in step (`cpal` gives them all the same group), and
+/// refuses a second while the first is playing: with one connection for
+/// everything, the speakers for a call wouldn't open while the speaker for
+/// Linger's own sounds was still open from a chime ("Invalid argument"). And
+/// built unoptimized, the one thread reading a shared connection couldn't
+/// keep up with a call.
+///
+/// A stream's connection ends with the stream, cleanly, as long as the
+/// stream is the last thing holding it: the server answers the stream being
+/// taken down, and the reading thread sees then that nobody is left.
+/// Measured against PipeWire and PulseAudio: 30 calls' worth of streams
+/// opened and dropped left no thread and no connection behind. So the host
+/// from here is dropped as soon as the stream is built, and what watches
+/// the default asks the kept host, never this one.
+fn stream_host() -> cpal::Host {
+    host_for(std::env::var_os("LINGER_AUDIO").as_deref())
+}
+
+/// How many hosts have been made, for the test that holds asking to the
+/// kept one: on a sound server each is a connection.
+#[cfg(test)]
+static HOSTS_MADE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// [`host`] and [`stream_host`], for what `LINGER_AUDIO` says.
+#[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
+fn host_for(chosen: Option<&std::ffi::OsStr>) -> cpal::Host {
+    #[cfg(test)]
+    HOSTS_MADE.fetch_add(1, Ordering::SeqCst);
+    #[cfg(target_os = "linux")]
+    if chosen.is_some_and(|chosen| chosen == "alsa") {
+        if let Ok(alsa) = cpal::host_from_id(cpal::HostId::Alsa) {
+            return alsa;
+        }
+    }
+    cpal::default_host()
+}
+
+/// Whether a device is the sound server's (#905), not ALSA's or another
+/// system's: what `host` reached.
+fn on_sound_server(device: &cpal::Device) -> bool {
+    device.id().is_ok_and(|id| is_sound_server(id.host()))
+}
+
+#[cfg(target_os = "linux")]
+fn is_sound_server(host: cpal::HostId) -> bool {
+    host == cpal::HostId::PulseAudio
+}
+
+#[cfg(not(target_os = "linux"))]
+fn is_sound_server(_host: cpal::HostId) -> bool {
+    false
+}
+
+/// A sound server offers, beside each real input, a "monitor" of every
+/// output: a recording of what that output plays. It's not a microphone and
+/// nobody picks one to talk through, so they're left out (#905). Told by the
+/// server's own name for it, which ends `.monitor`; the name shown,
+/// "Monitor of …", is translated.
+fn is_monitor(id: &str) -> bool {
+    id.ends_with(".monitor")
+}
+
+/// The inputs somebody could talk through: all of them, but a sound
+/// server's monitors.
+fn microphones(devices: impl Iterator<Item = cpal::Device>) -> impl Iterator<Item = cpal::Device> {
+    devices.filter(|device| {
+        !device
+            .id()
+            .is_ok_and(|id| is_sound_server(id.host()) && is_monitor(id.id()))
+    })
+}
+
+/// How often a stream on the sound server's default device looks whether
+/// the default is still that device.
+const DEFAULT_LOOK: Duration = Duration::from_secs(2);
+
+/// A stream, and something watching for the day it should be built again
+/// on another device (#905).
+///
+/// "System default" has to mean the system's default now, not when the call
+/// was joined. Through ALSA it did by itself: ALSA's `default` is the sound
+/// server, which plays it wherever its own default is. A stream opened on
+/// the sound server directly is opened on one device, by name, and stays on
+/// it when somebody picks other headphones in the desktop's sound settings.
+/// So while the default is what was asked for, the watch looks every two
+/// seconds whether the server's default is still the device this stream is
+/// on, and has the worker build it again when it isn't, as choosing a
+/// device in Settings does.
+struct Following<S> {
+    stream: S,
+    /// Dropped with the stream, which is what stops it.
+    _watch: Watch,
+}
+
+impl<S: Playing> Playing for Following<S> {
+    fn play(&self) -> Result<(), cpal::Error> {
+        self.stream.play()
+    }
+}
+
+/// How many watches have been started, for the test that holds a stream on
+/// the default to being followed whatever was picked: a sound server may
+/// move such a stream by itself (PulseAudio does, PipeWire doesn't), so
+/// where the sound ends up doesn't say whether Linger was watching.
+#[cfg(test)]
+static WATCHES_STARTED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// A thread that asks `moved` every `every`, and switches the worker's
+/// stream the first time it says yes. It ends then, or within a look of
+/// being dropped.
+struct Watch(Arc<AtomicBool>);
+
+impl Watch {
+    /// Nothing to watch: a device picked by name, or a system whose default
+    /// streams follow by themselves.
+    fn none() -> Self {
+        Self(Arc::new(AtomicBool::new(true)))
+    }
+
+    fn start(
+        alarm: Alarm,
+        every: Duration,
+        mut moved: impl FnMut() -> bool + Send + 'static,
+    ) -> Self {
+        #[cfg(test)]
+        WATCHES_STARTED.fetch_add(1, Ordering::SeqCst);
+        let over = Arc::new(AtomicBool::new(false));
+        let watched = Arc::clone(&over);
+        let spawned = std::thread::Builder::new()
+            .name("linger-audio-default".into())
+            .spawn(move || loop {
+                std::thread::sleep(every);
+                if watched.load(Ordering::Relaxed) {
+                    return;
+                }
+                if moved() {
+                    alarm.switch();
+                    return;
+                }
+            });
+        if let Err(error) = spawned {
+            eprintln!("voice: the default device isn't being followed: {error}");
+        }
+        Self(over)
+    }
+}
+
+impl Drop for Watch {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Relaxed);
+    }
+}
+
+/// The watch for a stream just built on `device`: when the stream is on the
+/// default (`by_name` is false) and the device is the sound server's, one
+/// that looks whether `default` still names it; otherwise none. It asks the
+/// kept host each time ([`host`]): not one of its own, and not the stream's,
+/// which has to be the stream's alone ([`stream_host`]).
+///
+/// `by_name` is whether the stream is on the device somebody picked, not
+/// whether they picked one ([`on_the_one_picked`]): the default standing in
+/// for a device that's gone, or that wouldn't open, is followed too.
+fn following(
+    by_name: bool,
+    device: &cpal::Device,
+    alarm: &Alarm,
+    default: impl Fn(&cpal::Host) -> Option<cpal::Device> + Send + 'static,
+) -> Watch {
+    if by_name || !on_sound_server(device) {
+        return Watch::none();
+    }
+    let Ok(opened) = device.id() else {
+        return Watch::none();
+    };
+    let host = host();
+    Watch::start(alarm.clone(), DEFAULT_LOOK, move || {
+        // No answer says nothing: a server that has gone takes the stream
+        // with it, and that's the worker's to hear from the stream.
+        default(&host)
+            .and_then(|device| device.id().ok())
+            .is_some_and(|now| now.id() != opened.id())
+    })
+}
+
+/// Whether a stream is on the device somebody picked by name: it was found
+/// by that name, and it opened. Otherwise the stream is on the default,
+/// whatever was asked for: nothing was picked, what was picked isn't there
+/// any more (`find`), or it's there and wouldn't open (`or_default`).
+fn on_the_one_picked<D>(found_by_name: bool, fell_back_to: Option<&D>) -> bool {
+    found_by_name && fell_back_to.is_none()
+}
+
+/// How a stream is asked for on a device, in one of the formats it offered.
+///
+/// Left to itself a sound server buffers about two seconds: measured through
+/// a private PulseAudio, a click took 1,960 ms from the output callback back
+/// to the input callback, and 20 ms when one frame's worth was asked for
+/// (#905). So on a sound server every stream asks for one voice frame at a
+/// time. ALSA, Windows and the Mac keep their own sizes, which were never
+/// the problem.
+fn stream_config(config: &SupportedStreamConfig, sound_server: bool) -> cpal::StreamConfig {
+    let mut config = config.config();
+    if sound_server {
+        config.buffer_size = cpal::BufferSize::Fixed(config.sample_rate * FRAME_MS / 1000);
+    }
+    config
+}
+
 /// Enumerate the sound devices. Blocks briefly, like the opens.
 pub fn list() -> Result<DeviceList, DeviceError> {
-    let host = cpal::default_host();
+    let host = host();
     Ok(DeviceList {
-        inputs: names(host.input_devices()?),
+        inputs: names(microphones(host.input_devices()?)),
         outputs: names(host.output_devices()?),
         default_input: host.default_input_device().and_then(|d| name_of(&d)),
         default_output: host.default_output_device().and_then(|d| name_of(&d)),
@@ -142,21 +429,30 @@ fn names(devices: impl Iterator<Item = cpal::Device>) -> Vec<String> {
 }
 
 /// The named device from a list, or the default when there is no name or
-/// the name is not there any more.
-fn find(
+/// the name is not there any more; and whether it's the named one.
+///
+/// The default standing in for a name isn't the device asked for, and the
+/// stream on it has to follow the default like any other (`following`): a
+/// device saved under one of ALSA's names isn't in the sound server's list
+/// (#905), so everybody who had picked one on Linux is on the default this
+/// way until they pick again.
+fn find<D>(
     wanted: Option<&str>,
-    devices: impl Iterator<Item = cpal::Device>,
-    default: Option<cpal::Device>,
+    devices: impl Iterator<Item = D>,
+    default: Option<D>,
+    name_of: impl Fn(&D) -> Option<String>,
     kind: &'static str,
-) -> Result<cpal::Device, DeviceError> {
+) -> Result<(D, bool), DeviceError> {
     if let Some(name) = wanted {
         for device in devices {
             if name_of(&device).as_deref() == Some(name) {
-                return Ok(device);
+                return Ok((device, true));
             }
         }
     }
-    default.ok_or(DeviceError::NoDevice(kind))
+    default
+        .map(|device| (device, false))
+        .ok_or(DeviceError::NoDevice(kind))
 }
 
 /// The frames a microphone produces, and a way to stop it.
@@ -279,23 +575,33 @@ impl Microphone {
         let refused = Arc::new(Mutex::new(None));
         let noted = Arc::clone(&refused);
         Self::over(wanted, refused, played, move |frames, alarm| {
-            let host = cpal::default_host();
+            let host = stream_host();
             let name = lock(&chosen).clone();
-            let device = find(
+            let (device, named) = find(
                 name.as_deref(),
-                host.input_devices()?,
+                microphones(host.input_devices()?),
                 host.default_input_device(),
+                name_of,
                 "input",
             )?;
-            let (stream, why) = or_default(
+            let (stream, why, fallback) = or_default(
                 name.as_deref(),
                 &device,
                 || host.default_input_device(),
                 "microphone",
                 |device| input_stream(device, frames, alarm),
             )?;
+            let watch = following(
+                on_the_one_picked(named, fallback.as_ref()),
+                fallback.as_ref().unwrap_or(&device),
+                alarm,
+                |host| host.default_input_device(),
+            );
             *lock(&noted) = name.zip(why).map(|(name, why)| Refused { name, why });
-            Ok(stream)
+            Ok(Following {
+                stream,
+                _watch: watch,
+            })
         })
     }
 
@@ -437,7 +743,7 @@ fn open_input(
     let mut framer = Framer::new(config.channels(), config.sample_rate(), frames.clone());
     let config_format = config.sample_format();
     let died = on_error("microphone", alarm.clone());
-    let config = config.config();
+    let config = stream_config(&config, on_sound_server(device));
     Ok(match config_format {
         SampleFormat::I16 => device.build_input_stream(
             config,
@@ -528,22 +834,29 @@ where
 /// device that isn't there (#249). Quietly, though, the default looks like the
 /// picked microphone not hearing you: a Windows headset whose system default
 /// was a silent virtual microphone did exactly that (#398).
+///
+/// Hands back the default it built on, when it did: the stream is on that
+/// device, not on the one found, and what follows the default has to know
+/// (`following`, #905).
 fn or_default<D, T>(
     name: Option<&str>,
     device: &D,
     default: impl FnOnce() -> Option<D>,
     what: &str,
     build: impl Fn(&D) -> Result<T, DeviceError>,
-) -> Result<(T, Option<String>), DeviceError> {
+) -> Result<(T, Option<String>, Option<D>), DeviceError> {
     match build(device) {
         Err(error) if name.is_some() => {
             eprintln!("voice: {what}: {name:?} would not open ({error}); using the default");
             match default() {
-                Some(fallback) => build(&fallback).map(|built| (built, Some(error.to_string()))),
+                Some(fallback) => {
+                    let built = build(&fallback)?;
+                    Ok((built, Some(error.to_string()), Some(fallback)))
+                }
                 None => Err(error),
             }
         }
-        built => built.map(|built| (built, None)),
+        built => built.map(|built| (built, None, None)),
     }
 }
 
@@ -955,22 +1268,35 @@ impl Speaker {
         let shared_rate = Arc::clone(&rate);
         let worker = Worker::start(
             move |alarm: &Alarm| {
-                let host = cpal::default_host();
+                let host = stream_host();
                 let name = lock(&chosen).clone();
-                let device = find(
+                let (device, named) = find(
                     name.as_deref(),
                     host.output_devices()?,
                     host.default_output_device(),
+                    name_of,
                     "output",
                 )?;
-                let (stream, _) = or_default(
+                let (stream, _, fallback) = or_default(
                     name.as_deref(),
                     &device,
                     || host.default_output_device(),
                     "speaker",
                     |device| output_stream(device, &playback, &shared_rate, alarm),
                 )?;
-                Ok((stream, ()))
+                let watch = following(
+                    on_the_one_picked(named, fallback.as_ref()),
+                    fallback.as_ref().unwrap_or(&device),
+                    alarm,
+                    |host| host.default_output_device(),
+                );
+                Ok((
+                    Following {
+                        stream,
+                        _watch: watch,
+                    },
+                    (),
+                ))
             },
             // Given up: nothing plays, and the lanes fill to their ceiling and
             // then drop. There is no sink-side sentinel — the call continues
@@ -1057,7 +1383,7 @@ fn open_output(
     }
     let died = on_error("speaker", alarm.clone());
     let format = config.sample_format();
-    let config = config.config();
+    let config = stream_config(&config, on_sound_server(device));
     Ok(match format {
         SampleFormat::I16 => device.build_output_stream(
             config,
@@ -1677,6 +2003,12 @@ impl Alarm {
     pub(crate) fn ring(&self) {
         let _ = self.0.send(Wake::Died);
     }
+
+    /// Have the worker build its stream again now, as `Worker::switch` does:
+    /// the default device moved under a stream that follows it (#905).
+    fn switch(&self) {
+        let _ = self.0.send(Wake::Switch);
+    }
 }
 
 /// A stream's error callback: ring the alarm when the error means the stream
@@ -2084,6 +2416,52 @@ mod tests {
         }
     }
 
+    /// The default stands in for a device that isn't in the list any more,
+    /// and `find` says so: on Linux that's every device saved under one of
+    /// ALSA's names once the sound server's list took over (#905).
+    #[test]
+    fn a_device_that_isnt_there_is_the_default_and_says_it_isnt_the_one_picked() {
+        let names = |device: &&'static str| Some((*device).to_owned());
+        let list = || ["headset", "speakers"].into_iter();
+        assert_eq!(
+            find(Some("headset"), list(), Some("default"), names, "input").ok(),
+            Some(("headset", true))
+        );
+        assert_eq!(
+            find(
+                Some("hw:CARD=Gone"),
+                list(),
+                Some("default"),
+                names,
+                "input"
+            )
+            .ok(),
+            Some(("default", false))
+        );
+        assert_eq!(
+            find(None, list(), Some("default"), names, "input").ok(),
+            Some(("default", false))
+        );
+        assert!(find(Some("hw:CARD=Gone"), list(), None, names, "input").is_err());
+    }
+
+    /// A stream follows the system's default whenever it's on the default:
+    /// nothing was picked, what was picked is gone, or it wouldn't open.
+    /// Only a stream on the very device picked stays put. Deciding by
+    /// whether a name was picked left the other two on the old default for
+    /// good when the default moved (#910's review).
+    #[test]
+    fn a_stream_on_the_default_is_followed_whatever_was_picked() {
+        let nothing: Option<&&str> = None;
+        // Picked, found and opened: the one stream that stays where it is.
+        assert!(on_the_one_picked(true, nothing));
+        // Nothing picked, or picked and not there: on the default.
+        assert!(!on_the_one_picked(false, nothing));
+        // Picked and found, and it wouldn't open: on the default.
+        assert!(!on_the_one_picked(true, Some(&"default")));
+        assert!(!on_the_one_picked(false, Some(&"default")));
+    }
+
     #[test]
     fn a_picked_device_that_opens_is_used_and_nothing_is_said() {
         let built = or_default(
@@ -2093,7 +2471,7 @@ mod tests {
             "microphone",
             open_unless_busy,
         );
-        assert_eq!(built.ok(), Some(("headset", None)));
+        assert_eq!(built.ok(), Some(("headset", None, None)));
     }
 
     #[test]
@@ -2108,9 +2486,15 @@ mod tests {
             "microphone",
             open_unless_busy,
         );
+        // And the default it's on comes back too: that's the device the
+        // stream follows from here (#905).
         assert_eq!(
             built.ok(),
-            Some(("default", Some("no input device".to_owned())))
+            Some((
+                "default",
+                Some("no input device".to_owned()),
+                Some("default")
+            ))
         );
     }
 
@@ -2830,6 +3214,331 @@ mod tests {
         );
     }
 
+    /// The whole path through a sound server, on real streams (#905), run by
+    /// `scripts/linux-voice-check.sh` against a private PulseAudio that has
+    /// one speaker, which plays to nowhere, and one microphone, which hears
+    /// that speaker.
+    ///
+    /// The lists are those two and nothing else: the speaker's monitor is
+    /// left out. A tone played through `Speaker` comes out of `Microphone`
+    /// within half a second, where the server's own buffering took two
+    /// (`stream_config`), and frames keep coming at their pace.
+    ///
+    /// Asking again and again opens nothing more: what's asked goes to one
+    /// kept connection ([`host`]), and each stream has one of its own that
+    /// goes when it does ([`stream_host`]). When the desktop's default moves, streams on
+    /// the default in place of a device that's gone follow it. And when the
+    /// sound server is restarted under a call, both streams hear of it, are
+    /// built again on the new server, and a tone comes back: nobody has to
+    /// leave the call or pick a device.
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    #[ignore = "needs a sound server: scripts/linux-voice-check.sh starts a private one"]
+    async fn through_a_sound_server_a_sound_comes_back_at_once() {
+        use crate::voice::cleanup::sounds::CHOICE;
+        use crate::voice::level;
+        let _settings = CHOICE.lock().await;
+        // The connections this program has open, to anything: what's open
+        // before the sound server is asked is the test's own.
+        let connections = || {
+            (0..1024)
+                .filter(|file| {
+                    // SAFETY: `fstat` writes only into `about`, which is
+                    // whole and ours, and a number that isn't an open file
+                    // is an error, not a fault.
+                    unsafe {
+                        let mut about: libc::stat = std::mem::zeroed();
+                        libc::fstat(*file, &raw mut about) == 0
+                            && about.st_mode & libc::S_IFMT == libc::S_IFSOCK
+                    }
+                })
+                .count()
+        };
+        let before = connections();
+        assert_eq!(
+            host().id(),
+            cpal::HostId::PulseAudio,
+            "no sound server answered: is PULSE_SERVER set?"
+        );
+        // Two speakers and two microphones, by the names the server shows,
+        // and no monitor of either speaker.
+        let devices = list().expect("the sound server's devices");
+        let sorted = |mut names: Vec<String>| {
+            names.sort();
+            names
+        };
+        assert_eq!(
+            sorted(devices.outputs.clone()),
+            [OTHER_SPEAKERS, "Linger-check-speakers"]
+        );
+        assert_eq!(
+            sorted(devices.inputs.clone()),
+            ["Linger-check-microphone", OTHER_MICROPHONE]
+        );
+        assert_eq!(
+            devices.default_output.as_deref(),
+            Some("Linger-check-speakers")
+        );
+        assert_eq!(
+            devices.default_input.as_deref(),
+            Some("Linger-check-microphone")
+        );
+
+        // As it comes: the clean-up would take a steady tone for noise.
+        let was = cleanup::chosen();
+        cleanup::choose(Cleanup::NONE);
+        // Given half a minute: with the server's client built unoptimized,
+        // opening never finished (Cargo.toml, `profile.dev.package`), and a
+        // test that waits for ever fails nothing.
+        let opening = tokio::task::spawn_blocking(|| {
+            (
+                Microphone::open(None).expect("the microphone opens"),
+                Speaker::open(None).expect("the speakers open"),
+            )
+        });
+        let (microphone, speaker) = tokio::time::timeout(Duration::from_secs(30), opening)
+            .await
+            .expect("the microphone and the speakers opened within 30 s")
+            .expect("opened");
+        // A second of quiet first, so both streams are running.
+        let begun = Instant::now();
+        while begun.elapsed() < Duration::from_secs(1) {
+            microphone.frame().await.expect("a frame of quiet");
+        }
+        let tone: Vec<i16> = (0..SAMPLE_RATE as usize / 5)
+            .map(|n| {
+                #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+                let sample = ((n as f32 * 1000.0 * std::f32::consts::TAU / SAMPLE_RATE as f32)
+                    .sin()
+                    * 12_000.0) as i16;
+                sample
+            })
+            .collect();
+        let played = Instant::now();
+        speaker.cue(&tone);
+        let heard = loop {
+            let frame = microphone.frame().await.expect("a frame");
+            if level::rms(&frame) > 2_000.0 {
+                break played.elapsed();
+            }
+            assert!(
+                played.elapsed() < Duration::from_secs(5),
+                "the tone never came back"
+            );
+        };
+        eprintln!("played to heard: {} ms", heard.as_millis());
+        assert!(
+            heard < Duration::from_millis(500),
+            "a sound took {} ms to come back",
+            heard.as_millis()
+        );
+        // Fifty frames a second: a hundred take about two, not four.
+        let pace = Instant::now();
+        for _ in 0..100 {
+            microphone.frame().await.expect("a frame");
+        }
+        let took = pace.elapsed();
+        assert!(
+            (Duration::from_millis(1500)..Duration::from_millis(3000)).contains(&took),
+            "100 frames took {} ms",
+            took.as_millis()
+        );
+
+        // Three connections to the sound server with a call up: the
+        // microphone's, the speakers', and the one kept for everything
+        // asked of it. Asking forty times over makes no more: a host each
+        // time was a connection each time, and against PipeWire they were
+        // left behind.
+        let made = HOSTS_MADE.load(Ordering::SeqCst);
+        for _ in 0..40 {
+            list().expect("the lists again");
+            assert!(host().default_output_device().is_some());
+        }
+        tokio::time::sleep(DEFAULT_LOOK * 2).await;
+        assert_eq!(
+            HOSTS_MADE.load(Ordering::SeqCst),
+            made,
+            "hosts made by asking, and by two looks at the default"
+        );
+        let with_a_call = connections() - before;
+        assert_eq!(
+            with_a_call, 3,
+            "connections open to the sound server, with a call's streams up"
+        );
+
+        // The default moves under streams that are on it in place of a
+        // device that's gone, which is everybody who'd picked a device by
+        // one of ALSA's names (#910's review). Each is checked against a
+        // device opened by name on the other pair, which stays where it is:
+        // the stood-in speakers play where the other microphone doesn't
+        // hear until they follow the default there, and the same for the
+        // stood-in microphone and the other speakers.
+        //
+        // Whether Linger watches is counted as well as heard: PulseAudio
+        // moves a stream on the old default by itself, so there the sound
+        // arriving doesn't prove the watch. A stream on the default is
+        // watched, one on a device picked and opened isn't.
+        let gone = "A name from ALSA's list";
+        let watches = || WATCHES_STARTED.load(Ordering::SeqCst);
+        let before_them = watches();
+        let (stood_in_microphone, stood_in_speaker, watched, other_microphone, other_speaker) =
+            tokio::time::timeout(
+                Duration::from_secs(30),
+                tokio::task::spawn_blocking(move || {
+                    let stood_in = (
+                        Microphone::open(Some(gone)).expect("the default, for a microphone gone"),
+                        Speaker::open(Some(gone)).expect("the default, for speakers gone"),
+                    );
+                    let watched = watches() - before_them;
+                    (
+                        stood_in.0,
+                        stood_in.1,
+                        watched,
+                        Microphone::open(Some(OTHER_MICROPHONE)).expect("the other microphone"),
+                        Speaker::open(Some(OTHER_SPEAKERS)).expect("the other speakers"),
+                    )
+                }),
+            )
+            .await
+            .expect("four more streams opened within 30 s")
+            .expect("opened");
+        assert_eq!(
+            watched, 2,
+            "watches on the default, for a microphone and speakers standing in for ones that are gone"
+        );
+        assert_eq!(
+            watches() - before_them,
+            2,
+            "a device picked by name and opened is followed nowhere"
+        );
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        let short = Duration::from_millis(1500);
+        assert!(
+            !reaches(&stood_in_speaker, &other_microphone, &tone, short).await,
+            "the stood-in speakers are on the other pair before the default moved"
+        );
+        assert!(
+            !reaches(&other_speaker, &stood_in_microphone, &tone, short).await,
+            "the stood-in microphone is on the other pair before the default moved"
+        );
+        run_script("LINGER_TEST_SOUND_SERVER_MOVE_DEFAULT").await;
+        let moved = Instant::now();
+        assert!(
+            reaches(
+                &stood_in_speaker,
+                &other_microphone,
+                &tone,
+                Duration::from_secs(15)
+            )
+            .await,
+            "speakers on the default, standing in for ones that are gone, didn't follow it"
+        );
+        assert!(
+            reaches(
+                &other_speaker,
+                &stood_in_microphone,
+                &tone,
+                Duration::from_secs(15)
+            )
+            .await,
+            "a microphone on the default, standing in for one that's gone, didn't follow it"
+        );
+        eprintln!(
+            "both followed the default within {} ms",
+            moved.elapsed().as_millis()
+        );
+        // A stream's connection goes with it: four more streams were four
+        // more connections, and dropped they're gone.
+        assert_eq!(connections() - before, with_a_call + 4);
+        drop((
+            stood_in_microphone,
+            stood_in_speaker,
+            other_microphone,
+            other_speaker,
+        ));
+        let gone_by = Instant::now() + Duration::from_secs(5);
+        while connections() - before != with_a_call {
+            assert!(
+                Instant::now() < gone_by,
+                "{} connections left open by four streams that were dropped",
+                connections() - before - with_a_call
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+
+        // The sound server is stopped and started again, as an update or
+        // `systemctl --user restart pipewire` does. The script that runs
+        // this test says how.
+        run_script("LINGER_TEST_SOUND_SERVER_RESTART").await;
+        let since = Instant::now();
+        assert!(
+            reaches(&speaker, &microphone, &tone, Duration::from_secs(30)).await,
+            "no tone came back within 30 s of the sound server restarting"
+        );
+        let back = since.elapsed();
+        eprintln!("a tone came back {} ms after the restart", back.as_millis());
+        cleanup::choose(was);
+    }
+
+    /// The second speakers and microphone of the check's private sound
+    /// server, by the names it shows (`scripts/linux-voice-check.sh`).
+    #[cfg(target_os = "linux")]
+    const OTHER_SPEAKERS: &str = "Linger-check-other-speakers";
+    #[cfg(target_os = "linux")]
+    const OTHER_MICROPHONE: &str = "Linger-check-other-microphone";
+
+    /// Run the script the check names in `variable`, off the runtime, and
+    /// have it succeed.
+    #[cfg(target_os = "linux")]
+    async fn run_script(variable: &'static str) {
+        let script = std::env::var_os(variable)
+            .unwrap_or_else(|| panic!("{variable}: scripts/linux-voice-check.sh sets it"));
+        let ran = tokio::task::spawn_blocking(move || {
+            std::process::Command::new("sh")
+                .arg(script)
+                .status()
+                .expect("the script runs")
+        })
+        .await
+        .expect("ran");
+        assert!(ran.success(), "{variable} failed");
+    }
+
+    /// Whether `tone`, played on `speaker` again and again, reaches
+    /// `microphone` within `within`. What the microphone had waiting is let
+    /// go first, and a moment given for a tone already in the air to end:
+    /// an earlier tone it heard is not this one.
+    #[cfg(target_os = "linux")]
+    async fn reaches(
+        speaker: &Speaker,
+        microphone: &Microphone,
+        tone: &[i16],
+        within: Duration,
+    ) -> bool {
+        use crate::voice::level;
+        for _ in 0..2 {
+            while let Ok(Some(_)) =
+                tokio::time::timeout(Duration::from_millis(2), microphone.frame()).await
+            {
+            }
+            tokio::time::sleep(Duration::from_millis(300)).await;
+        }
+        let since = Instant::now();
+        while since.elapsed() < within {
+            speaker.cue(tone);
+            let listening = Instant::now();
+            while listening.elapsed() < Duration::from_millis(600) {
+                // No frame for a while is the stream being built again.
+                match tokio::time::timeout(Duration::from_millis(200), microphone.frame()).await {
+                    Ok(Some(frame)) if level::rms(&frame) > 2_000.0 => return true,
+                    Ok(None) => panic!("the microphone gave up"),
+                    Ok(Some(_)) | Err(_) => {}
+                }
+            }
+        }
+        false
+    }
+
     // --- the reopen schedule (T-1405), with no device anywhere near it ---
 
     /// A stream that is nothing but a handle. What matters is that it was
@@ -3288,6 +3997,186 @@ mod tests {
             alone - beside >= 25.0,
             "beside speakers the echo came out at {beside:.1} dBFS, and alone at {alone:.1} dBFS"
         );
+    }
+
+    /// #905: a sound server's "Monitor of …" inputs are told by the
+    /// server's own name for them, whatever language the name shown is in,
+    /// and a real input never is.
+    #[test]
+    fn a_monitor_is_told_by_its_id() {
+        assert!(is_monitor(
+            "alsa_output.usb-TC-Helicon_GoXLRMini-00.HiFi__Line1__sink.monitor"
+        ));
+        assert!(!is_monitor(
+            "alsa_input.usb-TC-Helicon_GoXLRMini-00.HiFi__Line2__source"
+        ));
+        // ALSA's names never end so: nothing of ALSA's is hidden.
+        for alsa in [
+            "default",
+            "pipewire",
+            "sysdefault:CARD=GoXLRMini",
+            "hw:CARD=Audio,DEV=0",
+        ] {
+            assert!(!is_monitor(alsa));
+        }
+    }
+
+    /// On a sound server a stream asks for one voice frame at a time, at
+    /// whatever rate it runs: left to the server it's about two seconds
+    /// (#905). Anywhere else the size stays the system's.
+    #[test]
+    fn a_sound_servers_stream_asks_for_one_frame_at_a_time() {
+        let offered = |rate| {
+            SupportedStreamConfig::new(
+                2,
+                rate,
+                cpal::SupportedBufferSize::Unknown,
+                SampleFormat::I16,
+            )
+        };
+        assert_eq!(
+            stream_config(&offered(48_000), true).buffer_size,
+            cpal::BufferSize::Fixed(960)
+        );
+        assert_eq!(
+            stream_config(&offered(44_100), true).buffer_size,
+            cpal::BufferSize::Fixed(882)
+        );
+        let elsewhere = stream_config(&offered(48_000), false);
+        assert_eq!(elsewhere.buffer_size, cpal::BufferSize::Default);
+        assert_eq!((elsewhere.channels, elsewhere.sample_rate), (2, 48_000));
+    }
+
+    /// `LINGER_AUDIO=alsa` keeps to ALSA, whatever sound server is there.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn alsa_can_be_asked_for_by_name() {
+        let alsa = host_for(Some(std::ffi::OsStr::new("alsa")));
+        assert_eq!(alsa.id(), cpal::HostId::Alsa);
+    }
+
+    /// The sound server's host is made once and asked again and again
+    /// (#905, [`host`]): a host each time left threads and connections
+    /// behind. It's made again when it stops answering, which is a server
+    /// restarted, and one that isn't the sound server's is never kept, so a
+    /// server started later is found.
+    #[test]
+    fn the_sound_servers_host_is_kept_while_it_answers() {
+        // What stands in for a host: whether it's the sound server's, and
+        // whether it still answers.
+        struct Stood {
+            server: bool,
+            answers: AtomicBool,
+        }
+        let made = AtomicUsize::new(0);
+        let ask = |kept: &mut Option<Arc<Stood>>, server: bool| {
+            kept_or_made(
+                kept,
+                |host: &Stood| host.answers.load(Ordering::SeqCst),
+                || {
+                    made.fetch_add(1, Ordering::SeqCst);
+                    Stood {
+                        server,
+                        answers: AtomicBool::new(true),
+                    }
+                },
+                |host| host.server,
+            )
+        };
+        let mut kept = None;
+        let first = ask(&mut kept, true);
+        for _ in 0..50 {
+            assert!(Arc::ptr_eq(&first, &ask(&mut kept, true)));
+        }
+        assert_eq!(made.load(Ordering::SeqCst), 1, "one host, asked 51 times");
+
+        // The server restarts: the kept host stops answering, and the next
+        // asker gets a new one, which is kept in its place.
+        first.answers.store(false, Ordering::SeqCst);
+        let second = ask(&mut kept, true);
+        assert!(!Arc::ptr_eq(&first, &second));
+        assert!(Arc::ptr_eq(&second, &ask(&mut kept, true)));
+        assert_eq!(made.load(Ordering::SeqCst), 2);
+
+        // The server is gone and ALSA answers instead: it's handed over but
+        // not kept, so each asker looks for the server again.
+        second.answers.store(false, Ordering::SeqCst);
+        assert!(!ask(&mut kept, false).server);
+        assert!(kept.is_none());
+        assert!(!ask(&mut kept, false).server);
+        assert_eq!(made.load(Ordering::SeqCst), 4);
+        assert!(ask(&mut kept, true).server);
+        assert!(kept.is_some());
+    }
+
+    /// "System default" follows the system (#905): when the default device
+    /// is another one than the stream is on, the stream is built again, as a
+    /// device chosen in Settings is. A default that stays put builds nothing.
+    #[test]
+    fn a_default_that_moves_builds_the_stream_again() {
+        let builds = Arc::new(AtomicUsize::new(0));
+        let moved = Arc::new(AtomicBool::new(false));
+        let looks = Arc::new(AtomicUsize::new(0));
+        let (b, m, l) = (Arc::clone(&builds), Arc::clone(&moved), Arc::clone(&looks));
+        let _worker = Worker::start(
+            move |alarm: &Alarm| {
+                b.fetch_add(1, Ordering::SeqCst);
+                let (m, l) = (Arc::clone(&m), Arc::clone(&l));
+                let watch = Watch::start(alarm.clone(), Duration::from_millis(5), move || {
+                    l.fetch_add(1, Ordering::SeqCst);
+                    // Moved once: the stream built for it is on the new default.
+                    m.swap(false, Ordering::SeqCst)
+                });
+                Ok((
+                    Following {
+                        stream: Fake,
+                        _watch: watch,
+                    },
+                    (),
+                ))
+            },
+            || panic!("gave up on a default that moved"),
+            SLOW,
+        )
+        .expect("first open");
+        // Looked at several times, and still where it was: one build.
+        assert!(wait_until(&looks, 5) >= 5, "nothing looked at the default");
+        assert_eq!(builds.load(Ordering::SeqCst), 1);
+        moved.store(true, Ordering::SeqCst);
+        assert_eq!(wait_until(&builds, 2), 2, "a moved default built nothing");
+        // And the new stream is watched in its turn.
+        let before = looks.load(Ordering::SeqCst);
+        assert!(wait_until(&looks, before + 3) >= before + 3);
+        assert_eq!(builds.load(Ordering::SeqCst), 2);
+    }
+
+    /// A watch ends with its stream: once dropped, nothing looks again, and
+    /// nothing is switched for a default that moves afterwards.
+    #[test]
+    fn a_watch_ends_with_its_stream() {
+        let (wake_tx, wake_rx) = std::sync::mpsc::channel::<Wake>();
+        let looks = Arc::new(AtomicUsize::new(0));
+        let l = Arc::clone(&looks);
+        let watch = Watch::start(Alarm(wake_tx), Duration::from_millis(5), move || {
+            l.fetch_add(1, Ordering::SeqCst);
+            false
+        });
+        assert!(wait_until(&looks, 2) >= 2);
+        drop(watch);
+        std::thread::sleep(Duration::from_millis(30));
+        let after = looks.load(Ordering::SeqCst);
+        std::thread::sleep(Duration::from_millis(50));
+        assert_eq!(
+            looks.load(Ordering::SeqCst),
+            after,
+            "a dropped watch looked again"
+        );
+        assert!(
+            wake_rx.try_recv().is_err(),
+            "a watch that saw nothing move switched"
+        );
+        // One with nothing to watch never looks at all.
+        drop(Watch::none());
     }
 
     /// Picking what is already picked opens nothing again.

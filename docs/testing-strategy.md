@@ -197,6 +197,7 @@ proves nothing: the GPU check only showed #756's green once the container had
 | A voice message (Opus in WebM) and a sound file (MP3) in a conversation | `linux-next-check.mjs`, every run: each plays, its time moving on |
 | A shared screen (VP8, H.264, WebCodecs) | `linux-next-check.mjs` with `--webkit-gpu`; the GPU check |
 | Linger's own sounds | `scripts/linux-audio-check.py` |
+| Voice's microphone and speakers through a Linux sound server (the lists, how long a sound takes, the connections it opens, the default moved and the server restarted under open streams) | `scripts/linux-voice-check.sh`, in CI's shell job, on a private PulseAudio (#905) |
 
 A new rule gets the same: a test that proves it, named in the pull request
 (the template asks). Most bugs that reached people after 0.4.0 were rules
