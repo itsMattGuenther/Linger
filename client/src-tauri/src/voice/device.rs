@@ -37,7 +37,7 @@
 //! through channels and one mutex, and never block.
 
 use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -50,6 +50,7 @@ use cpal::{
 use tokio::sync::mpsc;
 
 use crate::voice::audio::{Devices, Refused, Sink, Source, CHANNELS, FRAME_SAMPLES, SAMPLE_RATE};
+use crate::voice::cleanup::{self, Cleaner};
 
 /// Why a device could not be opened, in words the voice surface can show.
 #[derive(Debug, thiserror::Error)]
@@ -164,6 +165,13 @@ pub struct Microphone {
     /// The device asked for when it wouldn't open and the default is in its
     /// place (#398). Set on every build, so a later build clears it.
     refused: Arc<Mutex<Option<Refused>>>,
+    /// What's done to each frame before anybody gets it (#904), with the
+    /// build it has been cleaning: levelling and noise learned on one
+    /// microphone are forgotten when another is built under this.
+    cleaner: Mutex<(Cleaner, u64)>,
+    /// How many times a stream has been built: once at the start, and again
+    /// on every switch or reopen.
+    builds: Arc<AtomicU64>,
     worker: Worker,
 }
 
@@ -177,6 +185,42 @@ impl Microphone {
         let chosen = Arc::clone(&wanted);
         let refused = Arc::new(Mutex::new(None));
         let noted = Arc::clone(&refused);
+        Self::over(wanted, refused, move |tx, alarm| {
+            let host = cpal::default_host();
+            let name = lock(&chosen).clone();
+            let device = find(
+                name.as_deref(),
+                host.input_devices()?,
+                host.default_input_device(),
+                "input",
+            )?;
+            let (stream, why) = or_default(
+                name.as_deref(),
+                &device,
+                || host.default_input_device(),
+                "microphone",
+                |device| input_stream(device, tx, alarm),
+            )?;
+            *lock(&noted) = name.zip(why).map(|(name, why)| Refused { name, why });
+            Ok(stream)
+        })
+    }
+
+    /// A microphone over whatever stream `build` makes, each time one is
+    /// wanted: a device's, from [`Microphone::open`], or a stand-in's in the
+    /// tests, so what happens to a frame between the stream and the engine
+    /// is tested without a sound card.
+    fn over<S, B>(
+        wanted: Arc<Mutex<Option<String>>>,
+        refused: Arc<Mutex<Option<Refused>>>,
+        mut build: B,
+    ) -> Result<Self, DeviceError>
+    where
+        S: Playing + 'static,
+        B: FnMut(&mpsc::Sender<Vec<i16>>, &Alarm) -> Result<S, DeviceError> + Send + 'static,
+    {
+        let builds = Arc::new(AtomicU64::new(0));
+        let built = Arc::clone(&builds);
         // Sixteen frames is a third of a second. The callback drops frames if
         // the engine falls further behind than that, because a queue that
         // grows is latency nobody asked for.
@@ -184,22 +228,8 @@ impl Microphone {
         let sentinel = tx.clone();
         let worker = Worker::start(
             move |alarm: &Alarm| {
-                let host = cpal::default_host();
-                let name = lock(&chosen).clone();
-                let device = find(
-                    name.as_deref(),
-                    host.input_devices()?,
-                    host.default_input_device(),
-                    "input",
-                )?;
-                let (stream, why) = or_default(
-                    name.as_deref(),
-                    &device,
-                    || host.default_input_device(),
-                    "microphone",
-                    |device| input_stream(device, &tx, alarm),
-                )?;
-                *lock(&noted) = name.zip(why).map(|(name, why)| Refused { name, why });
+                let stream = build(&tx, alarm)?;
+                built.fetch_add(1, Ordering::Relaxed);
                 Ok((stream, ()))
             },
             // Given up: an empty frame is the sentinel `frame()` reads as "the
@@ -209,12 +239,34 @@ impl Microphone {
             },
             Retry::default(),
         )?;
+        // The first stream is built by now, and is the one being cleaned.
+        let cleaning = builds.load(Ordering::Relaxed);
         Ok(Self {
             frames: tokio::sync::Mutex::new(rx),
             wanted,
             refused,
+            cleaner: Mutex::new((Cleaner::new(cleanup::chosen()), cleaning)),
+            builds,
             worker,
         })
+    }
+}
+
+impl Microphone {
+    /// A frame as it goes out: levelled and cleaned as Settings says (#904,
+    /// `cleanup.rs`), or as it came with both switches off. Settings is read
+    /// on every frame, so a switch takes effect in the call you're in.
+    fn cleaned(&self, mut frame: Vec<i16>) -> Vec<i16> {
+        let mut held = lock(&self.cleaner);
+        let (cleaner, cleaning) = &mut *held;
+        let built = self.builds.load(Ordering::Relaxed);
+        if *cleaning != built {
+            cleaner.restart();
+            *cleaning = built;
+        }
+        cleaner.follow(cleanup::chosen());
+        cleaner.clean(&mut frame);
+        frame
     }
 }
 
@@ -231,7 +283,7 @@ impl Source for Microphone {
         if frame.is_empty() {
             return None;
         }
-        Some(frame)
+        Some(self.cleaned(frame))
     }
 
     fn choose(&self, name: Option<&str>) {
@@ -2791,6 +2843,64 @@ mod tests {
         assert_eq!(
             *opened.lock().unwrap(),
             vec![Some("Speakers".into()), Some("Headphones".into()), None]
+        );
+    }
+
+    /// What a microphone hands the engine has been cleaned (#904): a voice
+    /// 30 dB quiet comes out of `frame()` at a speaking level. And when
+    /// another device is built under it (#249), what was learned about the
+    /// last one's level is forgotten: the gain starts again.
+    #[tokio::test]
+    async fn a_microphones_frames_are_cleaned_and_a_new_device_starts_afresh() {
+        use crate::voice::cleanup::sounds::{dbfs, voice, CHOICE};
+        // Settings' choice is one for the whole app, and a test changes it.
+        let _settings = CHOICE
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let sender: Arc<Mutex<Option<mpsc::Sender<Vec<i16>>>>> = Arc::default();
+        let builds = Arc::new(AtomicUsize::new(0));
+        let (held, built) = (Arc::clone(&sender), Arc::clone(&builds));
+        let microphone = Microphone::over(Arc::default(), Arc::default(), move |tx, _| {
+            *held.lock().unwrap() = Some(tx.clone());
+            built.fetch_add(1, Ordering::SeqCst);
+            Ok(Fake)
+        })
+        .expect("a microphone over a stand-in");
+        let tx = sender
+            .lock()
+            .unwrap()
+            .clone()
+            .expect("the stream was built");
+
+        let said = voice(10.0, -30.0);
+        let mut heard = Vec::with_capacity(said.len());
+        for frame in said.chunks_exact(FRAME_SAMPLES) {
+            tx.send(frame.to_vec())
+                .await
+                .expect("the microphone is listening");
+            heard.extend(microphone.frame().await.expect("a frame"));
+        }
+        let second = SAMPLE_RATE as usize;
+        let last = said.len() / FRAME_SAMPLES * FRAME_SAMPLES - 2 * second;
+        let learned = dbfs(&heard[last..]) - dbfs(&said[last..last + 2 * second]);
+        assert!(
+            learned >= 20.0,
+            "a voice 30 dB quiet gained {learned:.1} dB through the microphone"
+        );
+
+        microphone.choose(Some("Another microphone"));
+        assert_eq!(wait_until(&builds, 2), 2, "choosing a device built nothing");
+        let mut again = Vec::with_capacity(second);
+        for frame in said[..second].chunks_exact(FRAME_SAMPLES) {
+            tx.send(frame.to_vec())
+                .await
+                .expect("the microphone is listening");
+            again.extend(microphone.frame().await.expect("a frame"));
+        }
+        let afresh = dbfs(&again) - dbfs(&said[..again.len()]);
+        assert!(
+            learned - afresh >= 8.0,
+            "on a new device the gain was {afresh:.1} dB, against {learned:.1} dB learned on the last"
         );
     }
 

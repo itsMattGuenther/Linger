@@ -21,6 +21,7 @@
 //! what count.
 
 pub mod audio;
+pub mod cleanup;
 pub mod codec;
 pub mod device;
 pub mod level;

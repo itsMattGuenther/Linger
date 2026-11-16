@@ -230,6 +230,11 @@ notify-rust = "4"
 webrtc = "0.14"
 cpal = "0.18"
 opus = "0.4"
+# The microphone cleaned up before it's sent, as a browser cleans a call's
+# (#904, `voice::cleanup`): rumble filter, noise suppression, automatic
+# levelling and a limiter. A Rust port of WebRTC's audio processing, so, like
+# `webrtc`, it needs nothing installed and builds wherever the app does.
+sonora = "0.3"
 async-trait = "0.1"
 bytes = "1"
 thiserror = "2"
