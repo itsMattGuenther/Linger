@@ -56,6 +56,7 @@ test("the Tauri version check and the iPhone flows' own test run only in the rul
     "scripts/android-jni.mjs", "scripts/android-jni.test.mjs", "scripts/fixtures/dexdump-0.5.4.txt",
     "scripts/installed-packages.mjs", "scripts/installed-packages.test.mjs",
     "scripts/maestro-driver.mjs", "scripts/maestro-driver.test.mjs", "scripts/fixtures/maestro-driver-died.log",
+    "scripts/app-at-rest.mjs", "scripts/app-at-rest.test.mjs",
     "scripts/browser-fakes.test.mjs"]), []);
   assert.deepEqual(active(["client/tests/ios/link-open.yaml"]), ["ios"]);
 });

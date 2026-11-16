@@ -520,6 +520,10 @@ jobs:
         # Maestro's runner dies on any failure XCUITest records, failing the
         # flows whatever the app did (#857); this reads its log.
         run: node --test scripts/maestro-driver.test.mjs
+      - name: the iPhone app's at-rest check reads simctl and ps right, and fails when it can't measure
+        # It runs for real only on the simulator's Mac, after the builds
+        # (#901); this runs it on what those tools print, with stand-ins.
+        run: node --test scripts/app-at-rest.test.mjs
       - name: the startup measurement reads the screen and /proc right
         # It runs by hand on a desktop (docs/performance.md), so this is the
         # only place its arithmetic is checked.

@@ -959,6 +959,21 @@ macOS runners, or a friend's Mac.
   Disturb holds them; a tap opens the right conversation; signing out stops
   them; and there's never a badge.
 
+- 🟡 **#901 · The iPhone app kept a processor busy for as long as it was
+  open** — Matt, 2026-11-16. Found from the nightly simulator runs failing
+  one night in three. Since Tauri 2.12 (#836, 2026-11-03) the app asked
+  for its windows on every event its main loop had, and on the iPhone a
+  copy of a window wakes that loop, so it never slept: the main thread
+  used a whole processor, in the simulator and on a phone, where it's heat
+  and battery. No release has it; the TestFlight builds since 2026-11-03
+  do. **Fixed:** the windows are asked for only when iOS brings a scene
+  back (`phone_scene.rs`), and the simulator check now measures the app at
+  rest (`scripts/app-at-rest.mjs`). **Left:** the TestFlight testers' word, after
+  the next build, that the phone stays cool with Linger open.
+  *Release notes, 0.5.5 (testers only, nobody else had it):* Linger on the
+  iPhone no longer keeps the phone busy while it's open, which warmed it
+  and used battery in the TestFlight builds since early November.
+
 ---
 
 ## Backburner — later, not the next thing

@@ -392,6 +392,14 @@ jobs:
             -e "WINDOW_READY=http://127.0.0.1:$READY_PORT/" \
             client/tests/ios
 
+      # Left alone, the app uses next to no processor (#901). Its main loop
+      # once woke itself for good on the iPhone, a whole processor for as
+      # long as the app was open, and no flow fails on that. So the app is
+      # started again and looked at, at rest: scripts/app-at-rest.mjs says
+      # how, and its tests run where a simulator doesn't.
+      - name: the app at rest leaves the processor alone
+        run: node scripts/app-at-rest.mjs "$UDID" io.github.itsmattguenther.linger
+
       # Maestro drives the simulator through an XCUITest runner, and any
       # failure XCUITest records inside it (a screenshot timing out on a slow
       # simulator, say) tears it down, failing the flows whatever the app did

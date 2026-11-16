@@ -283,6 +283,19 @@ on a world that has changed.
 
 ## A check nobody could run before it mattered
 
+- **#911: the iPhone app's at-rest check was shell in the workflow.** The
+  new step in `ios-simulator.yml` launched the app, read its processor time
+  from `ps` with `awk` and decided pass or fail, all inline, on a machine
+  nothing here can stand in for: the rule #812 left, broken. It worked, as
+  the runs showed, but a mistake in it would have shown only after a
+  25-minute build. Caught by Greptile. *Missed because* I wrote it like the
+  steps around it and proved it by running the simulator, and the rule is
+  one no check enforces. *Changed:* the check is `scripts/app-at-rest.mjs`,
+  and `app-at-rest.test.mjs` runs it here with stand-ins for `simctl` and
+  `ps`: at rest, never resting, still starting, gone, and a launch with no
+  process. The pre-PR question about rules nothing checks now names this
+  one, and is asked of workflow changes too.
+
 - **#812: the iPhone build's App Group check could never pass.** The new
   step in `ios.yml` read `com.apple.security.application-groups` with
   `plutil -extract`, whose key paths split on dots, so it found nothing in a

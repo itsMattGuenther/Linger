@@ -206,14 +206,14 @@ status that means nothing was found as none.
 
 ### Which written rule applies here that no check enforces?
 
-For: shell, phone, server
-Gaps: A rule the code doesn't check; A rule nothing checks
+For: shell, phone, server, ci
+Gaps: A rule the code doesn't check; A rule nothing checks; A check nobody could run before it mattered
 
 Read for them by hand: no blocking file work on the async runtime (#792,
-#794), what the phone app writes stays out of backups (#792), and every
-public function has a doc comment saying why it exists (#897). Better,
-shape the code so the mistake can't be made, as `Store` did for the update
-files (#794).
+#794), what the phone app writes stays out of backups (#792), every public
+function has a doc comment saying why (#897), and a step only another
+machine runs keeps its logic in a script tested here (#812, #911). Better,
+shape the code so the mistake can't be made, as `Store` did (#794).
 
 ### Is a copy in another language tested where the two languages differ?
 
