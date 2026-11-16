@@ -50,7 +50,7 @@ use cpal::{
 use tokio::sync::mpsc;
 
 use crate::voice::audio::{Devices, Refused, Sink, Source, CHANNELS, FRAME_SAMPLES, SAMPLE_RATE};
-use crate::voice::cleanup::{self, Cleaner, Cleanup};
+use crate::voice::cleanup::{self, Cleaner, Cleanup, PLAYED_CHANNELS};
 
 /// Why a device could not be opened, in words the voice surface can show.
 #[derive(Debug, thiserror::Error)]
@@ -183,14 +183,18 @@ struct Cleaning {
     /// learned on one microphone are forgotten at the first frame from the
     /// next.
     build: u64,
-    /// What the speakers played since the last frame, at their device's
-    /// rate, and then at [`SAMPLE_RATE`]: kept between frames only to save
-    /// making them again fifty times a second.
+    /// What the speakers played since the last frame, left and right in
+    /// turn, at their device's rate, and then at [`SAMPLE_RATE`]: kept
+    /// between frames only to save making them again fifty times a second.
     at_device_rate: Vec<i16>,
     at_our_rate: Vec<i16>,
-    /// From the speakers' rate to ours, when they differ, with the rate
-    /// it was made for: the speakers can change in a call (#249).
-    to_our_rate: Option<(u32, Linear)>,
+    /// From the speakers' rate to ours, when they differ, one for each
+    /// side, with the rate they were made for: the speakers can change in a
+    /// call (#249).
+    to_our_rate: Option<(u32, [Linear; PLAYED_CHANNELS])>,
+    /// One side at a time, on its way through them.
+    side: Vec<i16>,
+    side_at_our_rate: [Vec<i16>; PLAYED_CHANNELS],
 }
 
 impl Cleaning {
@@ -203,13 +207,32 @@ impl Cleaning {
             self.cleaner.played(&self.at_device_rate);
         } else if rate != 0 {
             if self.to_our_rate.as_ref().map(|(from, _)| *from) != Some(rate) {
-                self.to_our_rate = Some((rate, Linear::new(rate, SAMPLE_RATE)));
+                let each = || Linear::new(rate, SAMPLE_RATE);
+                self.to_our_rate = Some((rate, [each(), each()]));
             }
-            if let Some((_, linear)) = self.to_our_rate.as_mut() {
-                self.at_our_rate.clear();
-                linear.push(&self.at_device_rate, &mut self.at_our_rate);
-                self.cleaner.played(&self.at_our_rate);
+            let Some((_, linears)) = self.to_our_rate.as_mut() else {
+                return;
+            };
+            // Each side by itself, then back in turn: the two come out the
+            // same length, having gone in the same length through the same
+            // steps.
+            for (which, linear) in linears.iter_mut().enumerate() {
+                self.side.clear();
+                self.side.extend(
+                    self.at_device_rate
+                        .iter()
+                        .skip(which)
+                        .step_by(PLAYED_CHANNELS),
+                );
+                self.side_at_our_rate[which].clear();
+                linear.push(&self.side, &mut self.side_at_our_rate[which]);
             }
+            self.at_our_rate.clear();
+            let [left, right] = &self.side_at_our_rate;
+            for (left, right) in left.iter().zip(right) {
+                self.at_our_rate.extend([*left, *right]);
+            }
+            self.cleaner.played(&self.at_our_rate);
         }
     }
 }
@@ -324,6 +347,8 @@ impl Microphone {
                 at_device_rate: Vec::new(),
                 at_our_rate: Vec::new(),
                 to_our_rate: None,
+                side: Vec::new(),
+                side_at_our_rate: [Vec::new(), Vec::new()],
             }),
             played,
             worker,
@@ -584,7 +609,10 @@ pub struct Played(Arc<Mutex<PlayedSamples>>);
 
 #[derive(Default)]
 struct PlayedSamples {
-    /// One channel: both sides of a shared screen's sound as their average.
+    /// Left and right in turn, as the first two channels were given them:
+    /// the same but for a shared screen's sound, which is stereo. Not their
+    /// average: what's opposite in the two speakers averages to silence
+    /// while both play it (#909's review, `Cleaner::played`).
     samples: VecDeque<i16>,
     /// The device's rate, which the samples are at. Zero until a stream is up.
     rate: u32,
@@ -604,8 +632,8 @@ impl Played {
         played.rate = rate;
     }
 
-    /// Take what's been played since the last time, onto the end of `into`,
-    /// and say what rate it's at.
+    /// Take what's been played since the last time, left and right in turn,
+    /// onto the end of `into`, and say what rate it's at.
     fn take(&self, into: &mut Vec<i16>) -> u32 {
         let mut played = lock(&self.0);
         into.extend(played.samples.drain(..));
@@ -614,12 +642,12 @@ impl Played {
 }
 
 impl PlayedSamples {
-    fn push(&mut self, sample: i16) {
-        let most = self.rate as usize / 1000 * PLAYED_MOST_MS;
-        if self.samples.len() >= most.max(1) {
-            self.samples.pop_front();
+    fn push(&mut self, left: i16, right: i16) {
+        let most = self.rate as usize / 1000 * PLAYED_MOST_MS * PLAYED_CHANNELS;
+        if self.samples.len() >= most.max(PLAYED_CHANNELS) {
+            self.samples.drain(..PLAYED_CHANNELS);
         }
-        self.samples.push_back(sample);
+        self.samples.extend([left, right]);
     }
 }
 
@@ -1352,11 +1380,18 @@ fn mix_all<T: Copy>(
         };
         let (left, right) = (i32::from(left), i32::from(right));
         let both = (left + right) / 2;
-        if let Some(played) = played.as_mut() {
-            #[allow(clippy::cast_possible_truncation)]
-            played.push((acc + both).clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16);
-        }
         let only = frame.len() == 1;
+        if let Some(played) = played.as_mut() {
+            // What the first two channels get: on a one-channel device, the
+            // one thing it plays, twice.
+            let (first, second) = if only { (both, both) } else { (left, right) };
+            let fits = |sample: i32| {
+                #[allow(clippy::cast_possible_truncation)]
+                let sample = sample.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16;
+                sample
+            };
+            played.push(fits(acc + first), fits(acc + second));
+        }
         for (at, slot) in frame.iter_mut().enumerate() {
             let side = match at {
                 _ if only => both,
@@ -3113,7 +3148,8 @@ mod tests {
         );
         let mut kept = Vec::new();
         assert_eq!(played.take(&mut kept), SAMPLE_RATE);
-        assert_eq!(kept, [1000, 2000, 3000, 0]);
+        // Left and right in turn: the sounds are the same in both.
+        assert_eq!(kept, [1000, 1000, 2000, 2000, 3000, 3000, 0, 0]);
         // Taken is gone: the next frame's worth is only what's new.
         kept.clear();
         played.take(&mut kept);
@@ -3132,7 +3168,46 @@ mod tests {
             |s| s,
         );
         played.take(&mut kept);
-        assert_eq!(kept.len(), SAMPLE_RATE as usize / 1000 * PLAYED_MOST_MS);
+        assert_eq!(
+            kept.len(),
+            SAMPLE_RATE as usize / 1000 * PLAYED_MOST_MS * PLAYED_CHANNELS
+        );
+
+        // A shared screen's sound keeps its two sides: opposite in the two
+        // speakers, it isn't the silence their average would be (#909's
+        // review). A one-channel device plays, and is kept as, that average.
+        let behind = SAMPLE_RATE as usize / 1000 * SCREEN_CUSHION_MS;
+        assert!(speaker.screen_sound(&[700, -700, 900, -900]));
+        let mut stereo = vec![0i16; (behind + 2) * 2];
+        mix_all(
+            &speaker.lanes,
+            &speaker.cues,
+            &speaker.screen,
+            &speaker.deafened,
+            Some(&played),
+            2,
+            &mut stereo,
+            |s| s,
+        );
+        kept.clear();
+        played.take(&mut kept);
+        assert_eq!(kept[behind * 2..], [700, -700, 900, -900]);
+        speaker.screen_quiet();
+        assert!(speaker.screen_sound(&[700, -300]));
+        let mut mono = vec![0i16; behind + 1];
+        mix_all(
+            &speaker.lanes,
+            &speaker.cues,
+            &speaker.screen,
+            &speaker.deafened,
+            Some(&played),
+            1,
+            &mut mono,
+            |s| s,
+        );
+        kept.clear();
+        played.take(&mut kept);
+        assert_eq!(kept[behind * 2..], [200, 200]);
 
         // Another device at another rate: what the last one played is let go.
         mix_all(

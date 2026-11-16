@@ -37,7 +37,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use sonora::config::{
-    AdaptiveDigital, EchoCanceller, GainController2, HighPassFilter, NoiseSuppression,
+    AdaptiveDigital, EchoCanceller, GainController2, HighPassFilter, NoiseSuppression, Pipeline,
     TransparentModeType,
 };
 use sonora::{AudioProcessing, Config, StreamConfig};
@@ -46,6 +46,10 @@ use super::audio::{CHANNELS, SAMPLE_RATE};
 
 /// What the clean-up works in: ten milliseconds, half of one of our frames.
 const PIECE: usize = SAMPLE_RATE as usize / 100;
+
+/// What's played is told to the echo canceller with its left and its right
+/// (`Cleaner::played`).
+pub const PLAYED_CHANNELS: usize = 2;
 
 /// Which parts of the clean-up are on. Settings' three switches, kept on
 /// this computer by the page (`lib/voice.ts`) and told to the shell by
@@ -99,6 +103,12 @@ impl Cleanup {
                 transparent_mode: NO_ECHO_BY,
                 ..EchoCanceller::default()
             }),
+            // What's played keeps its two sides all the way to the echo
+            // canceller (`Cleaner::played`).
+            pipeline: Pipeline {
+                multi_channel_render: true,
+                ..Pipeline::default()
+            },
             noise_suppression: self.noise.then(NoiseSuppression::default),
             gain_controller2: self.level.then(|| GainController2 {
                 adaptive_digital: Some(AdaptiveDigital {
@@ -167,7 +177,7 @@ pub struct Cleaner {
     /// `None` while nothing is on, so a raw microphone costs nothing.
     processing: Option<AudioProcessing>,
     /// What's been played and not yet told to the echo canceller: less than
-    /// one piece, waiting for the rest of it.
+    /// one piece, waiting for the rest of it. Left and right, in turn.
     played: Vec<i16>,
     /// Said once, not fifty times a second.
     failed: bool,
@@ -179,7 +189,7 @@ impl Cleaner {
         Self {
             cleanup,
             processing: cleanup.any().then(|| build(cleanup)),
-            played: Vec::with_capacity(PIECE * 2),
+            played: Vec::with_capacity(PIECE * PLAYED_CHANNELS * 2),
             failed: false,
         }
     }
@@ -198,22 +208,30 @@ impl Cleaner {
         *self = Self::new(self.cleanup);
     }
 
-    /// What the speakers have just been given to play (#906): mono at
-    /// [`SAMPLE_RATE`], any length, in the order it's played, told before
-    /// the microphone frame that might hold its echo. The echo canceller
-    /// lines the two up by itself, so nothing here measures the delay
-    /// between them. With echo cancelling off it's dropped.
-    pub fn played(&mut self, samples: &[i16]) {
+    /// What the speakers have just been given to play (#906): left and
+    /// right in turn at [`SAMPLE_RATE`], any length, in the order it's
+    /// played, told before the microphone frame that might hold its echo.
+    /// The echo canceller lines the two up by itself, so nothing here
+    /// measures the delay between them. With echo cancelling off it's
+    /// dropped.
+    ///
+    /// Both sides, not their average: a shared screen's sound is stereo, and
+    /// a sound that's opposite in the two speakers averages to nothing while
+    /// both play it. The microphone hears one speaker more than the other,
+    /// so it comes back, and a canceller told "nothing played" lets it
+    /// through (#909's review).
+    pub fn played(&mut self, stereo: &[i16]) {
+        const BOTH: usize = PIECE * PLAYED_CHANNELS;
         if !self.cleanup.echo {
             return;
         }
         let Some(processing) = self.processing.as_mut() else {
             return;
         };
-        self.played.extend_from_slice(samples);
-        let mut unused = [0i16; PIECE];
-        let whole = self.played.len() / PIECE * PIECE;
-        for piece in self.played[..whole].as_chunks::<PIECE>().0 {
+        self.played.extend_from_slice(stereo);
+        let mut unused = [0i16; BOTH];
+        let whole = self.played.len() / BOTH * BOTH;
+        for piece in self.played[..whole].as_chunks::<BOTH>().0 {
             if let Err(error) = processing.process_render_i16(piece, &mut unused) {
                 if !self.failed {
                     eprintln!("voice: echo cancelling: {error}");
@@ -246,11 +264,12 @@ impl Cleaner {
 }
 
 fn build(cleanup: Cleanup) -> AudioProcessing {
-    let stream = StreamConfig::new(SAMPLE_RATE, CHANNELS);
+    #[allow(clippy::cast_possible_truncation)]
+    let played = StreamConfig::new(SAMPLE_RATE, PLAYED_CHANNELS as u16);
     AudioProcessing::builder()
         .config(cleanup.config())
-        .capture_config(stream)
-        .render_config(stream)
+        .capture_config(StreamConfig::new(SAMPLE_RATE, CHANNELS))
+        .render_config(played)
         .build()
 }
 
@@ -505,6 +524,11 @@ mod tests {
         );
     }
 
+    /// A one-channel sound as both speakers play it: the same in each.
+    fn in_both(mono: &[i16]) -> Vec<i16> {
+        mono.iter().flat_map(|s| [*s, *s]).collect()
+    }
+
     /// A microphone and the speakers beside it, for the echo tests: `theirs`
     /// plays, and the microphone hears it `delay` samples later at `echo`
     /// decibels, under `mine`. What comes out of the cleaner.
@@ -518,7 +542,7 @@ mod tests {
         let gain = 10f32.powf(echo / 20.0);
         let mut heard = Vec::with_capacity(theirs.len());
         for (at, played) in theirs.chunks(FRAME_SAMPLES).enumerate() {
-            cleaner.played(played);
+            cleaner.played(&in_both(played));
             let start = at * FRAME_SAMPLES;
             let mut frame: Vec<i16> = (start..start + played.len())
                 .map(|i| {
@@ -602,7 +626,7 @@ mod tests {
         let mut cleaner = Cleaner::new(ONLY_ECHO);
         let mut heard = Vec::with_capacity(mine.len());
         for (played, said) in theirs.chunks(FRAME_SAMPLES).zip(mine.chunks(FRAME_SAMPLES)) {
-            cleaner.played(played);
+            cleaner.played(&in_both(played));
             let mut frame = said.to_vec();
             cleaner.clean(&mut frame);
             heard.extend(frame);
@@ -636,7 +660,7 @@ mod tests {
             };
             while told < upto {
                 let next = (told + 441).min(upto);
-                cleaner.played(&theirs[told..next]);
+                cleaner.played(&in_both(&theirs[told..next]));
                 told = next;
             }
             let start = at * FRAME_SAMPLES;
@@ -654,6 +678,49 @@ mod tests {
         );
     }
 
+    /// A shared screen's sound is stereo, and the canceller is told both
+    /// sides (#909's review). A sound that's opposite in the two speakers,
+    /// heard more from the left one, comes back into the microphone though
+    /// its average is silence; told both sides, the canceller takes it out
+    /// once it has seen the two differ (a quarter of a minute here, for a
+    /// case made as hard as it gets).
+    #[test]
+    fn a_sound_opposite_in_the_two_speakers_is_taken_out_too() {
+        let left = another_voice(24.0, 0.0);
+        let delay = SAMPLE_RATE as usize * 60 / 1000;
+        let mut cleaner = Cleaner::new(ONLY_ECHO);
+        let mut echo = Vec::with_capacity(left.len());
+        let mut heard = Vec::with_capacity(left.len());
+        for (at, frame) in left.chunks(FRAME_SAMPLES).enumerate() {
+            let played: Vec<i16> = frame
+                .iter()
+                .flat_map(|s| [*s, s.saturating_neg()])
+                .collect();
+            cleaner.played(&played);
+            // The left speaker at -8 dB and the right at -20 dB: 0.4 and 0.1.
+            let start = at * FRAME_SAMPLES;
+            let mut back: Vec<i16> = (start..start + frame.len())
+                .map(|i| {
+                    if i < delay {
+                        return 0;
+                    }
+                    let side = f32::from(left[i - delay]);
+                    #[allow(clippy::cast_possible_truncation)]
+                    let sample = (side * 0.4 - side * 0.1) as i16;
+                    sample
+                })
+                .collect();
+            echo.extend_from_slice(&back);
+            cleaner.clean(&mut back);
+            heard.extend(back);
+        }
+        let (came, left_over) = (dbfs(end(&echo, 4)), dbfs(end(&heard, 4)));
+        assert!(
+            came - left_over >= 30.0,
+            "an echo at {came:.1} dBFS, opposite in the two speakers, came out at {left_over:.1} dBFS"
+        );
+    }
+
     /// A microphone with no speakers beside it has no echo to cancel, and
     /// nothing is ever told to it: its other switches stay as they are.
     #[test]
@@ -668,7 +735,7 @@ mod tests {
         // And what's told to a cleaner with echo cancelling off is dropped.
         let said = voice(2.0, -20.0);
         let mut cleaner = Cleaner::new(Cleanup::NONE);
-        cleaner.played(&said);
+        cleaner.played(&in_both(&said));
         assert_eq!(through(&mut cleaner, &said), said);
     }
 
