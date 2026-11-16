@@ -392,6 +392,54 @@ jobs:
             -e "WINDOW_READY=http://127.0.0.1:$READY_PORT/" \
             client/tests/ios
 
+      # Left alone, the app uses next to no processor (#901). Its main loop
+      # once woke itself for good on the iPhone: Linger asked for its windows
+      # on every event, and there a copy of a window wakes the loop
+      # (`phone_scene.rs`). Its main thread then used a whole processor for
+      # as long as the app was open, which on a phone is heat and battery,
+      # and here was one of this Mac's three processors gone for every flow.
+      # No flow fails on that, so this looks at it: the app started again
+      # (signed in by now, connected to its server), given half a minute to
+      # finish starting, then three looks of twenty seconds. One quiet look
+      # passes it, since a busy Mac can make an idle app late but can't make
+      # it work: at rest it measured 0.1 s in twenty, and spinning 19.
+      - name: the app at rest leaves the processor alone
+        run: |
+          set -uo pipefail
+          xcrun simctl terminate "$UDID" io.github.itsmattguenther.linger 2>/dev/null || true
+          pid="$(xcrun simctl launch "$UDID" io.github.itsmattguenther.linger | awk 'END { print $NF }')"
+          case "$pid" in
+            ''|*[!0-9]*) echo "::error::the launch gave no process id: '$pid'"; exit 1 ;;
+          esac
+          # The processor time the app has used so far, in seconds: `ps`
+          # gives minutes:seconds, with hours in front once there are any.
+          used() {
+            ps -o time= -p "$pid" 2>/dev/null \
+              | awk -F: 'NF { seconds = 0; for (part = 1; part <= NF; part++) seconds = seconds * 60 + $part; printf "%.2f", seconds }'
+          }
+          sleep 30
+          rested=""
+          for look in 1 2 3; do
+            before="$(used)"
+            sleep 20
+            after="$(used)"
+            if [ -z "$before" ] || [ -z "$after" ]; then
+              echo "::error::Linger (process $pid) is gone, so there's nothing to measure"
+              exit 1
+            fi
+            spent="$(awk -v after="$after" -v before="$before" 'BEGIN { printf "%.2f", after - before }')"
+            echo "look $look: $spent s of processor in 20 s at rest"
+            if awk -v spent="$spent" 'BEGIN { exit !(spent < 4) }'; then
+              rested=yes
+              break
+            fi
+          done
+          if [ -z "$rested" ]; then
+            ps -M -p "$pid" || true
+            echo "::error::Linger never rested: 4 s or more of processor in each 20 s with nobody using it. Something keeps its main loop awake (#901)."
+            exit 1
+          fi
+
       # Maestro drives the simulator through an XCUITest runner, and any
       # failure XCUITest records inside it (a screenshot timing out on a slow
       # simulator, say) tears it down, failing the flows whatever the app did
