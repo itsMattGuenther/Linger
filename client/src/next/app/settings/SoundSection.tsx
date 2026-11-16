@@ -4,6 +4,7 @@ import { clockTime } from "../../../lib/time";
 import { useEffect, useState } from "react";
 import { type VoicePrefs, volumeLabel } from "../../../lib/voice";
 import { desktopOf } from "../../core/closing";
+import { MIC_TEST_LINES, type MicTest, micTestLine, micTestWaits } from "../../core/micTest";
 import { copyText } from "../../core/copy";
 import { canBeTalkKey, hyprlandBind, talkButton, talkKeyName } from "../../core/talkKey";
 import { CHIMES, deviceOptions, HEADINGS, quietChoices, SYSTEM_DEFAULT } from "../../core/settings";
@@ -23,6 +24,9 @@ export interface SoundProps {
   devices: VoiceDeviceList | null | "looking";
   /** How far the talk key reaches on this computer (#500): null outside the desktop app, or while the shell is asked. */
   talkReach?: TalkKeyReach | null;
+  /** The microphone test (#907): where it is, and how to start and stop it. Left out outside the desktop app, which is what tests the microphone. */
+  micTest?: MicTest;
+  onMicTest?: (go: "start" | "stop") => void;
   /** Now, for saying whether quiet hours are on right now. */
   now: number;
   /** The phone app, which is text only for now (SPEC §4.15): no Voice block. */
@@ -35,7 +39,7 @@ function minuteText(minutes: number): string {
 }
 
 /** Sound & Voice (SND, VOICE-8, VOICE-9). */
-export function SoundSection({ sound, onSound, onPreview, voice, onVoice, devices, talkReach = null, now, phone = false }: SoundProps) {
+export function SoundSection({ sound, onSound, onPreview, voice, onVoice, devices, talkReach = null, micTest, onMicTest, now, phone = false }: SoundProps) {
   // Choosing the push-to-talk key (decision 6): the next key pressed, if it's
   // one that types nothing, or the middle or a side mouse button where the
   // key is heard with any app in front (#500): there a game's mouse is where
@@ -198,6 +202,7 @@ export function SoundSection({ sound, onSound, onPreview, voice, onVoice, device
               <Note>Linger's own sounds play on these Speakers too. A change applies at once, in a call too. If a device you picked isn't plugged in, Linger uses the system default rather than stopping you talking.</Note>
             </>
           )}
+          {micTest && onMicTest ? <MicTestRow test={micTest} cleanUp={voice.cleanUp} onGo={onMicTest} /> : null}
           {/* What the desktop app does to the microphone before sending it (#904, #906). All on unless turned off. */}
           <SettingRow
             title="Even out my volume"
@@ -257,6 +262,66 @@ const WINDOW_ONLY: Readonly<Record<Extract<TalkKeyReach, { kind: "window" }>["wh
  * in front, or only with Linger's, and on Hyprland the line that gives it a
  * key, to copy.
  */
+/**
+ * The microphone test (#907): a button, and under it the lines that move
+ * with your voice while it listens, then what it heard and what to do about
+ * it. The shell listens and plays it back; nothing of the sound comes here.
+ */
+function MicTestRow({ test, cleanUp, onGo }: { test: MicTest; cleanUp: VoicePrefs["cleanUp"]; onGo: (go: "start" | "stop") => void }) {
+  const said =
+    test.step === "opening"
+      ? "Opening the microphone…"
+      : test.step === "listening"
+        ? "Listening. Say something."
+        : test.step === "playing"
+          ? test.heard === "nothing"
+            ? micTestLine("nothing", cleanUp)
+            : "Playing it back…"
+          : test.problem !== null
+            ? test.problem
+            : test.heard !== null
+              ? micTestLine(test.heard, cleanUp)
+              : null;
+  return (
+    <div className="nx-set-mictest-block">
+      <SettingRow
+        title="Test your microphone"
+        description="Talk for a few seconds, and Linger plays it back the way the others hear you. Nothing is sent or kept."
+        control={
+          test.step === "listening" ? (
+            <Button size="sm" variant="secondary" onClick={() => onGo("stop")}>
+              Stop
+            </Button>
+          ) : (
+            <Button size="sm" variant="secondary" busy={test.step === "opening"} disabled={test.step !== "idle"} onClick={() => onGo("start")}>
+              Test
+            </Button>
+          )
+        }
+      />
+      {said === null ? null : (
+        <div className="nx-set-mictest">
+          {test.step === "listening" ? <MicLines levels={test.levels} /> : null}
+          <Note tone={test.step === "idle" && test.problem !== null && !micTestWaits(test.problem) ? "problem" : "status"}>{said}</Note>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The lines that move with your voice: the latest levels, oldest on the left. */
+function MicLines({ levels }: { levels: readonly number[] }) {
+  const shown = [...Array.from({ length: Math.max(0, MIC_TEST_LINES - levels.length) }, () => 0), ...levels];
+  return (
+    <span className="nx-set-mictest-lines" aria-hidden="true">
+      {shown.map((level, at) => (
+        // A line is at least a dot, so silence still reads as listening.
+        <i key={at} style={{ height: `${Math.round(Math.max(0.12, level) * 100)}%` }} />
+      ))}
+    </span>
+  );
+}
+
 function TalkReach({ reach }: { reach: TalkKeyReach }) {
   const [copied, setCopied] = useState<"yes" | "no" | null>(null);
   if (reach.kind === "anywhere") {

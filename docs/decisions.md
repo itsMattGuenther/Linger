@@ -2223,6 +2223,15 @@ and an iPhone has none (#816).
   speakers play as well as the microphone: a call's microphone and speakers
   are opened together and share a tap on what's played. It can't cancel
   what other apps play.
+- **A test, not a set-up** (#907). Matt asked whether somebody could press a
+  button, talk for a few seconds and have Linger set itself up. The
+  levelling already does the setting up, all the time, so there's nothing
+  for a button to do; what a person can't do is hear themselves as the
+  others do. So the button is a test: talk, and hear it back as a call
+  would send it, with a sentence about what was heard. The sound stays in
+  the desktop shell, which plays it once and drops it: Settings is the one
+  window besides a message box that opens a microphone, and it's never
+  handed what the microphone heard.
 - **On by default, and each part a switch** that says in a sentence what it
   does and when to turn it off. Not everybody is technical, so nothing has to
   be set up: levelling adapts by itself. Somebody whose own audio gear levels

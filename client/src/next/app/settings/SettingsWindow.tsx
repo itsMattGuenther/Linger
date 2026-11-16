@@ -1,7 +1,7 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { copyText } from "../../core/copy";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import type { Invite } from "../../../generated/Invite";
 import type { SignInLinkMade } from "../../../generated/SignInLinkMade";
 import type { Room } from "../../../generated/Room";
@@ -33,7 +33,8 @@ import {
   serverVersionLine,
   type UpdateCheck,
 } from "../../../lib/updates";
-import { loadVoicePrefs, saveVoicePrefs, type VoicePrefs } from "../../../lib/voice";
+import { loadVoicePrefs, onWindows, saveVoicePrefs, type VoicePrefs } from "../../../lib/voice";
+import { MIC_TEST_IDLE, type MicTester, micTestNext, micTestProblem, shellMicTester } from "../../core/micTest";
 import { ask, OWNER, PROTOCOL, tauriBus } from "../../core/bus";
 import { UPDATE_SAID, type UpdateSaid } from "../../core/updates";
 import { loadArrivalCards, saveArrivalCards } from "../../core/arrivals";
@@ -349,6 +350,19 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
     };
   }, []);
 
+  // The microphone test (#907): the shell runs it and says how it goes.
+  const [micTest, micTestHappened] = useReducer(micTestNext, MIC_TEST_IDLE);
+  const micTester = useRef<MicTester | null>(null);
+  useEffect(() => {
+    if (!isTauri()) return;
+    const tester = shellMicTester(micTestHappened);
+    micTester.current = tester;
+    return () => {
+      micTester.current = null;
+      tester.dispose();
+    };
+  }, []);
+
   // How far the talk key reaches here (#500), with the chosen key named for
   // Hyprland's bind line: asked again when another key is picked.
   const [talkReach, setTalkReach] = useState<TalkKeyReach | null>(null);
@@ -656,6 +670,22 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
         },
         devices,
         talkReach,
+        ...(isTauri()
+          ? {
+              micTest,
+              onMicTest: (go: "start" | "stop") => {
+                const tester = micTester.current;
+                if (!tester) return;
+                if (go === "stop") return tester.stop();
+                const asked = voice.devices;
+                micTestHappened({ kind: "asked" });
+                tester.start(asked.input, asked.output).then(
+                  () => micTestHappened({ kind: "started" }),
+                  (error: unknown) => micTestHappened({ kind: "refused", why: micTestProblem(error instanceof Error ? error.message : String(error), onWindows(), asked) }),
+                );
+              },
+            }
+          : {}),
         now,
       }}
       notifications={{

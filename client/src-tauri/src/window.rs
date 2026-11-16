@@ -515,6 +515,7 @@ pub fn on_event(window: &tauri::Window, event: &tauri::WindowEvent) {
     // (#401), and so does a screen it was sharing (#360).
     if matches!(event, tauri::WindowEvent::Destroyed) {
         crate::clip::forget(window.app_handle(), window.label());
+        crate::mic_test::forget(window.app_handle(), window.label());
         crate::screen_shell::forget(window.app_handle(), window.label());
         crate::screen_sound::forget(window.app_handle(), window.label());
         if let Ok(mut unseen) = UNSEEN.lock() {

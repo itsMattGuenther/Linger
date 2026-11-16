@@ -325,14 +325,40 @@ pub async fn sound_play(app: AppHandle, samples: Vec<i16>, output: Option<String
     let Some(samples) = sounds::checked(samples) else {
         return false;
     };
-    let engines: Vec<_> = app
-        .state::<VoiceEngines>()
-        .with(|held| held.values().map(std::sync::Arc::clone).collect());
-    for engine in engines {
+    for engine in engines(&app) {
         if engine.cue(&samples).await {
             return true;
         }
     }
+    play_out_of_voice(&app, samples, output).await
+}
+
+/// Every server's voice engine there is.
+fn engines(app: &AppHandle) -> Vec<std::sync::Arc<VoiceEngine>> {
+    app.state::<VoiceEngines>()
+        .with(|held| held.values().map(std::sync::Arc::clone).collect())
+}
+
+/// Whether this computer is in voice anywhere: the microphone test won't
+/// play into a room (`mic_test.rs`).
+pub(crate) async fn in_voice(app: &AppHandle) -> bool {
+    for engine in engines(app) {
+        if engine.in_call().await {
+            return true;
+        }
+    }
+    false
+}
+
+/// Play samples on the Speakers picked in Settings, on the sounds' own
+/// speaker (`sounds.rs`), which is closed again once nothing has played on
+/// it for a while. Answers whether it played. For when there's no call to
+/// play into: one of Linger's sounds, or the microphone test's recording.
+pub(crate) async fn play_out_of_voice(
+    app: &AppHandle,
+    samples: Vec<i16>,
+    output: Option<String>,
+) -> bool {
     let sounds = std::sync::Arc::clone(app.state::<std::sync::Arc<sounds::Sounds>>().inner());
     let playing = std::sync::Arc::clone(&sounds);
     match tokio::task::spawn_blocking(move || playing.play(&samples, output.as_deref())).await {

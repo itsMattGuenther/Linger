@@ -110,7 +110,7 @@ pub async fn record(
         };
         clip.packets
             .push(encoder.encode(&frame).map_err(|error| error.to_string())?);
-        loudest = loudest.max(loudness(&frame));
+        loudest = loudest.max(level::loudness(&frame));
         if clip.packets.len().is_multiple_of(LEVEL_EVERY) {
             level(loudest);
             loudest = 0.0;
@@ -120,12 +120,6 @@ pub async fn record(
             return Ok(clip);
         }
     }
-}
-
-/// How loud a frame is, from 0 to 1, as the ear hears it rather than as the
-/// samples measure it: the square root lifts a quiet voice off the floor.
-fn loudness(frame: &[i16]) -> f32 {
-    (level::rms(frame) / f32::from(i16::MAX)).sqrt().min(1.0)
 }
 
 /// Start recording a voice message (#401) from the chosen microphone, or the
@@ -364,8 +358,6 @@ mod tests {
             levels.iter().all(|loud| (0.2..=1.0).contains(loud)),
             "{levels:?}"
         );
-        assert_eq!(loudness(&vec![0; FRAME_SAMPLES]), 0.0);
-        assert!((loudness(&vec![i16::MAX; FRAME_SAMPLES]) - 1.0).abs() < 1e-6);
     }
 
     /// The recording the browser tests hear back

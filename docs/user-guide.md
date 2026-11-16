@@ -457,7 +457,8 @@ Settings opens in its own window:
   person (below)
 - **Windows**: tabs or a window per conversation, and what closing the list does
 - **Sound & Voice**: how loud Linger's sounds are, notification chimes and
-  quiet hours; microphone, speakers, push to talk
+  quiet hours; microphone and speakers, a microphone test, what's tidied
+  before your voice is sent, push to talk
 - **Notifications**: desktop banners, and whose messages you want them for
 - **Account & App**: password, export, updates, starting Linger when you sign
   in to the computer, the privacy page, reporting a problem, adding a server,
@@ -859,6 +860,26 @@ picker marks one that isn't plugged in. If the microphone you picked is
 plugged in but won't open (another program holding on to it, say), the voice
 bar says so, with your computer's reason, for as long as you're on the
 default.
+
+**How you sound.** On a computer, Linger tidies your microphone before
+sending it, the way a phone or a browser does, and there's nothing to set
+up. Three switches in **Settings → Sound & Voice** turn the parts off, all
+on to begin with:
+
+- **Even out my volume** brings your voice to a normal speaking level, so
+  nobody has to turn you up. Turn it off if your own audio gear already
+  does this.
+- **Remove background noise** takes out steady sounds behind your voice,
+  like a fan. Turn it off to send music or an instrument as it is.
+- **Remove echo** stops what comes out of your speakers going back in
+  through your microphone. With headphones there's nothing to remove.
+
+To hear what the others hear, press **Test** beside **Test your
+microphone**, talk for a few seconds, and Linger plays it back to you. If
+it heard nothing, or very little, it says so and what to try. The recording
+is played once and thrown away: it's never sent or kept. You can't test
+while you're in voice, because the room would hear the playback; leave
+voice first.
 
 **If voice won't start**, the room's voice strip says why, where it would
 say who's talking. Click it for the whole reason, including your computer's

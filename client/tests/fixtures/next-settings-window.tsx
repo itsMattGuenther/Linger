@@ -72,6 +72,12 @@ let rules: NotifyRule[] = [];
 const startup = query.get("autostart");
 let startsAtSignIn = startup === "on";
 
+/** The shell's microphone test stops listening: what it heard, then "done" once it has played. */
+const micTestOver = (heard: string) => {
+  desktop.deliver("mictest:heard", heard);
+  window.setTimeout(() => desktop.deliver("mictest:done", null), heard === "nothing" ? 10 : 400);
+};
+
 const desktop = fakeDesktop({
   label: "settings",
   query,
@@ -111,6 +117,26 @@ const desktop = fakeDesktop({
     },
     "plugin:opener|open_url": (args) => desktop.note(`open:${String(args.url)}`),
     voice_devices: () => ({ inputs: ["Built-in microphone"], outputs: ["Headphones"], default_input: "Built-in microphone", default_output: "Headphones" }),
+    // The microphone test (#907). `?mictest` says how it goes: `voice`,
+    // `quiet` or `nothing` is what the shell heard; `invoice`, that Linger is
+    // in voice; `nomic`, that no microphone opened. The shell's part is
+    // played out in a moment: levels, then the verdict, then "done" (at once
+    // for nothing, which isn't played back).
+    mic_test_start: (args) => {
+      desktop.note(`mictest:start:${String(args.input)}:${String(args.output)}`);
+      const how = query.get("mictest") ?? "voice";
+      if (how === "invoice") throw "You're in voice. Leave it to test your microphone: the test plays out loud, and the room would hear it.";
+      if (how === "nomic") throw "no input device";
+      for (const [at, level] of [0.2, 0.7, 0.4].entries()) window.setTimeout(() => desktop.deliver("mictest:level", level), 40 + at * 40);
+      // `?mictest=...&hold`: it listens until Stop is pressed.
+      if (!query.has("hold")) window.setTimeout(() => micTestOver(how), 400);
+      return null;
+    },
+    mic_test_stop: () => {
+      desktop.note("mictest:stop");
+      micTestOver(query.get("mictest") ?? "voice");
+      return null;
+    },
   },
   routes: (method, path, url, body) => {
     // The other servers answer from the shared fake: their names, and nothing else.
