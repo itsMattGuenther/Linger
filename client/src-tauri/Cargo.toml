@@ -38,6 +38,16 @@ lto = "thin"
 codegen-units = 1
 strip = true
 
+# The client for a Linux desktop's sound server (cpal's `pulseaudio`
+# feature, #905) clears a megabyte before every read from the server. Built
+# unoptimized that's a loop a byte at a time, and the one thread that reads
+# for a call's microphone, its speakers and everything asked of the server
+# never caught up: opening the speakers hung in a debug build. Optimized it
+# is one fill. So this one crate is optimized in debug builds too, which is
+# what `pnpm tauri dev` and the tests run.
+[profile.dev.package.pulseaudio]
+opt-level = 3
+
 [lib]
 name = "linger_client_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]

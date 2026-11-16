@@ -1118,11 +1118,16 @@ out loud.
   (PulseAudio, or PipeWire as it) through cpal's `pulseaudio` host, and
   ALSA where there's none; streams ask for one frame at a time (the server's
   own buffering is two seconds); monitors are left out; "System default"
-  follows a changed default; `LINGER_AUDIO=alsa` keeps to ALSA.
+  follows a changed default; one connection to the server is kept for
+  everything (a host each time left connections behind on PipeWire);
+  `LINGER_AUDIO=alsa` keeps to ALSA.
   `scripts/linux-voice-check.sh` runs it on real streams against a private
-  PulseAudio, in CI. `docs/development.md`, "Sound on Linux".
+  PulseAudio, in CI, the server restarted under the streams included.
+  `docs/development.md`, "Sound on Linux".
   **Left:** Matt's own check on Omarchy at the next release: the lists, a
-  call, switching devices in it, and changing the desktop's default in it.
+  call, switching devices in it, changing the desktop's default in it, and
+  an hour's call on PipeWire (the connection count was measured against
+  PipeWire, but the automated check runs on PulseAudio).
   Anybody on Linux who'd picked a device in Settings picks it again: the
   names are new, and the old one falls back to the system default.
   *Release notes, 0.5.5:* on Linux, Settings lists the same microphones and

@@ -235,7 +235,7 @@ when one is running (PulseAudio, or PipeWire answering as PulseAudio), and
 ALSA when none is (#905, `voice::device::host`). The sound server lists what
 the desktop's own sound settings list, by those names. ALSA lists every card
 several ways and its plugins beside them: 43 outputs and 24 inputs on a
-computer whose desktop shows 9 and 6. Three things go with the sound server,
+computer whose desktop shows 9 and 6. Four things go with the sound server,
 all in `client/src-tauri/src/voice/device.rs`:
 
 - every stream asks for one 20 ms frame at a time (`stream_config`). Left to
@@ -245,6 +245,16 @@ all in `client/src-tauri/src/voice/device.rs`:
 - "System default" follows the desktop's default when it changes
   (`Following`): a stream opened on the server is on one device, where ALSA's
   `default` was whatever the server's default was.
+- the app keeps one connection to the server for everything (`host`). The
+  library makes a connection for each host it's asked for, and against
+  PipeWire a host let go often left its connection and a thread behind for
+  good: 43 of 120. When the server is restarted the connection goes with it,
+  the streams hear of that, and they're built again on a new one.
+
+The library that talks to the server (`pulseaudio`) is built optimized even
+in debug builds (`profile.dev.package` in `client/src-tauri/Cargo.toml`).
+Unoptimized, its one reading thread couldn't keep up with a call, and
+opening the speakers never finished.
 
 `LINGER_AUDIO=alsa` keeps the app on ALSA, for telling whether a sound problem
 is the sound server's way in. A device picked in Settings is remembered by
@@ -253,11 +263,16 @@ the choice back on the system default.
 
 `scripts/linux-voice-check.sh` runs the path on real streams: it starts a
 private PulseAudio with one speaker that plays to nowhere and one microphone
-that hears it, and checks that the lists hold those two and that a tone
-played comes back within half a second (it takes about 40 ms). It needs the
-`pulseaudio` daemon itself, which a desktop on PipeWire doesn't have, and
-says so and passes without it; CI's shell job runs it on every change to the
-shell.
+that hears it, and checks that the lists hold those two, that a tone played
+comes back within half a second (it takes about 50 ms), that the app holds
+one connection to the server with a call's streams up, and that after the
+server is stopped and started again a tone comes back by itself (about two
+seconds). It needs the `pulseaudio` daemon itself, which a desktop on
+PipeWire doesn't have, and says so and passes without it; CI's shell job
+runs it on every change to the shell. On such a desktop it runs in a
+container that has the daemon, given the tests already built:
+`scripts/linux-voice-check.sh <test binary>`, where
+`cargo test --lib --no-run` in `client/src-tauri` names the file.
 
 ## How the desktop app starts on Linux
 

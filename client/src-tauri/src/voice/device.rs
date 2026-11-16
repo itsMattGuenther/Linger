@@ -132,8 +132,55 @@ pub struct DeviceList {
 /// and falls back to ALSA when none answers, so a computer without one is
 /// as it was. `LINGER_AUDIO=alsa` keeps to ALSA, for a setup where the
 /// server's way goes wrong (docs/development.md).
-fn host() -> cpal::Host {
-    host_for(std::env::var_os("LINGER_AUDIO").as_deref())
+///
+/// **The sound server's host is made once and kept** ([`SERVER`]). It is a
+/// connection with a thread reading it, and letting a host go doesn't
+/// reliably end either: the thread finds it's no longer wanted only when the
+/// server next says something. Measured against PipeWire, 120 hosts made and
+/// let go left 43 threads and 43 connections behind for as long as the
+/// program ran (against PulseAudio itself, none). A stream that follows the
+/// default asks every two seconds (`following`), so a host each time would
+/// have left one behind every few seconds of every call. Everything asks the
+/// kept one, and it's made again only when it stops answering: the server
+/// was restarted, and took the connection with it. ALSA's host is only a
+/// name and isn't kept, so a sound server started later is found.
+fn host() -> Arc<cpal::Host> {
+    #[cfg(target_os = "linux")]
+    {
+        let chosen = std::env::var_os("LINGER_AUDIO");
+        kept_or_made(
+            &mut lock(&SERVER),
+            |host| host.devices().is_ok(),
+            || host_for(chosen.as_deref()),
+            |host| is_sound_server(host.id()),
+        )
+    }
+    #[cfg(not(target_os = "linux"))]
+    Arc::new(host_for(None))
+}
+
+/// The sound server's host, once it has answered: see [`host`]. Held while
+/// one is made, so two askers at once make one between them.
+#[cfg(target_os = "linux")]
+static SERVER: Mutex<Option<Arc<cpal::Host>>> = Mutex::new(None);
+
+/// The kept one while it still `answers`; otherwise one newly made, which
+/// takes its place if it's one to `keep` and empties the place if it isn't.
+#[cfg(any(target_os = "linux", test))]
+fn kept_or_made<H>(
+    kept: &mut Option<Arc<H>>,
+    answers: impl Fn(&H) -> bool,
+    make: impl FnOnce() -> H,
+    keep: impl Fn(&H) -> bool,
+) -> Arc<H> {
+    if let Some(host) = kept.as_ref() {
+        if answers(host) {
+            return Arc::clone(host);
+        }
+    }
+    let host = Arc::new(make());
+    *kept = keep(&host).then(|| Arc::clone(&host));
+    host
 }
 
 /// [`host`], for what `LINGER_AUDIO` says.
@@ -255,12 +302,15 @@ impl Drop for Watch {
     }
 }
 
-/// The watch for a stream just built on `device`: when the default was what
-/// was asked for (`name` is `None`) and the device is the sound server's,
-/// one that looks whether `default` still names it; otherwise none.
+/// The watch for a stream just built on `device`, which `host` found: when
+/// the default was what was asked for (`name` is `None`) and the device is
+/// the sound server's, one that looks whether `default` still names it;
+/// otherwise none. It asks the host the stream came from, each time: the
+/// kept one, not one of its own ([`host`]).
 fn following(
     name: Option<&str>,
     device: &cpal::Device,
+    host: &Arc<cpal::Host>,
     alarm: &Alarm,
     default: impl Fn(&cpal::Host) -> Option<cpal::Device> + Send + 'static,
 ) -> Watch {
@@ -270,10 +320,11 @@ fn following(
     let Ok(opened) = device.id() else {
         return Watch::none();
     };
+    let host = Arc::clone(host);
     Watch::start(alarm.clone(), DEFAULT_LOOK, move || {
         // No answer says nothing: a server that has gone takes the stream
         // with it, and that's the worker's to hear from the stream.
-        default(&host())
+        default(&host)
             .and_then(|device| device.id().ok())
             .is_some_and(|now| now.id() != opened.id())
     })
@@ -473,7 +524,7 @@ impl Microphone {
                 "microphone",
                 |device| input_stream(device, frames, alarm),
             )?;
-            let watch = following(name.as_deref(), &device, alarm, |host| {
+            let watch = following(name.as_deref(), &device, &host, alarm, |host| {
                 host.default_input_device()
             });
             *lock(&noted) = name.zip(why).map(|(name, why)| Refused { name, why });
@@ -1155,7 +1206,7 @@ impl Speaker {
                     "speaker",
                     |device| output_stream(device, &playback, &shared_rate, alarm),
                 )?;
-                let watch = following(name.as_deref(), &device, alarm, |host| {
+                let watch = following(name.as_deref(), &device, &host, alarm, |host| {
                     host.default_output_device()
                 });
                 Ok((
@@ -3039,6 +3090,11 @@ mod tests {
     /// left out. A tone played through `Speaker` comes out of `Microphone`
     /// within half a second, where the server's own buffering took two
     /// (`stream_config`), and frames keep coming at their pace.
+    ///
+    /// Asking again and again opens nothing more: the app keeps one
+    /// connection ([`host`]). And when the sound server is restarted under a
+    /// call, both streams hear of it, are built again on the new server,
+    /// and a tone comes back: nobody has to leave the call or pick a device.
     #[cfg(target_os = "linux")]
     #[tokio::test]
     #[ignore = "needs a sound server: scripts/linux-voice-check.sh starts a private one"]
@@ -3046,6 +3102,17 @@ mod tests {
         use crate::voice::cleanup::sounds::CHOICE;
         use crate::voice::level;
         let _settings = CHOICE.lock().await;
+        // The connections this program has open, to anything: what's open
+        // before the sound server is asked is the test's own.
+        let connections = || {
+            std::fs::read_dir("/proc/self/fd").map_or(0, |open| {
+                open.filter_map(Result::ok)
+                    .filter_map(|file| std::fs::read_link(file.path()).ok())
+                    .filter(|what| what.to_string_lossy().starts_with("socket:"))
+                    .count()
+            })
+        };
+        let before = connections();
         assert_eq!(
             host().id(),
             cpal::HostId::PulseAudio,
@@ -3060,14 +3127,19 @@ mod tests {
         // As it comes: the clean-up would take a steady tone for noise.
         let was = cleanup::chosen();
         cleanup::choose(Cleanup::NONE);
-        let (microphone, speaker) = tokio::task::spawn_blocking(|| {
+        // Given half a minute: with the server's client built unoptimized,
+        // opening never finished (Cargo.toml, `profile.dev.package`), and a
+        // test that waits for ever fails nothing.
+        let opening = tokio::task::spawn_blocking(|| {
             (
                 Microphone::open(None).expect("the microphone opens"),
                 Speaker::open(None).expect("the speakers open"),
             )
-        })
-        .await
-        .expect("opened");
+        });
+        let (microphone, speaker) = tokio::time::timeout(Duration::from_secs(30), opening)
+            .await
+            .expect("the microphone and the speakers opened within 30 s")
+            .expect("opened");
         // A second of quiet first, so both streams are running.
         let begun = Instant::now();
         while begun.elapsed() < Duration::from_secs(1) {
@@ -3111,6 +3183,55 @@ mod tests {
             "100 frames took {} ms",
             took.as_millis()
         );
+
+        // One connection to the sound server, for the microphone, the
+        // speakers, the two watching the default and everything asked of
+        // it, forty times over: a host each had one each, and against
+        // PipeWire left them behind.
+        for _ in 0..40 {
+            list().expect("the lists again");
+            assert!(host().default_output_device().is_some());
+        }
+        assert_eq!(
+            connections() - before,
+            1,
+            "connections open to the sound server, with a call's streams up"
+        );
+
+        // The sound server is stopped and started again, as an update or
+        // `systemctl --user restart pipewire` does. The script that runs
+        // this test says how.
+        let restart = std::env::var_os("LINGER_TEST_SOUND_SERVER_RESTART")
+            .expect("LINGER_TEST_SOUND_SERVER_RESTART: scripts/linux-voice-check.sh sets it");
+        let restarted = tokio::task::spawn_blocking(move || {
+            std::process::Command::new("sh")
+                .arg(restart)
+                .status()
+                .expect("the restart script runs")
+        })
+        .await
+        .expect("restarted");
+        assert!(restarted.success(), "the sound server didn't come back");
+        let since = Instant::now();
+        let back = 'back: loop {
+            assert!(
+                since.elapsed() < Duration::from_secs(30),
+                "no tone came back within 30 s of the sound server restarting"
+            );
+            speaker.cue(&tone);
+            let listening = Instant::now();
+            while listening.elapsed() < Duration::from_millis(600) {
+                // No frame for a while is the stream being built again.
+                let frame =
+                    tokio::time::timeout(Duration::from_millis(200), microphone.frame()).await;
+                match frame {
+                    Ok(Some(frame)) if level::rms(&frame) > 2_000.0 => break 'back since.elapsed(),
+                    Ok(Some(_)) | Err(_) => {}
+                    Ok(None) => panic!("the microphone gave up on the restarted sound server"),
+                }
+            }
+        };
+        eprintln!("a tone came back {} ms after the restart", back.as_millis());
         cleanup::choose(was);
     }
 
@@ -3628,6 +3749,60 @@ mod tests {
     fn alsa_can_be_asked_for_by_name() {
         let alsa = host_for(Some(std::ffi::OsStr::new("alsa")));
         assert_eq!(alsa.id(), cpal::HostId::Alsa);
+    }
+
+    /// The sound server's host is made once and asked again and again
+    /// (#905, [`host`]): a host each time left threads and connections
+    /// behind. It's made again when it stops answering, which is a server
+    /// restarted, and one that isn't the sound server's is never kept, so a
+    /// server started later is found.
+    #[test]
+    fn the_sound_servers_host_is_kept_while_it_answers() {
+        // What stands in for a host: whether it's the sound server's, and
+        // whether it still answers.
+        struct Stood {
+            server: bool,
+            answers: AtomicBool,
+        }
+        let made = AtomicUsize::new(0);
+        let ask = |kept: &mut Option<Arc<Stood>>, server: bool| {
+            kept_or_made(
+                kept,
+                |host: &Stood| host.answers.load(Ordering::SeqCst),
+                || {
+                    made.fetch_add(1, Ordering::SeqCst);
+                    Stood {
+                        server,
+                        answers: AtomicBool::new(true),
+                    }
+                },
+                |host| host.server,
+            )
+        };
+        let mut kept = None;
+        let first = ask(&mut kept, true);
+        for _ in 0..50 {
+            assert!(Arc::ptr_eq(&first, &ask(&mut kept, true)));
+        }
+        assert_eq!(made.load(Ordering::SeqCst), 1, "one host, asked 51 times");
+
+        // The server restarts: the kept host stops answering, and the next
+        // asker gets a new one, which is kept in its place.
+        first.answers.store(false, Ordering::SeqCst);
+        let second = ask(&mut kept, true);
+        assert!(!Arc::ptr_eq(&first, &second));
+        assert!(Arc::ptr_eq(&second, &ask(&mut kept, true)));
+        assert_eq!(made.load(Ordering::SeqCst), 2);
+
+        // The server is gone and ALSA answers instead: it's handed over but
+        // not kept, so each asker looks for the server again.
+        second.answers.store(false, Ordering::SeqCst);
+        assert!(!ask(&mut kept, false).server);
+        assert!(kept.is_none());
+        assert!(!ask(&mut kept, false).server);
+        assert_eq!(made.load(Ordering::SeqCst), 4);
+        assert!(ask(&mut kept, true).server);
+        assert!(kept.is_some());
     }
 
     /// "System default" follows the system (#905): when the default device
