@@ -16,7 +16,8 @@
 # No real microphone or speaker is used, and nothing is heard. Needs
 # `pulseaudio` (the daemon itself: a desktop on PipeWire doesn't have it)
 # and what the desktop shell builds with (docs/development.md). Without
-# pulseaudio it says so and passes: CI's tauri-shell job has it.
+# pulseaudio it says so and passes on somebody's computer, and fails in CI,
+# whose tauri-shell job installs it.
 #
 #   scripts/linux-voice-check.sh
 #   scripts/linux-voice-check.sh <test binary>   the shell's tests, built
@@ -26,6 +27,12 @@ set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 if ! command -v pulseaudio >/dev/null; then
+  # In CI that's a job that stopped installing it, and passing would hide
+  # that nothing here ran any more.
+  if [ -n "${CI:-}" ]; then
+    echo "linux-voice-check: no pulseaudio daemon in CI, so the check can't run" >&2
+    exit 1
+  fi
   echo "linux-voice-check: no pulseaudio daemon here, so nothing ran; CI runs it"
   exit 0
 fi
