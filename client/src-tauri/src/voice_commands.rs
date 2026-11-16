@@ -253,7 +253,7 @@ pub async fn voice_join(
     engine.set_session(session_id).await;
     // A microphone test under way ends here, before the call's devices
     // open: what it plays would go into the room (`mic_test.rs`).
-    crate::mic_test::voice_joined(&app);
+    crate::mic_test::voice_joined(&app).await;
     let devices = tokio::task::spawn_blocking(move || {
         voice::device::open(input.as_deref(), output.as_deref())
     })

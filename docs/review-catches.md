@@ -354,6 +354,20 @@ on a world that has changed.
 
 ## A rule nothing checks
 
+- **#912: stopping a microphone test could hold up whoever asked.**
+  Calling a test off closed the sounds' speaker there and then, from a
+  window's own events and from a command on the runtime. Closing waits for
+  the lock the speaker is opened under, so in the moment a device takes to
+  open, the window's thread or a runtime thread stood still for it. Caught
+  by Greptile. *Missed because* I'd checked that opening the microphone
+  and the speakers were off the runtime and never asked what the stopping
+  waits for; nothing checks the rule. *Changed:* the flag is set where it's
+  asked, which waits for nothing, and the closing is on a thread for work
+  that waits (`stop_playing`); joining voice waits for it, off the runtime,
+  before its own devices open. A test holds the asker to coming straight
+  back with a speaker that's slow to open, and fails, not hangs, against
+  the version that waited.
+
 - **#794: the update files blocked the async workers.** AGENTS.md says never
   block the reactor, and `updates.rs` read and wrote tens of megabytes with
   `std::fs` inside async commands. *Missed because* no check reads that

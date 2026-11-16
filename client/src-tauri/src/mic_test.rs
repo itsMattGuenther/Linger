@@ -29,6 +29,7 @@ use tauri::{AppHandle, Emitter, Manager, Window};
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
+use crate::sounds::Sounds;
 use crate::voice::audio::{Source, FRAME_MS, FRAME_SAMPLES, SAMPLE_RATE};
 use crate::voice::level;
 
@@ -439,10 +440,11 @@ pub fn mic_test_stop(app: AppHandle) {
 }
 
 /// A window has gone: a test it started goes with it, and what it was
-/// playing stops.
+/// playing stops. Called from the window's own events, so the stopping is
+/// left to get on with itself ([`stop_playing`]).
 pub fn forget(app: &AppHandle, label: &str) {
     if app.state::<MicTests>().call_off(Some(label)).is_some() {
-        called_off(app);
+        drop(stop_playing(sounds(app)));
     }
 }
 
@@ -451,19 +453,32 @@ pub fn forget(app: &AppHandle, label: &str) {
 /// before playing can't do this alone: a room can be joined in the moment
 /// between that check and the first sample, or any time in the eight
 /// seconds after it.
-pub fn voice_joined(app: &AppHandle) {
+///
+/// Waited for, so the test's speaker is closed before the call's devices
+/// open.
+pub async fn voice_joined(app: &AppHandle) {
     if let Some(window) = app.state::<MicTests>().call_off(None) {
-        called_off(app);
         let _ = app.emit_to(window.as_str(), "mictest:cut", IN_VOICE);
         let _ = app.emit_to(window.as_str(), "mictest:done", ());
+        let _ = stop_playing(sounds(app)).await;
     }
+}
+
+fn sounds(app: &AppHandle) -> Arc<Sounds> {
+    Arc::clone(app.state::<Arc<Sounds>>().inner())
 }
 
 /// What a test called off was playing stops: the sounds' own speaker is
 /// closed, which is the only way to take back what it was handed. A chime
 /// playing on it at that moment is cut off with it.
-fn called_off(app: &AppHandle) {
-    app.state::<Arc<crate::sounds::Sounds>>().stop();
+///
+/// On a thread for work that waits, never on the one that asked: closing
+/// waits for a speaker that's still being opened (`Sounds::stop`), which is
+/// as long as the device takes, and who asks is the window's own events or
+/// a command on the runtime. The test is already called off by then (the
+/// flag is set), so nothing more will be played while this waits.
+fn stop_playing(sounds: Arc<Sounds>) -> tauri::async_runtime::JoinHandle<()> {
+    tauri::async_runtime::spawn_blocking(move || sounds.stop())
 }
 
 #[cfg(test)]
@@ -703,6 +718,64 @@ mod tests {
         let (second, _) = tests.begin("settings").expect("the next test");
         tests.over(first);
         assert!(tests.wanted(second));
+    }
+
+    /// Stopping what a test was playing never holds up whoever asked
+    /// (#912's review): closing the speaker waits for one that's still
+    /// opening, and the asker is a window's events or the runtime. With a
+    /// speaker that takes its time to open, the asker gets its answer at
+    /// once, and the speaker is closed once it has opened.
+    #[tokio::test]
+    async fn stopping_the_playing_doesnt_wait_on_a_speaker_thats_opening() {
+        use crate::sounds::Output;
+        struct Quiet;
+        impl Output for Quiet {
+            fn cue(&self, _: &[i16]) {}
+            fn recording(&self, _: &[i16]) {}
+        }
+        let (opening, opened) = std::sync::mpsc::channel::<()>();
+        let (go_on, waited) = std::sync::mpsc::channel::<()>();
+        let waited = Mutex::new(waited);
+        let sounds = Arc::new(Sounds::with_opener(Box::new(move |_| {
+            // The device, taking its time: until the test says go on.
+            let _ = opening.send(());
+            let _ = waited.lock().unwrap().recv();
+            Ok(Arc::new(Quiet) as Arc<dyn Output>)
+        })));
+        let playing = Arc::clone(&sounds);
+        let wanted = Arc::new(AtomicBool::new(false));
+        let called_off = Arc::clone(&wanted);
+        let played = tokio::task::spawn_blocking(move || {
+            playing.play_recording(&[1, 2, 3], None, &called_off)
+        });
+        // The speaker is opening, and holds the sounds' lock while it does.
+        tokio::task::spawn_blocking(move || opened.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        // The device answers in its own time, not when anybody's ready:
+        // were the stopping to wait for it, it would wait this long, and
+        // the test would say so instead of hanging.
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(400));
+            let _ = go_on.send(());
+        });
+        // Called off now: the flag, then the stopping, which comes straight back.
+        wanted.store(true, Ordering::SeqCst);
+        let since = std::time::Instant::now();
+        let stopping = stop_playing(Arc::clone(&sounds));
+        assert!(
+            since.elapsed() < Duration::from_millis(50),
+            "stopping held its caller for {:?}",
+            since.elapsed()
+        );
+        // The device answers at last: nothing is played, and the speaker closes.
+        assert!(
+            !played.await.unwrap().unwrap(),
+            "it played after being called off"
+        );
+        stopping.await.unwrap();
+        assert!(!sounds.is_open());
     }
 
     /// Joining voice calls off whoever's test it is (#912's review): the
