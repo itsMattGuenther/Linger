@@ -436,11 +436,15 @@ on a world that has changed.
   and on a phone a microphone given after Discard stayed open. Caught by
   Greptile, and reverted there. *Missed because* the change came from a
   fresh review's finding, late, with no test: nothing could hold a
-  microphone opening. *Changed:* #920 gives each start its own number,
-  cancels through the last recorder made, and has the phone's recorder let
-  go of a microphone given late. The parity fixture holds a start until a
-  test opens it (`?holdmic`) and can take the page away (`unmount`); a
-  browser test of each case fails without the fix.
+  microphone opening. *Changed:* in #920 each start is its own object and
+  only the current one's answer counts; the recorder's own clean-up calls
+  off what's starting before it goes; one that goes ahead anyway is stopped
+  through the recorder it used; the shell's starts take turns, while a
+  start with nothing before it, and every phone start, stays in the tap
+  (#687); and the phone's recorder lets go of a microphone given late. The
+  parity fixture holds a start until a test opens it (`?holdmic`, and
+  `?cancelfirst` for a shell that hears the cancel first) and can take the
+  page away (`unmount`); a browser test of each case fails without the fix.
 
 - **#918 (2 catches): the review gate took a flag's value for a flag, and
   missed `--auto` after a body.** A body saying `--repo=other/project` read

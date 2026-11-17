@@ -183,11 +183,13 @@ export function useVoiceMessages(
     const using = recorder.current;
     // Only if this one wasn't called off meanwhile.
     const go = () => (startingIn.current !== mine ? Promise.reject(new Error("called off")) : (using?.start() ?? Promise.reject(new Error("no input device available"))));
-    // With nothing before it, now, in the tap that pressed Record: an iPhone
-    // starts a page's sound only from a tap (#687). After one still settling
-    // (Escape, then Record again), once it has, or a while if it hangs.
+    // Now, in the tap that pressed Record, whenever it can be: an iPhone
+    // starts a page's sound only from a tap (#687), and the phone's recorder
+    // lets go of an earlier start's microphone itself. The shell's waits for
+    // one still settling (Escape, then Record again), so one microphone opens
+    // at a time: once it has, or a while if it hangs.
     let starting: Promise<void>;
-    if (pending.current === 0) starting = go();
+    if (pending.current === 0 || kind !== "shell") starting = go();
     else {
       let timer: ReturnType<typeof setTimeout> | undefined;
       const waited = new Promise<void>((done) => (timer = setTimeout(done, LONGEST_WAIT_MS)));
@@ -217,10 +219,10 @@ export function useVoiceMessages(
         put(conversation, { kind: "ready", problem: startProblemWords(voiceStartProblem(error instanceof Error ? error.message : String(error), onWindows(), devices, onPhone())) });
       },
     );
-    lastStart.current = answered.catch(() => undefined).finally(() => {
+    lastStart.current = answered.finally(() => {
       pending.current -= 1;
     });
-  }, [paneId, put]);
+  }, [paneId, put, kind]);
 
   const stop = useCallback(() => {
     if (paneId !== null) void finish(paneId, null);

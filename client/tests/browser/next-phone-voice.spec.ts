@@ -167,10 +167,15 @@ test("another room opened while the phone's microphone opens calls it off, and t
   await expect(chat.locator(".k-titlebar")).toContainText("weekend-plans");
   await give();
   await expect.poll(() => live(0)).toEqual(["ended"]);
-  // Back in #general it's ready to record again, not recording.
+  // Back in #general it's ready to record again, with nothing said, and does.
   await chat.getByRole("button", { name: "Back", exact: true }).click();
   await page.getByRole("list", { name: "Rooms" }).getByRole("button", { name: /^#general\b/ }).click();
-  await expect(page.getByRole("button", { name: "Stop" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Record a voice message" }).click();
+  await expect(panel(page)).toContainText("Press Record when you're ready.");
+  await expect(panel(page).getByRole("alert")).toHaveCount(0);
+  await panel(page).getByRole("button", { name: "Record" }).click();
+  await give();
+  await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible();
 });
 
 test("a phone that won't give the microphone says so in words, and Record can be tried again", async ({ page }) => {
