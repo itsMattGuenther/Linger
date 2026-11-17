@@ -508,6 +508,11 @@ jobs:
         # catch; each change is asked only about its parts, and the count of
         # catches per pull request shows whether it works (#829).
         run: node --test scripts/pr-questions.test.mjs scripts/review-catches.test.mjs
+      - name: the fresh review before a pull request opens or merges reads commands exactly, and its hook stays in place
+        # Run by name: the gate and its hook (.claude/settings.json) start no
+        # job of their own (scripts/ci-scope.mjs), so this is all of their
+        # CI (#917, #930).
+        run: node --test scripts/review-gate.test.mjs
       - name: Tauri's Rust crates and JavaScript packages are on one version
         # The tauri crate and @tauri-apps/api are one release in two languages,
         # and so is each plugin and its package; the 2.12 upgrade moves them

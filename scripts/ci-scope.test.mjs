@@ -52,7 +52,7 @@ test("the questions before a pull request and the catch count are run by hand, a
 });
 test("the review gate and its hook ship nothing, and start no job of their own (#930)", () => {
   assert.deepEqual(active(["scripts/review-gate.mjs", "scripts/review-gate.test.mjs", ".claude/settings.json"]), []);
-  assert.equal(active([".claude/settings.local.json"]).length, 8);
+  assert.equal(active([".claude/hooks/gate.sh"]).length, 8);
   assert.equal(active(["scripts/review-gate.sh"]).length, 8);
 });
 test("the Tauri version check and the iPhone flows' own test run only in the rules job (#835)", () => {
