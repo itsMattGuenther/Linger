@@ -136,6 +136,10 @@ impl Clips {
     /// A start its window called off before it got here is refused.
     fn begin(&self, window: &str, start: u64) -> Result<u64, &'static str> {
         let mut books = self.lock();
+        // Only a number the shell handed this window (`clip_ticket`).
+        if start == 0 || start > books.tickets.get(window).copied().unwrap_or(0) {
+            return Err(UNKNOWN_START);
+        }
         if books
             .called_off
             .get(window)
@@ -165,6 +169,9 @@ impl Clips {
     /// is never touched (#920).
     fn call_off(&self, window: &str, start: u64) -> Option<Recording> {
         let mut books = self.lock();
+        // Never above a number the window was handed: a wrong one can't set
+        // a mark that refuses every start to come (#920).
+        let start = start.min(books.tickets.get(window).copied().unwrap_or(0));
         books.call_off_up_to(window, start);
         books.call_off_or_take(|recording| recording.window == window && recording.start == start)
     }
@@ -377,6 +384,7 @@ impl Drop for Booked {
 }
 
 const ALREADY: &str = "A voice message is already being recorded.";
+const UNKNOWN_START: &str = "That voice message wasn't given a number to start with.";
 /// How long a microphone has to open for a voice message (#920). The page
 /// waits a little longer than this for an earlier start (`recorders.ts`).
 const LONGEST_OPEN: std::time::Duration = std::time::Duration::from_secs(30);
@@ -467,6 +475,15 @@ pub async fn clip_ticket(app: AppHandle, window: Window) -> u64 {
 
 #[cfg(test)]
 mod tests {
+    /// Hand `window` tickets until its last is at least `up_to`, as pages
+    /// ask for them before starting.
+    fn handed(clips: &Clips, window: &str, up_to: u64) {
+        let mut books = clips.lock();
+        while books.tickets.get(window).copied().unwrap_or(0) < up_to {
+            books.ticket(window);
+        }
+    }
+
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
 
@@ -638,6 +655,8 @@ mod tests {
     #[tokio::test]
     async fn a_window_closed_while_the_microphone_opens_takes_its_recording_with_it() {
         let clips = Clips::default();
+        handed(&clips, "main", 20);
+        handed(&clips, "chat", 20);
         let id = clips.begin("main", 1).expect("the first recording");
         // Another window can't start one while this microphone opens, and
         // its closing takes nothing that isn't its own.
@@ -645,8 +664,9 @@ mod tests {
         assert!(clips.forget_window("chat").is_none());
         // Marked, keeping its place until its microphone opens (#920).
         assert!(clips.forget_window("main").is_none());
+        let fresh = clips.lock().ticket("chat");
         assert_eq!(
-            clips.begin("chat", 9).err(),
+            clips.begin("chat", fresh).err(),
             Some(ALREADY),
             "a second microphone opened beside the first"
         );
@@ -675,6 +695,8 @@ mod tests {
     #[tokio::test]
     async fn each_recording_ends_only_itself() {
         let clips = Clips::default();
+        handed(&clips, "main", 20);
+        handed(&clips, "chat", 20);
         let first = clips.begin("main", 3).expect("the first recording");
         clips.failed(first);
         let second = clips
@@ -703,6 +725,8 @@ mod tests {
     #[test]
     fn a_cancel_before_its_start_refuses_it() {
         let clips = Clips::default();
+        handed(&clips, "main", 20);
+        handed(&clips, "chat", 20);
         assert!(clips.call_off("main", 7).is_none());
         assert_eq!(clips.begin("main", 7).err(), Some(CALLED_OFF));
         assert_eq!(clips.begin("main", 3).err(), Some(CALLED_OFF));
@@ -716,6 +740,8 @@ mod tests {
     #[tokio::test]
     async fn a_late_cancel_never_takes_a_later_start() {
         let clips = Clips::default();
+        handed(&clips, "main", 20);
+        handed(&clips, "chat", 20);
         let first = clips.begin("main", 1).expect("the first");
         assert!(
             clips.call_off("main", 1).is_none(),
@@ -738,6 +764,8 @@ mod tests {
     #[tokio::test]
     async fn a_later_start_waits_for_the_earlier_to_be_called_off() {
         let clips = Clips::default();
+        handed(&clips, "main", 20);
+        handed(&clips, "chat", 20);
         let first = clips.begin("main", 1).expect("the first");
         let (stop, _stopped) = oneshot::channel();
         let done = tokio::spawn(async { Ok(Clip::default()) });
@@ -756,6 +784,8 @@ mod tests {
     #[tokio::test]
     async fn a_page_loaded_afresh_calls_off_every_start_its_last_page_was_handed() {
         let clips = Clips::default();
+        handed(&clips, "main", 20);
+        handed(&clips, "chat", 20);
         let first = clips.lock().ticket("main");
         let late = clips.lock().ticket("main");
         let id = clips.begin("main", first).expect("a start");
@@ -776,7 +806,7 @@ mod tests {
         assert!(next > late);
         assert!(clips.begin("main", next).is_ok());
         // Another window's numbers are its own.
-        assert_eq!(clips.lock().ticket("chat"), 1);
+        assert_eq!(clips.lock().ticket("chat"), 21);
     }
 
     /// A start called off while its microphone opens keeps its place until
@@ -785,6 +815,8 @@ mod tests {
     #[tokio::test]
     async fn a_start_called_off_while_opening_keeps_its_place_until_it_opens() {
         let clips = Clips::default();
+        handed(&clips, "main", 20);
+        handed(&clips, "chat", 20);
         let first = clips.begin("main", 1).expect("the first");
         assert!(clips.call_off("main", 1).is_none());
         assert_eq!(
@@ -806,6 +838,8 @@ mod tests {
     #[tokio::test]
     async fn a_cancel_takes_only_its_own_start() {
         let clips = Clips::default();
+        handed(&clips, "main", 20);
+        handed(&clips, "chat", 20);
         let first = clips.begin("main", 1).expect("the first");
         let (stop, _stopped) = oneshot::channel();
         let done = tokio::spawn(async { Ok(Clip::default()) });
@@ -825,6 +859,8 @@ mod tests {
     #[tokio::test]
     async fn a_later_start_never_replaces_a_recording_under_way() {
         let clips = Clips::default();
+        handed(&clips, "main", 20);
+        handed(&clips, "chat", 20);
         let first = clips.begin("main", 1).expect("the first");
         let (stop, _stopped) = oneshot::channel();
         let done = tokio::spawn(async { Ok(Clip::default()) });
@@ -852,6 +888,23 @@ mod tests {
         assert_eq!(
             opened_within(limit, fails).await.err().as_deref(),
             Some("busy")
+        );
+    }
+
+    /// A number the shell never handed out is refused, and a cancel can't
+    /// set a mark above the window's last ticket, which would refuse every
+    /// start to come (#920).
+    #[test]
+    fn numbers_the_shell_never_handed_out_count_for_nothing() {
+        let clips = Clips::default();
+        handed(&clips, "main", 3);
+        assert_eq!(clips.begin("main", 4).err(), Some(UNKNOWN_START));
+        assert_eq!(clips.begin("main", 0).err(), Some(UNKNOWN_START));
+        assert!(clips.call_off("main", 1_000_000).is_none());
+        let next = clips.lock().ticket("main");
+        assert!(
+            clips.begin("main", next).is_ok(),
+            "a wrong cancel refused every start to come"
         );
     }
 }
