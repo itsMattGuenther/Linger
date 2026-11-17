@@ -157,8 +157,8 @@ pass.
   the shared parts of the shell. The iPhone runs are then left out
   (`gh pr create --label desktop-only`; added later, it counts from the next
   push, or from marking a draft ready). Use it for work on what only the
-  desktop app has: voice in the shell, the tray, the windows, updates, the Settings rows a phone doesn't
-  show. Don't use it for anything a phone shows or runs: the list, a
+  desktop app has: voice in the shell, the tray, the windows, updates, the
+  Settings rows a phone doesn't show. Don't use it for anything a phone shows or runs: the list, a
   conversation, the message box, sign-in, servers, notifications, the share
   window, a phone's voice (`pageVoice.ts`), or code the page shares that
   those use. When you can't tell, leave it off: the run is 40 minutes, a
