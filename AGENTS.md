@@ -178,7 +178,10 @@ pass.
   <folder> &&` in front (and, before `gh pr create`, `git push … &&`), and
   the number right after `gh pr merge`; push before a merge, never in the
   same command, and don't use `--auto`, since either would merge a commit
-  the review never saw. The gate stops what it can't read rather than guess.
+  the review never saw. Don't put a merge in the background, and pipe it
+  only into what reads (`| tail`, `| tee log`); a body goes in
+  `--body-file` or a plain `"$(cat file)"`. The gate reads the command as
+  bash does and stops what it can't read rather than guess.
   At a merge it never runs the pull request's own code: the questions come
   from the gate's copy, and the reviewer loads only your own Claude
   settings. With another tool, run `node scripts/review-gate.mjs` before

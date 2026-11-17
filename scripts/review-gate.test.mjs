@@ -20,7 +20,9 @@ test("reads which pull request, folder and branch a command is about", () => {
   const table = [
     ["create", 'gh pr create --title "a b" --body-file x', { dirs: [], base: null }],
     ["create", "cd /x/y && gh pr create --title t", { dirs: ["/x/y"] }],
-    ["create", 'cd "/x/a b"; cd sub && gh pr create', { dirs: ["/x/a b", "sub"] }],
+    ["create", 'cd "/x/a b" && cd sub && gh pr create', { dirs: ["/x/a b", "sub"] }],
+    // A line ended by && carries on to the next.
+    ["create", "cd x &&\ngh pr create", { dirs: ["x"] }],
     ["create", "cd ~/p && git push -u origin HEAD && gh pr create -t x", { dirs: ["~/p"] }],
     ["create", "git push && gh pr create", { dirs: [] }],
     ["create", "gh pr create -B release -t x", { base: "release" }],
@@ -35,9 +37,9 @@ test("reads which pull request, folder and branch a command is about", () => {
     ["create", "gh pr create -t t && gh issue comment 5 -R o/site --body x", { repo: null }],
     ["create", "gh pr create -B main --title t --body \"$(cat <<'EOF'\nwords\nEOF\n)\"", { base: "main" }],
     ["merge", "gh pr merge 912 --squash --admin", { selector: "912" }],
+    ["merge", "gh pr merge 912 --squash --admin # after", { selector: "912" }],
+    ["merge", 'gh pr merge 912 --squash --body "$(cat x)"', { selector: "912" }],
     ["merge", "gh pr merge https://github.com/o/r/pull/9 --admin", { selector: "https://github.com/o/r/pull/9" }],
-    ["merge", "gh pr merge --squash --admin", { selector: null }],
-    ["merge", "gh pr merge --squash --admin # after", { selector: null }],
     ["merge", "gh pr merge 912 -R o/r --body-file m.txt", { selector: "912", repo: "o/r" }],
     // A value is read with its flag, so a body or title that looks like a flag is text.
     ["create", "gh pr create --title test --body '--repo=other/project'", { repo: null }],
@@ -55,8 +57,6 @@ test("reads which pull request, folder and branch a command is about", () => {
     ["merge", "gh pr merge 5 >&2 --admin", { selector: "5" }],
     ["merge", "gh pr merge 5 &>log.txt", { selector: "5" }],
     ["merge", "gh pr merge 5 --squash>out.txt 2>&-", { selector: "5" }],
-    // As the shell reads it: digits glued to > name what's redirected, not a pull request.
-    ["merge", "gh pr merge 5>out.txt", { selector: null }],
     ["merge", "gh pr merge 5 2>&1>out.txt", { selector: "5" }],
     ["merge", "gh pr merge 5 >>log.txt <in.txt 0<&-", { selector: "5" }],
     ["merge", "gh pr merge>log.txt 5", { selector: "5" }],
@@ -88,6 +88,86 @@ test("reads which pull request, folder and branch a command is about", () => {
     ["merge", "gh pr merge 5 && gh pr checkout 6 && git merge main", { selector: "5" }],
     ["create", "gh pr create -t x > out.txt", { base: null }],
     ["create", "gh pr create -t x -B release 2>&1", { base: "release" }],
+    // Read as bash reads them (#925): each was stopped while the gate read text.
+    ["create", "X=$(pwd) gh pr create", { base: null }],
+    ["merge", "\"gh\" pr merge 5", { selector: "5" }],
+    ["merge", "g''h pr merge 5", { selector: "5" }],
+    ["merge", "gh pr merge 5 > $(mktemp)", { selector: "5" }],
+    ["merge", 'gh pr merge 5 2>"$LOG"', { selector: "5" }],
+    ["create", 'gh pr create -t x --repo 2>"$LOG" o/r', { repo: "o/r" }],
+    ["create", 'gh pr create -t x -B 2>"$LOG" release', { base: "release" }],
+    ["merge", 'gh pr 2>"$X y" merge 5', { selector: "5" }],
+    ["merge", "gh pr \\\n        merge 5", { selector: "5" }],
+    ["merge", "gh pr merge 5 --body-file - <<'EOF'\nwords\nEOF", { selector: "5" }],
+    ["merge", 'gh 2> "$L" pr merge 5', { selector: "5" }],
+    ["merge", "gh pr 2>a\\ b merge 5", { selector: "5" }],
+    // After a body it can't read, its flags are still its own words.
+    ["create", 'gh pr create -b "$(cat x)" \\\n-B release', { base: "release" }],
+    ["create", 'gh pr create -b "$(cat x)" "-R" o/r', { repo: "o/r" }],
+    ["create", "gh pr create -b \"$(cat x)\" --ba''se release", { base: "release" }],
+    ["create", 'gh pr create -b "$(cat x)" -""B release', { base: "release" }],
+    ["create", 'gh pr create -b "$(cat x)" -dB release', { base: "release" }],
+    ["merge", 'gh pr merge 912 --body "$(cat x)" -R o/r', { selector: "912", repo: "o/r" }],
+    ["merge", 'gh pr merge 912 -R o/r --body "$(cat x)"', { selector: "912", repo: "o/r" }],
+    ["create", "gh pr create --title t --body \"$(cat <<'EOF'\nwords\nEOF\n)\" --base release", { base: "release" }],
+    // A flag's name inside a body is the body's.
+    ["create", "gh pr create -B main --title t --body \"$(cat <<'EOF'\nuse grep -R here\nEOF\n)\"", { base: "main", repo: null }],
+    // A flag that takes no value, given one, as pflag reads it.
+    ["merge", "gh pr merge 5 --help=false --admin", { selector: "5" }],
+    ["merge", "gh pr merge 5 -h=false", { selector: "5" }],
+    ["ready", "gh pr ready 7 --undo=false", { selector: "7" }],
+    ["merge", "gh pr merge 5 --auto=false", { selector: "5" }],
+    // A short flag's value after =, as pflag reads it.
+    ["create", "gh pr create -B=release", { base: "release" }],
+    ["merge", "gh pr merge 5 -R=o/r", { selector: "5", repo: "o/r" }],
+    // An assignment of any kind in front, and gh by its Windows name.
+    ["merge", "X+=1 gh pr merge 5", { selector: "5" }],
+    ["merge", "a[0]=1 gh pr merge 5", { selector: "5" }],
+    ["merge", "gh.exe pr merge 5", { selector: "5" }],
+    // ANSI-C escapes decoded as bash does.
+    ["merge", "gh pr $'\\u006derge' 5", { selector: "5" }],
+    // ANSI-C quoting is quoting.
+    ["create", "gh pr create --$'base' release", { base: "release" }],
+    // A pipeline ends before what follows it: a pull after it runs after the merge.
+    ["merge", "gh pr merge 5 | tail -3; git pull", { selector: "5" }],
+    // Piped into a loop or group that only reads.
+    ["merge", "gh pr merge 5 2>&1 | { cat; }", { selector: "5" }],
+    ["merge", 'gh pr merge 5 | while read l; do echo "$l"; done', { selector: "5" }],
+    // A later background job after the merge has finished, and a command named by a variable.
+    ["merge", "gh pr merge 5 --squash\ngit fetch origin & wait", { selector: "5" }],
+    ["merge", "gh pr merge 5 --squash && $EDITOR notes.txt", { selector: "5" }],
+    // A branch or folder whose name holds the words isn't the command.
+    ["create", "git push -u origin fix/gh-pr-create-flags && gh pr create -t x", { dirs: [] }],
+    ["merge", "cd ~/src/gh-pr-merge-bot && gh pr merge 5", { selector: "5", dirs: ["~/src/gh-pr-merge-bot"] }],
+    // The word case as an argument inside a substitution is a word.
+    ["create", 'gh pr create -t x --body "$(echo fixes the empty case)"', { base: null }],
+    ["merge", 'gh pr merge 5 --subject "$(echo covers the empty case)"', { selector: "5" }],
+    // pflag keeps the last value; git log reads only, without --output.
+    ["ready", "gh pr ready 5 --undo --undo=false", { selector: "5" }],
+    ["merge", 'gh pr merge 925 --squash --admin --body "$(git log -1 --format=%B)"', { selector: "925" }],
+    // Arithmetic inside double quotes is read.
+    ["create", 'gh pr create -t x --body "Count: $((1+1))"', { base: null }],
+    // The reviewed command's own body names the command, and its output goes to tee.
+    ["create", "cd wt && gh pr create -t x --body \"$(cat <<'EOF'\nThe gate now reads gh pr create.\nEOF\n)\" 2>&1 | tee /tmp/pr.txt", { dirs: ["wt"] }],
+    // The reviewed command's own here-document names the command, in exotic syntax.
+    ["create", "gh pr create --title t --body-file - <<'EOF'\nThe gate now runs before `gh pr create`.\nEOF", { base: null }],
+    // A branch named for the command, in a command with exotic syntax.
+    ["create", "git push -u origin fix/gh-pr-create-flags && gh pr create -t x --body \"$(cat <<'EOF'\nUses `x`\nEOF\n)\"", { dirs: [] }],
+    ["merge", "cd ~/src/gh-pr-merge-bot && gh pr merge 5 --subject 'the empty case'", { selector: "5" }],
+    // English words that are also keywords, in quoted text, aren't exotic syntax.
+    ["merge", 'gh pr merge 931 --squash --subject "Fix case handling" && echo "next: gh pr merge 932"', { selector: "931" }],
+    // printf and echo change nothing, inside a merge's body.
+    ["merge", 'gh pr merge 931 --squash --body "$(printf \'%s\\n\' "$NOTES")"', { selector: "931" }],
+    // A body read from a file, and the merge's output logged with tee.
+    ["merge", 'gh pr merge 925 --squash --body "$(<msg.md)"', { selector: "925" }],
+    ["merge", "gh pr merge 925 --squash --admin 2>&1 | tee /tmp/merge.log", { selector: "925" }],
+    // An email address in a default is one word; a loop that only reads after a pipe.
+    ["merge", 'gh pr merge 5 --author-email "${EMAIL:-me@example.com}"', { selector: "5" }],
+    ["merge", "gh pr merge 5 | for l in x; do :; done", { selector: "5" }],
+    // The reviewed command's own body, built with printf, names the command.
+    ["create", "gh pr create -t x --body \"$(printf 'Fixes the gh pr create gate\\n\\nMore')\"", { base: null }],
+    // A comment after it in exotic syntax: bash never runs a comment.
+    ["merge", 'gh pr merge 5 --subject "${T}" # then gh pr merge 6', { selector: "5" }],
     ["ready", "gh pr ready", { selector: null }],
     ["ready", "gh pr ready 12", { selector: "12" }],
   ];
@@ -112,56 +192,23 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     ["create", "cd x || gh pr create"],
     ["create", "(cd x && gh pr create)"],
     ["create", "$(echo) gh pr create"],
-    ["create", "X=$(pwd) gh pr create"],
-    ["create", "/usr/bin/gh pr create"],
     ["create", "command gh pr create"],
-    ["create", "echo gh pr create"],
-    ["merge", "\"gh\" pr merge 5"],
     ["merge", "gh pr merge --squash 912"],
-    // A redirection whose target it can't read is still a word it can't read.
-    ["merge", "gh pr merge 5 > $(mktemp)"],
-    ["merge", 'gh pr merge 5 2>"$LOG"'],
-    // Its digits are never a word, so never a flag's value (#924).
-    ["create", 'gh pr create -t x --repo 2>"$LOG" o/r'],
-    ["create", 'gh pr create -t x -B 2>"$LOG" release'],
     ["merge", "cd 2>/dev/null && gh pr merge 5"],
     // &> is a redirection, not the command's end, so what follows is read.
     ["merge", 'gh pr merge 5 &>"$LOG" --auto'],
     ["merge", "gh pr merge 5 &>log.txt --auto"],
     // Between gh's words: read, so --auto is seen; or not read, and stopped.
     ["merge", "gh pr 2>/dev/null merge 5 --auto"],
-    ["merge", 'gh pr 2>"$X y" merge 5'],
-    ["merge", "gh pr \\\n        merge 5"],
-    ["merge", "gh pr merge 5 --body-file - <<'EOF'\nwords\nEOF"],
     // A target it can't read after a blank, or with a blank escaped in it.
     ["merge", "gh pr 2> $LOG merge 5 --auto"],
-    ["merge", 'gh 2> "$L" pr merge 5'],
-    ["merge", "gh pr 2>a\\ b merge 5"],
-    // The & of &> doesn't start a command: gh here is true's word, and the
-    // words in order are enough to stop it.
-    ["merge", "true &>/dev/null gh pr merge 5"],
-    // A flag that matters, after a body it can't read and a line continued, or quoted.
-    ["create", 'gh pr create -b "$(cat x)" \\\n-B release'],
-    ["create", 'gh pr create -b "$(cat x)" "-R" o/r'],
-    ["create", "gh pr create -b \"$(cat x)\" --ba''se release"],
-    ["create", 'gh pr create -b "$(cat x)" -""B release'],
-    ["create", 'gh pr create -b "$(cat x)" -dB release'],
     ["create", "gh pr create -t x -dH other"],
-    // Claude Code fired the hook from its own reading, so the words in order
-    // are enough: the gate can't tell this from a merge it can't read.
-    ["merge", "gh pr create --title merge"],
-    ["merge", 'gh pr merge 912 --body "$(cat x)" -R o/r'],
-    ["merge", 'gh pr merge 912 -R o/r --body "$(cat x)"'],
     ["merge", 'gh pr merge 5 --body "$(cat message.txt)" --auto --squash'],
     ["create", "gh pr create -Hother"],
     ["create", "gh pr create -t x -Hother"],
     ["merge", "gh pr merge https://github.com/o/r/pull/9 -R a/b"],
-    ["create", "gh pr create --title t --body \"$(cat <<'EOF'\nwords\nEOF\n)\" --base release"],
     ["create", 'gh pr create --body "$(cat x)" -H other'],
-    // After a body it can't read, a flag's name might be the body's or the command's.
-    ["create", "gh pr create -B main --title t --body \"$(cat <<'EOF'\nuse grep -R here\nEOF\n)\""],
     ["merge", 'gh pr merge --subject "a b" 912'],
-    ["merge", 'gh pr merge --squash --body "$(cat x)"'],
     ["merge", "gh pr merge $N"],
     ["merge", "gh pr merge 1 && gh pr merge 2"],
     ["merge", "gh pr merge 5 -R a/b --repo c/d"],
@@ -172,6 +219,258 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     ["merge", "git push && gh pr merge 5 --squash"],
     ["ready", "git push origin feat/x && gh pr ready 5"],
     ["merge", "gh pr merge 5 --auto --squash"],
+    ["merge", "gh pr merge 5 --auto=true"],
+    // After a step, only &&: a failed cd with ; leaves gh in the first folder.
+    ["create", "cd x; gh pr create"],
+    ["create", "cd x\ngh pr create"],
+    // A word it can't follow where gh, pr or the action stands (#925).
+    ["merge", "$G pr merge 5"],
+    ["merge", "gh $P merge 5"],
+    ["merge", "gh pr $X 5"],
+    // Inside a program that runs other commands.
+    ["merge", "xargs gh pr merge"],
+    ["merge", "bash -c 'gh pr merge 5'"],
+    ["create", "env GH_REPO=x gh pr create"],
+    ["merge", "timeout 60 gh pr merge 5"],
+    // Inside a substitution, or an unquoted here-document's.
+    ["merge", "echo $(gh pr merge 5)"],
+    ["merge", 'gh pr view "$(gh pr merge 5)"'],
+    ["merge", "cat <<EOF\n$(gh pr merge 5)\nEOF"],
+    ["merge", "echo `gh pr merge 5`"],
+    // A second copy, however it's spelled.
+    ["merge", "gh pr merge 5; gh pr merge 6"],
+    ["merge", 'gh pr merge 5 && "gh" pr merge 6'],
+    ["merge", "gh pr merge 5; g''h pr merge 6"],
+    ["merge", 'gh pr merge 5 >/dev/null; gh 2>"$L" pr merge 6 --auto'],
+    // Inside a compound command.
+    ["merge", "if gh pr merge 5; then echo ok; fi"],
+    // A value it can't read, or a word that may be several.
+    ["merge", 'gh pr merge "$N"'],
+    ["merge", "gh pr merge 5 $FLAGS"],
+    ["create", 'gh pr create --base "$B"'],
+    ["create", "GH_REPO=$R gh pr create"],
+    // The three words in order, as words of one command, whatever runs them:
+    // stopped rather than guessed (#925).
+    ["create", "echo gh pr create"],
+    ["merge", "true &>/dev/null gh pr merge 5"],
+    ["merge", "gh pr create --title merge"],
+    ["merge", "gh pr -R o/r merge 5"],
+    ["merge", "/usr/bin/env gh pr merge 5"],
+    ["merge", 'W=env; "$W" gh pr merge 5'],
+    ["merge", '"$(echo sudo)" gh pr merge 5'],
+    ["merge", "function f { gh pr merge 5; }; f"],
+    ["merge", "coproc X { gh pr merge 5; }"],
+    ["merge", "time -p gh pr merge 5"],
+    ["merge", "CMD='gh pr merge 5'; $CMD"],
+    // A program that runs text, given the command as text.
+    ["merge", "bash -c 'gh pr \"merge\" 5'"],
+    ["merge", "bash <<<'gh pr merge 5'"],
+    ["merge", "bash <<EOF\ngh pr merge 5\nEOF"],
+    ["merge", "echo gh pr merge 5 | sh"],
+    // Substitutions bash runs, however they're wrapped.
+    ["merge", 'cat <<EOF\na\\" $(gh pr merge 5)\nEOF'],
+    ["merge", 'echo "${x:-$(echo }; gh pr merge 5)}"'],
+    ["merge", "echo $((gh pr merge 5) )"],
+    // A program that runs text behind a wrapper, or given text the gate can't read.
+    ["merge", "env bash -c 'gh pr merge 5'"],
+    ["merge", "timeout 60 sh -c 'gh pr merge 5'"],
+    ["merge", "CMD='gh pr merge 5'; eval \"$CMD\""],
+    ["merge", "CMD='gh pr merge 5'; bash -c \"$CMD\""],
+    ["merge", "bash -c 'g\"\"h pr merge 5'"],
+    // Piped into a shell from a here-document.
+    ["merge", "cat <<'EOF' | bash\ngh pr merge 5\nEOF"],
+    // Arithmetic's << is a shift, so the next line is still read.
+    ["merge", "(( x <<2 ))\ngh pr merge 5"],
+    // A compound command's word on a line of its own.
+    ["merge", "until\ngh pr merge 5\ndo sleep 60\ndone"],
+    // A process substitution as a redirection's target.
+    ["merge", "echo hi > >(g''h pr merge 5)"],
+    // A variable that may be gh, behind a wrapper.
+    ["merge", 'G=gh; env "$G" pr merge 5'],
+    ["merge", "sudo $G pr merge 5"],
+    // Added to, the repository is whatever it was too.
+    ["merge", "GH_REPO+=o/r gh pr merge 5"],
+    // A push running alongside the merge.
+    ["merge", "gh pr merge 5 & git push origin HEAD:feat/x"],
+    ["merge", "gh pr merge 5 | git push"],
+    // Text a program the gate doesn't know may run is code: node runs this.
+    ["create", "node - <<'JS'\n['create', 'gh pr create -t x']\nJS"],
+    ["merge", "node -e \"require('child_process').execSync('gh pr merge 5 --auto')\""],
+    ["merge", "env -S 'gh pr merge 5'"],
+    // Data written to a file may be run next.
+    ["merge", "echo 'gh pr merge 5' > x.sh && bash x.sh"],
+    ["merge", "cat > x.sh <<'EOF'\ngh pr merge 5\nEOF"],
+    // Piped from an inert program into one that runs text.
+    ["merge", "echo gh | xargs -I% % pr merge 5"],
+    // Arithmetic after a compound command's word, and a subshell that only looks like it.
+    ["merge", "if (( x <<EOF )); then :; fi\ngh pr merge 5 --auto\nEOF"],
+    ["merge", "((true); gh pr merge 5 --auto; (true))"],
+    // A here-document's end as bash decodes it.
+    ["merge", "cat <<$'EOF'\nx\nEOF\ngh pr merge 5 --auto"],
+    // A word that may be a whole flag, after create.
+    ["create", 'gh pr create -t x "$(printf -- --head=other)"'],
+    // A push that may run while the merge does, however it's written.
+    ["merge", "gh pr merge 5 & (git push)"],
+    ["merge", "gh pr merge 5 & { git push; }"],
+    ["merge", "gh pr merge 5 & sleep 1; git push"],
+    ["merge", "gh pr merge 5 & git -C . push origin HEAD:feat/x"],
+    // What runs inside the merge's own substitutions, or alongside it, must only read.
+    ["merge", 'gh pr merge 5 --squash --body "$(git push -f origin HEAD:feat; echo)"'],
+    ["merge", 'gh pr merge 5 > "$(git push origin HEAD:feat)"'],
+    ["merge", 'X="$(git push origin HEAD:feat)" gh pr merge 5'],
+    ["merge", "gh pr merge 5 & bash -c 'git push -f origin HEAD:feat'"],
+    ["merge", "gh pr merge 5 & $G push"],
+    ["merge", "gh pr merge 5 & gh api -X PATCH repos/o/r/git/refs/heads/feat"],
+    // Programs that take a program to run, or a file to write, from their flags.
+    ["merge", "git ls-remote --upload-pack='gh pr merge 5;:' ."],
+    ["merge", "rg --pre=bash x <(echo 'gh pr merge 5')"],
+    ["merge", "echo 'gh pr merge 5' >& m.sh && bash m.sh"],
+    ["merge", "echo 'gh pr merge 5' | sort -o m.sh && bash m.sh"],
+    // A gh alias or extension may be anything.
+    ["merge", "gh x 'gh pr merge 5'"],
+    // Several words even in double quotes.
+    ["merge", 'gh pr merge 5 --body "${a[@]}"'],
+    ["merge", 'gh pr merge 5 --body "$@"'],
+    // A ~ bash wouldn't expand as the gate would.
+    ["create", 'cd "~/p" && gh pr create'],
+    ["create", "cd ~other/p && gh pr create"],
+    // A merge names its pull request (AGENTS.md), so nothing can change which one gh picks.
+    ["merge", "gh pr merge --squash --admin"],
+    // As the shell reads it: digits glued to > name what's redirected, so no pull request is named.
+    ["merge", "gh pr merge 5>out.txt"],
+    ["merge", 'gh pr merge --squash --body "$(git switch -q feat/other)"'],
+    // What runs inside or beside a merge must change nothing: a branch, a pull request, a file.
+    ["merge", 'gh pr merge 5 --squash --body "$(git switch -q feat/other)"'],
+    ["merge", 'gh pr merge 5 --body "$(gh pr update-branch 5 >/dev/null; echo ok)"'],
+    ["merge", "gh pr merge 5 & gh pr edit 5 --base release"],
+    ["merge", "gh pr merge 5 | (git push -f origin HEAD:feat)"],
+    ["merge", "gh pr merge 5 | while sleep 1; do git push -f origin HEAD:feat; done"],
+    // A file written however the stream is named, and a setting's substitution.
+    ["merge", "printf 'gh pr merge 5' 2>x.sh 1>&2; bash x.sh"],
+    ["merge", "exec 3>x.sh; echo 'gh pr merge 5' >&3; bash x.sh"],
+    ["merge", "X=$(printf 'gh pr merge 5'); eval \"$X\""],
+    // A case pattern's ) doesn't end the substitution it's in.
+    ["merge", 'gh pr merge 5 --squash; echo "$(case x in x) gh pr merge 6 --admin;; esac)"'],
+    // A step's redirection can't run anything either.
+    ["merge", 'cd . >"$(git push -f origin HEAD:feat/x)" && gh pr merge 5 --squash'],
+    // A later & puts the merge in the background with what follows.
+    ["merge", "gh pr merge 5 && true & git push -f origin HEAD:feat"],
+    ["merge", "gh pr merge 5 | cat & git push -f origin HEAD:feat"],
+    // printf -v keeps its words to run later; a program by its path may be anything.
+    ["merge", "gh pr merge 5; printf -v x 'gh pr merge 6 --admin'; eval \"$x\""],
+    ["merge", "gh pr merge 5 & ./tools/git status"],
+    ["merge", "./bin/echo gh pr merge 6"],
+    // After --, a word is gh's, not a flag the gate would act on.
+    ["merge", "gh pr merge --squash -- --help"],
+    ["ready", "gh pr ready -- --undo"],
+    // A case inside a substitution: the gate doesn't read its patterns, and stops.
+    ["merge", 'echo "$(if true; then case a in a) gh pr merge 5;; esac; fi)"'],
+    ["merge", 'echo "$( (case x in a) true;; esac); gh pr merge 5 )"'],
+    ["merge", 'echo "$(case x in y) echo esac;; x) gh pr merge 5;; esac)"'],
+    // A cd in another form.
+    ["merge", "cd -- /w && gh pr merge 5"],
+    // The three words beside brackets, commas or backticks, in text a program runs.
+    ["merge", "python3 -c 'import subprocess; subprocess.run([\"gh\",\"pr\",\"merge\",\"5\"])'"],
+    ["merge", "node -e 'execSync(`gh pr merge 5`)'"],
+    ["merge", "bash -c 'x=`gh pr merge 5`'"],
+    // A word the gate can't read standing for gh, in text a program runs.
+    ["merge", 'sh -c "$(command -v gh) pr merge 5"'],
+    // After exec points a stream at a file, printed text may be a script.
+    ["merge", "exec >m.sh; echo 'gh pr merge 5'; exec >/dev/tty; bash m.sh"],
+    ["merge", "exec 2>m.sh; echo 'gh pr merge 5' >&2; bash m.sh"],
+    // A line continued inside text a program runs.
+    ["merge", "bash -c 'gh pr mer\\\nge 5'"],
+    // pflag keeps the last value: help off, so --auto is read.
+    ["merge", "gh pr merge 5 --help --help=false --auto"],
+    // Bash reads it; the gate doesn't read case in a substitution, and its text stops it.
+    ["merge", "x=$(case a in a) :;; esac); `gh pr merge 5`"],
+    // Parentheses paired as bash pairs them: a quoted )) doesn't make a subshell arithmetic.
+    ["merge", '((gh pr merge 5; echo "))" ) ) # "'],
+    ["merge", 'echo $((gh pr merge 5; echo "))" ) ) # "'],
+    // A here-document left open in a substitution is empty: the next line is a command.
+    ["merge", "echo $(cat <<EOF)\ngh pr merge 5 --auto\nEOF"],
+    // A setting can make a read-only program run something.
+    ["merge", "gh pr merge 5 | GIT_EXTERNAL_DIFF=./push.sh git diff HEAD~1"],
+    // coproc doesn't hide a later & that backgrounds the merge.
+    ["merge", "gh pr merge 5 && coproc true & git push -f"],
+    // A write on a group, subshell or loop: what's printed inside may be a script.
+    ["merge", "{ echo 'gh pr merge 5 --admin'; } > m.sh && bash m.sh"],
+    ["merge", "( echo 'gh pr merge 5 --admin' ) > m.sh && bash m.sh"],
+    ["merge", "for x in 1; do echo 'gh pr merge 5'; done > m.sh && bash m.sh"],
+    // $'…' escapes known when pairing parentheses.
+    ["merge", "echo $((gh pr merge 5; echo $'\\'' ) ) ; echo \"'))\" # \""],
+    // Text stored and read back into a program that runs text.
+    ["merge", "git commit --allow-empty -qm 'gh pr merge 5 --admin' && git log -1 --format=%B | bash"],
+    ["merge", "gh pr comment 9 --body 'gh pr merge 5' && gh pr view 9 --comments | bash"],
+    // Piped into a loop that runs what it reads.
+    ["merge", "git commit --allow-empty -qm 'gh pr merge 6 --admin' && git log -1 --format=%B | while read -r a b c d e; do $a $b $c $d $e; done"],
+    // GH in another case, in text a shell runs.
+    ["merge", "gh pr merge 5 --squash; echo 'GH pr merge 6 --admin' | bash"],
+    // gh by a path may be any program: a maybe, as on main.
+    ["create", "/usr/bin/gh pr create"],
+    ["merge", "./gh pr merge 5"],
+    ["merge", "gh pr merge 5 & ./scripts/gh pr view 5"],
+    // -h and --help are one flag: the last of either wins.
+    ["merge", "gh pr merge 5 --squash -h --help=false --auto"],
+    // Exotic syntax keeps main's rule too, outside the reviewed command (#925).
+    ["merge", "echo ${x:-$'\\''} ; gh pr merge 5 --auto ; echo \"'\" \"}\" #\""],
+    ["merge", "git commit --allow-empty -qm 'gh pr merge 5 --admin' && eval \"$(git log -1 --format=%B)\""],
+    ["merge", "git commit --allow-empty -qm 'gh pr merge 5 --admin' && bash <(git log -1 --format=%B)"],
+    ["merge", 'eval "${u:-gh pr merge 5}"'],
+    ["merge", "x=${u:-gh pr merge 5 --auto}; $x"],
+    ["merge", "x=$(case a in a) :;; esac); ${u:-gh} pr merge 5"],
+    ["merge", "echo \"`echo \\\"'\\\" ; gh pr merge 5 --auto ; echo \\\"'\\\"`\""],
+    ["merge", "command exec >m.sh; echo 'gh pr merge 5'; command exec >/dev/tty; bash m.sh"],
+    // A wait that doesn't wait for the merge.
+    ["merge", "gh pr merge 5 & (wait); git push -f origin HEAD:feat"],
+    ["merge", "gh pr merge 5 & sleep 0 & wait -n; git push -f origin HEAD:feat"],
+    // A wait that doesn't run in the main shell doesn't end what runs beside the merge.
+    ["merge", "gh pr merge 5 & false && wait; git push origin x"],
+    ["merge", "gh pr merge 5 & wait & git push origin x"],
+    ["merge", "gh pr merge 5 & wait | cat; git push origin x"],
+    // Stored text read back through a substitution or a file, not a pipe.
+    ["merge", "git commit --allow-empty -qm 'gh pr merge 5 --admin' && bash -c \"$(git log -1 --format=%B)\""],
+    ["merge", "git commit --allow-empty -qm 'gh pr merge 5 --admin' && $(git log -1 --format=%B)"],
+    ["merge", "git commit --allow-empty -qm 'gh pr merge 5 --admin' && git log -1 --format=%B > m.sh && bash m.sh"],
+    // gh repo clone hands its words to git clone.
+    ["merge", "gh repo clone o/r /tmp/x -- -c core.sshCommand='gh pr merge 5 --admin #'"],
+    // Escapes spell the command where the words don't.
+    ["merge", "printf 'g\\x68 pr merge 5 --admin' | bash"],
+    // A wait inside an if that may not run.
+    ["merge", "gh pr merge 5 &\nif false; then\nwait\nfi\ngit push -f origin HEAD:feat"],
+    // $'\c' ends at its quote, so the push beside the merge is seen.
+    ["merge", "gh pr merge 5 --subject $'\\c' & git push -f origin HEAD:feat ; echo 'a\\'"],
+    // A gh subcommand named like an object's own property.
+    ["merge", 'gh pr merge 5 --body "$(gh constructor)"'],
+    // A merge or ready in the background: nothing an agent needs, so it stops.
+    ["merge", "gh pr merge 5 --squash &\nwait\ngit pull --ff-only"],
+    ["merge", "gh pr merge 5 & sleep 0 & wait $!; git push -f origin HEAD:feat"],
+    ["ready", "gh pr ready 5 &"],
+    // Exotic syntax noted where the reader reads it, apostrophes in double quotes or not.
+    ["merge", "echo \"it's\"; x=${u:-gh pr merge 5}; $x; echo \"it's\""],
+    // A variable that may be several words stands for more than one of the three.
+    ["merge", 'X="gh pr"; $X merge 5'],
+    // An array element isn't passed to gh, so its repository can't be read.
+    ["merge", "GH_REPO[0]=someone/else gh pr merge 5"],
+    // tee into .git writes a ref.
+    ["merge", 'gh pr merge 5 --body "$(echo x | tee .git/refs/heads/feat)"'],
+    // gh commands that can start a run hand it text that may be run.
+    ["merge", "gh workflow run deploy.yml -f script='gh pr merge 5 --admin'"],
+    ["merge", "gh api repos/o/r/actions/workflows/d.yml/dispatches -f 'inputs[script]=gh pr merge 5'"],
+    // ${ closes at the first }: the second merge isn't inside the first's word.
+    ["merge", 'gh pr merge 5 --squash --subject "${x:-{}" ; gh pr merge 6 --squash --subject "}"'],
+    // The reviewed command's own body piping text into a shell.
+    ["create", 'gh pr create --title t --body "$(echo \'gh pr create -H other -B main\' | sh)"'],
+    // Stored and run back inside the reviewed command's own body.
+    ["create", 'gh pr create -t x --body "$(git commit --allow-empty -qm \'gh pr create -H other\'; git log -1 --format=%B | sh)"'],
+    // for ((…)): a shift, not a here-document, so the next line is read.
+    ["merge", "for ((;;true<<1)); do :; done\ngh pr merge 5 --auto"],
+    // Unquoted, a here-document's end word is joined across a backslash and a
+    // line break, so the merge after it runs (Greptile, #935).
+    ["merge", "cat <<EOF\nEO\\\nF\ngh pr merge 5\nEOF"],
+    ["merge", "cat <<-EOF\n\tEO\\\nF\ngh pr merge 5\nEOF"],
+    // Text bash would refuse, that might be the command.
+    ["merge", 'gh pr merge 5 "oops'],
   ];
   for (const [action, command] of table) {
     const read = readCommand(command, action);
@@ -184,7 +483,7 @@ test("a long command it can't place comes back, rather than running on", () => {
   // stopped and fails here rather than holding up every test after it. The
   // limit is far past the milliseconds it takes, so a busy machine can't fail it.
   const script = `import { readCommand } from ${JSON.stringify(new URL("./review-gate.mjs", import.meta.url).href)};
-const longs = ["gh " + "=>".repeat(20_000) + " x", "gh pr " + "2>".repeat(20_000) + " x", ">|A= ".repeat(20_000) + "x", ">&A= ".repeat(20_000) + "x"];
+const longs = ["gh " + "=>".repeat(20_000) + " x", "gh pr " + "2>".repeat(20_000) + " x", ">|A= ".repeat(20_000) + "x", ">&A= ".repeat(20_000) + "x", "$((".repeat(20_000), "$(".repeat(20_000), "((".repeat(20_000) + " x", "(".repeat(50_000) + "x" + " )".repeat(50_000), ("$((1))" + String.fromCharCode(96) + "$((1))" + String.fromCharCode(96) + " ").repeat(20_000), ("g" + "h pr ").repeat(20_000) + String.fromCharCode(39), "echo " + "$(x ".repeat(3_000) + ")".repeat(3_000), "cat <<EOF" + String.fromCharCode(10) + ("x".repeat(79) + String.fromCharCode(92, 10)).repeat(50_000) + "EOF"];
 for (const long of longs) if (readCommand(long, "merge") !== null) process.exit(2);`;
   const run = spawnSync(process.execPath, ["--input-type=module"], { input: script, timeout: 60_000 });
   assert.equal(run.status, 0, run.signal ? `still running after a minute (${run.signal})` : String(run.error ?? run.stderr));
@@ -198,6 +497,24 @@ test("a command that isn't one leaves the gate out", () => {
     ["create", "gh pr create --help"],
     ["merge", "gh pr merge -h"],
     ["ready", "gh pr view --json isDraft"],
+    // Words, not text (#925): the words of a program that runs nothing it's
+    // given (echo, jq, git commit, gh itself) are data, when nothing in its
+    // pipeline runs text and it writes no file.
+    ["merge", "gh pr view 5 --jq '.merge' | head -1"],
+    ["merge", "gh api repos/o/r/pulls/5 --jq '\"merge=\\(.merged)\"' 2>/dev/null"],
+    // Quoted, its end word isn't joined across lines, so the merge is in the body.
+    ["merge", "cat <<'EOF'\nEO\\\nF\ngh pr merge 5\nEOF"],
+    ["merge", "echo 'gh pr merge 5' >&2"],
+    ["merge", "for pr in 919 921; do gh pr view $pr --json state --jq '\"merged\"'; done"],
+    ["merge", 'git commit -m "fix: gh pr merge 5 later"'],
+    ["merge", "cat <<'EOF'\n$(gh pr merge 5)\nEOF"],
+    // A here-document body is data, a line in it that reads like the command included.
+    ["merge", "cat <<'EOF'\ngh pr merge 5\nEOF"],
+    ["merge", "cat <<EOF\ngh pr merge 5\nEOF"],
+    ["merge", "cat <<-EOF\n\tgh pr merge 5\n\tEOF"],
+    ["merge", "gh pr view 5 --json title,mergedAt && echo merge"],
+    // Variables alone, three in a row, aren't the command.
+    ["merge", 'for f in *.txt; do cp "$f" "$DEST/$f" "$X"; done'],
     // gh2 isn't gh: digits glued to > belong to the word before.
     ["merge", "gh2>a pr merge 5"],
     ["ready", "gh pr ready 12 --undo"],
@@ -226,6 +543,9 @@ test("words come out as the shell hands them over", () => {
   assert.equal(unquote(`'a "b"'`), 'a "b"');
   assert.equal(unquote(`a"b c"'d'`), "ab cd");
   assert.equal(unquote(`"a\\"b"`), 'a"b');
+  assert.equal(unquote("$'a\\tb'"), "a\tb");
+  assert.equal(unquote("a\\ b"), "a b");
+  assert.equal(unquote("a\\\nb"), "ab");
 });
 
 test("the reviewer's verdict is its last line, and no verdict is findings", () => {

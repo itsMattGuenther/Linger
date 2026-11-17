@@ -474,6 +474,23 @@ on a world that has changed.
   reads each flag with its value in all four spellings, a merge or ready
   must be readable whole, and the table has bodies that look like flags.
 
+- **#935 (2 catches): the review gate's reader ended a here-document where
+  bash doesn't, and the fix was slow on a long one.** In an unquoted here-document bash joins a line ending in a
+  backslash to the next before comparing it with the end word, so
+  `EO\` then `F` ends `<<EOF`, and a merge on the next line runs. The
+  reader compared each line as written, took the merge for part of the
+  here-document's text, and let it through unreviewed; main's gate had
+  stopped it. Caught by Greptile, after 24 rounds of the gate's own review.
+  *Missed because* the tables had here-documents with plain end words, and
+  the comparison with main's gate only runs the commands in the tables.
+  *Changed:* the reader joins continued lines before the end-word check
+  (`readHeredocs`), and the tables have the continued end word, quoted and
+  unquoted, with `<<-`. Greptile then found that the first fix re-read the
+  whole joined line after each piece, so 10,000 continued lines took
+  3 seconds: each piece is now looked at once and joined at the end, and
+  the long-input test has 50,000 continued lines, which hit its one-minute
+  limit before.
+
 - **#912: the microphone test played half of a long recording, listened
   past its limit, and blamed the wrong microphone.** Three of Greptile's
   four on it. The recording went to the speakers as one of Linger's sounds,

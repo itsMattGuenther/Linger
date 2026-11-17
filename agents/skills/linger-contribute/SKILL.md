@@ -107,7 +107,8 @@ commits that carry them (`scripts/lint-rules.sh`).
   section, in a line or two.
 - A fresh review runs before the pull request opens (#917). In Claude Code,
   the repository's hook runs it when you run `gh pr create`: run that on its
-  own, with only `cd <folder> &&` or `git push … &&` in front. If it stops
+  own, with only `cd <folder> &&` or `git push … &&` in front, and the
+  body in `--body-file`. If it stops
   the command with findings, fix what's real and run it again (the same
   commit passes the second time), and say in the Tests section what it found
   and what you did. With another tool, run `node scripts/review-gate.mjs`
