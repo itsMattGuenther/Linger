@@ -1825,9 +1825,10 @@ test.describe("voice messages (#401)", () => {
   // real one does (#913).
   const opening = (page: Page) => panel(page).getByText("Opening the microphone…");
   const escape = (page: Page) => panel(page).dispatchEvent("keydown", { key: "Escape" });
+  /** The oldest held start's microphone opens; back once the page has heard its answer. */
   const opens = (page: Page) => page.evaluate(() => window.parity?.clip.opens());
-  /** A turn of the page's own work, so an answer that changes nothing has had its chance to. */
-  const settled = (page: Page) => page.evaluate(() => new Promise((done) => setTimeout(done, 50)));
+  /** Starts asked of the shell so far: a start waits for the one before it to settle. */
+  const starts = (page: Page) => asked(page, "clip_start").then((all) => all.length);
 
   test("Escape while the microphone opens calls it off: nothing records, and the next Record starts (#920)", async ({ page }) => {
     await open(page, "room=r-general&holdmic");
@@ -1839,12 +1840,12 @@ test.describe("voice messages (#401)", () => {
     expect(await asked(page, "clip_cancel")).toHaveLength(1);
     // The microphone opens late: nothing comes back, and nothing says it went wrong.
     await opens(page);
-    await settled(page);
     await expect(panel(page)).toHaveCount(0);
     await page.getByRole("button", { name: "Record a voice message" }).click();
     await expect(panel(page)).toContainText("Press Record when you're ready.");
     await expect(panel(page).getByRole("alert")).toHaveCount(0);
     await panel(page).getByRole("button", { name: "Record" }).click();
+    await expect.poll(() => starts(page)).toBe(2);
     await opens(page);
     await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible();
   });
@@ -1858,15 +1859,16 @@ test.describe("voice messages (#401)", () => {
     await page.getByRole("button", { name: "Record a voice message" }).click();
     await panel(page).getByRole("button", { name: "Record" }).click();
     await expect(opening(page)).toBeVisible();
+    // The second waits for the first to settle: one microphone opening at a time.
+    expect(await starts(page)).toBe(1);
     // The first start's late answer (refused, as it was called off) is
     // nobody's: the second is still opening, with nothing said.
     await opens(page);
-    await settled(page);
     await expect(opening(page)).toBeVisible();
     await expect(panel(page).getByRole("alert")).toHaveCount(0);
+    await expect.poll(() => starts(page)).toBe(2);
     await opens(page);
     await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible();
-    expect(await asked(page, "clip_start")).toHaveLength(2);
   });
 
   test("the window going while the microphone opens calls it off (#920)", async ({ page }) => {
@@ -1876,6 +1878,10 @@ test.describe("voice messages (#401)", () => {
     await expect(opening(page)).toBeVisible();
     await page.evaluate(() => window.parity?.unmount());
     await expect.poll(() => asked(page, "clip_cancel")).toHaveLength(1);
+    // The microphone opens after: the shell throws it away, and nothing more is asked.
+    await opens(page);
+    expect(await asked(page, "clip_cancel")).toHaveLength(1);
+    expect(await asked(page, "clip_stop")).toEqual([]);
   });
 
   test("it stops by itself at five minutes, or when the microphone goes, and keeps what it has", async ({ page }) => {

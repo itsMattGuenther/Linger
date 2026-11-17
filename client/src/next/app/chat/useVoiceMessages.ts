@@ -62,17 +62,16 @@ export function useVoiceMessages(
   }, []);
   const recorder = useRef<Recorder | null>(null);
   /**
-   * The recorder last made, kept after it's let go of: the window going
-   * lets the recorder go before it calls off what was starting (#920).
+   * The start under way (its microphone opening), if any: Escape, another
+   * conversation or the window going call it off, and only the start that's
+   * still this one may use its answer (#920). Each start is its own object.
    */
-  const lastRecorder = useRef<Recorder | null>(null);
+  const startingIn = useRef<{ conversation: string } | null>(null);
   /**
-   * The recording that's starting (its microphone opening), if any, and
-   * which start it is: Escape, another conversation or the window going call
-   * it off, and only that start's answer may then be used (#920).
+   * The last start, settled either way: the next waits for it, so a
+   * microphone is never being opened twice at once (#920).
    */
-  const startingIn = useRef<{ conversation: string; start: number } | null>(null);
-  const starts = useRef(0);
+  const lastStart = useRef<Promise<unknown>>(Promise.resolve());
 
   const put = useCallback((conversation: string, next: VoiceMessage | null) => {
     setClips((held) => {
@@ -127,8 +126,10 @@ export function useVoiceMessages(
     };
     const made = kind === "shell" ? shellRecorder(events, () => loadVoicePrefs().devices.input) : pageRecorder(events);
     recorder.current = made;
-    lastRecorder.current = made;
     return () => {
+      // The window going (or, docked, the chat folding away): what's
+      // recording or starting is called off here, before the recorder goes.
+      if (recordingIn.current !== null || startingIn.current !== null) made.cancel();
       made.dispose();
       if (recorder.current === made) recorder.current = null;
     };
@@ -147,12 +148,10 @@ export function useVoiceMessages(
     }
   }, [paneId, finish, put]);
 
-  // The window going (or, docked, the chat folding away): whatever is
-  // recording or starting is thrown away, and every kept clip let go of. The
-  // recorder may already be let go of by now, so the last one is told.
+  // The window going: every kept clip let go of. What was recording or
+  // starting was called off with the recorder (above).
   useEffect(
     () => () => {
-      if (recordingIn.current !== null || startingIn.current !== null) lastRecorder.current?.cancel();
       recordingIn.current = null;
       startingIn.current = null;
       for (const clip of clipsNow.current.values()) if (clip.kind === "kept") URL.revokeObjectURL(clip.url);
@@ -170,21 +169,31 @@ export function useVoiceMessages(
     const conversation = paneId;
     if (conversation === null || recordingIn.current !== null || startingIn.current !== null) return;
     put(conversation, { kind: "starting" });
-    starts.current += 1;
-    const start = starts.current;
-    startingIn.current = { conversation, start };
+    const mine = { conversation };
+    startingIn.current = mine;
     const devices = loadVoicePrefs().devices;
-    const starting = recorder.current?.start() ?? Promise.reject(new Error("no input device available"));
+    // After the last start has settled, and only if this one wasn't called
+    // off meanwhile.
+    const starting = lastStart.current.then(() => {
+      if (startingIn.current !== mine) throw new Error("called off");
+      return recorder.current?.start() ?? Promise.reject(new Error("no input device available"));
+    });
+    lastStart.current = starting.catch(() => undefined);
     // Only this start's answer counts, and only while it's still the one
     // starting: called off meanwhile, its answer is nobody's (#920).
     const stillThisOne = () => {
-      if (startingIn.current?.start !== start) return false;
+      if (startingIn.current !== mine) return false;
       startingIn.current = null;
       return true;
     };
     starting.then(
       () => {
-        if (!stillThisOne()) return;
+        // Called off, and it started anyway (the shell heard the cancel
+        // before the start): it's stopped now, before a next start begins.
+        if (!stillThisOne()) {
+          recorder.current?.cancel();
+          return;
+        }
         recordingIn.current = conversation;
         put(conversation, { kind: "recording", since: Date.now(), levels: [] });
       },

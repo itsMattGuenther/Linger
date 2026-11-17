@@ -129,11 +129,14 @@ const desktop = fakeDesktop({
       // As the shell says it when the system has no microphone.
       if (query.has("nomic")) throw "no input device available";
       if (query.has("holdmic")) {
-        const held = { calledOff: false, open: () => undefined as void };
+        let heard = () => undefined as void;
+        const held = { calledOff: false, open: () => undefined as void, heard: new Promise<void>((done) => (heard = done)) };
         await new Promise<void>((open) => {
           held.open = open;
           heldStarts.push(held);
         });
+        // The page hears this answer first; then the test is told.
+        setTimeout(heard, 0);
         // As the shell does once the microphone opens: one called off
         // meanwhile is thrown away (clip.rs, #913).
         if (held.calledOff) throw "The voice message was called off while the microphone opened.";
@@ -240,7 +243,7 @@ const desktop = fakeDesktop({
 });
 
 // Voice message starts waiting for their microphone (`?holdmic`), oldest first.
-const heldStarts: { calledOff: boolean; open: () => void }[] = [];
+const heldStarts: { calledOff: boolean; open: () => void; heard: Promise<void> }[] = [];
 
 // History reads being held for the test (`holdReads`): each is asked of the
 // server at once, so it shows in `data-did`, and answered when the test says.
@@ -329,8 +332,8 @@ declare global {
         lost: () => void;
         /** What it hands back when stopped, as `clip_stop` answers: the lookahead, then each packet by its length. */
         hands: (bytes: number[]) => void;
-        /** With `?holdmic`: the oldest start's microphone opens. */
-        opens: () => void;
+        /** With `?holdmic`: the oldest start's microphone opens; settles once the page has heard it. */
+        opens: () => Promise<void>;
       };
       /** The window's page goes, as a docked chat folding takes it away. */
       unmount: () => void;
@@ -368,7 +371,11 @@ window.parity = {
     hands: (bytes) => {
       recorded = Uint8Array.from(bytes);
     },
-    opens: () => heldStarts.shift()?.open(),
+    opens: () => {
+      const held = heldStarts.shift();
+      held?.open();
+      return held?.heard ?? Promise.resolve();
+    },
   },
   unmount: () => page.unmount(),
   shellDrop: (dropped, at) => {

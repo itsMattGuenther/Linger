@@ -236,16 +236,17 @@ export function pageRecorder(events: RecorderEvents): Recorder {
   };
 
   // Chromium's way: the track processor's stream of the microphone's sound.
-  const read = async (reader: ReadableStreamDefaultReader<AudioData>) => {
+  // `mine` is the start it reads for: once another has begun, it says nothing (#920).
+  const read = async (reader: ReadableStreamDefaultReader<AudioData>, mine: number) => {
     for (;;) {
       const next = await reader.read().catch(() => ({ done: true, value: undefined }) as const);
       if (next.done || next.value === undefined) {
         // The microphone went away (unplugged, or taken), not stopped by us.
-        if (!stopped) events.ended("lost");
+        if (!stopped && attempt === mine) events.ended("lost");
         return;
       }
       const data = next.value;
-      if (stopped) {
+      if (stopped || attempt !== mine) {
         data.close();
         continue;
       }
@@ -258,12 +259,12 @@ export function pageRecorder(events: RecorderEvents): Recorder {
 
   // WebKit's way (#687): the worklet's 20 ms at a time, timed by how much
   // has come, from the microphone's sound in an audio graph of its own.
-  const listen = async (microphone: MediaStream, track: MediaStreamTrack, sound: AudioContext, waking: Promise<void>) => {
+  const listen = async (microphone: MediaStream, track: MediaStreamTrack, sound: AudioContext, waking: Promise<void>, mine: number) => {
     await sound.audioWorklet.addModule(MIC_WORKLET);
     const node = new AudioWorkletNode(sound, WORKLET_NAME);
     let frames = 0;
     node.port.onmessage = (event: MessageEvent<unknown>) => {
-      if (stopped || !(event.data instanceof Float32Array)) return;
+      if (stopped || attempt !== mine || !(event.data instanceof Float32Array)) return;
       // Copied, as the encoder takes only sound in a buffer of its own.
       const samples = new Float32Array(event.data);
       encode(samples, sound.sampleRate, Math.round((frames / sound.sampleRate) * 1_000_000));
@@ -274,7 +275,7 @@ export function pageRecorder(events: RecorderEvents): Recorder {
     // goes there too. It sends nothing on, so nothing is heard.
     node.connect(sound.destination);
     track.addEventListener("ended", () => {
-      if (!stopped) events.ended("lost");
+      if (!stopped && attempt === mine) events.ended("lost");
     });
     // Asked to start in the tap; asked again now the microphone is open,
     // which some engines wait for. One that still won't would record
@@ -322,10 +323,10 @@ export function pageRecorder(events: RecorderEvents): Recorder {
         release();
         throw new Error("no input device available");
       }
-      if (Processor !== null) reading = read(new Processor({ track }).readable.getReader());
+      if (Processor !== null) reading = read(new Processor({ track }).readable.getReader(), mine);
       else if (sound !== null) {
         try {
-          await listen(stream, track, sound, waking);
+          await listen(stream, track, sound, waking, mine);
         } catch (error: unknown) {
           if (attempt !== mine) throw calledOff(given);
           release();
