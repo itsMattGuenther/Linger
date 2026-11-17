@@ -1859,14 +1859,13 @@ test.describe("voice messages (#401)", () => {
     await page.getByRole("button", { name: "Record a voice message" }).click();
     await panel(page).getByRole("button", { name: "Record" }).click();
     await expect(opening(page)).toBeVisible();
-    // The second waits for the first to settle: one microphone opening at a time.
-    expect(await starts(page)).toBe(1);
+    // The second starts at once, in its tap.
+    await expect.poll(() => starts(page)).toBe(2);
     // The first start's late answer (refused, as it was called off) is
     // nobody's: the second is still opening, with nothing said.
     await opens(page);
     await expect(opening(page)).toBeVisible();
     await expect(panel(page).getByRole("alert")).toHaveCount(0);
-    await expect.poll(() => starts(page)).toBe(2);
     await opens(page);
     await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible();
   });
@@ -1886,7 +1885,7 @@ test.describe("voice messages (#401)", () => {
       await expect.poll(() => asked(page, "clip_cancel")).toHaveLength(2);
       if (how === "Escape") {
         await expect(panel(page)).toHaveCount(0);
-        // The next start waits for that stop, then starts.
+        // With it stopped, the next Record starts.
         await page.getByRole("button", { name: "Record a voice message" }).click();
         await panel(page).getByRole("button", { name: "Record" }).click();
         await expect.poll(() => starts(page)).toBe(2);

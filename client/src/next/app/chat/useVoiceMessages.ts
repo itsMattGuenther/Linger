@@ -23,9 +23,6 @@ export interface VoiceMessageControls {
   send: () => void;
 }
 
-/** How long a start waits for the one before it to settle: one that hangs mustn't hold every later Record (#920). */
-const LONGEST_WAIT_MS = 5_000;
-
 /**
  * Voice messages (#401), per conversation, in one window: the panel's state
  * in each, and the one recording (`recorders.ts`): the desktop shell's on a
@@ -70,13 +67,6 @@ export function useVoiceMessages(
    * still this one may use its answer (#920). Each start is its own object.
    */
   const startingIn = useRef<{ conversation: string } | null>(null);
-  /**
-   * The last start, settled either way: the next waits for it, so a
-   * microphone is never being opened twice at once (#920).
-   */
-  const lastStart = useRef<Promise<unknown>>(Promise.resolve());
-  /** Starts not yet settled: with none, the next starts in the tap itself. */
-  const pending = useRef(0);
 
   const put = useCallback((conversation: string, next: VoiceMessage | null) => {
     setClips((held) => {
@@ -135,10 +125,14 @@ export function useVoiceMessages(
       // The window going (or, docked, the chat folding away): what's
       // recording or starting is called off here, before the recorder goes.
       if (recordingIn.current !== null || startingIn.current !== null) void made.cancel();
+      // Nothing's under way with this recorder any more, whatever ends it.
+      for (const conversation of [recordingIn.current, startingIn.current?.conversation]) if (conversation) put(conversation, { kind: "ready", problem: null });
+      recordingIn.current = null;
+      startingIn.current = null;
       made.dispose();
       if (recorder.current === made) recorder.current = null;
     };
-  }, [kind, finish]);
+  }, [kind, finish, put]);
 
   // Another conversation shown while recording: stop, and keep the clip where
   // it was made. One still starting has nothing to keep: it's called off.
@@ -181,21 +175,9 @@ export function useVoiceMessages(
     // anyway, it's stopped through this one, even once the page has let the
     // recorder go (#920).
     const using = recorder.current;
-    // Only if this one wasn't called off meanwhile.
-    const go = () => (startingIn.current !== mine ? Promise.reject(new Error("called off")) : (using?.start() ?? Promise.reject(new Error("no input device available"))));
-    // Now, in the tap that pressed Record, whenever it can be: an iPhone
-    // starts a page's sound only from a tap (#687), and the phone's recorder
-    // lets go of an earlier start's microphone itself. The shell's waits for
-    // one still settling (Escape, then Record again), so one microphone opens
-    // at a time: once it has, or a while if it hangs.
-    let starting: Promise<void>;
-    if (pending.current === 0 || kind !== "shell") starting = go();
-    else {
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const waited = new Promise<void>((done) => (timer = setTimeout(done, LONGEST_WAIT_MS)));
-      starting = Promise.race([lastStart.current, waited]).finally(() => clearTimeout(timer)).then(go);
-    }
-    pending.current += 1;
+    // Now, in the tap that pressed Record: an iPhone starts a page's sound
+    // only from a tap (#687).
+    const starting = using?.start() ?? Promise.reject(new Error("no input device available"));
     // Only this start's answer counts, and only while it's still the one
     // starting: called off meanwhile, its answer is nobody's (#920).
     const stillThisOne = () => {
@@ -203,12 +185,14 @@ export function useVoiceMessages(
       startingIn.current = null;
       return true;
     };
-    const answered = starting.then(
-      async () => {
+    starting.then(
+      () => {
         // Called off, and it started anyway (the shell heard the cancel
-        // before the start): stopped now, and the next start waits for that.
+        // before the start booked, so the start kept the shell's one place
+        // and a Record meanwhile was told so): stopped now, through the
+        // recorder it used, even once the page has let that go.
         if (!stillThisOne()) {
-          await using?.cancel();
+          void using?.cancel();
           return;
         }
         recordingIn.current = conversation;
@@ -219,10 +203,7 @@ export function useVoiceMessages(
         put(conversation, { kind: "ready", problem: startProblemWords(voiceStartProblem(error instanceof Error ? error.message : String(error), onWindows(), devices, onPhone())) });
       },
     );
-    lastStart.current = answered.finally(() => {
-      pending.current -= 1;
-    });
-  }, [paneId, put, kind]);
+  }, [paneId, put]);
 
   const stop = useCallback(() => {
     if (paneId !== null) void finish(paneId, null);
