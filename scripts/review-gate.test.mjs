@@ -37,9 +37,9 @@ test("reads which pull request, folder and branch a command is about", () => {
     ["create", "gh pr create -t t && gh issue comment 5 -R o/site --body x", { repo: null }],
     ["create", "gh pr create -B main --title t --body \"$(cat <<'EOF'\nwords\nEOF\n)\"", { base: "main" }],
     ["merge", "gh pr merge 912 --squash --admin", { selector: "912" }],
+    ["merge", "gh pr merge 912 --squash --admin # after", { selector: "912" }],
+    ["merge", 'gh pr merge 912 --squash --body "$(cat x)"', { selector: "912" }],
     ["merge", "gh pr merge https://github.com/o/r/pull/9 --admin", { selector: "https://github.com/o/r/pull/9" }],
-    ["merge", "gh pr merge --squash --admin", { selector: null }],
-    ["merge", "gh pr merge --squash --admin # after", { selector: null }],
     ["merge", "gh pr merge 912 -R o/r --body-file m.txt", { selector: "912", repo: "o/r" }],
     // A value is read with its flag, so a body or title that looks like a flag is text.
     ["create", "gh pr create --title test --body '--repo=other/project'", { repo: null }],
@@ -57,8 +57,6 @@ test("reads which pull request, folder and branch a command is about", () => {
     ["merge", "gh pr merge 5 >&2 --admin", { selector: "5" }],
     ["merge", "gh pr merge 5 &>log.txt", { selector: "5" }],
     ["merge", "gh pr merge 5 --squash>out.txt 2>&-", { selector: "5" }],
-    // As the shell reads it: digits glued to > name what's redirected, not a pull request.
-    ["merge", "gh pr merge 5>out.txt", { selector: null }],
     ["merge", "gh pr merge 5 2>&1>out.txt", { selector: "5" }],
     ["merge", "gh pr merge 5 >>log.txt <in.txt 0<&-", { selector: "5" }],
     ["merge", "gh pr merge>log.txt 5", { selector: "5" }],
@@ -115,7 +113,6 @@ test("reads which pull request, folder and branch a command is about", () => {
     ["create", "gh pr create --title t --body \"$(cat <<'EOF'\nwords\nEOF\n)\" --base release", { base: "release" }],
     // A flag's name inside a body is the body's.
     ["create", "gh pr create -B main --title t --body \"$(cat <<'EOF'\nuse grep -R here\nEOF\n)\"", { base: "main", repo: null }],
-    ["merge", 'gh pr merge --squash --body "$(cat x)"', { selector: null }],
     // A flag that takes no value, given one, as pflag reads it.
     ["merge", "gh pr merge 5 --help=false --admin", { selector: "5" }],
     ["merge", "gh pr merge 5 -h=false", { selector: "5" }],
@@ -300,6 +297,21 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     // A ~ bash wouldn't expand as the gate would.
     ["create", 'cd "~/p" && gh pr create'],
     ["create", "cd ~other/p && gh pr create"],
+    // A merge names its pull request (AGENTS.md), so nothing can change which one gh picks.
+    ["merge", "gh pr merge --squash --admin"],
+    // As the shell reads it: digits glued to > name what's redirected, so no pull request is named.
+    ["merge", "gh pr merge 5>out.txt"],
+    ["merge", 'gh pr merge --squash --body "$(git switch -q feat/other)"'],
+    // What runs inside or beside a merge must change nothing: a branch, a pull request, a file.
+    ["merge", 'gh pr merge 5 --squash --body "$(git switch -q feat/other)"'],
+    ["merge", 'gh pr merge 5 --body "$(gh pr update-branch 5 >/dev/null; echo ok)"'],
+    ["merge", "gh pr merge 5 & gh pr edit 5 --base release"],
+    ["merge", "gh pr merge 5 | (git push -f origin HEAD:feat)"],
+    ["merge", "gh pr merge 5 | while sleep 1; do git push -f origin HEAD:feat; done"],
+    // A file written however the stream is named, and a setting's substitution.
+    ["merge", "printf 'gh pr merge 5' 2>x.sh 1>&2; bash x.sh"],
+    ["merge", "exec 3>x.sh; echo 'gh pr merge 5' >&3; bash x.sh"],
+    ["merge", "X=$(printf 'gh pr merge 5'); eval \"$X\""],
     // Text bash would refuse, that might be the command.
     ["merge", 'gh pr merge 5 "oops'],
   ];
@@ -314,7 +326,7 @@ test("a long command it can't place comes back, rather than running on", () => {
   // stopped and fails here rather than holding up every test after it. The
   // limit is far past the milliseconds it takes, so a busy machine can't fail it.
   const script = `import { readCommand } from ${JSON.stringify(new URL("./review-gate.mjs", import.meta.url).href)};
-const longs = ["gh " + "=>".repeat(20_000) + " x", "gh pr " + "2>".repeat(20_000) + " x", ">|A= ".repeat(20_000) + "x", ">&A= ".repeat(20_000) + "x", "$((".repeat(20_000)];
+const longs = ["gh " + "=>".repeat(20_000) + " x", "gh pr " + "2>".repeat(20_000) + " x", ">|A= ".repeat(20_000) + "x", ">&A= ".repeat(20_000) + "x", "$((".repeat(20_000), "$(".repeat(20_000), "((".repeat(20_000) + " x"];
 for (const long of longs) if (readCommand(long, "merge") !== null) process.exit(2);`;
   const run = spawnSync(process.execPath, ["--input-type=module"], { input: script, timeout: 60_000 });
   assert.equal(run.status, 0, run.signal ? `still running after a minute (${run.signal})` : String(run.error ?? run.stderr));

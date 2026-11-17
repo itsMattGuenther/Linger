@@ -115,6 +115,7 @@ function readTokens(reader, closer) {
     const before = tokens[tokens.length - 1];
     const startsCommand = !before || "op" in before || ("word" in before && before.word.known && LEADING.has(before.word.text));
     const shape = startsCommand && source.startsWith("((", reader.at) ? closing(source, reader.at) : null;
+    if (startsCommand && source.startsWith("((", reader.at) && !shape) throw new Unreadable("a `((` isn't closed");
     if (shape?.together) {
       const body = source.slice(reader.at + 2, shape.end - 1);
       reader.at = shape.end + 1;
@@ -502,32 +503,64 @@ function commandsOf(tokens) {
 const isGh = (word) => word.known && /(?:^|\/)gh(?:\.exe)?$/.test(word.text);
 /** Whether a word could be gh: gh however it's spelled, or one the gate can't read. */
 const mayBeGh = (word) => !word.known || /(?:^|[/\\])gh(?:\.exe)?$/i.test(word.text);
-/** Programs that only read their words as data: they run nothing they're given. */
-const INERT = new Set(["echo", "printf", "true", "false", ":", "jq", "grep", "egrep", "fgrep", "wc", "head", "tail", "cut", "tr", "ls", "cat", "test", "[", "sleep", "date", "pwd", "basename", "dirname", "realpath", "stat", "diff", "cmp", "comm", "column", "nl", "fold", "file", "which", "type", "id", "whoami", "hostname", "uname", "mktemp"]);
+/** Programs that run nothing they're given, and change nothing but the screen. */
+const INERT = new Set(["echo", "printf", "true", "false", ":", "jq", "grep", "egrep", "fgrep", "wc", "head", "tail", "cut", "tr", "ls", "cat", "test", "sleep", "date", "pwd", "basename", "dirname", "realpath", "stat", "diff", "cmp", "comm", "column", "nl", "fold", "file", "which", "type", "id", "whoami", "hostname", "uname", "mktemp"]);
 /**
- * git's subcommands that read their words as data. Not `config` (its
+ * git's subcommands whose words are data, never run: not `config` (its
  * aliases run), nor those that take a program to run or a file to write
  * (`fetch`/`pull`/`push`/`ls-remote` `--upload-pack`, `grep -O`, `log`/
- * `show`/`diff` `--output`), and `push` changes a pull request anyway.
+ * `show`/`diff` `--output`).
  */
-const INERT_GIT = new Set(["commit", "status", "tag", "branch", "add", "rm", "mv", "restore", "switch", "checkout", "merge-base", "rev-parse", "rev-list", "describe", "ls-files", "remote", "blame", "stash", "worktree"]);
-/** gh's commands that read their words as data: a list of those known, as an alias or extension can be anything. */
-const GH_DATA = new Set(["pr", "issue", "run", "workflow", "release", "label", "search", "status", "browse"]);
-/** Redirections that write to a file (and `>&` to one that isn't a stream's number). */
-const WRITES = new Set([">", ">>", ">|", "&>", "&>>", "<>"]);
-const writes = (token) => WRITES.has(token.redirect) || (token.redirect === ">&" && !/^(?:\d+|-)$/.test(token.target.text));
+const GIT_DATA = new Set(["commit", "status", "tag", "branch", "add", "rm", "mv", "restore", "switch", "checkout", "merge-base", "rev-parse", "rev-list", "describe", "ls-files", "remote", "blame", "stash", "worktree"]);
+/** git's subcommands that change nothing a pull request depends on: no branch, remote or push. */
+const GIT_READS = new Set(["status", "merge-base", "rev-parse", "rev-list", "describe", "ls-files", "blame"]);
+/** gh's commands whose words are data: a list of those known, as an alias or extension can be anything. */
+const GH_DATA = new Set(["pr", "issue", "run", "workflow", "release", "label", "search", "status", "browse", "repo", "api"]);
+/** gh's commands that only read, by command and subcommand (`*` for all of them). */
+const GH_READS = { pr: ["view", "list", "checks", "diff", "status"], issue: ["view", "list", "status"], run: ["view", "list", "watch"], workflow: ["view", "list"], release: ["view", "list"], label: ["list"], search: ["*"], status: ["*"], browse: ["*"] };
 
 /**
- * Whether a command only reads its words as data: a program that runs
- * nothing it's given, writing only to the screen, stderr or /dev/null (a
- * file it writes could be run next).
+ * Whether a redirection writes a file: `>`, `>>`, `&>` and the like to
+ * anything but /dev/null, whatever the stream, and `>&` to a file or to a
+ * stream past stdout and stderr (one `exec` may have opened on a file).
+ */
+const writesFile = (token) => {
+  if ([">", ">>", ">|", "&>", "&>>", "<>"].includes(token.redirect)) return !(token.target.known && token.target.text === "/dev/null");
+  return token.redirect === ">&" && !/^(?:[12]|-)$/.test(token.target.text);
+};
+
+/** A command's program by its plain name, and its first two words after it. */
+function programOf(command) {
+  const [name, first, second] = command.words;
+  if (!name?.known) return null;
+  return { name, program: name.text.replace(/^.*[/\\]/, ""), first: first?.known ? first.text : null, second: second?.known ? second.text : null };
+}
+
+/**
+ * Whether a command's words are data: a program that runs nothing it's
+ * given and writes no file (a file it writes could be run next). Its text
+ * then never counts as a command (`pipelineText`).
  */
 function inert(command) {
-  const [name, first] = command.words;
-  if (!name?.known) return false;
-  const program = name.text.replace(/^.*[/\\]/, "");
-  const reads = INERT.has(program) || (program === "git" && first?.known && INERT_GIT.has(first.text)) || (isGh(name) && first?.known && GH_DATA.has(first.text));
-  return reads && command.redirects.every((token) => !writes(token) || token.fd === "2" || (token.target.known && token.target.text === "/dev/null"));
+  const known = programOf(command);
+  if (!known || command.redirects.some(writesFile)) return false;
+  const { name, program, first } = known;
+  return INERT.has(program) || (program === "git" && GIT_DATA.has(first)) || (isGh(name) && GH_DATA.has(first));
+}
+
+/**
+ * Whether a command only reads: nothing it does can change a pull request,
+ * a branch, a remote or a file. What runs inside a merge's substitutions or
+ * beside it must be (#932 will bind the merge to the reviewed commit too).
+ */
+function readsOnly(command) {
+  if (!command.words.length) return !command.settings.length && !command.redirects.length;
+  const known = programOf(command);
+  if (!known || command.redirects.some(writesFile)) return false;
+  const { name, program, first, second } = known;
+  if (INERT.has(program)) return true;
+  if (program === "git") return GIT_READS.has(first);
+  return isGh(name) && (GH_READS[first]?.includes("*") || GH_READS[first]?.includes(second)) === true;
 }
 
 /**
@@ -573,10 +606,12 @@ function pipelineText(pipeline, target) {
   const parts = [];
   for (const command of pipeline) {
     parts.push(...command.settings.map((word) => word.text));
+    // A setting's substitution runs whatever the pipeline is.
+    if (command !== target) for (const setting of command.settings) for (const inner of setting.inner) parts.push(allText(inner));
     if (!live || command === target) continue;
     parts.push(...command.words.map((word) => word.text), ...command.redirects.map((token) => (token.redirect === "<<<" ? token.target.text : (token.body ?? ""))));
     // What its own substitutions produce is its input too (`rg --pre=bash x <(echo …)`).
-    for (const word of [...command.words, ...command.redirects.map((token) => token.target)]) for (const inner of word.inner) parts.push(allText(inner));
+    for (const word of [...command.words, ...command.settings, ...command.redirects.map((token) => token.target)]) for (const inner of word.inner) parts.push(allText(inner));
   }
   return parts.join(" ");
 }
@@ -720,7 +755,7 @@ export function readCommand(command, action) {
   try {
     tokens = tokenize(command);
   } catch (error) {
-    if (!(error instanceof Unreadable)) throw error;
+    if (!(error instanceof Unreadable) && !(error instanceof RangeError)) throw error;
     // Bash would refuse it too; if it might be the command, say so.
     return inOrder(command, ["gh", "pr", action]) ? stop(`it can't be read as the shell would (${error.message})`) : null;
   }
@@ -801,10 +836,22 @@ export function readCommand(command, action) {
   // Nor one that may run at the same time, or before gh inside the command's
   // own substitutions: what runs there must only read (#932 binds the merge
   // to the reviewed commit itself).
-  const reading = (lists) => lists.every(({ commands: list }) => list.every((command) => !command.words.length || inert(command)));
+  const reading = (lists) => lists.every(({ commands: list }) => list.every(readsOnly));
   let alongside = [];
   if (target.after === "&") alongside = commands.slice(at + 1);
-  else for (let index = at; index + 1 < commands.length && ["|", "|&"].includes(commands[index].after); index += 1) alongside.push(commands[index + 1]);
+  else if (["|", "|&"].includes(target.after)) {
+    // The rest of the pipeline, through any subshell or loop it opens.
+    let depth = 0;
+    for (const command of commands.slice(at + 1)) {
+      alongside.push(command);
+      const [first] = command.words;
+      if (command.leading.some((word) => ["while", "until", "if", "{", "coproc"].includes(word)) || (first?.known && ["for", "case", "select"].includes(first.text))) depth += 1;
+      if (first?.known && ["done", "fi", "esac", "}"].includes(first.text)) depth -= 1;
+      if (command.after === "(") depth += 1;
+      else if (command.after === ")") depth -= 1;
+      else if (depth <= 0 && !["|", "|&"].includes(command.after)) break;
+    }
+  }
   if (!reading([...everyList(alongside)])) return stop(`something runs alongside \`gh pr ${action}\` that could change the pull request while it's merged; run it on its own`);
   const inside = [...target.words, ...target.settings, ...target.redirects.map((token) => token.target)].flatMap((word) => word.inner);
   if (!inside.every((tokens) => reading([...everyList(commandsOf(tokens), true)]))) return stop(`a substitution in \`gh pr ${action}\` runs something that could change the pull request first; put it in a file, and the file in the command`);
@@ -818,6 +865,9 @@ export function readCommand(command, action) {
     return stop(`the pull request isn't the first word after \`gh pr ${action}\``);
   }
   read.selector = positional[0]?.word ?? null;
+  // Named, so nothing in the command can change which pull request gh picks
+  // from the branch (AGENTS.md: the number right after `gh pr merge`).
+  if (action === "merge" && read.selector === null) return stop("name the pull request: `gh pr merge <number>`");
   if (read.selector?.includes(UNKNOWN)) return stop(`which pull request \`gh pr ${action}\` is for can't be read`);
   // A pull request's address names its repository too.
   const named = /github\.com\/([^/\s]+\/[^/\s]+)\/pull\/\d+/i.exec(read.selector ?? "");
