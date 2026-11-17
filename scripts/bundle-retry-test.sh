@@ -114,6 +114,12 @@ BUNDLE_RETRY_TRIES=1 run download 1
 run args 0 '{"bundle":{"createUpdaterArtifacts":false}}'
 grep -qF 'given: {"bundle":{"createUpdaterArtifacts":false}}' "$work/out" || fail "a JSON argument arrives as written"
 
+# Checked out with LF on Windows too: Git Bash reads a CRLF script as
+# `pipefail\r` and fails before it starts.
+if git rev-parse --git-dir >/dev/null 2>&1; then
+  git check-attr eol -- scripts/bundle-retry.sh | grep -q "eol: lf$" || fail "scripts/bundle-retry.sh is checked out with LF everywhere (.gitattributes)"
+fi
+
 # The Windows package check builds through it, and keeps the tools.
 workflow=.github/workflows/package-check.yml
 grep -qE "^ +bash \.\./scripts/bundle-retry\.sh pnpm tauri build --debug" "$workflow" || fail "$workflow builds through bundle-retry.sh, on a line of its own"

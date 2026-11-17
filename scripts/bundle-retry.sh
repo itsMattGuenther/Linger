@@ -42,9 +42,6 @@ pause=$((10#$pause))
 
 log="$(mktemp)"
 trap 'rm -f "$log"' EXIT
-# Ctrl-C stops it rather than counting as a failed try. (No TERM trap: one
-# would wait for the build to finish before a cancelled job could stop.)
-trap 'exit 130' INT
 
 # Colours and Windows line ends, spelled by bash so any sed reads them (a
 # Mac's doesn't know \x1b or \r).

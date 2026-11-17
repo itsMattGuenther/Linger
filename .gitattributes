@@ -3,3 +3,7 @@
 
 # ts-rs output: committed but machine-written (CI regenerates and checks drift)
 client/src/generated/** linguist-generated=true
+
+# Shell scripts keep LF everywhere: Git Bash on a Windows runner reads a CRLF
+# checkout as `pipefail\r` (#916).
+*.sh text eol=lf
