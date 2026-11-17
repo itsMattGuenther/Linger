@@ -159,6 +159,22 @@ test(`Escape while the phone's microphone opens (${way}): the microphone that co
 });
 }
 
+test("on a phone, Record asks for the microphone in the tap itself, as an iPhone needs (#687, #920)", async ({ page }) => {
+  await page.addInitScript(() => Reflect.deleteProperty(window, "MediaStreamTrackProcessor"));
+  const { give } = await holdMicrophone(page);
+  await inGeneral(page);
+  await page.getByRole("button", { name: "Record a voice message" }).click();
+  const asked = await panel(page)
+    .getByRole("button", { name: "Record" })
+    .evaluate((button) => {
+      (button as HTMLButtonElement).click();
+      return (window as unknown as { heldMicrophones: unknown[] }).heldMicrophones.length;
+    });
+  expect(asked).toBe(1);
+  await give();
+  await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible();
+});
+
 test("Escape, then Record again before the first microphone comes: the first is let go of, the second records (#920)", async ({ page }) => {
   const { give, live } = await holdMicrophone(page);
   await inGeneral(page);

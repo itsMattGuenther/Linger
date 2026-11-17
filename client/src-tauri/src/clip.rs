@@ -13,6 +13,7 @@
 //! One recording at a time, in the window that started it. Closing that
 //! window throws it away (`forget`).
 
+use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use tauri::ipc::Response;
@@ -43,21 +44,13 @@ struct Books {
     /// later one.
     next: u64,
     recording: Option<Recording>,
-    /// Cancels that came before their start was booked, by window and the
-    /// page's number for the start (#920). Commands can be handled in
-    /// another order than they were sent, so a start called off this way is
-    /// refused when it comes. A few at most: each is used once, and a
-    /// window that closes takes its own.
-    called_off: Vec<(String, u32)>,
-    /// The starts heard lately, by window and the page's number, booked or
-    /// refused: a cancel for one of these has nothing to wait for (#920).
-    seen: Vec<(String, u32)>,
+    /// For each window, the highest start its page has called off (#920).
+    /// The page numbers its starts 1, 2, 3…, so a start at or below it is
+    /// refused when it comes, whatever order the commands were handled in,
+    /// and a cancel takes a booked start at or below it. A page loaded
+    /// afresh starts counting again, and the window's is forgotten then.
+    called_off: HashMap<String, u32>,
 }
-
-/// The most cancels kept for starts not yet heard; the oldest go first.
-const MOST_CALLED_OFF: usize = 8;
-/// The most starts remembered as heard.
-const MOST_SEEN: usize = 32;
 
 struct Recording {
     id: u64,
@@ -83,6 +76,14 @@ impl Started {
     }
 }
 
+impl Books {
+    /// Raise `window`'s called-off mark to `start`, never lower it.
+    fn call_off_up_to(&mut self, window: &str, start: u32) {
+        let up_to = self.called_off.entry(window.to_owned()).or_insert(0);
+        *up_to = (*up_to).max(start);
+    }
+}
+
 impl Clips {
     /// Put a recording on the books for `window`, before anything is waited
     /// for: opening a microphone takes a moment, and a window closed in that
@@ -91,17 +92,29 @@ impl Clips {
     /// A start its window called off before it got here is refused.
     fn begin(&self, window: &str, start: u32) -> Result<u64, &'static str> {
         let mut books = self.lock();
-        if books.seen.len() == MOST_SEEN {
-            books.seen.remove(0);
-        }
-        books.seen.push((window.to_owned(), start));
-        if let Some(at) = books
+        if books
             .called_off
-            .iter()
-            .position(|(by, which)| by == window && *which == start)
+            .get(window)
+            .is_some_and(|&up_to| start <= up_to)
         {
-            books.called_off.remove(at);
             return Err(CALLED_OFF);
+        }
+        // An earlier start of this window's still on the books: its page has
+        // moved on from it (called it off, with the cancel still on its
+        // way), so it's called off here and this one takes its place.
+        if books
+            .recording
+            .as_ref()
+            .is_some_and(|recording| recording.window == window && recording.start < start)
+        {
+            books.call_off_up_to(window, start - 1);
+            if let Some(started) = books
+                .recording
+                .take()
+                .and_then(|recording| recording.started)
+            {
+                started.discard();
+            }
         }
         if books.recording.is_some() {
             return Err(ALREADY);
@@ -117,37 +130,38 @@ impl Clips {
         Ok(id)
     }
 
-    /// Call off the start `window` numbered `start`: taken off the books if
-    /// it's there, and remembered if it hasn't come yet. Never another start,
-    /// so a later recording is safe from an earlier one's cancel (#920).
-    ///
-    /// Remembered only while the shell hasn't heard that start: one heard
-    /// and gone (refused, failed, stopped) has nothing left to call off.
+    /// Call off `window`'s starts up to the one numbered `start`: one on the
+    /// books is taken off, and any that hasn't come yet is refused when it
+    /// does. Never a later start, so a late cancel can't take a recording
+    /// begun after it (#920).
     fn call_off(&self, window: &str, start: u32) -> Option<Recording> {
         let mut books = self.lock();
-        let named = (window.to_owned(), start);
-        match books.recording.as_ref() {
-            Some(recording) if recording.window == window && recording.start == start => {
-                books.recording.take()
-            }
-            _ if books.seen.contains(&named) => None,
-            _ => {
-                if books.called_off.len() == MOST_CALLED_OFF {
-                    books.called_off.remove(0);
-                }
-                books.called_off.push(named);
-                None
-            }
+        books.call_off_up_to(window, start);
+        if books
+            .recording
+            .as_ref()
+            .is_some_and(|recording| recording.window == window && recording.start <= start)
+        {
+            books.recording.take()
+        } else {
+            None
         }
     }
 
-    /// A window has gone: its recording, and everything kept for it.
+    /// A window has gone, or its page is loaded afresh: its recording, and
+    /// what was called off for it, in one go.
     fn forget_window(&self, window: &str) -> Option<Recording> {
-        let taken = self.take_from(window);
         let mut books = self.lock();
-        books.called_off.retain(|(by, _)| by != window);
-        books.seen.retain(|(by, _)| by != window);
-        taken
+        books.called_off.remove(window);
+        if books
+            .recording
+            .as_ref()
+            .is_some_and(|recording| recording.window == window)
+        {
+            books.recording.take()
+        } else {
+            None
+        }
     }
 
     /// Recording `id` has its microphone open and is under way. When it was
@@ -388,8 +402,8 @@ pub async fn clip_cancel(app: AppHandle, window: Window, start: u32) {
     }
 }
 
-/// A window has gone: a recording it started goes with it, unheard, and so
-/// do the cancels it sent for starts that never came.
+/// A window has gone, or its page is loaded afresh: a recording it started
+/// goes with it, unheard, and what was called off for it is forgotten.
 ///
 /// One whose microphone is still opening is taken off the books, and
 /// `clip_start` throws it away once the microphone opens (#913).
@@ -612,7 +626,7 @@ mod tests {
             .expect("free again after a failed microphone");
         clips.failed(first);
         assert_eq!(
-            clips.begin("main", 4).err(),
+            clips.begin("chat", 4).err(),
             Some(ALREADY),
             "the first's failure ended the second"
         );
@@ -628,89 +642,73 @@ mod tests {
             .take()
             .is_some_and(|recording| recording.started.is_some()));
     }
-    /// A cancel that's handled before its start booked is remembered, and
-    /// that start is refused when it comes; nothing else is (#920).
+    /// A cancel handled before its start refuses that start, and every
+    /// earlier one of its window's; other windows' go ahead (#920).
     #[test]
-    fn a_cancel_before_its_start_refuses_that_start_only() {
+    fn a_cancel_before_its_start_refuses_it() {
         let clips = Clips::default();
         assert!(clips.call_off("main", 7).is_none());
         assert_eq!(clips.begin("main", 7).err(), Some(CALLED_OFF));
-        // Used once: the same number again, and other windows', go ahead.
+        assert_eq!(clips.begin("main", 3).err(), Some(CALLED_OFF));
         assert!(clips.begin("chat", 7).is_ok());
         assert!(clips.take_from("chat").is_some());
         assert!(clips.begin("main", 8).is_ok());
     }
 
-    /// A cancel takes only the start it names: an earlier start's cancel,
-    /// arriving late, leaves a later recording alone (#920).
+    /// A cancel takes only starts up to the one it names: an earlier start's
+    /// cancel, arriving late, leaves a later recording alone (#920).
     #[test]
     fn a_late_cancel_never_takes_a_later_start() {
         let clips = Clips::default();
         clips.begin("main", 1).expect("the first");
         assert!(clips.call_off("main", 1).is_some());
         clips.begin("main", 2).expect("the second");
-        // The first's cancel again, late, and another window's.
         assert!(clips.call_off("main", 1).is_none());
-        assert!(clips.call_off("chat", 2).is_none());
         assert!(
             clips.take().is_some_and(|recording| recording.start == 2),
-            "the second was taken by another start's cancel"
+            "the second was taken by the first's cancel"
         );
     }
 
-    /// The cancels kept for starts not yet come are few, and a window that
-    /// closes takes its own with it.
-    #[test]
-    fn cancels_kept_are_few_and_go_with_their_window() {
+    /// Record again straight after Escape: the new start can be handled
+    /// before the earlier one's cancel. It takes the earlier one's place
+    /// rather than being refused, and the earlier one, when its microphone
+    /// opens, is thrown away (#920).
+    #[tokio::test]
+    async fn a_later_start_takes_the_place_of_one_its_page_moved_on_from() {
         let clips = Clips::default();
-        for start in 0..20 {
-            clips.call_off("main", start);
-        }
-        assert_eq!(clips.lock().called_off.len(), MOST_CALLED_OFF);
-        // The oldest went first.
-        assert!(clips.begin("main", 0).is_ok());
+        let first = clips.begin("main", 1).expect("the first");
+        let second = clips
+            .begin("main", 2)
+            .expect("the second, before the first's cancel");
+        let (stop, _stopped) = oneshot::channel();
+        let done = tokio::spawn(async { Ok(Clip::default()) });
+        assert!(
+            !clips.started(first, Started { stop, done }),
+            "the first went ahead"
+        );
+        assert!(
+            clips.call_off("main", 1).is_none(),
+            "the late cancel took the second"
+        );
+        let (stop, _stopped) = oneshot::channel();
+        let done = tokio::spawn(async { Ok(Clip::default()) });
+        assert!(clips.started(second, Started { stop, done }));
+        // Another window's recording is still never taken.
+        assert_eq!(clips.begin("chat", 9).err(), Some(ALREADY));
+    }
+
+    /// A window that goes, or whose page loads afresh (counting from 1
+    /// again), forgets what was called off for it and its recording.
+    #[test]
+    fn a_window_forgotten_counts_afresh() {
+        let clips = Clips::default();
+        clips.call_off("main", 5);
+        clips.begin("main", 6).expect("a start");
         assert!(clips.forget_window("main").is_some());
         assert!(
-            clips.lock().called_off.is_empty(),
-            "the window's going kept its cancels"
+            clips.begin("main", 1).is_ok(),
+            "a page loaded afresh was refused"
         );
-        clips.call_off("chat", 3);
-        assert!(clips.forget_window("main").is_none());
-        assert_eq!(clips.lock().called_off.len(), 1);
-    }
-
-    /// Commands can be handled in any order: start(A), cancel(A), start(B)
-    /// sent, B heard first. A's cancel still waits for A, through B's
-    /// failing or being stopped, and A is refused when it comes (#920).
-    #[test]
-    fn a_cancel_waits_for_its_start_whatever_comes_between() {
-        let clips = Clips::default();
-        let b = clips.begin("main", 2).expect("B first");
-        assert!(clips.call_off("main", 1).is_none());
-        clips.failed(b);
-        assert_eq!(
-            clips.begin("main", 1).err(),
-            Some(CALLED_OFF),
-            "A went ahead after B failed"
-        );
-        // And through a stop of a later recording (clip_stop takes it).
-        assert!(clips.call_off("main", 3).is_none());
-        clips.begin("main", 4).expect("the next");
-        assert!(clips.take_from("main").is_some());
-        assert_eq!(
-            clips.begin("main", 3).err(),
-            Some(CALLED_OFF),
-            "a Stop forgot the cancel"
-        );
-    }
-
-    /// A cancel for a start heard and gone isn't kept: nothing is waiting.
-    #[test]
-    fn a_cancel_for_a_start_come_and_gone_is_not_kept() {
-        let clips = Clips::default();
-        let a = clips.begin("main", 5).expect("A");
-        clips.failed(a);
-        assert!(clips.call_off("main", 5).is_none());
-        assert!(clips.lock().called_off.is_empty());
     }
 }

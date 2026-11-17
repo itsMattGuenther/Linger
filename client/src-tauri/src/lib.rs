@@ -477,6 +477,8 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
             if matches!(payload.event(), tauri::webview::PageLoadEvent::Started) {
                 screen_shell::forget(webview.app_handle(), webview.label());
                 screen_sound::forget(webview.app_handle(), webview.label());
+                // And a voice message: its page numbers starts afresh (#920).
+                clip::forget(webview.app_handle(), webview.label());
             }
         })
         .invoke_handler(tauri::generate_handler![

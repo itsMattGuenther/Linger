@@ -69,6 +69,9 @@ const LEVEL_EVERY_MS = 40;
  * and events. `input` is the microphone Settings picked, by name, or null for
  * the computer's default, read as each recording starts.
  */
+/** The page's starts so far, across every shell recorder it makes (#920). */
+let shellStarts = 0;
+
 export function shellRecorder(events: RecorderEvents, input: () => string | null): Recorder {
   const bus = tauriBus();
   const stops: Array<() => void> = [];
@@ -80,13 +83,14 @@ export function shellRecorder(events: RecorderEvents, input: () => string | null
   void bus.listen<number>("clip:level", (level) => events.level(level)).then(hold);
   void bus.listen("clip:full", () => events.ended("full")).then(hold);
   void bus.listen("clip:lost", () => events.ended("lost")).then(hold);
-  // Each start's own number, which its cancel names, so the shell calls off
-  // that start and no later one, whichever it hears first (#920). Random,
-  // so a page loaded afresh never names an earlier page's start.
   let current = 0;
   return {
     start: async () => {
-      current = crypto.getRandomValues(new Uint32Array(1))[0] ?? 0;
+      // Each start's own number, counted for the page: its cancel names it,
+      // so the shell calls off that start and no later one, whichever it
+      // hears first (#920). The shell forgets a window's when its page loads.
+      shellStarts += 1;
+      current = shellStarts;
       await invoke("clip_start", { input: input(), start: current });
     },
     stop: async () => readClip(new Uint8Array(await invoke<ArrayBuffer>("clip_stop"))),
@@ -221,7 +225,7 @@ export function pageRecorder(events: RecorderEvents): Recorder {
           const packet = new Uint8Array(chunk.byteLength);
           chunk.copyTo(packet);
           packets.push(packet);
-          if (packets.length === LONGEST_PACKETS && !stopped && attempt === owner) {
+          if (packets.length === LONGEST_PACKETS && !stopped) {
             release();
             events.ended("full");
           }
@@ -293,6 +297,16 @@ export function pageRecorder(events: RecorderEvents): Recorder {
     if (!started || sound.state !== "running") throw new Error("the microphone wouldn't start");
   };
 
+  /** Stop and throw away whatever this start had, and stop any start still waiting. */
+  function cancel() {
+    attempt += 1;
+    release();
+    const held = encoder as AudioEncoder | null;
+    if (held !== null && held.state !== "closed") held.close();
+    encoder = null;
+    packets = [];
+  }
+
   return {
     start: async () => {
       attempt += 1;
@@ -350,25 +364,13 @@ export function pageRecorder(events: RecorderEvents): Recorder {
       reading = null;
       const held = encoder as AudioEncoder | null;
       if (held !== null && held.state === "configured") await held.flush().catch(() => undefined);
-      held?.close();
+      // Closed already, after an encoder error or a dispose meanwhile.
+      if (held !== null && held.state !== "closed") held.close();
       encoder = null;
       return { preSkip, packets };
     },
-    cancel: () => {
-      attempt += 1;
-      release();
-      const held = encoder as AudioEncoder | null;
-      if (held !== null && held.state !== "closed") held.close();
-      encoder = null;
-      packets = [];
-    },
-    dispose: () => {
-      attempt += 1;
-      release();
-      const held = encoder as AudioEncoder | null;
-      if (held !== null && held.state !== "closed") held.close();
-      encoder = null;
-    },
+    cancel,
+    dispose: cancel,
   };
 }
 

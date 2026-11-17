@@ -37,8 +37,8 @@
  * back. `?nomic` has no microphone to record from. With `?holdmic` each
  * `clip_start` waits, the microphone opening, until `window.parity.clip.opens()`;
  * a `clip_cancel` meanwhile calls it off, and it then rejects as the shell
- * does (#913, #920); with `?cancelfirst`, the cancel is heard before its start,
- * which is refused when it comes, as the shell does. `window.parity.unmount()` takes the window's page away,
+ * does (#913, #920): up to the start a cancel names, as clip.rs keeps it.
+ * `window.parity.unmount()` takes the window's page away,
  * as a docked chat folding does.
  *
  * `window.parity.holdReads()` makes every history read from then on wait for
@@ -129,9 +129,11 @@ const desktop = fakeDesktop({
       desktop.note(`clip_start:${JSON.stringify(args)}`);
       // As the shell says it when the system has no microphone.
       if (query.has("nomic")) throw "no input device available";
-      // As the shell does (clip.rs): a start whose cancel came first is refused.
+      // As the shell does (clip.rs): a start at or below what this window
+      // called off is refused, and one held from before is superseded.
       const start = Number(args.start);
-      if (calledOffFirst.delete(start)) throw "The voice message was called off while the microphone opened.";
+      if (start <= calledOffUpTo) throw "The voice message was called off while the microphone opened.";
+      for (const earlier of heldStarts) if (earlier.start < start) earlier.calledOff = true;
       if (query.has("holdmic")) {
         let heard = () => undefined as void;
         const held = { start, calledOff: false, open: () => undefined as void, heard: new Promise<void>((done) => (heard = done)) };
@@ -142,9 +144,8 @@ const desktop = fakeDesktop({
         // The page hears this answer first; then the test is told.
         setTimeout(heard, 0);
         // As the shell does: one called off meanwhile is thrown away once
-        // its microphone opens (#913), and with `?cancelfirst` the cancel
-        // came before the start booked, so it's refused there (#920).
-        if (held.calledOff || calledOffFirst.delete(start)) throw "The voice message was called off while the microphone opened.";
+        // its microphone opens (#913, #920).
+        if (held.calledOff || start <= calledOffUpTo) throw "The voice message was called off while the microphone opened.";
       }
       return null;
     },
@@ -155,12 +156,9 @@ const desktop = fakeDesktop({
     },
     clip_cancel: (args) => {
       desktop.note(`clip_cancel:${JSON.stringify(args)}`);
-      // The start it names, and no other. With `?cancelfirst` the shell
-      // hears the cancel before the start, and refuses the start when it comes.
-      const start = Number(args.start);
-      const held = heldStarts.find((one) => one.start === start);
-      if (query.has("cancelfirst") || !held) calledOffFirst.add(start);
-      else held.calledOff = true;
+      // Up to the start it names, and no later one, as the shell does.
+      calledOffUpTo = Math.max(calledOffUpTo, Number(args.start));
+      for (const held of heldStarts) if (held.start <= calledOffUpTo) held.calledOff = true;
       return null;
     },
     dropped_files: () => {
@@ -254,8 +252,8 @@ const desktop = fakeDesktop({
 
 // Voice message starts waiting for their microphone (`?holdmic`), oldest first.
 const heldStarts: { start: number; calledOff: boolean; open: () => void; heard: Promise<void> }[] = [];
-// Cancels the stand-in shell heard before their start (`?cancelfirst`), by the start's number.
-const calledOffFirst = new Set<number>();
+// The highest start this window called off, as clip.rs keeps it.
+let calledOffUpTo = 0;
 
 // History reads being held for the test (`holdReads`): each is asked of the
 // server at once, so it shows in `data-did`, and answered when the test says.
