@@ -68,6 +68,10 @@ const ASSIGN_ONE = new RegExp(String.raw`(${ASSIGN})`, "g");
 const TOKEN = new RegExp(String.raw`^[ \t]*(${WORD})(?=$|[ \t;&|)\n])`);
 // Where the command ends: a separator, the end, or a comment (a # that starts a word).
 const END = /^(?:[ \t]*(?:$|[;&|)\n])|[ \t]+#)/;
+// A redirection and its target (`2>&1`, `> out`, `2>/dev/null`, `<in`, `&>log`): the
+// shell's, not one of gh's words, so it's passed over (#924). A target the gate
+// can't read (a substitution, a variable) doesn't match, and is refused as a word.
+const REDIRECT = new RegExp(String.raw`^[ \t]*(?:\d*(?:>>?|<|>&|<&)|&>>?)[ \t]*(?:\d+|-|${WORD})(?=$|[ \t;&|)\n])`);
 
 /** gh's flags that take a value, for each command: the long name, and its short one if it has one. */
 const VALUED = {
@@ -173,6 +177,11 @@ export function readCommand(command, action) {
   const words = [];
   let readable = true;
   for (;;) {
+    const redirection = REDIRECT.exec(after);
+    if (redirection) {
+      after = after.slice(redirection[0].length);
+      continue;
+    }
     if (END.test(after)) break;
     const token = TOKEN.exec(after);
     if (!token) { readable = false; break; }

@@ -49,6 +49,13 @@ test("reads which pull request, folder and branch a command is about", () => {
     ["merge", "gh pr merge https://github.com/o/r/pull/9 -R O/R", { repo: "o/r" }],
     ["merge", "gh pr merge 5 --repo=o/r", { selector: "5", repo: "o/r" }],
     ["merge", "cd /w && gh pr merge 5 --squash && git pull", { selector: "5", dirs: ["/w"] }],
+    // A redirection is the shell's, not one of gh's words (#924).
+    ["merge", "gh pr merge 5 --squash --admin 2>&1 | tail -3", { selector: "5" }],
+    ["merge", "gh pr merge 5 2>/dev/null", { selector: "5" }],
+    ["merge", "gh pr merge 5 >&2 --admin", { selector: "5" }],
+    ["merge", "gh pr merge 5 &>log.txt", { selector: "5" }],
+    ["create", "gh pr create -t x > out.txt", { base: null }],
+    ["create", "gh pr create -t x -B release 2>&1", { base: "release" }],
     ["ready", "gh pr ready", { selector: null }],
     ["ready", "gh pr ready 12", { selector: "12" }],
   ];
@@ -79,6 +86,9 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     ["create", "echo gh pr create"],
     ["merge", "\"gh\" pr merge 5"],
     ["merge", "gh pr merge --squash 912"],
+    // A redirection whose target it can't read is still a word it can't read.
+    ["merge", "gh pr merge 5 > $(mktemp)"],
+    ["merge", 'gh pr merge 5 2>"$LOG"'],
     ["merge", 'gh pr merge 912 --body "$(cat x)" -R o/r'],
     ["merge", 'gh pr merge 912 -R o/r --body "$(cat x)"'],
     ["merge", 'gh pr merge 5 --body "$(cat message.txt)" --auto --squash'],
