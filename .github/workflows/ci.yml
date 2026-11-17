@@ -503,7 +503,7 @@ jobs:
         # Linux and Windows finished in the same second releasing 0.5.4, and
         # each made its own draft, splitting the release in two (#828).
         run: node --test scripts/release-draft.test.mjs
-      - name: every kind of review catch has a question or a check, and a change gets only its own questions
+      - name: every kind of review catch has a question or a check, a change gets only its own questions, and the fresh review reads commands exactly
         # Asking every question of every pull request would cost more with each
         # catch; each change is asked only about its parts, and the count of
         # catches per pull request shows whether it works (#829). The fresh
