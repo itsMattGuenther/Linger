@@ -102,6 +102,49 @@ test("a web view whose encoder can't make Opus, as an iPhone's before iOS 26, of
   await expect(page.getByRole("button", { name: "Record a voice message" })).toHaveCount(0);
 });
 
+test("Escape while the phone's microphone opens: the microphone that comes later is let go of at once, and the next Record works (#920)", async ({ page }) => {
+  await page.addInitScript(() => {
+    if (typeof MediaDevices === "undefined") return;
+    // On the prototype, as below (#843). Each ask waits until the test
+    // gives the microphone, and the tracks it gave are kept to look at.
+    const real = MediaDevices.prototype.getUserMedia;
+    const held: Array<() => void> = [];
+    const given: MediaStreamTrack[][] = [];
+    Object.assign(window, { heldMicrophones: held, givenTracks: given });
+    Object.defineProperty(MediaDevices.prototype, "getUserMedia", {
+      value(this: MediaDevices, constraints?: MediaStreamConstraints) {
+        return new Promise<MediaStream>((resolve, reject) => {
+          held.push(() => {
+            real.call(this, constraints).then((stream) => {
+              given.push(stream.getTracks());
+              resolve(stream);
+            }, reject);
+          });
+        });
+      },
+      configurable: true,
+    });
+  });
+  const give = () => page.evaluate(() => (window as unknown as { heldMicrophones: Array<() => void> }).heldMicrophones.shift()?.());
+  const live = (which: number) =>
+    page.evaluate((index) => ((window as unknown as { givenTracks: MediaStreamTrack[][] }).givenTracks[index] ?? []).map((track) => track.readyState), which);
+  await inGeneral(page);
+  await page.getByRole("button", { name: "Record a voice message" }).click();
+  await panel(page).getByRole("button", { name: "Record" }).click();
+  await expect(panel(page).getByText("Opening the microphone…")).toBeVisible();
+  await panel(page).dispatchEvent("keydown", { key: "Escape" });
+  await expect(panel(page)).toHaveCount(0);
+  // The phone gives the microphone after all: it's let go of straight away.
+  await give();
+  await expect.poll(() => live(0)).toEqual(["ended"]);
+  // And the next Record works.
+  await page.getByRole("button", { name: "Record a voice message" }).click();
+  await panel(page).getByRole("button", { name: "Record" }).click();
+  await give();
+  await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible();
+  expect(await live(1)).toEqual(["live"]);
+});
+
 test("a phone that won't give the microphone says so in words, and Record can be tried again", async ({ page }) => {
   await page.addInitScript(() => {
     if (typeof MediaDevices === "undefined") return;

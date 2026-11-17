@@ -187,6 +187,12 @@ export function pageRecorder(events: RecorderEvents): Recorder {
   let stopped = false;
   let loudest = 0;
   let heardAt = 0;
+  /**
+   * Which start is the current one. Cancelling moves it on, so a start
+   * still waiting for the phone's microphone finds it isn't, and lets go of
+   * the microphone it's given without touching a later start's (#920).
+   */
+  let attempt = 0;
 
   const release = () => {
     stopped = true;
@@ -279,6 +285,8 @@ export function pageRecorder(events: RecorderEvents): Recorder {
 
   return {
     start: async () => {
+      attempt += 1;
+      const mine = attempt;
       packets = [];
       preSkip = USUAL_PRE_SKIP;
       stopped = false;
@@ -290,14 +298,25 @@ export function pageRecorder(events: RecorderEvents): Recorder {
       const sound = Processor === null ? new AudioContext({ sampleRate: WORKLET_RATE }) : null;
       const waking = sound?.resume() ?? Promise.resolve();
       context = sound;
+      // Called off while it waited: what this start was given is let go of
+      // here, and what's current (a later start's) is left alone.
+      const calledOff = (given: MediaStream | null) => {
+        for (const track of given?.getTracks() ?? []) track.stop();
+        void sound?.close().catch(() => undefined);
+        return new Error(CALLED_OFF);
+      };
+      let given: MediaStream;
       try {
         // A phone's own clean-up for a voice: its echo cancelling, noise
         // suppression and level, which a speakerphone mic needs.
-        stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+        given = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
       } catch (error: unknown) {
+        if (attempt !== mine) throw calledOff(null);
         release();
         throw new Error(inWords(error));
       }
+      if (attempt !== mine) throw calledOff(given);
+      stream = given;
       const [track] = stream.getAudioTracks();
       if (!track) {
         release();
@@ -308,9 +327,11 @@ export function pageRecorder(events: RecorderEvents): Recorder {
         try {
           await listen(stream, track, sound, waking);
         } catch (error: unknown) {
+          if (attempt !== mine) throw calledOff(given);
           release();
           throw new Error(inWords(error));
         }
+        if (attempt !== mine) throw calledOff(given);
       }
     },
     stop: async () => {
@@ -324,6 +345,7 @@ export function pageRecorder(events: RecorderEvents): Recorder {
       return { preSkip, packets };
     },
     cancel: () => {
+      attempt += 1;
       release();
       const held = encoder as AudioEncoder | null;
       if (held !== null && held.state !== "closed") held.close();
@@ -331,7 +353,11 @@ export function pageRecorder(events: RecorderEvents): Recorder {
       packets = [];
     },
     dispose: () => {
+      attempt += 1;
       release();
     },
   };
 }
+
+/** What a start called off while the microphone opened rejects with; nobody shows it. */
+const CALLED_OFF = "The voice message was called off while the microphone opened.";

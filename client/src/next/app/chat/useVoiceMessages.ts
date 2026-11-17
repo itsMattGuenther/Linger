@@ -61,6 +61,18 @@ export function useVoiceMessages(
     };
   }, []);
   const recorder = useRef<Recorder | null>(null);
+  /**
+   * The recorder last made, kept after it's let go of: the window going
+   * lets the recorder go before it calls off what was starting (#920).
+   */
+  const lastRecorder = useRef<Recorder | null>(null);
+  /**
+   * The recording that's starting (its microphone opening), if any, and
+   * which start it is: Escape, another conversation or the window going call
+   * it off, and only that start's answer may then be used (#920).
+   */
+  const startingIn = useRef<{ conversation: string; start: number } | null>(null);
+  const starts = useRef(0);
 
   const put = useCallback((conversation: string, next: VoiceMessage | null) => {
     setClips((held) => {
@@ -115,23 +127,34 @@ export function useVoiceMessages(
     };
     const made = kind === "shell" ? shellRecorder(events, () => loadVoicePrefs().devices.input) : pageRecorder(events);
     recorder.current = made;
+    lastRecorder.current = made;
     return () => {
       made.dispose();
       if (recorder.current === made) recorder.current = null;
     };
   }, [kind, finish]);
 
-  // Another conversation shown while recording: stop, and keep the clip where it was made.
+  // Another conversation shown while recording: stop, and keep the clip where
+  // it was made. One still starting has nothing to keep: it's called off.
   useEffect(() => {
     const recording = recordingIn.current;
     if (recording !== null && recording !== paneId) void finish(recording, null);
-  }, [paneId, finish]);
+    const starting = startingIn.current;
+    if (starting !== null && starting.conversation !== paneId) {
+      startingIn.current = null;
+      recorder.current?.cancel();
+      put(starting.conversation, { kind: "ready", problem: null });
+    }
+  }, [paneId, finish, put]);
 
-  // The window going: whatever is recording is thrown away, and every kept clip let go of.
+  // The window going (or, docked, the chat folding away): whatever is
+  // recording or starting is thrown away, and every kept clip let go of. The
+  // recorder may already be let go of by now, so the last one is told.
   useEffect(
     () => () => {
-      if (recordingIn.current !== null) recorder.current?.cancel();
+      if (recordingIn.current !== null || startingIn.current !== null) lastRecorder.current?.cancel();
       recordingIn.current = null;
+      startingIn.current = null;
       for (const clip of clipsNow.current.values()) if (clip.kind === "kept") URL.revokeObjectURL(clip.url);
     },
     [],
@@ -145,17 +168,30 @@ export function useVoiceMessages(
 
   const record = useCallback(() => {
     const conversation = paneId;
-    if (conversation === null || recordingIn.current !== null) return;
+    if (conversation === null || recordingIn.current !== null || startingIn.current !== null) return;
     put(conversation, { kind: "starting" });
+    starts.current += 1;
+    const start = starts.current;
+    startingIn.current = { conversation, start };
     const devices = loadVoicePrefs().devices;
     const starting = recorder.current?.start() ?? Promise.reject(new Error("no input device available"));
+    // Only this start's answer counts, and only while it's still the one
+    // starting: called off meanwhile, its answer is nobody's (#920).
+    const stillThisOne = () => {
+      if (startingIn.current?.start !== start) return false;
+      startingIn.current = null;
+      return true;
+    };
     starting.then(
       () => {
+        if (!stillThisOne()) return;
         recordingIn.current = conversation;
         put(conversation, { kind: "recording", since: Date.now(), levels: [] });
       },
-      (error: unknown) =>
-        put(conversation, { kind: "ready", problem: startProblemWords(voiceStartProblem(error instanceof Error ? error.message : String(error), onWindows(), devices, onPhone())) }),
+      (error: unknown) => {
+        if (!stillThisOne()) return;
+        put(conversation, { kind: "ready", problem: startProblemWords(voiceStartProblem(error instanceof Error ? error.message : String(error), onWindows(), devices, onPhone())) });
+      },
     );
   }, [paneId, put]);
 
@@ -166,8 +202,9 @@ export function useVoiceMessages(
   const discard = useCallback(() => {
     if (paneId === null) return;
     const now = clipsNow.current.get(paneId);
-    if (recordingIn.current === paneId) {
+    if (recordingIn.current === paneId || startingIn.current?.conversation === paneId) {
       recordingIn.current = null;
+      startingIn.current = null;
       recorder.current?.cancel();
     }
     if (now?.kind === "kept") URL.revokeObjectURL(now.url);

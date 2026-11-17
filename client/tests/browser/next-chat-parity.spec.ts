@@ -1819,6 +1819,65 @@ test.describe("voice messages (#401)", () => {
     expect(await asked(page, "clip_start")).toHaveLength(1);
   });
 
+  // Called off while the microphone opens (#920): Escape, another start, or
+  // the window going. The stand-in shell holds each start until the test
+  // opens its microphone, and throws away one called off meanwhile, as the
+  // real one does (#913).
+  const opening = (page: Page) => panel(page).getByText("Opening the microphone…");
+  const escape = (page: Page) => panel(page).dispatchEvent("keydown", { key: "Escape" });
+  const opens = (page: Page) => page.evaluate(() => window.parity?.clip.opens());
+  /** A turn of the page's own work, so an answer that changes nothing has had its chance to. */
+  const settled = (page: Page) => page.evaluate(() => new Promise((done) => setTimeout(done, 50)));
+
+  test("Escape while the microphone opens calls it off: nothing records, and the next Record starts (#920)", async ({ page }) => {
+    await open(page, "room=r-general&holdmic");
+    await page.getByRole("button", { name: "Record a voice message" }).click();
+    await panel(page).getByRole("button", { name: "Record" }).click();
+    await expect(opening(page)).toBeVisible();
+    await escape(page);
+    await expect(panel(page)).toHaveCount(0);
+    expect(await asked(page, "clip_cancel")).toHaveLength(1);
+    // The microphone opens late: nothing comes back, and nothing says it went wrong.
+    await opens(page);
+    await settled(page);
+    await expect(panel(page)).toHaveCount(0);
+    await page.getByRole("button", { name: "Record a voice message" }).click();
+    await expect(panel(page)).toContainText("Press Record when you're ready.");
+    await expect(panel(page).getByRole("alert")).toHaveCount(0);
+    await panel(page).getByRole("button", { name: "Record" }).click();
+    await opens(page);
+    await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible();
+  });
+
+  test("called off and started again before the first microphone opens, the second records (#920)", async ({ page }) => {
+    await open(page, "room=r-general&holdmic");
+    await page.getByRole("button", { name: "Record a voice message" }).click();
+    await panel(page).getByRole("button", { name: "Record" }).click();
+    await expect(opening(page)).toBeVisible();
+    await escape(page);
+    await page.getByRole("button", { name: "Record a voice message" }).click();
+    await panel(page).getByRole("button", { name: "Record" }).click();
+    await expect(opening(page)).toBeVisible();
+    // The first start's late answer (refused, as it was called off) is
+    // nobody's: the second is still opening, with nothing said.
+    await opens(page);
+    await settled(page);
+    await expect(opening(page)).toBeVisible();
+    await expect(panel(page).getByRole("alert")).toHaveCount(0);
+    await opens(page);
+    await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible();
+    expect(await asked(page, "clip_start")).toHaveLength(2);
+  });
+
+  test("the window going while the microphone opens calls it off (#920)", async ({ page }) => {
+    await open(page, "room=r-general&holdmic");
+    await page.getByRole("button", { name: "Record a voice message" }).click();
+    await panel(page).getByRole("button", { name: "Record" }).click();
+    await expect(opening(page)).toBeVisible();
+    await page.evaluate(() => window.parity?.unmount());
+    await expect.poll(() => asked(page, "clip_cancel")).toHaveLength(1);
+  });
+
   test("it stops by itself at five minutes, or when the microphone goes, and keeps what it has", async ({ page }) => {
     await open(page);
     await recording(page);

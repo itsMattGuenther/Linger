@@ -430,6 +430,18 @@ on a world that has changed.
 
 ## Tests written from the case in mind, not from the ways things fail
 
+- **#919 (3 catches): the chat panel's first fix for a start still opening
+  made things worse.** Folding the docked chat cancelled through a recorder
+  already let go of, an earlier start's late answer cleared a newer one,
+  and on a phone a microphone given after Discard stayed open. Caught by
+  Greptile, and reverted there. *Missed because* the change came from a
+  fresh review's finding, late, with no test: nothing could hold a
+  microphone opening. *Changed:* #920 gives each start its own number,
+  cancels through the last recorder made, and has the phone's recorder let
+  go of a microphone given late. The parity fixture holds a start until a
+  test opens it (`?holdmic`) and can take the page away (`unmount`); a
+  browser test of each case fails without the fix.
+
 - **#918 (2 catches): the review gate took a flag's value for a flag, and
   missed `--auto` after a body.** A body saying `--repo=other/project` read
   as another repository, so the change went unreviewed; `-Hother` wasn't

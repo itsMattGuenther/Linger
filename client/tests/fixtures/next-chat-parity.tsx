@@ -34,7 +34,11 @@
  * `clip_cancel`) hands back `next/voice-clip.bin`, one second of a tone that
  * the real recorder made (src-tauri/src/clip.rs). `window.parity.clip` acts
  * as the recorder: how loud you are, stopping by itself, and what it hands
- * back. `?nomic` has no microphone to record from.
+ * back. `?nomic` has no microphone to record from. With `?holdmic` each
+ * `clip_start` waits, the microphone opening, until `window.parity.clip.opens()`;
+ * a `clip_cancel` meanwhile calls it off, and it then rejects as the shell
+ * does (#913, #920). `window.parity.unmount()` takes the window's page away,
+ * as a docked chat folding does.
  *
  * `window.parity.holdReads()` makes every history read from then on wait for
  * `window.parity.answerReads(…)`, so a test decides the order two reads come
@@ -120,10 +124,20 @@ const desktop = fakeDesktop({
   },
   commands: {
     "plugin:opener|open_url": (args) => desktop.note(`open:${String(args.url)}`),
-    clip_start: (args) => {
+    clip_start: async (args) => {
       desktop.note(`clip_start:${JSON.stringify(args)}`);
       // As the shell says it when the system has no microphone.
       if (query.has("nomic")) throw "no input device available";
+      if (query.has("holdmic")) {
+        const held = { calledOff: false, open: () => undefined as void };
+        await new Promise<void>((open) => {
+          held.open = open;
+          heldStarts.push(held);
+        });
+        // As the shell does once the microphone opens: one called off
+        // meanwhile is thrown away (clip.rs, #913).
+        if (held.calledOff) throw "The voice message was called off while the microphone opened.";
+      }
       return null;
     },
     clip_stop: async () => {
@@ -133,6 +147,7 @@ const desktop = fakeDesktop({
     },
     clip_cancel: () => {
       desktop.note("clip_cancel");
+      for (const held of heldStarts) held.calledOff = true;
       return null;
     },
     dropped_files: () => {
@@ -224,6 +239,9 @@ const desktop = fakeDesktop({
   },
 });
 
+// Voice message starts waiting for their microphone (`?holdmic`), oldest first.
+const heldStarts: { calledOff: boolean; open: () => void }[] = [];
+
 // History reads being held for the test (`holdReads`): each is asked of the
 // server at once, so it shows in `data-did`, and answered when the test says.
 let holdingReads = false;
@@ -311,7 +329,11 @@ declare global {
         lost: () => void;
         /** What it hands back when stopped, as `clip_stop` answers: the lookahead, then each packet by its length. */
         hands: (bytes: number[]) => void;
+        /** With `?holdmic`: the oldest start's microphone opens. */
+        opens: () => void;
       };
+      /** The window's page goes, as a docked chat folding takes it away. */
+      unmount: () => void;
       /** A drop the Linux shell took (#673), landing at `at` in the page's pixels. */
       shellDrop: (dropped: { name: string; bytes?: number[]; problem?: "folder" | "too_big" | "unreadable" }[], at: { x: number; y: number }) => void;
       /** From now on, every history read waits to be answered. */
@@ -346,7 +368,9 @@ window.parity = {
     hands: (bytes) => {
       recorded = Uint8Array.from(bytes);
     },
+    opens: () => heldStarts.shift()?.open(),
   },
+  unmount: () => page.unmount(),
   shellDrop: (dropped, at) => {
     shellDropped = dropped;
     desktop.deliver("tauri://drag-drop", { paths: dropped.map((one) => `/home/sam/${one.name}`), position: at });
@@ -371,7 +395,8 @@ takeDropsFromTheShell(window, hearShellDrops, (command, args) => invoke(command,
 
 const root = document.getElementById("root");
 if (!root) throw new Error("missing #root");
-createRoot(root).render(
+const page = createRoot(root);
+page.render(
   <StrictMode>
     <ChatWindow />
   </StrictMode>,
