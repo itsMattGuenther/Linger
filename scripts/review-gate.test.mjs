@@ -373,6 +373,15 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     ["merge", "gh pr merge 5 | GIT_EXTERNAL_DIFF=./push.sh git diff HEAD~1"],
     // coproc doesn't hide a later & that backgrounds the merge.
     ["merge", "gh pr merge 5 && coproc true & git push -f"],
+    // A write on a group, subshell or loop: what's printed inside may be a script.
+    ["merge", "{ echo 'gh pr merge 5 --admin'; } > m.sh && bash m.sh"],
+    ["merge", "( echo 'gh pr merge 5 --admin' ) > m.sh && bash m.sh"],
+    ["merge", "for x in 1; do echo 'gh pr merge 5'; done > m.sh && bash m.sh"],
+    // $'…' escapes known when pairing parentheses.
+    ["merge", "echo $((gh pr merge 5; echo $'\\'' ) ) ; echo \"'))\" # \""],
+    // Text stored and read back into a program that runs text.
+    ["merge", "git commit --allow-empty -qm 'gh pr merge 5 --admin' && git log -1 --format=%B | bash"],
+    ["merge", "gh pr comment 9 --body 'gh pr merge 5' && gh pr view 9 --comments | bash"],
     // Text bash would refuse, that might be the command.
     ["merge", 'gh pr merge 5 "oops'],
   ];
@@ -387,7 +396,7 @@ test("a long command it can't place comes back, rather than running on", () => {
   // stopped and fails here rather than holding up every test after it. The
   // limit is far past the milliseconds it takes, so a busy machine can't fail it.
   const script = `import { readCommand } from ${JSON.stringify(new URL("./review-gate.mjs", import.meta.url).href)};
-const longs = ["gh " + "=>".repeat(20_000) + " x", "gh pr " + "2>".repeat(20_000) + " x", ">|A= ".repeat(20_000) + "x", ">&A= ".repeat(20_000) + "x", "$((".repeat(20_000), "$(".repeat(20_000), "((".repeat(20_000) + " x", "(".repeat(50_000) + "x" + " )".repeat(50_000)];
+const longs = ["gh " + "=>".repeat(20_000) + " x", "gh pr " + "2>".repeat(20_000) + " x", ">|A= ".repeat(20_000) + "x", ">&A= ".repeat(20_000) + "x", "$((".repeat(20_000), "$(".repeat(20_000), "((".repeat(20_000) + " x", "(".repeat(50_000) + "x" + " )".repeat(50_000), ("$((1))" + String.fromCharCode(96) + "$((1))" + String.fromCharCode(96) + " ").repeat(20_000)];
 for (const long of longs) if (readCommand(long, "merge") !== null) process.exit(2);`;
   const run = spawnSync(process.execPath, ["--input-type=module"], { input: script, timeout: 60_000 });
   assert.equal(run.status, 0, run.signal ? `still running after a minute (${run.signal})` : String(run.error ?? run.stderr));
@@ -415,6 +424,8 @@ test("a command that isn't one leaves the gate out", () => {
     ["merge", "cat <<EOF\ngh pr merge 5\nEOF"],
     ["merge", "cat <<-EOF\n\tgh pr merge 5\n\tEOF"],
     ["merge", "gh pr view 5 --json title,mergedAt && echo merge"],
+    // Variables alone, three in a row, aren't the command.
+    ["merge", 'for f in *.txt; do cp "$f" "$DEST/$f" "$X"; done'],
     // gh2 isn't gh: digits glued to > belong to the word before.
     ["merge", "gh2>a pr merge 5"],
     ["ready", "gh pr ready 12 --undo"],

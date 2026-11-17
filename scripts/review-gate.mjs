@@ -420,39 +420,40 @@ function closing(source, open) {
 
 /**
  * Where the `(` at `open` closes, as bash pairs them: a `)` inside quotes,
- * after a backslash or in a comment doesn't count. Worked out for the whole
- * text at once, so long runs of parentheses stay linear; an `(` inside a
- * double-quoted string (`"$((1+1))"`) is scanned for on its own.
+ * after a backslash or in a comment doesn't count. Read forward from the
+ * `(`, which sits where the reader is, outside any quote. A text whose
+ * pairing would take too long (thousands of nested parentheses) is one the
+ * gate can't read, so the fallback answers for it.
  */
 function closeOf(source, open) {
-  if (paired.source !== source) {
-    const pairs = new Map();
-    const opened = [];
-    for (let at = 0; at < source.length; at += 1) {
-      const past = pastQuoted(source, at);
-      if (past !== at) at = past;
-      else if (source[at] === "(") opened.push(at);
-      else if (source[at] === ")" && opened.length) pairs.set(opened.pop(), at);
-    }
-    paired = { source, pairs };
-  }
-  const known = paired.pairs.get(open);
-  if (known !== undefined) return known;
   let depth = 0;
   for (let at = open; at < source.length; at += 1) {
+    budget.left -= 1;
+    if (budget.left < 0) throw new Unreadable("its parentheses are too many to pair");
     const past = at === open ? at : pastQuoted(source, at);
-    if (past !== at) at = past;
-    else if (source[at] === "(") depth += 1;
+    if (past !== at) {
+      budget.left -= past - at;
+      at = past;
+    } else if (source[at] === "(") depth += 1;
     else if (source[at] === ")" && (depth -= 1) === 0) return at;
   }
   return -1;
 }
-let paired = { source: null, pairs: null };
+
+/** How much pairing one reading of a command may do. */
+const budget = { left: 0 };
+const PAIRING = 4_000_000;
 
 /** If a quote, an escape or a comment starts at `at`, where it ends; otherwise `at`. */
 function pastQuoted(source, at) {
   const char = source[at];
   if (char === "\\") return Math.min(at + 1, source.length - 1);
+  if (char === "'" && source[at - 1] === "$") {
+    // `$'…'`: a backslash escapes the next character, `\'` included.
+    let end = at + 1;
+    while (end < source.length && source[end] !== "'") end += source[end] === "\\" ? 2 : 1;
+    return Math.min(end, source.length - 1);
+  }
   if (char === "'") {
     const end = source.indexOf("'", at + 1);
     return end < 0 ? source.length - 1 : end;
@@ -643,16 +644,21 @@ function classify(command, action) {
   const wanted = [mayBeGh, (word) => word.known && word.text === "pr", (word) => word.known && word.text === action];
   let stage = 0;
   let last = -1;
+  // At least one of the three is the word itself: `cp "$a" "$b" "$c"` isn't
+  // a merge, while `$G pr merge` and `gh pr $X` may be.
+  let named = false;
   for (let at = 0; at < words.length && stage < 3; at += 1) {
     const word = words[at];
     // For gh, anywhere (`sudo $G pr …`); for pr and the action, right after the one before.
     const standsIn = !word.known && (stage === 0 || at === last + 1);
-    if (wanted[stage](word) || standsIn) {
+    const is = word.known && wanted[stage](word);
+    if (is || standsIn) {
+      named ||= is;
       stage += 1;
       last = at;
     }
   }
-  return stage === 3 ? "maybe" : null;
+  return stage === 3 && named ? "maybe" : null;
 }
 
 /**
@@ -779,6 +785,7 @@ export function parseWords(words, action) {
 
 /** A word as the shell hands it over: quotes taken off, escapes undone. */
 export function unquote(word) {
+  budget.left = PAIRING;
   return tokenize(word).find((token) => "word" in token)?.word.text ?? "";
 }
 
@@ -856,6 +863,7 @@ export function readCommand(command, action) {
   if (!ACTIONS.includes(action)) throw new Error(`unknown action ${action}`);
   let tokens;
   try {
+    budget.left = PAIRING;
     tokens = tokenize(command);
   } catch (error) {
     if (!(error instanceof Unreadable) && !(error instanceof RangeError)) throw error;
@@ -870,8 +878,15 @@ export function readCommand(command, action) {
   // Text a program may run, with the three words in it, is a command the gate can't place.
   // Once exec points a stream at a file, what any program prints may land
   // in a script, so no program's words are data.
-  const trusting = !lists.some(({ commands: list }) => list.some((command) => command.words[0]?.known && command.words[0].text === "exec" && command.redirects.length));
-  const carried = lists.some(({ commands: list }) => pipelinesOf(list).some((pipeline) => inOrder(pipelineText(pipeline, target, trusting), ["gh", "pr", action])));
+  // So does a write on a group, subshell or loop (`{ echo …; } > f`,
+  // `( … ) > f`, `done > f`): the redirection sits on its closing word.
+  const closes = (command) => !command.words.length || (command.words.length === 1 && command.words[0].known && ["}", "done", "fi", "esac"].includes(command.words[0].text));
+  const trusting = !lists.some(({ commands: list }) => list.some((command) => (command.words[0]?.known && command.words[0].text === "exec" && command.redirects.length) || (closes(command) && command.redirects.some(writesFile))));
+  // Text piped into a program that runs text may have been stored before (a
+  // commit message read back with git log): then every word counts.
+  const fed = lists.some(({ commands: list }) => pipelinesOf(list).some((pipeline) => pipeline.slice(1).some((command) => command.words.length && !inert(command) && !readsOnly(command))));
+  const everything = fed ? lists.flatMap(({ commands: list }) => list.filter((command) => command !== target).flatMap((command) => [...command.settings.map((word) => word.text), ...textOf(command)])).join(" ") : "";
+  const carried = (fed && inOrder(everything, ["gh", "pr", action])) || lists.some(({ commands: list }) => pipelinesOf(list).some((pipeline) => inOrder(pipelineText(pipeline, target, trusting), ["gh", "pr", action])));
   if (!found.length && !carried) return null;
   if (found.some((entry) => entry.kind === "maybe") || carried) return stop(`it might run \`gh pr ${action}\` in a form the gate can't read exactly (a word it can't follow, or text another program runs)`);
   if (exact.length > 1) return stop(`it runs \`gh pr ${action}\` more than once`);
