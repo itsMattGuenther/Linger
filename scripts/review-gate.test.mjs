@@ -395,6 +395,18 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     ["merge", "gh pr merge 5 & ./scripts/gh pr view 5"],
     // -h and --help are one flag: the last of either wins.
     ["merge", "gh pr merge 5 --squash -h --help=false --auto"],
+    // Exotic syntax keeps main's rule too, outside the reviewed command (#925).
+    ["merge", "echo ${x:-$'\\''} ; gh pr merge 5 --auto ; echo \"'\" \"}\" #\""],
+    ["merge", "git commit --allow-empty -qm 'gh pr merge 5 --admin' && eval \"$(git log -1 --format=%B)\""],
+    ["merge", "git commit --allow-empty -qm 'gh pr merge 5 --admin' && bash <(git log -1 --format=%B)"],
+    ["merge", 'eval "${u:-gh pr merge 5}"'],
+    ["merge", "x=${u:-gh pr merge 5 --auto}; $x"],
+    ["merge", "x=$(case a in a) :;; esac); ${u:-gh} pr merge 5"],
+    ["merge", "echo \"`echo \\\"'\\\" ; gh pr merge 5 --auto ; echo \\\"'\\\"`\""],
+    ["merge", "command exec >m.sh; echo 'gh pr merge 5'; command exec >/dev/tty; bash m.sh"],
+    // A wait that doesn't wait for the merge.
+    ["merge", "gh pr merge 5 & (wait); git push -f origin HEAD:feat"],
+    ["merge", "gh pr merge 5 & sleep 0 & wait -n; git push -f origin HEAD:feat"],
     // Text bash would refuse, that might be the command.
     ["merge", 'gh pr merge 5 "oops'],
   ];

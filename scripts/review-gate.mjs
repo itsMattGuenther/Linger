@@ -316,6 +316,8 @@ function readWord(reader) {
     reader.at += 1;
   }
   word.raw = source.slice(start, reader.at);
+  word.from = start;
+  word.to = reader.at;
   return word;
 }
 
@@ -686,9 +688,14 @@ function pipelineText(pipeline, target, trusting = true) {
 /** A command's words and what its redirections feed it: here-strings and here-documents. */
 const textOf = (command) => [...command.words.map((word) => word.text), ...command.redirects.map((token) => (token.redirect === "<<<" ? token.target.text : (token.body ?? "")))];
 
+const texts = new WeakMap();
+
 /** Every setting, word, here-string and here-document in a token list and the substitutions in it. */
 function allText(tokens) {
-  return [...everyList(commandsOf(tokens))].flatMap(({ commands }) => commands.flatMap((command) => [...command.settings.map((word) => word.text), ...textOf(command)])).join(" ");
+  if (texts.has(tokens)) return texts.get(tokens);
+  const text = [...everyList(commandsOf(tokens))].flatMap(({ commands }) => commands.flatMap((command) => [...command.settings.map((word) => word.text), ...textOf(command)])).join(" ");
+  texts.set(tokens, text);
+  return text;
 }
 
 /** A command list split into its pipelines: commands joined by `|` or `|&`. */
@@ -818,6 +825,26 @@ function inOrder(text, words) {
 }
 
 /**
+ * Syntax where the reader's quoting could part from bash's: here the gate
+ * also keeps main's rule, gh, pr and the action as words in order in the
+ * text, so it is never less strict than main was (#925). Ordinary commands
+ * (quotes, $(…), here-documents, pipes) don't need it.
+ */
+const EXOTIC = /\$\{|\$'|\$"|`|\(\(|\$\[|[<>]\(|(?<![\w-])(?:eval|exec|case|coproc|function)(?![\w-])/;
+
+/** Main's rule: the three as words in order, quotes and continued lines taken out. */
+function wordsInOrder(text, action) {
+  text = text.replace(/\\\n/g, "").replace(/["'\\]/g, "");
+  return new RegExp(String.raw`\bgh\b[\s\S]*?\bpr\b[\s\S]*?\b${action}\b`).test(text);
+}
+
+/** Where a command's own words, settings and redirection targets sit in the text it was read from. */
+function spanOf(command) {
+  const words = [...command.words, ...command.settings, ...command.redirects.map((token) => token.target)];
+  return { from: Math.min(...words.map((word) => word.from)), to: Math.max(...words.map((word) => word.to)) };
+}
+
+/**
  * From the command at `from`, where the run of commands joined by `joins`
  * ends: the index of its last command and the operator that ends it (`;`,
  * `&`, a new line, or null at the end). Subshells and compound commands
@@ -869,7 +896,7 @@ export function readCommand(command, action) {
     if (!(error instanceof Unreadable) && !(error instanceof RangeError)) throw error;
     // Text the reader can't read, bash's error or not: if it might be the
     // command, it's stopped rather than guessed.
-    return inOrder(command, ["gh", "pr", action]) ? stop(`it can't be read as the shell would (${error.message})`) : null;
+    return wordsInOrder(command, action) ? stop(`it can't be read as the shell would (${error.message})`) : null;
   }
   const commands = commandsOf(tokens);
   const lists = [...everyList(commands)];
@@ -882,7 +909,7 @@ export function readCommand(command, action) {
   // So does a write on a group, subshell or loop (`{ echo …; } > f`,
   // `( … ) > f`, `done > f`): the redirection sits on its closing word.
   const closes = (command) => !command.words.length || (command.words.length === 1 && command.words[0].known && CLOSERS.includes(command.words[0].text));
-  const trusting = !lists.some(({ commands: list }) => list.some((command) => (command.words[0]?.known && command.words[0].text === "exec" && command.redirects.length) || (closes(command) && command.redirects.some(writesFile))));
+  const trusting = !lists.some(({ commands: list }) => list.some((command) => (command.words.slice(0, 2).some((word) => word.known && word.text === "exec") && command.redirects.length) || (closes(command) && command.redirects.some(writesFile))));
   // Text piped into a program that runs text may have been stored before (a
   // commit message read back with git log): then every word counts.
   // `read` counts: what it reads into variables, a loop may run.
@@ -891,6 +918,12 @@ export function readCommand(command, action) {
   const own = new Set(target ? [...target.words, ...target.settings, ...target.redirects.map((token) => token.target)].flatMap((word) => word.inner).flatMap((tokens) => [...everyList(commandsOf(tokens), true)].map((entry) => entry.commands)) : []);
   const everything = fed ? lists.filter(({ commands: list }) => !own.has(list)).flatMap(({ commands: list }) => list.filter((command) => command !== target).flatMap((command) => [...command.settings.map((word) => word.text), ...textOf(command)])).join(" ") : "";
   const carried = (fed && inOrder(everything, ["gh", "pr", action])) || lists.some(({ commands: list }) => pipelinesOf(list).some((pipeline) => inOrder(pipelineText(pipeline, target, trusting), ["gh", "pr", action])));
+  // Exotic syntax: main's rule too, outside the reviewed command's own words.
+  if (EXOTIC.test(command)) {
+    const span = target ? spanOf(target) : null;
+    const outside = span ? command.slice(0, span.from) + " " + command.slice(span.to) : command;
+    if (wordsInOrder(outside, action)) return stop(`it holds \`gh pr ${action}\` in syntax the gate can't be sure it reads as bash does; write it plainly, the body in --body-file`);
+  }
   if (!found.length && !carried) return null;
   if (found.some((entry) => entry.kind === "maybe") || carried) return stop(`it might run \`gh pr ${action}\` in a form the gate can't read exactly (a word it can't follow, or text another program runs)`);
   if (exact.length > 1) return stop(`it runs \`gh pr ${action}\` more than once`);
@@ -971,7 +1004,8 @@ export function readCommand(command, action) {
   if (list.by === "&") {
     // Up to a `wait`, which waits for the merge to finish.
     for (const command of commands.slice(list.last + 1)) {
-      if (command.words[0]?.known && command.words[0].text === "wait" && !command.leading.length) break;
+      const previous = commands[commands.indexOf(command) - 1];
+      if (command.words.length === 1 && command.words[0].known && command.words[0].text === "wait" && !command.leading.length && !["(", "|", "|&"].includes(previous?.after)) break;
       alongside.push(command);
     }
   }
