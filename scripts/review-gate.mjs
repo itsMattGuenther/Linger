@@ -182,6 +182,7 @@ function readHeredocs(reader, heredocs) {
   const { source } = reader;
   for (const heredoc of heredocs.splice(0)) {
     const body = [];
+    heredoc.token.bodyFrom = reader.at;
     for (;;) {
       if (reader.at >= source.length) break;
       const newline = source.indexOf("\n", reader.at);
@@ -191,6 +192,7 @@ function readHeredocs(reader, heredocs) {
       body.push(line);
     }
     heredoc.token.body = body.join("\n");
+    heredoc.token.bodyTo = reader.at;
     // Unquoted, its body is expanded: a substitution in it runs.
     if (!heredoc.quoted) heredoc.token.target.inner.push(...substitutionsIn(heredoc.token.body));
   }
@@ -730,7 +732,7 @@ const isOn = (values) => {
   const last = values?.[values.length - 1];
   return values?.length > 0 && (last === null || ["1", "t", "T", "true", "TRUE", "True"].includes(last));
 };
-/** Whether every value pflag reads for a boolean flag is false. */
+/** Whether pflag reads a boolean flag as off: the last value it was given is false. */
 const isOff = (values) => {
   const last = values?.[values.length - 1];
   return values?.length > 0 && last !== null && ["0", "f", "F", "false", "FALSE", "False"].includes(last);
@@ -835,7 +837,16 @@ const EXOTIC = /\$\{|\$'|\$"|`|\(\(|\$\[|[<>]\(|(?<![\w-])(?:eval|exec|case|copr
 /** Main's rule: the three as words in order, quotes and continued lines taken out. */
 function wordsInOrder(text, action) {
   text = text.replace(/\\\n/g, "").replace(/["'\\]/g, "");
-  return new RegExp(String.raw`\bgh\b[\s\S]*?\bpr\b[\s\S]*?\b${action}\b`).test(text);
+  // The first of each after the one before: one pass, so no text makes it slow.
+  let from = 0;
+  for (const word of ["gh", "pr", action]) {
+    const found = new RegExp(String.raw`\b${word}\b`, "g");
+    found.lastIndex = from;
+    const hit = found.exec(text);
+    if (!hit) return false;
+    from = hit.index + word.length;
+  }
+  return true;
 }
 
 /** Where a command's own words, settings and redirection targets sit in the text it was read from. */
@@ -921,7 +932,16 @@ export function readCommand(command, action) {
   // Exotic syntax: main's rule too, outside the reviewed command's own words.
   if (EXOTIC.test(command)) {
     const span = target ? spanOf(target) : null;
-    const outside = span ? command.slice(0, span.from) + " " + command.slice(span.to) : command;
+    // The reviewed command's own words, and the here-documents it reads,
+    // are its own: a body that names the command isn't a second one.
+    const cuts = span ? [span, ...target.redirects.filter((token) => token.bodyFrom !== undefined).map((token) => ({ from: token.bodyFrom, to: token.bodyTo }))].sort((a, b) => a.from - b.from) : [];
+    let outside = "";
+    let at = 0;
+    for (const cut of cuts) {
+      outside += command.slice(at, Math.max(at, cut.from)) + " ";
+      at = Math.max(at, cut.to);
+    }
+    outside += command.slice(at);
     if (wordsInOrder(outside, action)) return stop(`it holds \`gh pr ${action}\` in syntax the gate can't be sure it reads as bash does; write it plainly, the body in --body-file`);
   }
   if (!found.length && !carried) return null;
@@ -1003,9 +1023,13 @@ export function readCommand(command, action) {
   const list = endOf(commands, at, ["&&", "||", "|", "|&"]);
   if (list.by === "&") {
     // Up to a `wait`, which waits for the merge to finish.
-    for (const command of commands.slice(list.last + 1)) {
-      const previous = commands[commands.indexOf(command) - 1];
-      if (command.words.length === 1 && command.words[0].known && command.words[0].text === "wait" && !command.leading.length && !["(", "|", "|&"].includes(previous?.after)) break;
+    for (let index = list.last + 1; index < commands.length; index += 1) {
+      const command = commands[index];
+      // A bare wait in the main shell: not behind && or ||, not in a
+      // subshell or pipeline, and not itself in the background.
+      const before = commands[index - 1]?.after;
+      const waits = command.words.length === 1 && command.words[0].known && command.words[0].text === "wait" && !command.leading.length && !command.redirects.length;
+      if (waits && ["&", ";", "\n"].includes(before) && [";", "\n", null].includes(command.after)) break;
       alongside.push(command);
     }
   }

@@ -151,6 +151,8 @@ test("reads which pull request, folder and branch a command is about", () => {
     ["create", "cd wt && gh pr create -t x --body \"$(cat <<'EOF'\nThe gate now reads gh pr create.\nEOF\n)\" 2>&1 | tee /tmp/pr.txt", { dirs: ["wt"] }],
     // A background merge, then a wait: what follows runs after it.
     ["merge", "gh pr merge 5 --squash &\nwait\ngit pull --ff-only", { selector: "5" }],
+    // The reviewed command's own here-document names the command, in exotic syntax.
+    ["create", "gh pr create --title t --body-file - <<'EOF'\nThe gate now runs before `gh pr create`.\nEOF", { base: null }],
     ["ready", "gh pr ready", { selector: null }],
     ["ready", "gh pr ready 12", { selector: "12" }],
   ];
@@ -407,6 +409,10 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     // A wait that doesn't wait for the merge.
     ["merge", "gh pr merge 5 & (wait); git push -f origin HEAD:feat"],
     ["merge", "gh pr merge 5 & sleep 0 & wait -n; git push -f origin HEAD:feat"],
+    // A wait that doesn't run in the main shell doesn't end what runs beside the merge.
+    ["merge", "gh pr merge 5 & false && wait; git push origin x"],
+    ["merge", "gh pr merge 5 & wait & git push origin x"],
+    ["merge", "gh pr merge 5 & wait | cat; git push origin x"],
     // Text bash would refuse, that might be the command.
     ["merge", 'gh pr merge 5 "oops'],
   ];
@@ -421,7 +427,7 @@ test("a long command it can't place comes back, rather than running on", () => {
   // stopped and fails here rather than holding up every test after it. The
   // limit is far past the milliseconds it takes, so a busy machine can't fail it.
   const script = `import { readCommand } from ${JSON.stringify(new URL("./review-gate.mjs", import.meta.url).href)};
-const longs = ["gh " + "=>".repeat(20_000) + " x", "gh pr " + "2>".repeat(20_000) + " x", ">|A= ".repeat(20_000) + "x", ">&A= ".repeat(20_000) + "x", "$((".repeat(20_000), "$(".repeat(20_000), "((".repeat(20_000) + " x", "(".repeat(50_000) + "x" + " )".repeat(50_000), ("$((1))" + String.fromCharCode(96) + "$((1))" + String.fromCharCode(96) + " ").repeat(20_000)];
+const longs = ["gh " + "=>".repeat(20_000) + " x", "gh pr " + "2>".repeat(20_000) + " x", ">|A= ".repeat(20_000) + "x", ">&A= ".repeat(20_000) + "x", "$((".repeat(20_000), "$(".repeat(20_000), "((".repeat(20_000) + " x", "(".repeat(50_000) + "x" + " )".repeat(50_000), ("$((1))" + String.fromCharCode(96) + "$((1))" + String.fromCharCode(96) + " ").repeat(20_000), ("g" + "h pr ").repeat(20_000) + String.fromCharCode(39)];
 for (const long of longs) if (readCommand(long, "merge") !== null) process.exit(2);`;
   const run = spawnSync(process.execPath, ["--input-type=module"], { input: script, timeout: 60_000 });
   assert.equal(run.status, 0, run.signal ? `still running after a minute (${run.signal})` : String(run.error ?? run.stderr));
