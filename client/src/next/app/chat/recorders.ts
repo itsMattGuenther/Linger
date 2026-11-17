@@ -39,8 +39,8 @@ export interface Recorder {
   start: () => Promise<void>;
   /** Stop, and hand the recording back; null when there's nothing readable. */
   stop: () => Promise<Recording | null>;
-  /** Stop and throw it away; settles once it's done, for one that has to ask the shell. */
-  cancel: () => void | Promise<void>;
+  /** Stop and throw it away; settles once it's done (the shell's has to ask). */
+  cancel: () => Promise<void>;
   /** Let go of everything it listens to. */
   dispose: () => void;
 }
@@ -350,7 +350,7 @@ export function pageRecorder(events: RecorderEvents): Recorder {
       encoder = null;
       return { preSkip, packets };
     },
-    cancel: () => {
+    cancel: async () => {
       attempt += 1;
       release();
       const held = encoder as AudioEncoder | null;

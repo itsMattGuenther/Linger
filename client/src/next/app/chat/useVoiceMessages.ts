@@ -23,6 +23,9 @@ export interface VoiceMessageControls {
   send: () => void;
 }
 
+/** How long a start waits for the one before it to settle: one that hangs mustn't hold every later Record (#920). */
+const LONGEST_WAIT_MS = 5_000;
+
 /**
  * Voice messages (#401), per conversation, in one window: the panel's state
  * in each, and the one recording (`recorders.ts`): the desktop shell's on a
@@ -34,9 +37,6 @@ export interface VoiceMessageControls {
  * web view can't record (no microphone, or no Opus encoder, as on an iPhone
  * before iOS 26), which then offers no microphone button.
  */
-/** How long a start waits for the one before it to settle: one that hangs mustn't hold every later Record (#920). */
-const LONGEST_WAIT_MS = 5_000;
-
 export function useVoiceMessages(
   paneId: string | null,
   apis: ReadonlyMap<string, AuthedApi>,
@@ -75,6 +75,8 @@ export function useVoiceMessages(
    * microphone is never being opened twice at once (#920).
    */
   const lastStart = useRef<Promise<unknown>>(Promise.resolve());
+  /** Starts not yet settled: with none, the next starts in the tap itself. */
+  const pending = useRef(0);
 
   const put = useCallback((conversation: string, next: VoiceMessage | null) => {
     setClips((held) => {
@@ -132,7 +134,7 @@ export function useVoiceMessages(
     return () => {
       // The window going (or, docked, the chat folding away): what's
       // recording or starting is called off here, before the recorder goes.
-      if (recordingIn.current !== null || startingIn.current !== null) made.cancel();
+      if (recordingIn.current !== null || startingIn.current !== null) void made.cancel();
       made.dispose();
       if (recorder.current === made) recorder.current = null;
     };
@@ -179,12 +181,19 @@ export function useVoiceMessages(
     // anyway, it's stopped through this one, even once the page has let the
     // recorder go (#920).
     const using = recorder.current;
-    // After the last start has settled (or a while, if one hangs), and only
-    // if this one wasn't called off meanwhile.
-    const starting = Promise.race([lastStart.current, new Promise((waited) => setTimeout(waited, LONGEST_WAIT_MS))]).then(() => {
-      if (startingIn.current !== mine) throw new Error("called off");
-      return using?.start() ?? Promise.reject(new Error("no input device available"));
-    });
+    // Only if this one wasn't called off meanwhile.
+    const go = () => (startingIn.current !== mine ? Promise.reject(new Error("called off")) : (using?.start() ?? Promise.reject(new Error("no input device available"))));
+    // With nothing before it, now, in the tap that pressed Record: an iPhone
+    // starts a page's sound only from a tap (#687). After one still settling
+    // (Escape, then Record again), once it has, or a while if it hangs.
+    let starting: Promise<void>;
+    if (pending.current === 0) starting = go();
+    else {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const waited = new Promise<void>((done) => (timer = setTimeout(done, LONGEST_WAIT_MS)));
+      starting = Promise.race([lastStart.current, waited]).finally(() => clearTimeout(timer)).then(go);
+    }
+    pending.current += 1;
     // Only this start's answer counts, and only while it's still the one
     // starting: called off meanwhile, its answer is nobody's (#920).
     const stillThisOne = () => {
@@ -208,7 +217,9 @@ export function useVoiceMessages(
         put(conversation, { kind: "ready", problem: startProblemWords(voiceStartProblem(error instanceof Error ? error.message : String(error), onWindows(), devices, onPhone())) });
       },
     );
-    lastStart.current = answered.catch(() => undefined);
+    lastStart.current = answered.catch(() => undefined).finally(() => {
+      pending.current -= 1;
+    });
   }, [paneId, put]);
 
   const stop = useCallback(() => {

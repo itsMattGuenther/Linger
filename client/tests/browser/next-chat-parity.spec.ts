@@ -1896,6 +1896,20 @@ test.describe("voice messages (#401)", () => {
     });
   }
 
+  test("Record with nothing before it starts in the tap itself, as an iPhone needs (#687, #920)", async ({ page }) => {
+    await open(page, "room=r-general&holdmic");
+    await page.getByRole("button", { name: "Record a voice message" }).click();
+    // The start is asked of the shell before the tap's own handling ends,
+    // not a promise later: an iPhone lets a page start sound only from a tap.
+    const inTheTap = await panel(page)
+      .getByRole("button", { name: "Record" })
+      .evaluate((button) => {
+        (button as HTMLButtonElement).click();
+        return (document.body.dataset.did ?? "").split("|").some((line) => line.startsWith("clip_start"));
+      });
+    expect(inTheTap).toBe(true);
+  });
+
   test("the window going while the microphone opens calls it off (#920)", async ({ page }) => {
     await open(page, "room=r-general&holdmic");
     await page.getByRole("button", { name: "Record a voice message" }).click();
