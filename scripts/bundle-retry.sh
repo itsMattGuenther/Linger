@@ -67,7 +67,7 @@ failed_downloading() {
     # end: the build stopped there. Only words a network uses count, never a
     # loose one an address or a path could hold (L-31: no blanket retries).
     /failed to bundle project/ { reading = (step == "Downloading") }
-    reading && tolower($0) ~ /(http status|status code):? *(5[0-9][0-9]|408|429)([^0-9]|$)|timed out|timeout: |connection (reset|refused|failed|closed)|forcibly closed|os error 100(54|60|61)|host not found|dns failed|error sending request/ { found = 1 }
+    reading && tolower($0) ~ /(http status|status code):? *(5[0-9][0-9]|408|429)([^0-9]|$)|timed out|timeout: |connection (reset|refused|failed|closed)|forcibly closed|close_notify|unexpected end of file|os error 100(54|60|61)|host not found|dns failed|error sending request/ { found = 1 }
     { word = ($1 == "Info") ? $2 : $1; if (word ~ /^(Downloading|Bundling|Running|Finished|Built|Compiling|Signing|Packaging|Patching|Installing)$/) step = word }
     END { exit found ? 0 : 1 }'
 }
