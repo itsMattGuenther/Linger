@@ -65,15 +65,6 @@ const START_WAIT_MS = 3_000;
 const LEVEL_EVERY_MS = 40;
 
 /**
- * The page's own count of its shell starts (#920): milliseconds on the
- * page's steady clock, always rising, so a module loaded again while
- * developing keeps counting up. Sent above the window's base from the shell
- * (`clip_epoch`), which a reload raises above everything an earlier page
- * sent, so no two pages' starts are ever confused, and no clock is compared.
- */
-let shellStarts = 0;
-
-/**
  * Every start, cancel and stop the page has asked of the shell, settled
  * either way: a start goes once they're done, so the shell hears them in
  * order, a start never meets the one before it still booked, and one
@@ -113,17 +104,15 @@ export function shellRecorder(events: RecorderEvents, input: () => string | null
   void bus.listen<number>("clip:level", (level) => events.level(level)).then(hold);
   void bus.listen("clip:full", () => events.ended("full")).then(hold);
   void bus.listen("clip:lost", () => events.ended("lost")).then(hold);
-  /** The number the current start is sent with, once the shell has said the window's base. */
+  /** The number the current start is sent with, once the shell has handed it out. */
   let current: Promise<number> = Promise.resolve(0);
   return {
     start: async () => {
-      // Counted now, before anything is waited for, and above the window's
-      // base, asked each time so a start is always above the latest
-      // reload's mark. A cancel while it waits waits for this number and
-      // names it; the shell calls off that start and no later one (#920).
-      shellStarts = Math.max(shellStarts + 1, Math.floor(performance.now()));
-      const count = shellStarts;
-      const numbered = invoke<number>("clip_epoch").then((base) => base + count);
+      // The shell hands each start its number, above every one before, this
+      // page's or an earlier page's. Asked now, before anything is waited
+      // for: a cancel while it waits waits for this number and names it, and
+      // the shell calls off that start and no later one (#920).
+      const numbered = invoke<number>("clip_ticket");
       current = numbered;
       const start = await numbered;
       await shellSettling;

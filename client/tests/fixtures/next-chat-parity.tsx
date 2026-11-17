@@ -146,14 +146,17 @@ const desktop = fakeDesktop({
         setTimeout(heard, 0);
         // As the shell does: one called off meanwhile is thrown away once
         // its microphone opens (#913, #920).
-        if (held.calledOff || start <= calledOffUpTo) {
+        if (held.calledOff) {
           if (booked === start) booked = null;
           throw "The voice message was called off while the microphone opened.";
         }
       }
       return null;
     },
-    clip_epoch: () => 0,
+    clip_ticket: () => {
+      tickets += 1;
+      return tickets;
+    },
     clip_stop: async () => {
       desktop.note("clip_stop");
       booked = null;
@@ -165,7 +168,9 @@ const desktop = fakeDesktop({
       // Up to the start it names, and no later one, as the shell does.
       calledOffUpTo = Math.max(calledOffUpTo, Number(args.start));
       if (booked === Number(args.start)) booked = null;
-      for (const held of heldStarts) if (held.start <= calledOffUpTo) held.calledOff = true;
+      // Only the start it names is taken; one at or below the mark that
+      // hasn't come yet is refused when it does (above).
+      for (const held of heldStarts) if (held.start === Number(args.start)) held.calledOff = true;
       // With `?holdcancel` its answer waits for `window.parity.clip.cancelled()`.
       if (query.has("holdcancel")) await new Promise<void>((answer) => heldCancels.push(answer));
       return null;
@@ -264,6 +269,8 @@ const heldStarts: { start: number; calledOff: boolean; open: () => void; heard: 
 // The highest start this window called off, and the one booked, as clip.rs keeps them.
 let calledOffUpTo = 0;
 let booked: number | null = null;
+// The last start number handed out, as clip.rs's `clip_ticket`.
+let tickets = 0;
 // Cancels whose answers are held (`?holdcancel`).
 const heldCancels: Array<() => void> = [];
 

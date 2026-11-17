@@ -48,18 +48,12 @@ struct Books {
     /// a start at or below it is refused when it comes, whatever order the
     /// commands were handled in.
     called_off: HashMap<String, u64>,
-    /// For each window, how many times its page has been loaded afresh or
-    /// the window gone. A page numbers its starts above its epoch's base
-    /// (`clip_epoch`), so every start an earlier page sent is below a later
-    /// page's, and below the mark set when it went: told apart by the
-    /// shell's own count, never a clock (#920).
-    epochs: HashMap<String, u64>,
+    /// For each window, the last start number handed out (`clip_ticket`).
+    /// The shell numbers every start, so a later page's are above an
+    /// earlier page's, and a reload or close calls off every one handed out
+    /// until then: told apart by the shell's own count, never a clock (#920).
+    tickets: HashMap<String, u64>,
 }
-
-/// How far apart two epochs' numbers are: room for a page's own count, its
-/// milliseconds since it loaded, for 34 years. A page's numbers stay exact
-/// as JavaScript numbers for a window's first 8,192 epochs.
-const EPOCH: u64 = 1 << 40;
 
 struct Recording {
     id: u64,
@@ -105,9 +99,11 @@ impl Books {
         }
     }
 
-    /// The number `window`'s page counts its starts from.
-    fn base(&self, window: &str) -> u64 {
-        self.epochs.get(window).copied().unwrap_or(0) * EPOCH
+    /// Hand `window` its next start number.
+    fn ticket(&mut self, window: &str) -> u64 {
+        let last = self.tickets.entry(window.to_owned()).or_insert(0);
+        *last += 1;
+        *last
     }
 }
 
@@ -152,14 +148,13 @@ impl Clips {
     }
 
     /// A window has gone, or its page is loaded afresh: its recording taken,
-    /// in one go with a new epoch, every start the window sent before now
-    /// called off, so one heard late is refused rather than recording for
-    /// nobody (#920).
+    /// in one go with every start number handed out to it so far called
+    /// off, so one heard late is refused rather than recording for nobody
+    /// (#920). The next page's numbers are handed out above them.
     fn forget_window(&self, window: &str) -> Option<Recording> {
         let mut books = self.lock();
-        let epoch = books.epochs.get(window).copied().unwrap_or(0) + 1;
-        books.epochs.insert(window.to_owned(), epoch);
-        books.call_off_up_to(window, epoch * EPOCH);
+        let last = books.tickets.get(window).copied().unwrap_or(0);
+        books.call_off_up_to(window, last);
         books.take_if(|recording| recording.window == window)
     }
 
@@ -406,11 +401,12 @@ pub fn forget(app: &AppHandle, label: &str) {
     }
 }
 
-/// The number this window's page counts its voice message starts from
-/// (#920): above every start an earlier page of the window's sent.
+/// The number for this window's next voice message start (#920): above
+/// every number handed out before, to this page or an earlier one. Off the
+/// main thread, as the start it numbers is.
 #[tauri::command]
-pub fn clip_epoch(app: AppHandle, window: Window) -> u64 {
-    app.state::<Clips>().lock().base(window.label())
+pub async fn clip_ticket(app: AppHandle, window: Window) -> u64 {
+    app.state::<Clips>().lock().ticket(window.label())
 }
 
 #[cfg(test)]
@@ -611,8 +607,8 @@ mod tests {
         assert!(matches!(ended, Ok(Err(_))), "it recorded anyway");
         // And the next voice message starts, as if nothing had happened,
         // counted from the window's new base as its page would (#920).
-        let base = clips.lock().base("main");
-        assert!(clips.begin("main", base + 1).is_ok());
+        let next = clips.lock().ticket("main");
+        assert!(clips.begin("main", next).is_ok());
     }
 
     /// A microphone that won't open leaves nothing on the books, and an
@@ -683,25 +679,26 @@ mod tests {
         assert!(clips.begin("main", 2).is_ok());
     }
 
-    /// A window that goes, or whose page loads afresh, starts a new epoch:
-    /// every start its last page sent is refused when it comes, and the new
-    /// page's, counted above the new base, go ahead (#920).
+    /// A window that goes, or whose page loads afresh, calls off every start
+    /// number handed out to it so far: one heard late is refused, and the
+    /// next page's, handed out above them, go ahead (#920).
     #[test]
-    fn a_page_loaded_afresh_counts_above_every_start_its_last_page_sent() {
+    fn a_page_loaded_afresh_calls_off_every_start_its_last_page_was_handed() {
         let clips = Clips::default();
-        let old = clips.lock().base("main");
-        clips.begin("main", old + 6).expect("a start");
+        let first = clips.lock().ticket("main");
+        let late = clips.lock().ticket("main");
+        clips.begin("main", first).expect("a start");
         assert!(clips.forget_window("main").is_some());
-        let new = clips.lock().base("main");
-        assert!(new > old + 6);
         assert_eq!(
-            clips.begin("main", old + 7).err(),
+            clips.begin("main", late).err(),
             Some(CALLED_OFF),
             "the last page's start went ahead"
         );
-        assert!(clips.begin("main", new + 1).is_ok());
-        // Another window's count is its own.
-        assert_eq!(clips.lock().base("chat"), 0);
+        let next = clips.lock().ticket("main");
+        assert!(next > late);
+        assert!(clips.begin("main", next).is_ok());
+        // Another window's numbers are its own.
+        assert_eq!(clips.lock().ticket("chat"), 1);
     }
 
     /// A cancel takes only its own start: an earlier recording still being

@@ -525,7 +525,7 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
             clip::clip_start,
             clip::clip_stop,
             clip::clip_cancel,
-            clip::clip_epoch,
+            clip::clip_ticket,
             mic_test::mic_test_start,
             mic_test::mic_test_stop,
             screen_shell::screen_share_available,

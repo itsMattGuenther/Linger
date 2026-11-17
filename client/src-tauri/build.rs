@@ -76,7 +76,7 @@ const COMMANDS: &[&str] = &[
     "clip_start",
     "clip_stop",
     "clip_cancel",
-    "clip_epoch",
+    "clip_ticket",
     "mic_test_start",
     "mic_test_stop",
     "screen_share_available",

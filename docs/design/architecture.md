@@ -401,13 +401,13 @@ one.
   `sound_play` (#241) and `clipboard_image`, which reads a picture off the
   clipboard when one is pasted into the message box on Linux, since
   WebKitGTK never shows the page one (#276, `src-tauri/src/clipboard.rs`),
-  and `clip_start`, `clip_stop`, `clip_cancel` and `clip_epoch`, which record
+  and `clip_start`, `clip_stop`, `clip_cancel` and `clip_ticket`, which record
   a voice message from the message box's panel (#401, `src-tauri/src/clip.rs`).
   Only a window with a message box may record; a recording goes with the
-  window that started it. Each start is numbered above the window's epoch
-  base (`clip_epoch`, raised when its page reloads or it closes), and a
-  cancel names its start, so the shell calls off that one whatever order it
-  hears them in, and refuses a start sent before a reload (#920).
+  window that started it. The shell hands each start its number
+  (`clip_ticket`) and a cancel names it, so the shell calls off that one
+  whatever order it hears them in; a reload or close calls off every
+  number handed out until then, so a start sent before it is refused (#920).
   Settings gets `graphics_started`, `voice_devices`, the three update commands,
   `newest_version` for the version note in Hosting → Server (#314), and
   `autostart_state` and `autostart_set` for starting Linger when you sign in
