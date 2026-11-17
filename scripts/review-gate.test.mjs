@@ -137,6 +137,9 @@ test("reads which pull request, folder and branch a command is about", () => {
     // A later background job after the merge has finished, and a command named by a variable.
     ["merge", "gh pr merge 5 --squash\ngit fetch origin & wait", { selector: "5" }],
     ["merge", "gh pr merge 5 --squash && $EDITOR notes.txt", { selector: "5" }],
+    // A branch or folder whose name holds the words isn't the command.
+    ["create", "git push -u origin fix/gh-pr-create-flags && gh pr create -t x", { dirs: [] }],
+    ["merge", "cd ~/src/gh-pr-merge-bot && gh pr merge 5", { selector: "5", dirs: ["~/src/gh-pr-merge-bot"] }],
     ["ready", "gh pr ready", { selector: null }],
     ["ready", "gh pr ready 12", { selector: "12" }],
   ];
@@ -332,6 +335,12 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     // After --, a word is gh's, not a flag the gate would act on.
     ["merge", "gh pr merge --squash -- --help"],
     ["ready", "gh pr ready -- --undo"],
+    // A case inside a substitution: the gate doesn't read its patterns, and stops.
+    ["merge", 'echo "$(if true; then case a in a) gh pr merge 5;; esac; fi)"'],
+    ["merge", 'echo "$( (case x in a) true;; esac); gh pr merge 5 )"'],
+    ["merge", 'echo "$(case x in y) echo esac;; x) gh pr merge 5;; esac)"'],
+    // A cd in another form.
+    ["merge", "cd -- /w && gh pr merge 5"],
     // Text bash would refuse, that might be the command.
     ["merge", 'gh pr merge 5 "oops'],
   ];

@@ -106,8 +106,6 @@ function readTokens(reader, closer) {
   const tokens = [];
   const heredocs = [];
   let depth = 0;
-  // Inside `case … esac`, a pattern's `)` closes the pattern, not a substitution.
-  let cases = 0;
   for (;;) {
     while (source[reader.at] === " " || source[reader.at] === "\t" || (source[reader.at] === "\\" && source[reader.at + 1] === "\n")) {
       reader.at += source[reader.at] === "\\" ? 2 : 1;
@@ -157,7 +155,7 @@ function readTokens(reader, closer) {
     const op = OPERATORS.find((candidate) => source.startsWith(candidate, reader.at));
     if (op) {
       reader.at += op.length;
-      if (op === ")" && closer === ")" && depth === 0 && cases === 0) {
+      if (op === ")" && closer === ")" && depth === 0) {
         readHeredocs(reader, heredocs);
         return tokens;
       }
@@ -168,11 +166,9 @@ function readTokens(reader, closer) {
       continue;
     }
     const word = readWord(reader);
-    if (word.known && !word.quoted && (word.text === "case" || word.text === "esac")) {
-      const startsCommand = !tokens.length || "op" in tokens[tokens.length - 1];
-      if (word.text === "case" && startsCommand) cases += 1;
-      if (word.text === "esac" && cases > 0) cases -= 1;
-    }
+    // A case's patterns end in `)`, which bash tells from the substitution's
+    // own end by its grammar; inside one, the gate doesn't try, and stops.
+    if (closer && word.known && !word.quoted && word.text === "case") throw new Unreadable("a `case` inside a substitution");
     tokens.push({ word });
   }
 }
@@ -589,7 +585,7 @@ function readsOnly(command) {
  * string is one word, so text that only names the command isn't. Text a
  * program may run is the pipeline's to answer (`pipelineText`).
  */
-function classify(command, action, raw) {
+function classify(command, action) {
   const { words } = command;
   if (!words.length) return null;
   const [name] = words;
@@ -667,6 +663,8 @@ function* everyList(commands, nested = false) {
 
 /** Whether pflag reads a boolean flag's values as on: bare, or a true value. */
 const isOn = (values) => (values ?? []).some((value) => value === null || ["1", "t", "T", "true", "TRUE", "True"].includes(value));
+/** Whether every value pflag reads for a boolean flag is false. */
+const isOff = (values) => (values ?? []).every((value) => value !== null && ["0", "f", "F", "false", "FALSE", "False"].includes(value));
 
 /** gh's flags that take a value, for each command: the long name, and its short one if it has one. */
 const VALUED = {
@@ -738,8 +736,13 @@ function inOrder(text, words) {
   // Quotes and escapes taken out, as the shell would: `g''h` is gh.
   text = text.replace(/["'\\]/g, "");
   let from = 0;
-  for (const word of words) {
-    const found = new RegExp(String.raw`\b${word}\b`, "g");
+  for (const [index, word] of words.entries()) {
+    // A word of its own: between blanks, operators or the ends, so a branch
+    // like fix/gh-pr-create-flags isn't one. gh may follow a path's / or a
+    // setting's =, and be gh.exe.
+    const before = index === 0 ? "[\\s;&|()<>=/]" : "[\\s;&|()<>]";
+    const after = index === 0 ? "(?:\\.exe)?" : "";
+    const found = new RegExp(String.raw`(?:^|(?<=${before}))${word}${after}(?=$|[\s;&|()<>])`, "g");
     found.lastIndex = from;
     const hit = found.exec(text);
     if (!hit) return false;
@@ -779,7 +782,7 @@ function stepOf(command) {
   const texts = words.map((word) => word.text);
   // A ~ quoted, or another user's, isn't the home folder the gate would take it for.
   if (texts[0] === "cd" && texts.length === 2 && texts[1].startsWith("~") && (words[1].quoted || /^~[^/]/.test(texts[1]))) return { tilde: true };
-  if (texts[0] === "cd") return texts.length === 2 ? { dir: texts[1] } : { dir: "" };
+  if (texts[0] === "cd") return texts.length === 2 ? { dir: texts[1] } : texts.length === 1 ? { dir: "" } : { odd: true };
   if (texts[0] === "git" && texts[1] === "push") return { push: true };
   return null;
 }
@@ -803,7 +806,7 @@ export function readCommand(command, action) {
   }
   const commands = commandsOf(tokens);
   const lists = [...everyList(commands)];
-  const found = lists.flatMap(({ commands: list, nested }) => list.map((entry) => ({ command: entry, nested, kind: classify(entry, action, command) }))).filter((entry) => entry.kind);
+  const found = lists.flatMap(({ commands: list, nested }) => list.map((entry) => ({ command: entry, nested, kind: classify(entry, action) }))).filter((entry) => entry.kind);
   const exact = found.filter((entry) => entry.kind === "exact");
   const target = exact.length === 1 && !exact[0].nested ? exact[0].command : null;
   // Text a program may run, with the three words in it, is a command the gate can't place.
@@ -829,6 +832,7 @@ export function readCommand(command, action) {
     if (commands[index].after !== "&&") return stop(`\`${shown.slice(0, 60)}\` is followed by \`${commands[index].after === "\n" ? "a new line" : commands[index].after}\`, not \`&&\`, so gh would run whether it worked or not`);
     if (step.tilde) return stop("it changes to a folder with a `~` bash won't expand as the gate would (quoted, or another user's home)");
     if (step.push) pushes = true;
+    else if (step.odd) return stop("it changes folder in a form the gate doesn't follow; use `cd <folder>`");
     else if (step.dir === "-" || step.dir === "") return stop("it changes folder with `cd -`, or to the home folder");
     else dirs.push(step.dir);
   }
@@ -888,7 +892,7 @@ export function readCommand(command, action) {
   if (!reading([...everyList(alongside)])) return stop(`something runs alongside \`gh pr ${action}\` that could change the pull request while it's merged; run it on its own`);
   const inside = [...target.words, ...target.settings, ...target.redirects.map((token) => token.target)].flatMap((word) => word.inner);
   if (!inside.every((tokens) => reading([...everyList(commandsOf(tokens), true)]))) return stop(`a substitution in \`gh pr ${action}\` runs something that could change the pull request first; put it in a file, and the file in the command`);
-  if (action === "merge" && flags.has("--auto") && !(flags.get("--auto") ?? []).every((value) => value !== null && ["0", "f", "F", "false", "FALSE", "False"].includes(value))) {
+  if (action === "merge" && flags.has("--auto") && !isOff(flags.get("--auto"))) {
     return stop("`--auto` merges commits pushed after the review");
   }
 
