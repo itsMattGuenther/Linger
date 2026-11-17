@@ -169,8 +169,10 @@ export function classify(paths, { labels = [], read = fromDisk, before = null } 
     if (path.startsWith("docs/") || path.endsWith(".md") || path === "LICENSE") continue;
     // Checks and tools that ship nothing (docs/performance.md,
     // docs/pr-questions.md, docs/testing-strategy.md): the rules job runs
-    // them and their tests on every change.
-    if (/^scripts\/(startup-time|pr-questions|review-catches|tauri-versions|ios-flows|ios-plist|upstream-fixes|android-jni|installed-packages|maestro-driver|app-at-rest|browser-fakes)(\.test)?\.mjs$|^scripts\/fixtures\/(dexdump-[\w.]+\.txt|maestro-[\w-]+\.log)$|^scripts\/actionlint(-test)?\.sh$/.test(path)) continue;
+    // them and their tests on every change. The review gate is one, with
+    // its hook in .claude/settings.json (#917, #930).
+    if (/^\.claude\/settings\.json$/.test(path)) continue;
+    if (/^scripts\/(startup-time|pr-questions|review-catches|review-gate|tauri-versions|ios-flows|ios-plist|upstream-fixes|android-jni|installed-packages|maestro-driver|app-at-rest|browser-fakes)(\.test)?\.mjs$|^scripts\/fixtures\/(dexdump-[\w.]+\.txt|maestro-[\w-]+\.log)$|^scripts\/actionlint(-test)?\.sh$/.test(path)) continue;
     if (path.startsWith("crates/linger-core/") || path.startsWith("client/src/generated/")) add(...domains);
     else if (path.startsWith("crates/linger-server/")) add("rust", "s3");
     else if (path.startsWith(SHELL)) {
