@@ -188,8 +188,15 @@ function readHeredocs(reader, heredocs) {
     for (;;) {
       if (reader.at >= source.length) break;
       const newline = source.indexOf("\n", reader.at);
-      const line = source.slice(reader.at, newline < 0 ? source.length : newline);
+      let line = source.slice(reader.at, newline < 0 ? source.length : newline);
       reader.at = newline < 0 ? source.length : newline + 1;
+      // Unquoted, a line ending in a backslash goes on into the next, and
+      // bash compares the joined line with the end word: `EO\` then `F` ends it.
+      while (!heredoc.quoted && /(?:^|[^\\])(?:\\\\)*\\$/.test(line) && reader.at < source.length) {
+        const next = source.indexOf("\n", reader.at);
+        line = line.slice(0, -1) + source.slice(reader.at, next < 0 ? source.length : next);
+        reader.at = next < 0 ? source.length : next + 1;
+      }
       if ((heredoc.tabs ? line.replace(/^\t+/, "") : line) === heredoc.end) break;
       body.push(line);
     }

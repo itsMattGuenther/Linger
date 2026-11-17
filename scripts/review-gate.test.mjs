@@ -465,6 +465,10 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     ["create", 'gh pr create -t x --body "$(git commit --allow-empty -qm \'gh pr create -H other\'; git log -1 --format=%B | sh)"'],
     // for ((…)): a shift, not a here-document, so the next line is read.
     ["merge", "for ((;;true<<1)); do :; done\ngh pr merge 5 --auto"],
+    // Unquoted, a here-document's end word is joined across a backslash and a
+    // line break, so the merge after it runs (Greptile, #935).
+    ["merge", "cat <<EOF\nEO\\\nF\ngh pr merge 5\nEOF"],
+    ["merge", "cat <<-EOF\n\tEO\\\nF\ngh pr merge 5\nEOF"],
     // Text bash would refuse, that might be the command.
     ["merge", 'gh pr merge 5 "oops'],
   ];
@@ -498,6 +502,8 @@ test("a command that isn't one leaves the gate out", () => {
     // pipeline runs text and it writes no file.
     ["merge", "gh pr view 5 --jq '.merge' | head -1"],
     ["merge", "gh api repos/o/r/pulls/5 --jq '\"merge=\\(.merged)\"' 2>/dev/null"],
+    // Quoted, its end word isn't joined across lines, so the merge is in the body.
+    ["merge", "cat <<'EOF'\nEO\\\nF\ngh pr merge 5\nEOF"],
     ["merge", "echo 'gh pr merge 5' >&2"],
     ["merge", "for pr in 919 921; do gh pr view $pr --json state --jq '\"merged\"'; done"],
     ["merge", 'git commit -m "fix: gh pr merge 5 later"'],
