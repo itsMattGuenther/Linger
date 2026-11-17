@@ -69,21 +69,21 @@ const AFTER = String.raw`(?=$|[ \t<>&]|${SEPARATOR})`;
 const REDIR = String.raw`(?:\d*(?:>>|>&|>\||>|<<<|<&|<>|<)|&>>|&>)[ \t]*${WORD}${AFTER}`;
 // Where a redirection starts, read or not, so its digits (`2>`) are never a word.
 const NOT_REDIR = String.raw`(?!\d*[<>])`;
-// Where a command starts: the start, or after ; & | newline or (.
-const START = String.raw`(^|[;&|\n(])[ \t]*`;
+// Where a command starts: the start, or after ; | newline ( or an & that
+// doesn't start `&>`.
+const START = String.raw`(^|[;|\n(]|&(?!>))[ \t]*`;
 // Before gh, among the settings, and between gh, pr and the action, the shell
-// allows redirections too (`2>/dev/null gh pr 2>&1 merge 5`); they're passed over.
-const GAP = String.raw`(?:[ \t]+${REDIR})*[ \t]+`;
-const GH = (action) => new RegExp(`${START}((?:(?:${ASSIGN}|${REDIR})[ \\t]+)*)gh${GAP}pr${GAP}${action}${AFTER}`, "g");
+// allows redirections too (`2>/dev/null gh pr 2>&1 merge 5`), glued together or
+// not; they're passed over. A redirection's target that looks like a setting
+// (`>GH_REPO=o/r` writes a file of that name) is never one: FRONT says which.
+const FRONT = String.raw`(?:(${ASSIGN})[ \t]+|${REDIR}[ \t]*)`;
+const GAP = String.raw`[ \t]+(?:${REDIR}[ \t]*)*`;
+const GH = (action) => new RegExp(`${START}((?:${FRONT})*)gh${GAP}pr${GAP}${action}${AFTER}`, "g");
 // What may come before the command on its line: changes of folder and a push.
 // Either may have redirections (`2>/dev/null`), and their digits are never its words.
 const STEP = new RegExp(String.raw`^\s*(?:cd(?:[ \t]+${REDIR})*[ \t]+${NOT_REDIR}(${WORD})${AFTER}(?:[ \t]*${REDIR})*|git[ \t]+push${AFTER}(?:[ \t]*${REDIR}|[ \t]+${NOT_REDIR}${WORD}${AFTER})*)[ \t]*(?:&&|;|\n)`);
-// One setting or redirection in front of gh, at a time: a redirection's target
-// that looks like a setting (`>GH_REPO=o/r` writes a file of that name) is never one.
-const IN_FRONT = new RegExp(String.raw`(?:(${ASSIGN})|${REDIR})[ \t]+`, "y");
-// gh, pr and the action with only blanks, a line's continuation, other non-word
-// characters or redirections between, read or not: the fallback's idea of one.
-const LOOSE_GAP = String.raw`(?:\W|\d*[<>]+&?(?:"[^"]*"|'[^']*'|[^\s;|"'])*)+?`;
+// What's in front of gh, one setting or redirection at a time, as GH matched it.
+const IN_FRONT = new RegExp(FRONT, "y");
 const TOKEN = new RegExp(String.raw`^[ \t]*${NOT_REDIR}(${WORD})${AFTER}`);
 // Where the command ends: a separator, the end, or a comment (a # that starts a word).
 // `&>` is a redirection, not an end.
@@ -146,15 +146,34 @@ const stop = (why) => ({ fail: why });
  * that command at all; `{ fail }` with why when it might and the gate can't
  * tell exactly how, because guessing would let a change through unreviewed.
  */
+/**
+ * Whether `words` come in this order in `command`, each a word of its own,
+ * anywhere. The gate's fallback when it can't place the command exactly:
+ * Claude Code fired the hook from its own reading, so with the words there
+ * in order it might be the command, however it's spelled (`command gh`, a
+ * path, quotes, a redirection the gate can't read between them, a line
+ * continued). One pass left to right, so no command makes it slow.
+ */
+export function inOrder(command, words) {
+  let from = 0;
+  for (const word of words) {
+    const found = new RegExp(String.raw`\b${word}\b`, "g");
+    found.lastIndex = from;
+    const hit = found.exec(command);
+    if (!hit) return false;
+    from = hit.index + word.length;
+  }
+  return true;
+}
+
 export function readCommand(command, action) {
   if (!ACTIONS.includes(action)) throw new Error(`unknown action ${action}`);
   const matches = [...command.matchAll(GH(action))];
   if (!matches.length) {
     // Claude Code's own reading of the command chose this hook, so the three
-    // words in a row in any other form (`command gh`, `"gh"`, a path to gh)
-    // are a command the gate can't place. Without them in a row it isn't one
-    // at all, as for a hook that fired for every command.
-    if (new RegExp(String.raw`\bgh${LOOSE_GAP}pr${LOOSE_GAP}${action}\b`).test(command)) {
+    // words in order in any other form are a command the gate can't place.
+    // Without them it isn't one at all.
+    if (inOrder(command, ["gh", "pr", action])) {
       return stop(`it couldn't find \`gh pr ${action}\` where a command starts`);
     }
     return null;
@@ -223,7 +242,8 @@ export function readCommand(command, action) {
   // flag that matters after it might be the command's or the body's, so it
   // stops rather than guess.
   if (!readable && action !== "create") return stop(`a word after \`gh pr ${action}\` can't be read; run it with plain words, the body in --body-file`);
-  if (!readable && /(?:^|[ \t])-(?:-repo|R|-head|H|-base|B)/.test(after)) {
+  // After any non-word character: a blank, a line continued, a quote.
+  if (!readable && /(?:^|[^\w-])-(?:-repo|R|-head|H|-base|B)/.test(after)) {
     return stop("`--repo`, `--head` or `--base` may come after a word it can't read; put them first, or the body in --body-file");
   }
   const repos = new Set(flags.get("--repo") ?? []);

@@ -72,6 +72,9 @@ test("reads which pull request, folder and branch a command is about", () => {
     // A redirection's target that looks like a setting is a file's name.
     ["create", ">GH_REPO=o/r gh pr create -t x", { repo: null }],
     ["merge", "gh pr merge 5 >| out.txt <> rw.txt <<< x", { selector: "5" }],
+    // Glued together, before gh or between its words.
+    ["merge", "2>/dev/null>log.txt gh pr merge 5", { selector: "5" }],
+    ["merge", "gh 2>a.txt>b.txt pr merge 5", { selector: "5" }],
     ["create", "gh pr create -t x > out.txt", { base: null }],
     ["create", "gh pr create -t x -B release 2>&1", { base: "release" }],
     ["ready", "gh pr ready", { selector: null }],
@@ -119,6 +122,19 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     ["merge", 'gh pr 2>"$X y" merge 5'],
     ["merge", "gh pr \\\n        merge 5"],
     ["merge", "gh pr merge 5 --body-file - <<'EOF'\nwords\nEOF"],
+    // A target it can't read after a blank, or with a blank escaped in it.
+    ["merge", "gh pr 2> $LOG merge 5 --auto"],
+    ["merge", 'gh 2> "$L" pr merge 5'],
+    ["merge", "gh pr 2>a\\ b merge 5"],
+    // The & of &> doesn't start a command: gh here is true's word, and the
+    // words in order are enough to stop it.
+    ["merge", "true &>/dev/null gh pr merge 5"],
+    // A flag that matters, after a body it can't read and a line continued, or quoted.
+    ["create", 'gh pr create -b "$(cat x)" \\\n-B release'],
+    ["create", 'gh pr create -b "$(cat x)" "-R" o/r'],
+    // Claude Code fired the hook from its own reading, so the words in order
+    // are enough: the gate can't tell this from a merge it can't read.
+    ["merge", "gh pr create --title merge"],
     ["merge", 'gh pr merge 912 --body "$(cat x)" -R o/r'],
     ["merge", 'gh pr merge 912 -R o/r --body "$(cat x)"'],
     ["merge", 'gh pr merge 5 --body "$(cat message.txt)" --auto --squash'],
@@ -148,6 +164,13 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
   }
 });
 
+test("a command it can't place comes back at once, however long", () => {
+  const started = Date.now();
+  assert.equal(readCommand(`gh ${"=>".repeat(20_000)} x`, "merge"), null);
+  assert.equal(readCommand(`gh pr ${"2>".repeat(20_000)} x`, "merge"), null);
+  assert.ok(Date.now() - started < 2000, `took ${Date.now() - started} ms`);
+});
+
 test("a command that isn't one leaves the gate out", () => {
   for (const [action, command] of [
     ["create", "gh pr view 1"],
@@ -155,7 +178,6 @@ test("a command that isn't one leaves the gate out", () => {
     ["create", "git status"],
     ["create", "gh pr create --help"],
     ["merge", "gh pr merge -h"],
-    ["merge", "gh pr create --title merge"],
     ["ready", "gh pr view --json isDraft"],
     ["ready", "gh pr ready 12 --undo"],
   ]) assert.equal(readCommand(command, action), null, command);
