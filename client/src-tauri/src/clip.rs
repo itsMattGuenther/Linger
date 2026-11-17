@@ -118,6 +118,7 @@ impl Clips {
     }
 
     /// Take whatever is on the books, opening or under way.
+    #[cfg(test)]
     fn take(&self) -> Option<Recording> {
         self.lock().recording.take()
     }
@@ -229,19 +230,20 @@ pub async fn clip_start(
 ) -> Result<(), String> {
     let label = window.label().to_string();
     let id = app.state::<Clips>().begin(&label)?;
+    // Off the books again however this ends before it's under way: an error,
+    // or this command being dropped while it waits.
+    let mut booked = Booked {
+        app: app.clone(),
+        id,
+        under_way: false,
+    };
     let opened = tokio::task::spawn_blocking(move || {
         crate::voice::device::Microphone::open(input.as_deref())
     })
     .await
     .map_err(|error| error.to_string())
     .and_then(|opened| opened.map_err(|error| error.to_string()));
-    let microphone = match opened {
-        Ok(microphone) => microphone,
-        Err(error) => {
-            app.state::<Clips>().failed(id);
-            return Err(error);
-        }
-    };
+    let microphone = opened?;
     let (stop, stopped) = oneshot::channel();
     let heard = (app.clone(), label.clone());
     let told = (app.clone(), label.clone());
@@ -263,10 +265,27 @@ pub async fn clip_start(
         .await
     });
     if app.state::<Clips>().started(id, Started { stop, done }) {
+        booked.under_way = true;
         Ok(())
     } else {
         // Its window closed, or it was stopped, while the microphone opened.
         Err(CALLED_OFF.into())
+    }
+}
+
+/// A recording on the books that isn't under way yet: dropped before it is,
+/// it comes off them, so nothing is left to refuse the next one.
+struct Booked {
+    app: AppHandle,
+    id: u64,
+    under_way: bool,
+}
+
+impl Drop for Booked {
+    fn drop(&mut self) {
+        if !self.under_way {
+            self.app.state::<Clips>().failed(self.id);
+        }
     }
 }
 
@@ -277,16 +296,18 @@ const CALLED_OFF: &str = "The voice message was called off while the microphone 
 /// stopped by itself (full, or the microphone gone) is handed back the same
 /// way.
 #[tauri::command]
-pub async fn clip_stop(app: AppHandle) -> Result<Response, String> {
-    // One still opening its microphone is taken off the books too, and
-    // `clip_start` throws it away once the microphone opens.
-    let recording = app.state::<Clips>().take();
-    let Some(Recording {
-        started: Some(started),
-        ..
-    }) = recording
-    else {
-        return Err("Nothing is being recorded.".into());
+pub async fn clip_stop(app: AppHandle, window: Window) -> Result<Response, String> {
+    // This window's own: one window never stops another's. One still opening
+    // its microphone is taken off the books, and `clip_start` throws it away
+    // once the microphone opens.
+    let recording = app.state::<Clips>().take_from(window.label());
+    let started = match recording {
+        None => return Err("Nothing is being recorded.".into()),
+        Some(Recording { started: None, .. }) => return Err(CALLED_OFF.into()),
+        Some(Recording {
+            started: Some(started),
+            ..
+        }) => started,
     };
     let _ = started.stop.send(());
     let clip = started.done.await.map_err(|error| error.to_string())??;
@@ -295,8 +316,8 @@ pub async fn clip_stop(app: AppHandle) -> Result<Response, String> {
 
 /// Stop recording and throw it away.
 #[tauri::command]
-pub async fn clip_cancel(app: AppHandle) {
-    let recording = app.state::<Clips>().take();
+pub async fn clip_cancel(app: AppHandle, window: Window) {
+    let recording = app.state::<Clips>().take_from(window.label());
     if let Some(started) = recording.and_then(|recording| recording.started) {
         started.discard();
     }
@@ -497,17 +518,18 @@ mod tests {
         );
         // The microphone is open now, and too late: what would have recorded
         // is stopped, not started.
+        // The task never finishes by itself; it's thrown away when what it
+        // holds is dropped, which says so at once rather than after a wait.
         let (stop, _stopped) = oneshot::channel();
-        let ran = Arc::new(AtomicUsize::new(0));
-        let running = Arc::clone(&ran);
+        let (alive, gone) = oneshot::channel::<()>();
         let done = tokio::spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-            running.fetch_add(1, Ordering::SeqCst);
+            let _alive = alive;
+            std::future::pending::<()>().await;
             Ok(Clip::default())
         });
         assert!(!clips.started(id, Started { stop, done }));
-        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
-        assert_eq!(ran.load(Ordering::SeqCst), 0, "it recorded anyway");
+        let ended = tokio::time::timeout(std::time::Duration::from_secs(5), gone).await;
+        assert!(matches!(ended, Ok(Err(_))), "it recorded anyway");
         // And the next voice message starts, as if nothing had happened.
         assert!(clips.begin("main").is_ok());
     }

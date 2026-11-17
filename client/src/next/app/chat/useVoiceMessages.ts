@@ -45,6 +45,12 @@ export function useVoiceMessages(
   /** The conversation being recorded in, if any. */
   const recordingIn = useRef<string | null>(null);
   /**
+   * The conversation whose recording is still starting (its microphone
+   * opening), if any: going away or discarding then has to call it off too,
+   * or it starts with nobody to stop it (#913).
+   */
+  const startingIn = useRef<string | null>(null);
+  /**
    * Which recorder this app has, if any: decided once, as the app doesn't
    * change. A phone's web view takes a moment to say whether it can make
    * Opus, so its microphone button comes once it has.
@@ -130,8 +136,9 @@ export function useVoiceMessages(
   // The window going: whatever is recording is thrown away, and every kept clip let go of.
   useEffect(
     () => () => {
-      if (recordingIn.current !== null) recorder.current?.cancel();
+      if (recordingIn.current !== null || startingIn.current !== null) recorder.current?.cancel();
       recordingIn.current = null;
+      startingIn.current = null;
       for (const clip of clipsNow.current.values()) if (clip.kind === "kept") URL.revokeObjectURL(clip.url);
     },
     [],
@@ -145,17 +152,27 @@ export function useVoiceMessages(
 
   const record = useCallback(() => {
     const conversation = paneId;
-    if (conversation === null || recordingIn.current !== null) return;
+    if (conversation === null || recordingIn.current !== null || startingIn.current !== null) return;
     put(conversation, { kind: "starting" });
+    startingIn.current = conversation;
     const devices = loadVoicePrefs().devices;
     const starting = recorder.current?.start() ?? Promise.reject(new Error("no input device available"));
+    // Discarded while starting: nothing more to say, whichever way it went.
+    const stillWanted = () => {
+      const wanted = startingIn.current === conversation;
+      if (wanted) startingIn.current = null;
+      return wanted;
+    };
     starting.then(
       () => {
+        if (!stillWanted()) return;
         recordingIn.current = conversation;
         put(conversation, { kind: "recording", since: Date.now(), levels: [] });
       },
-      (error: unknown) =>
-        put(conversation, { kind: "ready", problem: startProblemWords(voiceStartProblem(error instanceof Error ? error.message : String(error), onWindows(), devices, onPhone())) }),
+      (error: unknown) => {
+        if (!stillWanted()) return;
+        put(conversation, { kind: "ready", problem: startProblemWords(voiceStartProblem(error instanceof Error ? error.message : String(error), onWindows(), devices, onPhone())) });
+      },
     );
   }, [paneId, put]);
 
@@ -166,8 +183,9 @@ export function useVoiceMessages(
   const discard = useCallback(() => {
     if (paneId === null) return;
     const now = clipsNow.current.get(paneId);
-    if (recordingIn.current === paneId) {
+    if (recordingIn.current === paneId || startingIn.current === paneId) {
       recordingIn.current = null;
+      startingIn.current = null;
       recorder.current?.cancel();
     }
     if (now?.kind === "kept") URL.revokeObjectURL(now.url);
