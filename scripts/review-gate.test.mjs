@@ -54,6 +54,9 @@ test("reads which pull request, folder and branch a command is about", () => {
     ["merge", "gh pr merge 5 2>/dev/null", { selector: "5" }],
     ["merge", "gh pr merge 5 >&2 --admin", { selector: "5" }],
     ["merge", "gh pr merge 5 &>log.txt", { selector: "5" }],
+    ["merge", "gh pr merge 5 --squash>out.txt 2>&-", { selector: "5" }],
+    // As the shell reads it: digits glued to > name what's redirected, not a pull request.
+    ["merge", "gh pr merge 5>out.txt", { selector: null }],
     ["create", "gh pr create -t x > out.txt", { base: null }],
     ["create", "gh pr create -t x -B release 2>&1", { base: "release" }],
     ["ready", "gh pr ready", { selector: null }],
@@ -89,6 +92,7 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     // A redirection whose target it can't read is still a word it can't read.
     ["merge", "gh pr merge 5 > $(mktemp)"],
     ["merge", 'gh pr merge 5 2>"$LOG"'],
+    ["merge", "gh pr merge 5 <<< x"],
     ["merge", 'gh pr merge 912 --body "$(cat x)" -R o/r'],
     ["merge", 'gh pr merge 912 -R o/r --body "$(cat x)"'],
     ["merge", 'gh pr merge 5 --body "$(cat message.txt)" --auto --squash'],

@@ -65,7 +65,8 @@ const GH = (action) => new RegExp(`${START}((?:${ASSIGN}[ \\t]+)*)gh[ \\t]+pr[ \
 const STEP = new RegExp(String.raw`^\s*(?:cd[ \t]+(${WORD})|git[ \t]+push(?:[ \t]+${WORD})*)[ \t]*(?:&&|;|\n)`);
 const ASSIGNS = new RegExp(String.raw`^\s*(?:${ASSIGN}[ \t]+)*$`);
 const ASSIGN_ONE = new RegExp(String.raw`(${ASSIGN})`, "g");
-const TOKEN = new RegExp(String.raw`^[ \t]*(${WORD})(?=$|[ \t;&|)\n])`);
+// A word ends where a redirection glued to it starts (`--squash>out`), as in the shell.
+const TOKEN = new RegExp(String.raw`^[ \t]*(${WORD})(?=$|[ \t;&|)\n<>])`);
 // Where the command ends: a separator, the end, or a comment (a # that starts a word).
 const END = /^(?:[ \t]*(?:$|[;&|)\n])|[ \t]+#)/;
 // A redirection and its target (`2>&1`, `> out`, `2>/dev/null`, `<in`, `&>log`): the
