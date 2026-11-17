@@ -85,10 +85,12 @@ const settled = (asked: Promise<unknown>) => {
 };
 
 /**
- * How long a start waits for an earlier start's microphone to open: one that
- * hangs (a stuck driver) mustn't hold every later Record (#920).
+ * How long a start waits for an earlier start, cancel or stop: one that
+ * hangs mustn't hold every later Record (#920). A little longer than the
+ * shell gives a microphone to open (`LONGEST_OPEN` in clip.rs), after which
+ * it has given up that start's place.
  */
-const LONGEST_OPEN_WAIT_MS = 10_000;
+const LONGEST_OPEN_WAIT_MS = 35_000;
 
 /**
  * The desktop shell's recorder (src-tauri/src/clip.rs), through its commands
@@ -127,7 +129,7 @@ export function shellRecorder(events: RecorderEvents, input: () => string | null
     },
     stop: async () => {
       const stopping = invoke<ArrayBuffer>("clip_stop");
-      settled(stopping);
+      settled(within(stopping, LONGEST_OPEN_WAIT_MS));
       return readClip(new Uint8Array(await stopping));
     },
     cancel: () => {
@@ -406,6 +408,9 @@ export function pageRecorder(events: RecorderEvents): Recorder {
       // anything is waited for: a start made meanwhile has its own (#920).
       const kept = clip;
       const held = encoder as AudioEncoder | null;
+      // Out of the recorder's hands at once, so a start meanwhile can't
+      // close it while it finishes.
+      encoder = null;
       const ending = reading;
       release();
       await ending;
@@ -413,7 +418,6 @@ export function pageRecorder(events: RecorderEvents): Recorder {
       if (held !== null && held.state === "configured") await held.flush().catch(() => undefined);
       // Closed already, after an encoder error meanwhile.
       if (held !== null && held.state !== "closed") held.close();
-      if (encoder === held) encoder = null;
       return kept;
     },
     cancel,

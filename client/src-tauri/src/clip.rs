@@ -168,7 +168,15 @@ impl Clips {
         let mut books = self.lock();
         let last = books.tickets.get(window).copied().unwrap_or(0);
         books.call_off_up_to(window, last);
-        books.take_if(|recording| recording.window == window)
+        match books.recording.as_mut() {
+            // Still opening: marked, keeping its place until it opens, as a
+            // cancel does, so no second microphone opens beside it.
+            Some(recording) if recording.window == window && recording.started.is_none() => {
+                recording.called_off = true;
+                None
+            }
+            _ => books.take_if(|recording| recording.window == window),
+        }
     }
 
     /// Recording `id` has its microphone open and is under way. When it was
@@ -314,12 +322,17 @@ pub async fn clip_start(
         id,
         under_way: false,
     };
-    let opened = tokio::task::spawn_blocking(move || {
+    // A microphone that never opens (a stuck driver) gives up its place on
+    // the books after a while, as voice's does, so it can't hold every later
+    // start (#920); one that opens after that is closed unused.
+    let opening = tokio::task::spawn_blocking(move || {
         crate::voice::device::Microphone::open(input.as_deref())
-    })
-    .await
-    .map_err(|error| error.to_string())
-    .and_then(|opened| opened.map_err(|error| error.to_string()));
+    });
+    let opened = tokio::time::timeout(LONGEST_OPEN, opening)
+        .await
+        .map_err(|_| SLOW_OPEN.to_string())
+        .and_then(|joined| joined.map_err(|error| error.to_string()))
+        .and_then(|opened| opened.map_err(|error| error.to_string()));
     let microphone = opened?;
     let (stop, stopped) = oneshot::channel();
     let heard = (app.clone(), label.clone());
@@ -367,6 +380,10 @@ impl Drop for Booked {
 }
 
 const ALREADY: &str = "A voice message is already being recorded.";
+/// How long a microphone has to open for a voice message (#920). The page
+/// waits a little longer than this for an earlier start (`recorders.ts`).
+const LONGEST_OPEN: std::time::Duration = std::time::Duration::from_secs(30);
+const SLOW_OPEN: &str = "the microphone took too long to open";
 const CALLED_OFF: &str = "The voice message was called off while the microphone opened.";
 
 /// Stop recording and hand the clip back (`Clip::to_bytes`). One that already
@@ -600,9 +617,12 @@ mod tests {
         // its closing takes nothing that isn't its own.
         assert_eq!(clips.begin("chat", 5).err(), Some(ALREADY));
         assert!(clips.forget_window("chat").is_none());
-        assert!(
-            clips.forget_window("main").is_some(),
-            "the window's closing found nothing"
+        // Marked, keeping its place until its microphone opens (#920).
+        assert!(clips.forget_window("main").is_none());
+        assert_eq!(
+            clips.begin("chat", 9).err(),
+            Some(ALREADY),
+            "a second microphone opened beside the first"
         );
         // The microphone is open now, and too late: what would have recorded
         // is stopped, not started.
@@ -707,17 +727,24 @@ mod tests {
     /// A window that goes, or whose page loads afresh, calls off every start
     /// number handed out to it so far: one heard late is refused, and the
     /// next page's, handed out above them, go ahead (#920).
-    #[test]
-    fn a_page_loaded_afresh_calls_off_every_start_its_last_page_was_handed() {
+    #[tokio::test]
+    async fn a_page_loaded_afresh_calls_off_every_start_its_last_page_was_handed() {
         let clips = Clips::default();
         let first = clips.lock().ticket("main");
         let late = clips.lock().ticket("main");
-        clips.begin("main", first).expect("a start");
-        assert!(clips.forget_window("main").is_some());
+        let id = clips.begin("main", first).expect("a start");
+        // Still opening: it keeps its place until its microphone opens.
+        assert!(clips.forget_window("main").is_none());
         assert_eq!(
             clips.begin("main", late).err(),
             Some(CALLED_OFF),
             "the last page's start went ahead"
+        );
+        let (stop, _stopped) = oneshot::channel();
+        let done = tokio::spawn(async { Ok(Clip::default()) });
+        assert!(
+            !clips.started(id, Started { stop, done }),
+            "it recorded for a page that's gone"
         );
         let next = clips.lock().ticket("main");
         assert!(next > late);
