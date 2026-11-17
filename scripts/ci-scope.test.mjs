@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { classify, localPaths } from "./ci-scope.mjs";
+import { cfgReach, classify, DESKTOP_ONLY, labelsFrom, localPaths, shellModules, shellReach } from "./ci-scope.mjs";
 
 const active = (paths) => Object.entries(classify(paths)).filter(([, value]) => value).map(([key]) => key);
 for (const paths of [["README.md"], ["docs/testing.md", "LICENSE"], ["docs/screenshots/example.png"]])
@@ -124,4 +124,198 @@ test("local: no base to compare with selects everything", (t) => {
   const out = execFileSync("node", [script, "--local", "no-such-ref"], { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
   assert.match(out, /^changed=0\nrust=true\n/);
   assert.equal(out.match(/=true/g).length, 8);
+});
+
+// --- only the checks a change can reach (#914) ---
+
+/** A shell whose `lib.rs` and capability files are these, for `classify` to read. */
+const LIB = `//! Tauri shell.
+
+#[cfg(test)]
+mod acl;
+#[cfg(desktop)]
+mod tray;
+// Voice is the desktop's: a phone's is in its page.
+#[cfg(desktop)]
+pub mod voice;
+#[cfg(target_os = "linux")]
+pub mod desktop_entry;
+pub mod gateway;
+mod secrets;
+#[cfg(any(target_os = "ios", test))]
+mod phone_scene;
+#[cfg(target_os = "ios")]
+mod phone_keyboard;
+#[cfg(any(mobile, test))]
+mod share_window;
+#[cfg(any(desktop, target_os = "ios"))]
+mod both_named;
+#[cfg(all(desktop, not(test)))]
+mod not_read;
+#[cfg(desktop)]
+#[cfg(feature = "x")]
+mod two_cfgs;
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {}
+`;
+const shell = (files = {}) => (path) => ({ "client/src-tauri/src/lib.rs": LIB, ...files })[path] ?? null;
+const reached = (paths, options = {}) => Object.entries(classify(paths, { read: shell(), ...options })).filter(([, value]) => value).map(([key]) => key);
+
+test("which app builds a module is read from its cfg", () => {
+  assert.equal(cfgReach("desktop"), "desktop");
+  assert.equal(cfgReach('target_os = "linux"'), "desktop");
+  assert.equal(cfgReach('any(target_os = "windows", target_os = "macos")'), "desktop");
+  assert.equal(cfgReach("mobile"), "phone");
+  assert.equal(cfgReach('target_os = "ios"'), "phone");
+  assert.equal(cfgReach('target_os = "android"'), "phone");
+  // The phone's module, with tests that run on a computer.
+  assert.equal(cfgReach("any(mobile, test)"), "phone");
+  assert.equal(cfgReach('any(target_os = "ios", test)'), "phone");
+  assert.equal(cfgReach("test"), "tests");
+  // Both named, or anything this doesn't read: both's.
+  assert.equal(cfgReach('any(desktop, target_os = "ios")'), "both");
+  assert.equal(cfgReach("all(desktop, not(test))"), "both");
+  assert.equal(cfgReach('feature = "x"'), "both");
+  assert.equal(cfgReach("not(desktop)"), "both");
+  assert.equal(cfgReach(""), "both");
+});
+
+test("the shell's modules are read from lib.rs, and what isn't plain is both's", () => {
+  assert.deepEqual(shellModules(LIB), {
+    acl: "tests", tray: "desktop", voice: "desktop", desktop_entry: "desktop", gateway: "both", secrets: "both",
+    phone_scene: "phone", phone_keyboard: "phone", share_window: "phone", both_named: "both", not_read: "both", two_cfgs: "both",
+  });
+});
+
+test("the real lib.rs sorts the way the app is built: voice is the desktop's, the scenes are the phone's", () => {
+  const real = shellModules(readFileSync(fileURLToPath(new URL("../client/src-tauri/src/lib.rs", import.meta.url)), "utf8"));
+  assert.equal(real.voice, "desktop");
+  assert.equal(real.tray, "desktop");
+  assert.equal(real.phone_scene, "phone");
+  assert.equal(real.gateway, "both");
+  assert.equal(real.secrets, "both");
+  // Every module is one of the four, and each kind is there: a lib.rs written another way would be all "both".
+  assert.deepEqual([...new Set(Object.values(real))].sort(), ["both", "desktop", "phone", "tests"]);
+});
+
+test("a file only the desktop app builds doesn't start the iPhone run", () => {
+  for (const path of ["client/src-tauri/src/tray.rs", "client/src-tauri/src/voice/device.rs", "client/src-tauri/src/voice/cleanup.rs",
+    "client/src-tauri/src/desktop_entry.rs", "client/src-tauri/linux/linger.desktop", "client/src-tauri/windows/installer.nsh"])
+    assert.deepEqual(reached([path]), ["shell", "packages"], path);
+  // A capability file for the desktop's windows.
+  const desktop = shell({ "client/src-tauri/capabilities/owner.json": '{"platforms":["linux","macOS","windows"],"windows":["main"]}' });
+  assert.deepEqual(reached(["client/src-tauri/capabilities/owner.json"], { read: desktop }), ["shell", "packages"]);
+});
+
+test("a file only the phone app builds doesn't start the desktop installers", () => {
+  for (const path of ["client/src-tauri/src/phone_scene.rs", "client/src-tauri/src/phone_keyboard.rs", "client/src-tauri/src/share_window.rs",
+    "client/src-tauri/gen/apple/project.yml", "client/src-tauri/gen/apple/NotificationService/PushNote.swift",
+    "client/src-tauri/Info.ios.plist", "client/src-tauri/tauri.ios.conf.json"])
+    assert.deepEqual(reached([path]), ["shell", "ios"], path);
+  const phone = shell({ "client/src-tauri/capabilities/phone.json": '{"platforms":["android","iOS"]}' });
+  assert.deepEqual(reached(["client/src-tauri/capabilities/phone.json"], { read: phone }), ["shell", "ios"]);
+});
+
+test("the shell's tests alone run only the shell's tests", () => {
+  assert.deepEqual(reached(["client/src-tauri/src/acl.rs"]), ["shell"]);
+});
+
+test("a file both apps build, or one this can't place, starts both", () => {
+  for (const path of ["client/src-tauri/src/lib.rs", "client/src-tauri/src/main.rs", "client/src-tauri/src/gateway.rs", "client/src-tauri/src/secrets.rs",
+    "client/src-tauri/Cargo.toml", "client/src-tauri/Cargo.lock", "client/src-tauri/build.rs", "client/src-tauri/tauri.conf.json",
+    "client/src-tauri/tests/csp.rs", "client/src-tauri/permissions/autogenerated/voice_join.toml",
+    // Android's files aren't sorted by app yet.
+    "client/src-tauri/gen/android/app/build.gradle.kts", "client/src-tauri/tauri.android.conf.json",
+    // A module lib.rs doesn't declare, one with a cfg naming both, and ones whose cfg isn't read.
+    "client/src-tauri/src/brand_new.rs", "client/src-tauri/src/both_named.rs", "client/src-tauri/src/not_read.rs", "client/src-tauri/src/two_cfgs.rs"])
+    assert.deepEqual(reached([path]), ["shell", "packages", "ios"], path);
+  // A capability file that names both, names nothing, or isn't JSON.
+  for (const text of ['{"platforms":["linux","iOS"]}', '{"windows":["main"]}', '{"platforms":[]}', "not json", null]) {
+    const read = shell({ "client/src-tauri/capabilities/x.json": text });
+    assert.deepEqual(reached(["client/src-tauri/capabilities/x.json"], { read }), ["shell", "packages", "ios"], String(text));
+  }
+});
+
+test("what can't be read is both's: no lib.rs, or one with nothing this recognises", () => {
+  for (const lib of [null, "", "fn main() {}"]) {
+    const read = (path) => (path === "client/src-tauri/src/lib.rs" ? lib : null);
+    assert.deepEqual(reached(["client/src-tauri/src/tray.rs"], { read }), ["shell", "packages", "ios"], String(lib));
+    assert.equal(shellReach("client/src-tauri/src/voice/device.rs", read), "both");
+  }
+});
+
+test("a desktop-only change and a phone-only change together start both", () => {
+  assert.deepEqual(reached(["client/src-tauri/src/tray.rs", "client/src-tauri/src/phone_scene.rs"]), ["shell", "packages", "ios"]);
+});
+
+test("the desktop-only label leaves the iPhone run out for files both apps build", () => {
+  const labels = [DESKTOP_ONLY];
+  // The page, the shared parts of the shell, and both with desktop-only files: today's voice work.
+  assert.deepEqual(reached(["client/src/next/app/settings/SoundSection.tsx"], { labels }), ["web", "packages"]);
+  assert.deepEqual(reached(["client/src-tauri/src/lib.rs", "client/src-tauri/Cargo.toml", "client/src-tauri/build.rs"], { labels }), ["shell", "packages"]);
+  assert.deepEqual(
+    reached(["client/src-tauri/src/voice/device.rs", "client/src-tauri/src/lib.rs", "client/src/next/core/micTest.ts", "docs/user-guide.md"], { labels }),
+    ["web", "shell", "packages"],
+  );
+  // And nothing else changes: the same without the label runs the iPhone check too.
+  assert.deepEqual(reached(["client/src/next/app/settings/SoundSection.tsx"]), ["web", "packages", "ios"]);
+  // Other labels say nothing.
+  assert.deepEqual(reached(["client/src/next/app/settings/SoundSection.tsx"], { labels: ["bug", "desktop"] }), ["web", "packages", "ios"]);
+});
+
+test("the label is ignored when a file that's the phone app's alone changed", () => {
+  const labels = [DESKTOP_ONLY];
+  for (const phone of ["client/src-tauri/src/phone_scene.rs", "client/src-tauri/gen/apple/project.yml", "client/tests/ios/set-up.yaml", "client/src-tauri/tauri.ios.conf.json",
+    // The run itself, and what it runs on: a change to those is what it's there to check.
+    ".github/workflows/ios-simulator.yml", ".github/workflows/ios.yml", ".github/workflows/share-window.yml", "scripts/https-front.mjs",
+    "scripts/share-window-ready.mjs", "scripts/test-certs.sh", "scripts/share-window-shots.sh", "client/tests/share-sender/send.test.ts"])
+    assert(reached(["client/src/next/app/settings/SoundSection.tsx", phone], { labels }).includes("ios"), phone);
+  // Other workflows aren't the phone's.
+  assert(!reached(["client/src/next/app/settings/SoundSection.tsx", ".github/workflows/ci.yml"], { labels }).includes("ios"));
+});
+
+test("the label doesn't hold back a run of everything: nothing to compare, the nightly, a release", () => {
+  assert.equal(reached([], { labels: [DESKTOP_ONLY] }).length, 8);
+});
+
+test("the pull request's labels are read from what the workflow hands over, and nothing readable is none", () => {
+  assert.deepEqual(labelsFrom('["bug","desktop-only"]'), ["bug", "desktop-only"]);
+  for (const value of [undefined, "", "null", "{}", "desktop-only", "[1,null]"]) assert.deepEqual(labelsFrom(value), [], String(value));
+});
+
+// As CI runs it: a pull request's two commits, its labels in PR_LABELS, and the answer in GITHUB_OUTPUT.
+test("in CI: a labelled pull request leaves the iPhone run out, an unlabelled one runs it, and it says which", (t) => {
+  const { dir, git } = branchRepo(t);
+  const base = execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
+  execFileSync("mkdir", ["-p", join(dir, "client/src/next"), join(dir, "client/src-tauri/src")]);
+  writeFileSync(join(dir, "client/src/next/Settings.tsx"), "b\n");
+  writeFileSync(join(dir, "client/src-tauri/src/lib.rs"), "#[cfg(desktop)]\nmod tray;\n#[cfg(any(mobile, test))]\nmod phone_scene;\n");
+  writeFileSync(join(dir, "client/src-tauri/src/tray.rs"), "b\n");
+  git("add", "."); git("commit", "-q", "-m", "a page and the tray");
+  const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
+  const script = fileURLToPath(new URL("./ci-scope.mjs", import.meta.url));
+  const run = (labels) => {
+    const output = join(dir, "output");
+    writeFileSync(output, "");
+    const env = { ...process.env, GITHUB_EVENT_NAME: "pull_request", BASE_SHA: base, HEAD_SHA: head, GITHUB_OUTPUT: output, CI_SCOPE_ALL: "" };
+    if (labels === undefined) delete env.PR_LABELS;
+    else env.PR_LABELS = labels;
+    const said = execFileSync("node", [script], { cwd: dir, encoding: "utf8", env });
+    return { said, ios: /^ios=(.*)$/m.exec(readFileSync(output, "utf8"))?.[1], packages: /^packages=(.*)$/m.exec(readFileSync(output, "utf8"))?.[1] };
+  };
+  // No labels at all (a push, or a pull request with none), and other labels.
+  for (const labels of [undefined, "[]", "null", '["bug"]']) assert.equal(run(labels).ios, "true", String(labels));
+  const labelled = run('["bug","desktop-only"]');
+  assert.equal(labelled.ios, "false");
+  assert.equal(labelled.packages, "true");
+  assert.match(labelled.said, /Labelled desktop-only: the iPhone app in the simulator isn't run\. The nightly run on main still runs it\./);
+  // With a file that's the phone's alone, the label is ignored, and that's said.
+  writeFileSync(join(dir, "client/src-tauri/src/phone_scene.rs"), "b\n");
+  git("add", "."); git("commit", "-q", "-m", "and the phone's scenes");
+  const head2 = execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
+  const output = join(dir, "output");
+  writeFileSync(output, "");
+  const said = execFileSync("node", [script], { cwd: dir, encoding: "utf8", env: { ...process.env, GITHUB_EVENT_NAME: "pull_request", BASE_SHA: base, HEAD_SHA: head2, GITHUB_OUTPUT: output, CI_SCOPE_ALL: "", PR_LABELS: '["desktop-only"]' } });
+  assert.match(readFileSync(output, "utf8"), /^ios=true$/m);
+  assert.match(said, /The desktop-only label is ignored: this changes files that are the phone app's alone\./);
 });

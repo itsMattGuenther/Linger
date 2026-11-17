@@ -49,6 +49,9 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           CI_SCOPE_ALL: ${{ inputs.all }}
+          # `desktop-only` on a pull request leaves the iPhone run out for
+          # files both apps build (#914, AGENTS.md).
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
         run: node scripts/ci-scope.mjs
 
   # What hosts run from deploy/: the relay, and the update and setup scripts (#312, #440).

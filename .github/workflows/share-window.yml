@@ -41,8 +41,35 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Which of this a change can reach (#914). The paths above start the
+  # workflow for any change to the shell's code, and most of that is one
+  # app's: a file only the desktop app builds can't change the iPhone's
+  # extensions or its Rust, and a pull request labelled desktop-only says
+  # the same of files both apps build (AGENTS.md). The server's and the wire
+  # types' changes run it as before. Anything but a pull request (the
+  # nightly run, a run by hand) runs everything.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      phone: ${{ steps.classify.outputs.ios == 'true' || steps.classify.outputs.rust == 'true' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: classify changed files
+        id: classify
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CI_SCOPE_ALL: ${{ github.event_name != 'pull_request' }}
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: node scripts/ci-scope.mjs
+
   extension:
     name: the share extension builds for the iPhone
+    needs: changes
+    if: ${{ needs.changes.outputs.phone == 'true' }}
     runs-on: xcode-27
     timeout-minutes: 30
     steps:
@@ -66,6 +93,8 @@ jobs:
   # files for this Mac with a test of their own (no Xcode project needed).
   notifications:
     name: the notification extension builds for the iPhone and opens what the server sends
+    needs: changes
+    if: ${{ needs.changes.outputs.phone == 'true' }}
     runs-on: xcode-27
     timeout-minutes: 30
     steps:
@@ -108,6 +137,8 @@ jobs:
   # platform-specific breakage shows up.
   rust:
     name: the app's Rust builds for the iPhone
+    needs: changes
+    if: ${{ needs.changes.outputs.phone == 'true' }}
     runs-on: xcode-27
     timeout-minutes: 30
     steps:
@@ -140,6 +171,8 @@ jobs:
 
   screens:
     name: the share window's screens, on the iPhone Simulator
+    needs: changes
+    if: ${{ needs.changes.outputs.phone == 'true' }}
     runs-on: xcode-27
     timeout-minutes: 30
     steps:
@@ -158,6 +191,8 @@ jobs:
 
   sender:
     name: the share window's sender, against a real server
+    needs: changes
+    if: ${{ needs.changes.outputs.phone == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
