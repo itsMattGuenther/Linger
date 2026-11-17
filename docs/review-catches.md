@@ -447,8 +447,7 @@ on a world that has changed.
   opens one microphone at a time; every phone start stays
   in the tap (#687); and the phone's recorder lets go of a microphone given
   late. The parity fixture holds a start until a test opens it
-  (`?holdmic`, and `?cancelfirst` for a shell that hears the cancel
-  first) and can take the page away (`unmount`); a browser test of each
+  (`?holdmic`, and `?holdcancel` to hold a cancel's answer) and can take the page away (`unmount`); a browser test of each
   case fails without the fix.
 
 - **#918 (2 catches): the review gate took a flag's value for a flag, and

@@ -133,7 +133,7 @@ export function shellRecorder(events: RecorderEvents, input: () => string | null
       return readClip(new Uint8Array(await stopping));
     },
     cancel: () => {
-      settled(current.then((start) => invoke("clip_cancel", { start })));
+      settled(within(current.then((start) => invoke("clip_cancel", { start })), LONGEST_OPEN_WAIT_MS));
     },
     dispose: () => {
       gone = true;
@@ -421,11 +421,15 @@ export function pageRecorder(events: RecorderEvents): Recorder {
       return kept;
     },
     cancel,
-    // Lets go of the microphone and stops any start still waiting. A stop
-    // under way has its own encoder and recording to finish with.
+    // Lets go of the microphone, stops any start still waiting, and closes
+    // an encoder a failed start left. A stop under way took its own encoder
+    // and recording out of the recorder, and finishes with them.
     dispose: () => {
       attempt += 1;
       release();
+      const left = encoder as AudioEncoder | null;
+      if (left !== null && left.state !== "closed") left.close();
+      encoder = null;
     },
   };
 }

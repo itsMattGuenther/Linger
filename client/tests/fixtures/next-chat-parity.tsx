@@ -38,6 +38,7 @@
  * `clip_start` waits, the microphone opening, until `window.parity.clip.opens()`;
  * a `clip_cancel` meanwhile calls it off, and it then rejects as the shell
  * does (#913, #920): up to the start a cancel names, as clip.rs keeps it.
+ * With `?holdcancel` a cancel's answer waits for `window.parity.clip.cancelled()`.
  * `window.parity.unmount()` takes the window's page away,
  * as a docked chat folding does.
  *

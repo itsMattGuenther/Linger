@@ -103,6 +103,19 @@ impl Books {
         }
     }
 
+    /// Call off the recording `wanted` picks: one still opening is marked,
+    /// keeping its place until its microphone opens or fails, so no second
+    /// microphone opens beside it; one under way is taken (#920).
+    fn call_off_or_take(&mut self, wanted: impl Fn(&Recording) -> bool) -> Option<Recording> {
+        match self.recording.as_mut() {
+            Some(recording) if wanted(recording) && recording.started.is_none() => {
+                recording.called_off = true;
+                None
+            }
+            _ => self.take_if(wanted),
+        }
+    }
+
     /// Hand `window` its next start number.
     fn ticket(&mut self, window: &str) -> u64 {
         let last = self.tickets.entry(window.to_owned()).or_insert(0);
@@ -149,15 +162,7 @@ impl Clips {
     fn call_off(&self, window: &str, start: u64) -> Option<Recording> {
         let mut books = self.lock();
         books.call_off_up_to(window, start);
-        let named = |recording: &Recording| recording.window == window && recording.start == start;
-        match books.recording.as_mut() {
-            // Still opening: marked, and thrown away once it opens.
-            Some(recording) if named(recording) && recording.started.is_none() => {
-                recording.called_off = true;
-                None
-            }
-            _ => books.take_if(named),
-        }
+        books.call_off_or_take(|recording| recording.window == window && recording.start == start)
     }
 
     /// A window has gone, or its page is loaded afresh: its recording taken,
@@ -168,20 +173,12 @@ impl Clips {
         let mut books = self.lock();
         let last = books.tickets.get(window).copied().unwrap_or(0);
         books.call_off_up_to(window, last);
-        match books.recording.as_mut() {
-            // Still opening: marked, keeping its place until it opens, as a
-            // cancel does, so no second microphone opens beside it.
-            Some(recording) if recording.window == window && recording.started.is_none() => {
-                recording.called_off = true;
-                None
-            }
-            _ => books.take_if(|recording| recording.window == window),
-        }
+        books.call_off_or_take(|recording| recording.window == window)
     }
 
     /// Recording `id` has its microphone open and is under way. When it was
-    /// taken off the books meanwhile (its window closed, or it was stopped),
-    /// it's thrown away here instead, and that's said.
+    /// called off meanwhile (its window closed, a cancel, a stop) or taken
+    /// off the books, it's thrown away here instead, and that's said.
     fn started(&self, id: u64, started: Started) -> bool {
         let mut books = self.lock();
         if let Some(recording) = books.recording.as_mut().filter(|recording| {
@@ -216,6 +213,7 @@ impl Clips {
     }
 
     /// Take the recording `window` started, if that's the one on the books.
+    #[cfg(test)]
     fn take_from(&self, window: &str) -> Option<Recording> {
         self.lock().take_if(|recording| recording.window == window)
     }
@@ -383,7 +381,8 @@ const ALREADY: &str = "A voice message is already being recorded.";
 /// How long a microphone has to open for a voice message (#920). The page
 /// waits a little longer than this for an earlier start (`recorders.ts`).
 const LONGEST_OPEN: std::time::Duration = std::time::Duration::from_secs(30);
-const SLOW_OPEN: &str = "the microphone took too long to open";
+/// Worded as the page's rules read an open that failed (`voiceStartProblem`).
+const SLOW_OPEN: &str = "the microphone wouldn't open in time";
 const CALLED_OFF: &str = "The voice message was called off while the microphone opened.";
 
 /// Stop recording and hand the clip back (`Clip::to_bytes`). One that already
@@ -392,10 +391,25 @@ const CALLED_OFF: &str = "The voice message was called off while the microphone 
 #[tauri::command]
 pub async fn clip_stop(app: AppHandle, window: Window) -> Result<Response, String> {
     // This window's own: one window never stops another's. One still opening
-    // its microphone is taken off the books, and `clip_start` throws it away
-    // once the microphone opens.
-    let recording = app.state::<Clips>().take_from(window.label());
+    // its microphone is called off, keeping its place, and `clip_start`
+    // throws it away once the microphone opens (#920).
+    let label = window.label();
+    // The lock is let go of here, before anything is waited for.
+    let (opening, recording) = {
+        let clips = app.state::<Clips>();
+        let mut books = clips.lock();
+        let opening = books
+            .recording
+            .as_ref()
+            .is_some_and(|recording| recording.window == label && recording.started.is_none());
+        (
+            opening,
+            books.call_off_or_take(|recording| recording.window == label),
+        )
+    };
     let started = match recording {
+        // Still opening: called off, keeping its place until it opens.
+        None if opening => return Err(CALLED_OFF.into()),
         None => return Err("Nothing is being recorded.".into()),
         Some(Recording { started: None, .. }) => return Err(CALLED_OFF.into()),
         Some(Recording {
@@ -422,8 +436,8 @@ pub async fn clip_cancel(app: AppHandle, window: Window, start: u64) {
 /// it started goes with it, unheard, and every start it sent until now is
 /// called off, so one heard late never records for nobody (#920).
 ///
-/// One whose microphone is still opening is taken off the books, and
-/// `clip_start` throws it away once the microphone opens (#913).
+/// One whose microphone is still opening is called off and keeps its place
+/// until it opens, and `clip_start` throws it away then (#913, #920).
 pub fn forget(app: &AppHandle, label: &str) {
     let recording = app.state::<Clips>().forget_window(label);
     if let Some(started) = recording.and_then(|recording| recording.started) {
