@@ -514,20 +514,20 @@ rules that came out of them:
   from GitHub releases when Tauri's bundler doesn't have them, and it tries
   each once: one 504 threw away a Windows package build on 2026-11-17 (UTC,
   #916). The package check keeps their folder (`~/AppData/Local/tauri`) in
-  GitHub's cache, keyed on the Tauri CLI's version, so most runs fetch
-  nothing (after a new CLI, a pull request's run fetches them until main's
-  nightly run keeps them for all, since a pull request's cache is its own), and builds through `scripts/bundle-retry.sh`, which runs the
-  build once more when the bundler's last step before it failed was
-  `Downloading`, including a download that arrived broken (its hash or
-  unpacking failing), and on Linux the AppImage bundler's downloads too.
-  Any other failure fails at once. Another try is all of
-  `tauri build`, mostly cached by then. `scripts/bundle-retry-test.sh` has
-  a stand-in build fail on a download, coloured and plain and with other
-  lines after it, and fail every other way, and checks which are tried
-  again. It retries the build rather than fetching the tools itself: their
-  folder's layout and checks are the bundler's own, and change between
-  Tauri versions. The release workflow
-  doesn't use it yet: the package check goes first.
+  GitHub's cache, keyed on the Tauri CLI's version, so most runs fetch nothing
+  (after a new CLI, a pull request's run fetches them until main's nightly run
+  keeps them for all, since a pull request's cache is its own), and builds
+  through `scripts/bundle-retry.sh`, which runs the build once more when the
+  bundler's last step before it failed was `Downloading` and the failure is a
+  network's or a broken file's, including a download whose hash or unpacking
+  failed, and on Linux the AppImage bundler's downloads too. Any other failure
+  fails at once. Another try is all of `tauri build`, mostly cached by then.
+  `scripts/bundle-retry-test.sh` has a stand-in build fail on a download,
+  coloured and plain and with other lines after it, and fail every other way,
+  and checks which are tried again. It retries the build rather than fetching
+  the tools itself: their folder's layout and checks are the bundler's own,
+  and change between Tauri versions. The release workflow doesn't use it yet:
+  the package check goes first.
 - **actionlint's image** comes from Docker Hub, through
   `scripts/actionlint.sh`, the one place CI and `check.sh` run it and name its
   version. A 502 from Docker Hub failed a pull request's `rules` job on

@@ -52,13 +52,16 @@ cr=$'\r'
 
 # Whether it failed on a download: of the bundler's steps (a capitalised
 # word like Downloading, Bundling or Running starting a line, after any
-# "Info"), the last before its "failed to bundle project" is Downloading.
+# "Info"), the last before its "failed to bundle project" is Downloading,
+# and the failure is a network's or a broken file's (an HTTP status, a
+# timeout, a dropped connection, a bad hash or archive), not, say, a
+# template that wouldn't render after the download had worked.
 # Other lines between (a warning, a progress count, an error's causes, a
 # lowercase "Info validating hash") don't count either way. Colours and
 # Windows line ends are taken off first.
 failed_downloading() {
   sed -e "s/${esc}\[[0-9;]*[A-Za-z]//g" -e "s/${cr}\$//" "$1" | awk '
-    /failed to bundle project/ { if (step == "Downloading") found = 1 }
+    /failed to bundle project/ { if (step == "Downloading" && tolower($0) ~ /http status|timed out|timeout|connection|connect|dns|resolve|network|tls|reset|eof|io:|error sending request|hash|zip|archive/) found = 1 }
     { word = ($1 == "Info") ? $2 : $1; if (word ~ /^(Downloading|Bundling|Running|Finished|Built|Compiling|Signing|Packaging|Patching|Installing)$/) step = word }
     END { exit found ? 0 : 1 }'
 }

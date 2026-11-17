@@ -32,6 +32,7 @@ if [ "$n" -le "$failing" ]; then
     later) printf ' Downloading https://github.com/x/y.zip\n    Bundling Linger.msi\n     Running light.exe\nfailed to bundle project: `light.exe failed`\n' ;;
     between) printf ' Downloading https://github.com/x/y.zip\n        Warn the server was slow\n  45%% 12 MB\nfailed to bundle project: `http status: 502`\nCaused by:\n    0: http status: 502\n' ;;
     broken) printf ' Downloading https://github.com/x/wix314-binaries.zip\n        Info validating hash\n        Info extracting WIX\nfailed to bundle project: `invalid zip archive`\n' ;;
+    template) printf ' Downloading https://github.com/x/wix314-binaries.zip\n        Info validating hash\nfailed to bundle project: `failed to render main.wxs`\n' ;;
     signed) printf ' Downloading https://github.com/x/y.zip\n     Signing Linger.msi\nfailed to bundle project: `signtool failed`\n' ;;
     compile) printf 'error[E0308]: mismatched types\n' ;;
   esac
@@ -63,6 +64,8 @@ run between 1
 [ "$status" -eq 0 ] && [ "$runs" -eq 2 ] || fail "a warning, a progress count and causes after it don't hide the download ($status, $runs)"
 run broken 1
 [ "$status" -eq 0 ] && [ "$runs" -eq 2 ] || fail "a download that arrived broken (Tauri's lowercase checking and unpacking lines) is tried again ($status, $runs)"
+run template 1
+[ "$status" -eq 7 ] && [ "$runs" -eq 1 ] || fail "a failure after a download that worked, not a network's, runs once ($status, $runs)"
 run signed 1
 [ "$status" -eq 7 ] && [ "$runs" -eq 1 ] || fail "a failure in a later step, signing, isn't the download's ($status, $runs)"
 # A setting that isn't a whole number is refused before anything runs,
@@ -101,5 +104,5 @@ set +e; bash scripts/bundle-retry.sh >/dev/null 2>&1; none=$?; set -e
 BUNDLE_RETRY_WAIT=00 run download 1
 [ "$status" -eq 0 ] && [ "$runs" -eq 2 ] || fail "BUNDLE_RETRY_WAIT=00 waits no time ($status, $runs)"
 BUNDLE_RETRY_WAIT=x run download 1
-[ "$status" -eq 2 ] || fail "BUNDLE_RETRY_WAIT=x is refused ($status)"
+[ "$status" -eq 2 ] && [ -z "$runs" ] || fail "BUNDLE_RETRY_WAIT=x is refused before anything runs ($status, $runs)"
 echo "bundle-retry: ok"
