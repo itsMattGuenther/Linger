@@ -124,15 +124,11 @@ export function useVoiceMessages(
     return () => {
       // The window going (or, docked, the chat folding away): what's
       // recording or starting is called off here, before the recorder goes.
-      if (recordingIn.current !== null || startingIn.current !== null) void made.cancel();
-      // Nothing's under way with this recorder any more, whatever ends it.
-      for (const conversation of [recordingIn.current, startingIn.current?.conversation]) if (conversation) put(conversation, { kind: "ready", problem: null });
-      recordingIn.current = null;
-      startingIn.current = null;
+      if (recordingIn.current !== null || startingIn.current !== null) made.cancel();
       made.dispose();
       if (recorder.current === made) recorder.current = null;
     };
-  }, [kind, finish, put]);
+  }, [kind, finish]);
 
   // Another conversation shown while recording: stop, and keep the clip where
   // it was made. One still starting has nothing to keep: it's called off.
@@ -142,7 +138,7 @@ export function useVoiceMessages(
     const starting = startingIn.current;
     if (starting !== null && starting.conversation !== paneId) {
       startingIn.current = null;
-      void recorder.current?.cancel();
+      recorder.current?.cancel();
       put(starting.conversation, { kind: "ready", problem: null });
     }
   }, [paneId, finish, put]);
@@ -192,7 +188,7 @@ export function useVoiceMessages(
         // and a Record meanwhile was told so): stopped now, through the
         // recorder it used, even once the page has let that go.
         if (!stillThisOne()) {
-          void using?.cancel();
+          using?.cancel();
           return;
         }
         recordingIn.current = conversation;
@@ -215,7 +211,7 @@ export function useVoiceMessages(
     if (recordingIn.current === paneId || startingIn.current?.conversation === paneId) {
       recordingIn.current = null;
       startingIn.current = null;
-      void recorder.current?.cancel();
+      recorder.current?.cancel();
     }
     if (now?.kind === "kept") URL.revokeObjectURL(now.url);
     put(paneId, null);

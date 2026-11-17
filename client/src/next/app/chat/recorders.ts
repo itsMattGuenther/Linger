@@ -39,8 +39,8 @@ export interface Recorder {
   start: () => Promise<void>;
   /** Stop, and hand the recording back; null when there's nothing readable. */
   stop: () => Promise<Recording | null>;
-  /** Stop and throw it away; settles once it's done (the shell's has to ask). */
-  cancel: () => Promise<void>;
+  /** Stop and throw it away. */
+  cancel: () => void;
   /** Let go of everything it listens to. */
   dispose: () => void;
 }
@@ -85,10 +85,7 @@ export function shellRecorder(events: RecorderEvents, input: () => string | null
       await invoke("clip_start", { input: input() });
     },
     stop: async () => readClip(new Uint8Array(await invoke<ArrayBuffer>("clip_stop"))),
-    cancel: () => invoke("clip_cancel").then(
-      () => undefined,
-      () => undefined,
-    ),
+    cancel: () => void invoke("clip_cancel").catch(() => undefined),
     dispose: () => {
       gone = true;
       for (const stop of stops) stop();
@@ -350,7 +347,7 @@ export function pageRecorder(events: RecorderEvents): Recorder {
       encoder = null;
       return { preSkip, packets };
     },
-    cancel: async () => {
+    cancel: () => {
       attempt += 1;
       release();
       const held = encoder as AudioEncoder | null;

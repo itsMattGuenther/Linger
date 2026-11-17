@@ -1827,7 +1827,7 @@ test.describe("voice messages (#401)", () => {
   const escape = (page: Page) => panel(page).dispatchEvent("keydown", { key: "Escape" });
   /** The oldest held start's microphone opens; back once the page has heard its answer. */
   const opens = (page: Page) => page.evaluate(() => window.parity?.clip.opens());
-  /** Starts asked of the shell so far: a start waits for the one before it to settle. */
+  /** Starts asked of the shell so far. */
   const starts = (page: Page) => asked(page, "clip_start").then((all) => all.length);
 
   test("Escape while the microphone opens calls it off: nothing records, and the next Record starts (#920)", async ({ page }) => {
