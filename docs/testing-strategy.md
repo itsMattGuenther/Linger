@@ -74,10 +74,8 @@ only changes documentation.
 | Only the iPhone flows, `client/tests/ios/`, or their https front (`scripts/https-front.mjs`, `scripts/test-certs.sh`) | The rules lint, the version check and the front's tests | The iPhone app in the simulator |
 | `deploy/` | The Rust checks and the update script's test | S3, the voice relay and a real server update in Docker |
 | The push relay, `push-relay/` | Its typecheck on the Workers runtime's types, and its tests against stand-ins for Apple and Google | Nothing more; it's deployed by hand |
-| The startup measurement, `scripts/startup-time.mjs` | Its own tests (below); the measuring itself is run by hand ([performance.md](performance.md)) | Nothing more |
-| A check or tool in `scripts/` that ships nothing, and its fixtures: the questions before a pull request, the catch count, the review gate and its hook (`.claude/settings.json`, #917, #930), and others. `classify()` in `scripts/ci-scope.mjs` is the list | Their own tests (below) | Nothing more |
-| A script only the packages use: the audio and icon tools, the AppImage downloads, the bundler's retry (#916), the Windows update check. `classify()` is the list | As above | The packages |
-| Shared types (`crates/linger-core/`, `client/src/generated/`), CI, a script not in the rows above, anything else | Everything | Everything |
+| A check or tool that ships nothing, with its fixtures: in `scripts/`, the startup measurement (measured by hand, [performance.md](performance.md)), the questions before a pull request, the catch count, the review gate and others; and the gate's hook, `.claude/settings.json` (#917, #930). `classify()` in `scripts/ci-scope.mjs` is the list | Their own tests (below) | Nothing more |
+| Shared types (`crates/linger-core/`, `client/src/generated/`), CI, any other script, anything else | Everything | Everything, but for a few scripts only the packages use (the audio and icon tools, the AppImage downloads, the bundler's retry), which start the packages alone: `classify()` has them |
 
 **Only the checks a change can reach** (#914). Which app builds a file of
 the shell is read from the code: the `cfg` on its module in `lib.rs`, the

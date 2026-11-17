@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -55,10 +55,23 @@ test("the review gate and its hook ship nothing, and start no job of their own (
   assert.equal(active([".claude/hooks/gate.sh"]).length, 8);
   assert.equal(active(["scripts/review-gate.sh"]).length, 8);
 });
+// A script's own test that starts no job still runs: by name, in CI's rules
+// job and in check.sh, whatever ci-scope skips (#930).
+test("every script's own test is run by name in CI and by check.sh (#930)", () => {
+  const root = fileURLToPath(new URL("../", import.meta.url));
+  const ci = readFileSync(join(root, ".github/workflows/ci.yml"), "utf8");
+  const check = readFileSync(join(root, "scripts/check.sh"), "utf8");
+  const tests = readdirSync(join(root, "scripts")).filter((name) => name.endsWith(".test.mjs")).map((name) => `scripts/${name}`);
+  assert.ok(tests.length > 20, `only ${tests.length} found`);
+  for (const file of tests) {
+    assert.ok(ci.includes(file), `${file} isn't run in .github/workflows/ci.yml`);
+    assert.ok(check.includes(file), `${file} isn't run by scripts/check.sh`);
+  }
+});
 test("the Tauri version check and the iPhone flows' own test run only in the rules job (#835)", () => {
   assert.deepEqual(active(["scripts/tauri-versions.mjs", "scripts/tauri-versions.test.mjs", "scripts/ios-flows.test.mjs", "scripts/ios-plist.test.mjs",
     "scripts/upstream-fixes.mjs", "scripts/upstream-fixes.test.mjs",
-    "scripts/android-jni.mjs", "scripts/android-jni.test.mjs", "scripts/fixtures/dexdump-0.5.4.txt",
+    "scripts/android-jni.mjs", "scripts/android-jni.test.mjs", "scripts/fixtures/dexdump-0.5.4.txt", "scripts/android-manifest.test.mjs",
     "scripts/installed-packages.mjs", "scripts/installed-packages.test.mjs",
     "scripts/maestro-driver.mjs", "scripts/maestro-driver.test.mjs", "scripts/fixtures/maestro-driver-died.log",
     "scripts/app-at-rest.mjs", "scripts/app-at-rest.test.mjs",
