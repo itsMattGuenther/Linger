@@ -57,6 +57,12 @@ test("reads which pull request, folder and branch a command is about", () => {
     ["merge", "gh pr merge 5 --squash>out.txt 2>&-", { selector: "5" }],
     // As the shell reads it: digits glued to > name what's redirected, not a pull request.
     ["merge", "gh pr merge 5>out.txt", { selector: null }],
+    ["merge", "gh pr merge 5 2>&1>out.txt", { selector: "5" }],
+    ["merge", "gh pr merge 5 >>log.txt <in.txt 0<&-", { selector: "5" }],
+    ["merge", "gh pr merge>log.txt 5", { selector: "5" }],
+    ["create", "gh pr create -t x -B release 2>>log.txt", { base: "release" }],
+    ["create", "git push -u origin HEAD 2>&1 && gh pr create -t x", { dirs: [] }],
+    ["merge", "cd /w 2>/dev/null && gh pr merge 5", { selector: "5", dirs: ["/w"] }],
     ["create", "gh pr create -t x > out.txt", { base: null }],
     ["create", "gh pr create -t x -B release 2>&1", { base: "release" }],
     ["ready", "gh pr ready", { selector: null }],
@@ -93,6 +99,13 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     ["merge", "gh pr merge 5 > $(mktemp)"],
     ["merge", 'gh pr merge 5 2>"$LOG"'],
     ["merge", "gh pr merge 5 <<< x"],
+    // Its digits are never a word, so never a flag's value (#924).
+    ["create", 'gh pr create -t x --repo 2>"$LOG" o/r'],
+    ["create", 'gh pr create -t x -B 2>"$LOG" release'],
+    ["merge", "cd 2>/dev/null && gh pr merge 5"],
+    // &> is a redirection, not the command's end, so what follows is read.
+    ["merge", 'gh pr merge 5 &>"$LOG" --auto'],
+    ["merge", "gh pr merge 5 &>log.txt --auto"],
     ["merge", 'gh pr merge 912 --body "$(cat x)" -R o/r'],
     ["merge", 'gh pr merge 912 -R o/r --body "$(cat x)"'],
     ["merge", 'gh pr merge 5 --body "$(cat message.txt)" --auto --squash'],
