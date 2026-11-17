@@ -13,9 +13,9 @@ name: iphone simulator
 # A simulator build needs no Apple account and nothing is signed for a
 # phone, so this uses no secrets and runs on any pull request that touches
 # the app or what it runs (scripts/ci-scope.mjs, `ios`), once it's out of
-# draft (#933). The signed
-# build for TestFlight is ios.yml's. docs/development.md, "The iPhone in the
-# simulator", says how to run the flows.
+# draft (#933). The signed build for TestFlight is ios.yml's.
+# docs/development.md, "The iPhone in the simulator", says how to run the
+# flows.
 #
 # It builds with Xcode 27.1 and the iOS 27 SDK, on GitHub's `xcode-27`
 # image, as ios.yml does (#839). Run by hand, it can build with Xcode 26.6

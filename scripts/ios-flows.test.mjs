@@ -31,7 +31,7 @@ test("the iPhone runs on a Mac wait while a pull request is a draft, and only th
     const jobs = Object.entries(jobsOf(text));
     // Any job not plainly on Linux or Windows counts as a Mac's, so a runner
     // from a matrix or a list has to wait too.
-    const onMac = jobs.filter(([, job]) => !/^ {4}runs-on: (?:ubuntu|windows)-[\w.]+\s*$/m.test(job));
+    const onMac = jobs.filter(([, job]) => !/^ {4}runs-on: (?:ubuntu|windows)-[\w.-]+\s*$/m.test(job));
     assert.ok(onMac.length > 0, `${file} has jobs on a Mac`);
     for (const [name, job] of jobs) {
       const gate = /^ {4}if: (.*)$/m.exec(job)?.[1] ?? "";
