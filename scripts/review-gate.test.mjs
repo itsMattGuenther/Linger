@@ -131,6 +131,9 @@ test("reads which pull request, folder and branch a command is about", () => {
     ["create", "gh pr create --$'base' release", { base: "release" }],
     // A pipeline ends before what follows it: a pull after it runs after the merge.
     ["merge", "gh pr merge 5 | tail -3; git pull", { selector: "5" }],
+    // Piped into a loop or group that only reads.
+    ["merge", "gh pr merge 5 2>&1 | { cat; }", { selector: "5" }],
+    ["merge", 'gh pr merge 5 | while read l; do echo "$l"; done', { selector: "5" }],
     ["ready", "gh pr ready", { selector: null }],
     ["ready", "gh pr ready 12", { selector: "12" }],
   ];
@@ -312,6 +315,20 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     ["merge", "printf 'gh pr merge 5' 2>x.sh 1>&2; bash x.sh"],
     ["merge", "exec 3>x.sh; echo 'gh pr merge 5' >&3; bash x.sh"],
     ["merge", "X=$(printf 'gh pr merge 5'); eval \"$X\""],
+    // A case pattern's ) doesn't end the substitution it's in.
+    ["merge", 'gh pr merge 5 --squash; echo "$(case x in x) gh pr merge 6 --admin;; esac)"'],
+    // A step's redirection can't run anything either.
+    ["merge", 'cd . >"$(git push -f origin HEAD:feat/x)" && gh pr merge 5 --squash'],
+    // A later & puts the merge in the background with what follows.
+    ["merge", "gh pr merge 5 && true & git push -f origin HEAD:feat"],
+    ["merge", "gh pr merge 5 | cat & git push -f origin HEAD:feat"],
+    // printf -v keeps its words to run later; a program by its path may be anything.
+    ["merge", "gh pr merge 5; printf -v x 'gh pr merge 6 --admin'; eval \"$x\""],
+    ["merge", "gh pr merge 5 & ./tools/git status"],
+    ["merge", "./bin/echo gh pr merge 6"],
+    // After --, a word is gh's, not a flag the gate would act on.
+    ["merge", "gh pr merge --squash -- --help"],
+    ["ready", "gh pr ready -- --undo"],
     // Text bash would refuse, that might be the command.
     ["merge", 'gh pr merge 5 "oops'],
   ];

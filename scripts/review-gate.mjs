@@ -97,6 +97,8 @@ function readTokens(reader, closer) {
   const tokens = [];
   const heredocs = [];
   let depth = 0;
+  // Inside `case … esac`, a pattern's `)` closes the pattern, not a substitution.
+  let cases = 0;
   for (;;) {
     while (source[reader.at] === " " || source[reader.at] === "\t" || (source[reader.at] === "\\" && source[reader.at + 1] === "\n")) {
       reader.at += source[reader.at] === "\\" ? 2 : 1;
@@ -146,7 +148,7 @@ function readTokens(reader, closer) {
     const op = OPERATORS.find((candidate) => source.startsWith(candidate, reader.at));
     if (op) {
       reader.at += op.length;
-      if (op === ")" && closer === ")" && depth === 0) {
+      if (op === ")" && closer === ")" && depth === 0 && cases === 0) {
         readHeredocs(reader, heredocs);
         return tokens;
       }
@@ -156,7 +158,13 @@ function readTokens(reader, closer) {
       if (op === "\n") readHeredocs(reader, heredocs);
       continue;
     }
-    tokens.push({ word: readWord(reader) });
+    const word = readWord(reader);
+    if (word.known && !word.quoted && (word.text === "case" || word.text === "esac")) {
+      const startsCommand = !tokens.length || "op" in tokens[tokens.length - 1];
+      if (word.text === "case" && startsCommand) cases += 1;
+      if (word.text === "esac" && cases > 0) cases -= 1;
+    }
+    tokens.push({ word });
   }
 }
 
@@ -338,13 +346,7 @@ function readExpansion(reader, word, quoted) {
   }
   if (next === "(" && source[reader.at + 2] === "(" && closesTogether(source, reader.at + 1)) {
     // Arithmetic: a number, read for the commands it could hold all the same.
-    let depth = 0;
-    let end = reader.at + 1;
-    for (; end < source.length; end += 1) {
-      if (source[end] === "(") depth += 1;
-      else if (source[end] === ")" && --depth === 0) break;
-    }
-    if (end >= source.length) throw new Unreadable("an arithmetic expansion isn't closed");
+    const { end } = closing(source, reader.at + 1);
     const body = source.slice(reader.at + 3, end - 1);
     if (/\$\(|`/.test(body)) word.inner.push(...substitutionsIn(body));
     reader.at = end + 1;
@@ -533,7 +535,9 @@ const writesFile = (token) => {
 function programOf(command) {
   const [name, first, second] = command.words;
   if (!name?.known) return null;
-  return { name, program: name.text.replace(/^.*[/\\]/, ""), first: first?.known ? first.text : null, second: second?.known ? second.text : null };
+  // By its plain name, found on the PATH: `./tools/git` may be anything.
+  if (/[/\\]/.test(name.text) && !isGh(name)) return null;
+  return { name, program: name.text, first: first?.known ? first.text : null, second: second?.known ? second.text : null };
 }
 
 /**
@@ -545,6 +549,7 @@ function inert(command) {
   const known = programOf(command);
   if (!known || command.redirects.some(writesFile)) return false;
   const { name, program, first } = known;
+  if (program === "printf" && command.words.some((word) => !word.known || word.text.startsWith("-v"))) return false;
   return INERT.has(program) || (program === "git" && GIT_DATA.has(first)) || (isGh(name) && GH_DATA.has(first));
 }
 
@@ -555,10 +560,13 @@ function inert(command) {
  */
 function readsOnly(command) {
   if (!command.words.length) return !command.settings.length && !command.redirects.length;
+  const [word] = command.words;
+  if (command.words.length === 1 && word.known && !word.quoted && ["done", "fi", "esac", "}"].includes(word.text)) return !command.redirects.some(writesFile);
+  if (word.known && ["read", "wait"].includes(word.text) && command.words.every((each) => each.known)) return !command.redirects.some(writesFile);
   const known = programOf(command);
   if (!known || command.redirects.some(writesFile)) return false;
   const { name, program, first, second } = known;
-  if (INERT.has(program)) return true;
+  if (INERT.has(program)) return inert(command);
   if (program === "git") return GIT_READS.has(first);
   return isGh(name) && (GH_READS[first]?.includes("*") || GH_READS[first]?.includes(second)) === true;
 }
@@ -609,20 +617,19 @@ function pipelineText(pipeline, target) {
     // A setting's substitution runs whatever the pipeline is.
     if (command !== target) for (const setting of command.settings) for (const inner of setting.inner) parts.push(allText(inner));
     if (!live || command === target) continue;
-    parts.push(...command.words.map((word) => word.text), ...command.redirects.map((token) => (token.redirect === "<<<" ? token.target.text : (token.body ?? ""))));
+    parts.push(...textOf(command));
     // What its own substitutions produce is its input too (`rg --pre=bash x <(echo …)`).
     for (const word of [...command.words, ...command.settings, ...command.redirects.map((token) => token.target)]) for (const inner of word.inner) parts.push(allText(inner));
   }
   return parts.join(" ");
 }
 
-/** Every word, here-string and here-document in a token list and the substitutions in it. */
+/** A command's words and what its redirections feed it: here-strings and here-documents. */
+const textOf = (command) => [...command.words.map((word) => word.text), ...command.redirects.map((token) => (token.redirect === "<<<" ? token.target.text : (token.body ?? "")))];
+
+/** Every setting, word, here-string and here-document in a token list and the substitutions in it. */
 function allText(tokens) {
-  return [...everyList(commandsOf(tokens))].flatMap(({ commands }) => commands.flatMap((command) => [
-    ...command.settings.map((word) => word.text),
-    ...command.words.map((word) => word.text),
-    ...command.redirects.map((token) => (token.redirect === "<<<" ? token.target.text : (token.body ?? ""))),
-  ])).join(" ");
+  return [...everyList(commandsOf(tokens))].flatMap(({ commands }) => commands.flatMap((command) => [...command.settings.map((word) => word.text), ...textOf(command)])).join(" ");
 }
 
 /** A command list split into its pipelines: commands joined by `|` or `|&`. */
@@ -675,6 +682,10 @@ export function parseWords(words, action) {
   const add = (name, value) => flags.set(name, [...(flags.get(name) ?? []), value]);
   for (let i = 0; i < words.length; i += 1) {
     const word = words[i];
+    if (word === "--") {
+      for (const rest of words.slice(i + 1)) positional.push({ word: rest, at: (i += 1) });
+      break;
+    }
     if (word.startsWith("--") && word.length > 2) {
       const eq = word.indexOf("=");
       const name = eq > 0 ? word.slice(0, eq) : word;
@@ -734,6 +745,8 @@ function inOrder(text, words) {
 function stepOf(command) {
   const { words, settings, leading } = command;
   if (settings.length || leading.length || !words.every((word) => word.known)) return null;
+  // Its redirections plain too: a substitution there would run before gh does.
+  if (!command.redirects.every((token) => token.target.known && !token.target.inner.length && token.body === undefined)) return null;
   const texts = words.map((word) => word.text);
   // A ~ quoted, or another user's, isn't the home folder the gate would take it for.
   if (texts[0] === "cd" && texts.length === 2 && texts[1].startsWith("~") && (words[1].quoted || /^~[^/]/.test(texts[1]))) return { tilde: true };
@@ -838,7 +851,8 @@ export function readCommand(command, action) {
   // to the reviewed commit itself).
   const reading = (lists) => lists.every(({ commands: list }) => list.every(readsOnly));
   let alongside = [];
-  if (target.after === "&") alongside = commands.slice(at + 1);
+  // A later `&` puts the and-or list or pipeline holding it in the background.
+  if (commands.slice(at).some((command) => command.after === "&")) alongside = commands.slice(at + 1);
   else if (["|", "|&"].includes(target.after)) {
     // The rest of the pipeline, through any subshell or loop it opens.
     let depth = 0;
