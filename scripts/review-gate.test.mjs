@@ -134,6 +134,9 @@ test("reads which pull request, folder and branch a command is about", () => {
     // Piped into a loop or group that only reads.
     ["merge", "gh pr merge 5 2>&1 | { cat; }", { selector: "5" }],
     ["merge", 'gh pr merge 5 | while read l; do echo "$l"; done', { selector: "5" }],
+    // A later background job after the merge has finished, and a command named by a variable.
+    ["merge", "gh pr merge 5 --squash\ngit fetch origin & wait", { selector: "5" }],
+    ["merge", "gh pr merge 5 --squash && $EDITOR notes.txt", { selector: "5" }],
     ["ready", "gh pr ready", { selector: null }],
     ["ready", "gh pr ready 12", { selector: "12" }],
   ];

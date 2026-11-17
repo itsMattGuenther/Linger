@@ -52,6 +52,15 @@ export const REVIEWER_TOOLS = [
   "Bash(git merge-base:*)", "Bash(git rev-parse:*)", "Bash(git status:*)",
 ];
 
+// What this guards, and what it doesn't. The gate catches an agent's
+// accidental unreviewed change: a `gh pr create`, `ready` or `merge` in any
+// form an agent writes is read exactly or stopped, and text that might be
+// one is stopped rather than guessed. It is not a sandbox against a command
+// built to get past it from the same shell (a name redefined as a function,
+// text stored and run later, quoting games inside arithmetic): whoever can
+// write those can as easily edit .claude/settings.json. That the commit
+// merged is the commit reviewed is #932's to bind, not this reader's.
+//
 // The command is read as bash reads it (#925): one pass over its text, left
 // to right, that knows quotes, escapes, line continuations, comments,
 // operators, redirections and here-documents, and opens each substitution
@@ -585,8 +594,6 @@ function classify(command, action, raw) {
   if (!words.length) return null;
   const [name] = words;
   if (isGh(name) && words[1]?.known && words[1].text === "pr" && words[2]?.known && words[2].text === action) return "exact";
-  // An unquoted name the gate can't read may be the whole command.
-  if (!name.known && !name.single && inOrder(raw, ["pr", action])) return "maybe";
   const wanted = [mayBeGh, (word) => word.known && word.text === "pr", (word) => word.known && word.text === action];
   let stage = 0;
   let last = -1;
@@ -741,6 +748,28 @@ function inOrder(text, words) {
   return true;
 }
 
+/**
+ * From the command at `from`, where the run of commands joined by `joins`
+ * ends: the index of its last command and the operator that ends it (`;`,
+ * `&`, a new line, or null at the end). Subshells and compound commands
+ * opened on the way are followed through to their close.
+ */
+function endOf(commands, from, joins) {
+  let depth = 0;
+  for (let index = from; index < commands.length; index += 1) {
+    const command = commands[index];
+    if (index > from) {
+      const [first] = command.words;
+      if (command.leading.some((word) => ["while", "until", "if", "{", "coproc"].includes(word)) || (first?.known && ["for", "case", "select"].includes(first.text))) depth += 1;
+      if (first?.known && ["done", "fi", "esac", "}"].includes(first.text)) depth -= 1;
+    }
+    if (command.after === "(") depth += 1;
+    else if (command.after === ")") depth -= 1;
+    else if (depth <= 0 && !joins.includes(command.after)) return { last: index, by: command.after };
+  }
+  return { last: commands.length - 1, by: null };
+}
+
 /** A step before the command the gate can follow: `cd <folder>` or `git push …`. */
 function stepOf(command) {
   const { words, settings, leading } = command;
@@ -850,22 +879,12 @@ export function readCommand(command, action) {
   // own substitutions: what runs there must only read (#932 binds the merge
   // to the reviewed commit itself).
   const reading = (lists) => lists.every(({ commands: list }) => list.every(readsOnly));
-  let alongside = [];
-  // A later `&` puts the and-or list or pipeline holding it in the background.
-  if (commands.slice(at).some((command) => command.after === "&")) alongside = commands.slice(at + 1);
-  else if (["|", "|&"].includes(target.after)) {
-    // The rest of the pipeline, through any subshell or loop it opens.
-    let depth = 0;
-    for (const command of commands.slice(at + 1)) {
-      alongside.push(command);
-      const [first] = command.words;
-      if (command.leading.some((word) => ["while", "until", "if", "{", "coproc"].includes(word)) || (first?.known && ["for", "case", "select"].includes(first.text))) depth += 1;
-      if (first?.known && ["done", "fi", "esac", "}"].includes(first.text)) depth -= 1;
-      if (command.after === "(") depth += 1;
-      else if (command.after === ")") depth -= 1;
-      else if (depth <= 0 && !["|", "|&"].includes(command.after)) break;
-    }
-  }
+  // The rest of its pipeline runs beside it; and when the and-or list
+  // holding it ends in `&`, so does everything after that `&`.
+  const pipeline = endOf(commands, at, ["|", "|&"]);
+  const alongside = commands.slice(at + 1, pipeline.last + 1);
+  const list = endOf(commands, at, ["&&", "||", "|", "|&"]);
+  if (list.by === "&") alongside.push(...commands.slice(list.last + 1));
   if (!reading([...everyList(alongside)])) return stop(`something runs alongside \`gh pr ${action}\` that could change the pull request while it's merged; run it on its own`);
   const inside = [...target.words, ...target.settings, ...target.redirects.map((token) => token.target)].flatMap((word) => word.inner);
   if (!inside.every((tokens) => reading([...everyList(commandsOf(tokens), true)]))) return stop(`a substitution in \`gh pr ${action}\` runs something that could change the pull request first; put it in a file, and the file in the command`);
@@ -1200,7 +1219,7 @@ export function hook(action, input) {
   if (read.fail) {
     return {
       code: 2,
-      message: `Stopped before review: ${read.fail}. A fresh review runs before a pull request ${VERB[action]} (#917, AGENTS.md), and the gate stops a command it can't read rather than guess. Run it as a command of its own: \`gh pr ${action}${action === "create" ? "" : " <number>"} …\`, with only \`cd <folder> &&\` or \`git push … &&\` in front.`,
+      message: `Stopped before review: ${read.fail}. A fresh review runs before a pull request ${VERB[action]} (#917, AGENTS.md), and the gate stops a command it can't read rather than guess. Run it as a command of its own: \`gh pr ${action}${action === "create" ? "" : " <number>"} …\`, with only \`cd <folder> &&\`${action === "create" ? " or \`git push … &&\`" : ""} in front${action === "create" ? "" : "; push first, on its own"}.`,
     };
   }
   let found;
