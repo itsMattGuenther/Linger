@@ -136,7 +136,10 @@ async function holdMicrophone(page: Page) {
   };
 }
 
-test("Escape while the phone's microphone opens: the microphone that comes later is let go of at once, and the next Record works (#920)", async ({ page }) => {
+for (const way of ["track processor", "audio worklet"] as const) {
+test(`Escape while the phone's microphone opens (${way}): the microphone that comes later is let go of at once, and the next Record works (#920)`, async ({ page }) => {
+  // The iPhone's way is the worklet (#687): forced here as the test above does.
+  if (way === "audio worklet") await page.addInitScript(() => Reflect.deleteProperty(window, "MediaStreamTrackProcessor"));
   const { give, live } = await holdMicrophone(page);
   await inGeneral(page);
   await page.getByRole("button", { name: "Record a voice message" }).click();
@@ -154,6 +157,7 @@ test("Escape while the phone's microphone opens: the microphone that comes later
   await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible();
   expect(await live(1)).toEqual(["live"]);
 });
+}
 
 test("another room opened while the phone's microphone opens calls it off, and the microphone given later is let go of (#920)", async ({ page }) => {
   const { give, live } = await holdMicrophone(page);

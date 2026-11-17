@@ -124,7 +124,11 @@ export function useVoiceMessages(
     return () => {
       // The window going (or, docked, the chat folding away): what's
       // recording or starting is called off here, before the recorder goes.
+      // Called off and forgotten in one place, so no other clean-up's order
+      // can come between them.
       if (recordingIn.current !== null || startingIn.current !== null) made.cancel();
+      recordingIn.current = null;
+      startingIn.current = null;
       made.dispose();
       if (recorder.current === made) recorder.current = null;
     };
@@ -147,8 +151,6 @@ export function useVoiceMessages(
   // starting was called off with the recorder (above).
   useEffect(
     () => () => {
-      recordingIn.current = null;
-      startingIn.current = null;
       for (const clip of clipsNow.current.values()) if (clip.kind === "kept") URL.revokeObjectURL(clip.url);
     },
     [],
