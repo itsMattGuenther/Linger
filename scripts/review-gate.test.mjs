@@ -140,6 +140,9 @@ test("reads which pull request, folder and branch a command is about", () => {
     // A branch or folder whose name holds the words isn't the command.
     ["create", "git push -u origin fix/gh-pr-create-flags && gh pr create -t x", { dirs: [] }],
     ["merge", "cd ~/src/gh-pr-merge-bot && gh pr merge 5", { selector: "5", dirs: ["~/src/gh-pr-merge-bot"] }],
+    // The word case as an argument inside a substitution is a word.
+    ["create", 'gh pr create -t x --body "$(echo fixes the empty case)"', { base: null }],
+    ["merge", 'gh pr merge 5 --subject "$(echo covers the empty case)"', { selector: "5" }],
     ["ready", "gh pr ready", { selector: null }],
     ["ready", "gh pr ready 12", { selector: "12" }],
   ];

@@ -168,7 +168,8 @@ function readTokens(reader, closer) {
     const word = readWord(reader);
     // A case's patterns end in `)`, which bash tells from the substitution's
     // own end by its grammar; inside one, the gate doesn't try, and stops.
-    if (closer && word.known && !word.quoted && word.text === "case") throw new Unreadable("a `case` inside a substitution");
+    // Only a case where a command starts: `case` as an argument is a word.
+    if (closer && startsCommand && word.known && !word.quoted && word.text === "case") throw new Unreadable("a `case` inside a substitution");
     tokens.push({ word });
   }
 }
@@ -472,12 +473,14 @@ function readAnsiC(reader) {
   }
 }
 
+/** Each token list's commands, worked out once. */
+const listed = new WeakMap();
+
 /**
  * The simple commands in a token list, each with its words, its settings
  * (`NAME=value` in front), its redirections, the compound-command words led
  * in with (`do`, `if`, `!`), and the operator after it.
  */
-const listed = new WeakMap();
 
 function commandsOf(tokens) {
   if (listed.has(tokens)) return listed.get(tokens);
