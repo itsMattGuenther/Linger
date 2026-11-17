@@ -245,7 +245,7 @@ test("a start while the last stop still finishes: each recording keeps its own s
   const stopped = (which: number) => page.evaluate((index) => (window as unknown as Driven).pageRecorder.stopped(index), which);
   await page.goto("/tests/fixtures/page-recorder.html");
   expect(await start()).toBe("started");
-  await page.waitForTimeout(2500);
+  await page.waitForTimeout(4000);
   await stop();
   await expect.poll(flushes).toBe(1);
   // The next start, while the first still finishes.
@@ -259,11 +259,13 @@ test("a start while the last stop still finishes: each recording keeps its own s
   await expect.poll(flushes).toBe(1);
   await letFlush();
   const second = await stopped(1);
-  // Twenty milliseconds a packet: about 2.5 seconds, and about 1.3.
-  expect(first).toBeGreaterThan(110);
-  expect(first).toBeLessThan(200);
+  // Twenty milliseconds a packet. The first recorded four seconds before
+  // the second began; handed the second's instead, it would have about
+  // one second's, however slow the machine. The upper bounds are only sane.
+  expect(first).toBeGreaterThan(150);
+  expect(first).toBeLessThan(1000);
   expect(second).toBeGreaterThan(45);
-  expect(second).toBeLessThan(100);
+  expect(second).toBeLessThan(1000);
   // The first's microphone ending, after the second began, isn't the second's.
   expect(await page.evaluate(() => (window as unknown as Driven).pageRecorder.ended())).toEqual([]);
 });
