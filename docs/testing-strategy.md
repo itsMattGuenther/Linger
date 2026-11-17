@@ -75,8 +75,9 @@ only changes documentation.
 | `deploy/` | The Rust checks and the update script's test | S3, the voice relay and a real server update in Docker |
 | The push relay, `push-relay/` | Its typecheck on the Workers runtime's types, and its tests against stand-ins for Apple and Google | Nothing more; it's deployed by hand |
 | The startup measurement, `scripts/startup-time.mjs` | Its own tests (below); the measuring itself is run by hand ([performance.md](performance.md)) | Nothing more |
-| A check or tool that ships nothing: the questions before a pull request and the catch count (`pr-questions`, `review-catches`), the review gate and its hook (`review-gate`, `.claude/settings.json`, #917, #930), and `tauri-versions`, `ios-flows`, `ios-plist`, `upstream-fixes`, `android-jni`, `installed-packages`, `maestro-driver`, `app-at-rest`, `browser-fakes`, `actionlint` (the list is `classify()` in `scripts/ci-scope.mjs`) | Their own tests (below) | Nothing more |
-| Shared types (`crates/linger-core/`, `client/src/generated/`), CI, any other file in `scripts/`, anything else | Everything | Everything |
+| A check or tool in `scripts/` that ships nothing, and its fixtures: the questions before a pull request, the catch count, the review gate and its hook (`.claude/settings.json`, #917, #930), and others. `classify()` in `scripts/ci-scope.mjs` is the list | Their own tests (below) | Nothing more |
+| A script only the packages use: the audio and icon tools, the AppImage downloads, the bundler's retry (#916), the Windows update check. `classify()` is the list | As above | The packages |
+| Shared types (`crates/linger-core/`, `client/src/generated/`), CI, a script not in the rows above, anything else | Everything | Everything |
 
 **Only the checks a change can reach** (#914). Which app builds a file of
 the shell is read from the code: the `cfg` on its module in `lib.rs`, the
@@ -93,7 +94,9 @@ wrong: it runs the iPhone app in the simulator whatever changed.
 Every run, locally and in CI, also runs the rules lint (`scripts/lint-rules.sh`:
 AI attribution, dropped vocabulary, file names only differing in case), the
 version check, and the tests of these scripts themselves
-(`node --test scripts/ci-scope.test.mjs`, `scripts/csp-assets.test.mjs`,
+(`node --test scripts/ci-scope.test.mjs`, `scripts/ci-gate.test.mjs`,
+`scripts/changed-tests.test.mjs`, `scripts/updater-urls.test.mjs`,
+`scripts/release-draft.test.mjs`, `scripts/csp-assets.test.mjs`,
 `scripts/package-deps.test.mjs`, `scripts/playwright-image.test.mjs`,
 `scripts/issue-label.test.mjs`, `scripts/action-pins.test.mjs`,
 `scripts/workflow-downloads.test.mjs`, `scripts/linux-next-env.test.mjs`,
