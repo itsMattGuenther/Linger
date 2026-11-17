@@ -161,6 +161,30 @@ pass.
   answer the questions it prints for your change: the kinds of mistake
   reviews have caught, for the parts of the project your branch changed. Say
   what you checked in the pull request's Tests section, in a line or two.
+- **A fresh review runs by itself before a pull request opens, is marked
+  ready, or merges** (#917). Whoever writes a change also writes its tests
+  and answers those questions, so all three share the same blind spots, and
+  most of what Greptile caught was exactly that. In Claude Code, a hook in
+  `.claude/settings.json` runs `scripts/review-gate.mjs` before `gh pr
+  create`, `gh pr ready` and `gh pr merge`: `/code-review` (high) in a
+  separate Claude process, on the commits being proposed or merged, given
+  the questions for them. Nobody starts it, and it takes a few minutes.
+  Each commit is reviewed once. With findings, the command stops and they
+  come back to you: fix what's real and run it again, and a new commit gets
+  a new review. The same commit passes the second time, so a finding you
+  judge wrong doesn't hold you up; say why in the pull request, and say in
+  its Tests section what the review found and what you did. Docs-only
+  changes aren't reviewed. Run the command on its own, with only `cd
+  <folder> &&` in front (and, before `gh pr create`, `git push … &&`), and
+  the number right after `gh pr merge`; push before a merge, never in the
+  same command, and don't use `--auto`, since either would merge a commit
+  the review never saw. The gate stops what it can't read rather than guess.
+  At a merge it never runs the pull request's own code: the questions come
+  from the gate's copy, and the reviewer loads only your own Claude
+  settings. With another tool, run `node scripts/review-gate.mjs` before
+  opening (it needs the `claude` command, or `LINGER_REVIEWER` set to it,
+  which Windows needs when Claude Code came from npm), or your tool's own
+  review in a fresh session.
 - **A real review catch strengthens the project, not only the code it was on.**
   When a reviewer (Greptile, which reviews every pull request but a `docs/…`
   branch's, or a person) finds a real problem, fix it, then say in the pull

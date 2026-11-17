@@ -242,6 +242,7 @@ agents/                skills for your own coding agent (linger-report, linger-c
 docs/                  guides, decisions, design, release notes
 scripts/               check.sh (the local gate) and what it calls
 .github/               CI workflows, issue forms, the PR template
+.claude/               Claude Code's hook that runs a fresh review before a PR opens or merges
 .cargo/                where cargo test writes the TypeScript wire types
 ```
 

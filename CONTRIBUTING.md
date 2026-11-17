@@ -88,6 +88,14 @@ The repo is arranged so a session reads little and misses nothing:
   prints the questions those catches taught, for the parts of the project
   your branch changed. Answer them, and say what you checked in the pull
   request, in a line or two.
+- A fresh review runs before a pull request opens and before it merges
+  (#917). In Claude Code it starts by itself: a hook in
+  `.claude/settings.json` runs `/code-review` in a separate session on your
+  commits, with those questions, and stops `gh pr create` once if it finds
+  something, handing you the findings. Fix what's real; the same commit
+  passes the second time. It takes a few minutes of your own Claude usage.
+  With another tool, run `node scripts/review-gate.mjs` before opening, or
+  your tool's own review in a fresh session. `AGENTS.md` has the details.
 - Changes to `SPEC.md`, `ARCHITECTURE.md`, `PROTOCOL.md`, or `AGENTS.md` need
   Matt's review — CODEOWNERS enforces this. Those files are the source of
   truth, so they change deliberately or not at all.

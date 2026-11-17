@@ -176,6 +176,15 @@ to be right for every shape that window takes.
 
 ## A fallback wider than the case it's for
 
+- **#918 (2 catches): two base branches shared a review, and questions that
+  couldn't be read went unsaid.** `release/foo` and `release_foo` made the
+  same record name; and a failure reading the project's questions reviewed
+  without them, quietly. Caught by Greptile. *Missed because* the name was
+  made by replacing characters with one that can also be in a name, and the
+  questions had a catch-all that returned nothing. *Changed:* `recordName`
+  spells out every character a name might not hold, and the questions
+  failing stops the review.
+
 - **#891: a broken `SEAL_KEY` would have made every phone "gone".** The
   push relay loaded its key inside the same `catch` that turns a token it
   can't open into 410, so a missing or malformed key answered every send
@@ -210,6 +219,13 @@ to be right for every shape that window takes.
   fallback put back.
 
 ## Checked when asked, not when it happens
+
+- **#918: a pull request pushed to during its review would have merged
+  unreviewed.** The gate looked up the head, reviewed it for minutes, then
+  let `gh pr merge` go, which merges whatever the head is by then. Caught
+  by Greptile. *Missed because* the push before a merge was refused, but not
+  one from somewhere else during the wait. *Changed:* after a review, the
+  gate asks gh again and stops if the head moved, with a test.
 
 - **#912: a microphone test could still play into a room, or to a window
   that had gone.** Greptile's third look, after the first fixes. Whether to
@@ -413,6 +429,17 @@ on a world that has changed.
   question for written rules now names this one.
 
 ## Tests written from the case in mind, not from the ways things fail
+
+- **#918 (2 catches): the review gate took a flag's value for a flag, and
+  missed `--auto` after a body.** A body saying `--repo=other/project` read
+  as another repository, so the change went unreviewed; `-Hother` wasn't
+  seen as a branch; and `gh pr merge 5 --body "$(cat m)" --auto` stopped
+  reading at the body, after which `--auto` could merge later pushes.
+  Caught by Greptile, after the gate had reviewed itself twice. *Missed
+  because* the table of commands had each flag written plainly, never a
+  value that looks like one, nor a flag after a body. *Changed:* `parseWords`
+  reads each flag with its value in all four spellings, a merge or ready
+  must be readable whole, and the table has bodies that look like flags.
 
 - **#912: the microphone test played half of a long recording, listened
   past its limit, and blamed the wrong microphone.** Three of Greptile's
