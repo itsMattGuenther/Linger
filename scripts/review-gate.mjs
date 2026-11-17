@@ -58,27 +58,36 @@ export const REVIEWER_TOOLS = [
 const PIECE = String.raw`(?:"(?:[^"\\$\x60]|\\[\\"$\x60])*"|'[^']*'|[^\s;&|<>()"'$\x60\\*?\[\]{}#])`;
 const WORD = `(?:${PIECE}+)`;
 const ASSIGN = String.raw`[A-Za-z_]\w*=(?:${WORD})?`;
+// What ends one command: ; | ) a newline, or an & that doesn't start `&>`.
+const SEPARATOR = String.raw`[;|)\n]|&(?!>)`;
 // Where a word ends, as in the shell: a blank, a separator, the end, or a
-// redirection glued to it (`--squash>out`).
-const AFTER = String.raw`(?=$|[ \t;&|)\n<>])`;
+// redirection glued to it (`--squash>out`, `x&>log`).
+const AFTER = String.raw`(?=$|[ \t<>&]|${SEPARATOR})`;
 // A redirection, operators longest first, and what it reads or writes: the
 // shell's, not one of gh's words (#924). One whose target the gate can't read
 // (a substitution, a variable) doesn't match, so the command is stopped.
-const REDIR = String.raw`(?:\d*(?:>>|>&|<&|>|<)|&>>|&>)[ \t]*${WORD}${AFTER}`;
+const REDIR = String.raw`(?:\d*(?:>>|>&|>\||>|<<<|<&|<>|<)|&>>|&>)[ \t]*${WORD}${AFTER}`;
 // Where a redirection starts, read or not, so its digits (`2>`) are never a word.
 const NOT_REDIR = String.raw`(?!\d*[<>])`;
 // Where a command starts: the start, or after ; & | newline or (.
 const START = String.raw`(^|[;&|\n(])[ \t]*`;
-const GH = (action) => new RegExp(`${START}((?:${ASSIGN}[ \\t]+)*)gh[ \\t]+pr[ \\t]+${action}${AFTER}`, "g");
+// Before gh, among the settings, and between gh, pr and the action, the shell
+// allows redirections too (`2>/dev/null gh pr 2>&1 merge 5`); they're passed over.
+const GAP = String.raw`(?:[ \t]+${REDIR})*[ \t]+`;
+const GH = (action) => new RegExp(`${START}((?:(?:${ASSIGN}|${REDIR})[ \\t]+)*)gh${GAP}pr${GAP}${action}${AFTER}`, "g");
 // What may come before the command on its line: changes of folder and a push.
 // Either may have redirections (`2>/dev/null`), and their digits are never its words.
-const STEP = new RegExp(String.raw`^\s*(?:cd[ \t]+${NOT_REDIR}(${WORD})${AFTER}(?:[ \t]*${REDIR})*|git[ \t]+push${AFTER}(?:[ \t]*${REDIR}|[ \t]+${NOT_REDIR}${WORD}${AFTER})*)[ \t]*(?:&&|;|\n)`);
-const ASSIGNS = new RegExp(String.raw`^\s*(?:${ASSIGN}[ \t]+)*$`);
-const ASSIGN_ONE = new RegExp(String.raw`(${ASSIGN})`, "g");
+const STEP = new RegExp(String.raw`^\s*(?:cd(?:[ \t]+${REDIR})*[ \t]+${NOT_REDIR}(${WORD})${AFTER}(?:[ \t]*${REDIR})*|git[ \t]+push${AFTER}(?:[ \t]*${REDIR}|[ \t]+${NOT_REDIR}${WORD}${AFTER})*)[ \t]*(?:&&|;|\n)`);
+// One setting or redirection in front of gh, at a time: a redirection's target
+// that looks like a setting (`>GH_REPO=o/r` writes a file of that name) is never one.
+const IN_FRONT = new RegExp(String.raw`(?:(${ASSIGN})|${REDIR})[ \t]+`, "y");
+// gh, pr and the action with only blanks, a line's continuation, other non-word
+// characters or redirections between, read or not: the fallback's idea of one.
+const LOOSE_GAP = String.raw`(?:\W|\d*[<>]+&?(?:"[^"]*"|'[^']*'|[^\s;|"'])*)+?`;
 const TOKEN = new RegExp(String.raw`^[ \t]*${NOT_REDIR}(${WORD})${AFTER}`);
 // Where the command ends: a separator, the end, or a comment (a # that starts a word).
 // `&>` is a redirection, not an end.
-const END = /^(?:[ \t]*(?:$|[;|)\n]|&(?!>))|[ \t]+#)/;
+const END = new RegExp(String.raw`^(?:[ \t]*(?:$|${SEPARATOR})|[ \t]+#)`);
 const REDIRECT = new RegExp(String.raw`^[ \t]*${REDIR}`);
 
 /** gh's flags that take a value, for each command: the long name, and its short one if it has one. */
@@ -145,7 +154,7 @@ export function readCommand(command, action) {
     // words in a row in any other form (`command gh`, `"gh"`, a path to gh)
     // are a command the gate can't place. Without them in a row it isn't one
     // at all, as for a hook that fired for every command.
-    if (new RegExp(String.raw`\bgh\W{1,6}pr\W{1,6}${action}\b`).test(command)) {
+    if (new RegExp(String.raw`\bgh${LOOSE_GAP}pr${LOOSE_GAP}${action}\b`).test(command)) {
       return stop(`it couldn't find \`gh pr ${action}\` where a command starts`);
     }
     return null;
@@ -172,12 +181,18 @@ export function readCommand(command, action) {
   rest = rest.replace(/[\s;&|(]+$/, "");
   if (rest.trim()) return stop(`something runs before \`gh pr ${action}\` that the gate doesn't read (\`${rest.trim().slice(0, 60)}\`)`);
 
-  if (!ASSIGNS.test(assignments)) return stop("its settings in front of gh can't be read");
   const env = {};
-  for (const [assignment] of assignments.matchAll(ASSIGN_ONE)) {
+  // Read up to where the last one ended: a sticky match that fails starts again at 0.
+  let readTo = 0;
+  IN_FRONT.lastIndex = 0;
+  for (let item = IN_FRONT.exec(assignments); item; item = IN_FRONT.exec(assignments)) {
+    readTo = IN_FRONT.lastIndex;
+    const [, assignment] = item;
+    if (assignment === undefined) continue;
     const eq = assignment.indexOf("=");
     env[assignment.slice(0, eq)] = unquote(assignment.slice(eq + 1));
   }
+  if (readTo !== assignments.length) return stop("its settings in front of gh can't be read");
 
   // After it: the words of this one command, up to where it ends or a word
   // the gate can't read.
