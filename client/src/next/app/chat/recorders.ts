@@ -196,8 +196,12 @@ export function pageRecorder(events: RecorderEvents): Recorder {
   let context: AudioContext | null = null;
   let encoder: AudioEncoder | null = null;
   let reading: Promise<void> | null = null;
-  let packets: Uint8Array[] = [];
-  let preSkip = USUAL_PRE_SKIP;
+  /**
+   * The start under way's recording. Each start has its own, and its
+   * encoder writes only into it, so a stop finishing one never reads, and
+   * never loses packets to, the next (#920).
+   */
+  let clip: Recording = { preSkip: USUAL_PRE_SKIP, packets: [] };
   let stopped = false;
   let loudest = 0;
   let heardAt = 0;
@@ -207,8 +211,6 @@ export function pageRecorder(events: RecorderEvents): Recorder {
    * the microphone it's given without touching a later start's (#920).
    */
   let attempt = 0;
-  /** A stop is finishing its encoder: letting the recorder go leaves that be. */
-  let flushing = false;
 
   const release = () => {
     stopped = true;
@@ -221,24 +223,23 @@ export function pageRecorder(events: RecorderEvents): Recorder {
   /** One stretch of sound, as one channel: encoded, and heard for the lines. `timestamp` is in microseconds. */
   const encode = (samples: Float32Array<ArrayBuffer>, rate: number, timestamp: number) => {
     if (encoder === null) {
-      // Made for the start under way: it speaks only for that one (#920).
-      const owner = attempt;
+      // Made for the start under way: it writes into that start's
+      // recording, and speaks only while that start is the current one (#920).
+      const into = clip;
       encoder = new AudioEncoder({
         output: (chunk, meta) => {
-          // A late packet of an earlier start's never joins a later one's.
-          if (attempt !== owner) return;
           const found = preSkipOf(meta?.decoderConfig?.description);
-          if (found !== null) preSkip = found;
+          if (found !== null) into.preSkip = found;
           const packet = new Uint8Array(chunk.byteLength);
           chunk.copyTo(packet);
-          packets.push(packet);
-          if (packets.length === LONGEST_PACKETS && !stopped) {
+          into.packets.push(packet);
+          if (into.packets.length === LONGEST_PACKETS && !stopped && into === clip) {
             release();
             events.ended("full");
           }
         },
         error: () => {
-          if (!stopped && attempt === owner) events.ended("lost");
+          if (!stopped && into === clip) events.ended("lost");
         },
       });
       encoder.configure({ codec: "opus", sampleRate: rate, numberOfChannels: 1, bitrate: BITS_PER_SECOND, opus: { frameDuration: 20_000 } });
@@ -311,15 +312,14 @@ export function pageRecorder(events: RecorderEvents): Recorder {
     const held = encoder as AudioEncoder | null;
     if (held !== null && held.state !== "closed") held.close();
     encoder = null;
-    packets = [];
+    clip = { preSkip: USUAL_PRE_SKIP, packets: [] };
   }
 
   return {
     start: async () => {
       attempt += 1;
       const mine = attempt;
-      packets = [];
-      preSkip = USUAL_PRE_SKIP;
+      clip = { preSkip: USUAL_PRE_SKIP, packets: [] };
       stopped = false;
       encoder = null;
       const Processor = trackProcessor();
@@ -366,29 +366,26 @@ export function pageRecorder(events: RecorderEvents): Recorder {
       }
     },
     stop: async () => {
-      release();
-      await reading;
-      reading = null;
+      // This start's own reader, encoder and recording, taken before
+      // anything is waited for: a start made meanwhile has its own (#920).
+      const kept = clip;
       const held = encoder as AudioEncoder | null;
-      flushing = true;
+      const ending = reading;
+      release();
+      await ending;
+      if (reading === ending) reading = null;
       if (held !== null && held.state === "configured") await held.flush().catch(() => undefined);
-      flushing = false;
       // Closed already, after an encoder error meanwhile.
       if (held !== null && held.state !== "closed") held.close();
-      encoder = null;
-      return { preSkip, packets };
+      if (encoder === held) encoder = null;
+      return kept;
     },
     cancel,
-    // Lets go of the microphone and stops any start still waiting; a stop
-    // under way keeps its encoder and packets to finish with.
+    // Lets go of the microphone and stops any start still waiting. A stop
+    // under way has its own encoder and recording to finish with.
     dispose: () => {
       attempt += 1;
       release();
-      if (!flushing) {
-        const held = encoder as AudioEncoder | null;
-        if (held !== null && held.state !== "closed") held.close();
-        encoder = null;
-      }
     },
   };
 }
