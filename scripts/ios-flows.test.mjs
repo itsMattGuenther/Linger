@@ -14,6 +14,34 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const DIR = fileURLToPath(new URL("../client/tests/ios/", import.meta.url));
+
+// The jobs of a workflow, by name, each with its own text.
+const jobsOf = (text) => {
+  const jobs = text.slice(text.indexOf("\njobs:\n"));
+  const names = [...jobs.matchAll(/^ {2}([\w-]+):\s*(?:#.*)?$/gm)];
+  return Object.fromEntries(names.map((match, i) => [match[1], jobs.slice(match.index, names[i + 1]?.index ?? jobs.length)]));
+};
+
+test("the iPhone runs on a Mac wait while a pull request is a draft, and only those (#933)", () => {
+  for (const file of ["ios-simulator.yml", "share-window.yml"]) {
+    const text = readFileSync(fileURLToPath(new URL(`../.github/workflows/${file}`, import.meta.url)), "utf8");
+    const types = /^ {2}pull_request:\n(?: {4}#.*\n)*(?: {4}.*\n)*? {4}types: \[([^\]]*)\]/m.exec(text)?.[1].split(",").map((type) => type.trim()).sort();
+    assert.deepEqual(types, ["converted_to_draft", "opened", "ready_for_review", "reopened", "synchronize"],
+      `${file}: marking a draft ready starts it, and going back to draft stops it`);
+    const jobs = Object.entries(jobsOf(text));
+    const onMac = jobs.filter(([, job]) => /^ {4}runs-on: .*(?:xcode|macos)/m.test(job));
+    assert.ok(onMac.length > 0, `${file} has jobs on a Mac`);
+    for (const [name, job] of jobs) {
+      const gate = /^ {4}if: (.*)$/m.exec(job)?.[1] ?? "";
+      // The draft check is the last of the conditions, all of them joined by
+      // &&: one joined by || or wrapped in always() wouldn't wait.
+      const waits = /^\$\{\{ [^|]*&& !github\.event\.pull_request\.draft \}\}$/.test(gate) && !/always\(\)/.test(gate);
+      if (onMac.some(([mac]) => mac === name)) assert.ok(waits, `${file}: ${name}, on a Mac, waits while the pull request is a draft: ${gate}`);
+      else assert.ok(!gate.includes("pull_request.draft"), `${file}: ${name} isn't on a Mac and doesn't wait`);
+    }
+    assert.doesNotMatch(jobsOf(text).changes ?? "", /pull_request\.draft/, `${file}: the draft check is each Mac job's, not in an output others share`);
+  }
+});
 const GUIDE = fileURLToPath(new URL("../docs/development.md", import.meta.url));
 
 /**

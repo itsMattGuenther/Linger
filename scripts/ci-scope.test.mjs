@@ -7,31 +7,6 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { cfgReach, classify, DESKTOP_ONLY, labelsFrom, localPaths, shellModules, shellReach } from "./ci-scope.mjs";
 
-// The jobs of a workflow, by name, each with its own text.
-const jobsOf = (text) => {
-  const jobs = text.slice(text.indexOf("\njobs:\n"));
-  const names = [...jobs.matchAll(/^ {2}([\w-]+):$/gm)];
-  return Object.fromEntries(names.map((match, i) => [match[1], jobs.slice(match.index, names[i + 1]?.index ?? jobs.length)]));
-};
-
-test("the iPhone runs on a Mac wait while a pull request is a draft, and start when it's marked ready (#933)", () => {
-  const root = fileURLToPath(new URL("../", import.meta.url));
-  for (const file of ["ios-simulator.yml", "share-window.yml"]) {
-    const text = readFileSync(join(root, ".github/workflows", file), "utf8");
-    const types = /^ {2}pull_request:\n(?: {4}#.*\n)*(?: {4}.*\n)*? {4}types: \[([^\]]*)\]/m.exec(text)?.[1].split(",").map((type) => type.trim()).sort();
-    assert.deepEqual(types, ["opened", "ready_for_review", "reopened", "synchronize"], `${file}: marking a draft ready starts it`);
-    const jobs = jobsOf(text);
-    const onMac = Object.entries(jobs).filter(([, job]) => /^ {4}runs-on: .*(?:xcode|macos)/m.test(job));
-    assert.ok(onMac.length > 0, `${file} has jobs on a Mac`);
-    for (const [name, job] of onMac) {
-      const gate = /^ {4}if: (.*)$/m.exec(job)?.[1] ?? "";
-      const waits = gate.includes("!github.event.pull_request.draft")
-        || (gate.includes("needs.changes.outputs.phone == 'true'") && /^ {6}phone: \$\{\{ !github\.event\.pull_request\.draft && /m.test(jobs.changes ?? ""));
-      assert.ok(waits, `${file}: ${name} waits while the pull request is a draft`);
-    }
-  }
-});
-
 const active = (paths) => Object.entries(classify(paths)).filter(([, value]) => value).map(([key]) => key);
 for (const paths of [["README.md"], ["docs/testing.md", "LICENSE"], ["docs/screenshots/example.png"]])
   test(`documentation only: ${paths}`, () => assert.deepEqual(active(paths), []));

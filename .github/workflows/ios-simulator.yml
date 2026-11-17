@@ -11,8 +11,9 @@ name: iphone simulator
 # report, and the app's and server's logs.
 #
 # A simulator build needs no Apple account and nothing is signed for a
-# phone, so this uses no secrets and runs on any pull request: those that
-# touch the app or what it runs (scripts/ci-scope.mjs, `ios`). The signed
+# phone, so this uses no secrets and runs on any pull request that touches
+# the app or what it runs (scripts/ci-scope.mjs, `ios`), once it's out of
+# draft (#933). The signed
 # build for TestFlight is ios.yml's. docs/development.md, "The iPhone in the
 # simulator", says how to run the flows.
 #
@@ -24,9 +25,10 @@ name: iphone simulator
 on:
   # A draft pull request doesn't run it: it starts when the pull request is
   # marked ready, and on each push after (#933). It's 35 to 60 minutes on a
-  # Mac, and drafts are where a change is still being worked out.
+  # Mac, and drafts are where a change is still being worked out. Back to
+  # draft, a new run takes the old one's place and stops it.
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
     inputs:
       xcode:

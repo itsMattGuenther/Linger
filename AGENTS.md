@@ -149,7 +149,8 @@ pass.
   ready (`gh pr ready`) once the work is done and `ci` is green. While it's
   a draft, a push runs `ci` (about 10 minutes) but not the iPhone runs on
   GitHub's Mac (35 to 60 minutes): they start when it's marked ready, and
-  still have to pass before it merges (#933). Push your fixes together,
+  still have to pass before it merges (#933). `all green` doesn't include
+  them, so wait for them. Push your fixes together,
   not one at a time: after it's ready, every push runs them again.
 - **Label a pull request `desktop-only` when nothing in it can change what
   the phone app does**, and it touches files both apps build: the page, or
