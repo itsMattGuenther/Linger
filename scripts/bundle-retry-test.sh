@@ -33,6 +33,9 @@ if [ "$n" -le "$failing" ]; then
     between) printf ' Downloading https://github.com/x/y.zip\n        Warn the server was slow\n  45%% 12 MB\nfailed to bundle project: `http status: 502`\nCaused by:\n    0: http status: 502\n' ;;
     broken) printf ' Downloading https://github.com/x/wix314-binaries.zip\n        Info validating hash\n        Info extracting WIX\nfailed to bundle project: `invalid zip archive`\n' ;;
     template) printf ' Downloading https://github.com/x/wix314-binaries.zip\n        Info validating hash\nfailed to bundle project: `failed to render main.wxs`\n' ;;
+    chain) printf ' Downloading https://github.com/x/nsis.zip\n       Error failed to bundle project:\n    - http status: 504\n' ;;
+    wording) printf ' Downloading https://github.com/x/nsis.zip\nfailed to bundle project: https://github.com/x/nsis.zip: status code 503\n' ;;
+    gone) printf ' Downloading https://github.com/x/nsis.zip\nfailed to bundle project: `http status: 404`\n' ;;
     signed) printf ' Downloading https://github.com/x/y.zip\n     Signing Linger.msi\nfailed to bundle project: `signtool failed`\n' ;;
     compile) printf 'error[E0308]: mismatched types\n' ;;
   esac
@@ -66,6 +69,12 @@ run broken 1
 [ "$status" -eq 0 ] && [ "$runs" -eq 2 ] || fail "a download that arrived broken (Tauri's lowercase checking and unpacking lines) is tried again ($status, $runs)"
 run template 1
 [ "$status" -eq 7 ] && [ "$runs" -eq 1 ] || fail "a failure after a download that worked, not a network's, runs once ($status, $runs)"
+run chain 1
+[ "$status" -eq 0 ] && [ "$runs" -eq 2 ] || fail "a reason on the cause line after the failure is read ($status, $runs)"
+run wording 1
+[ "$status" -eq 0 ] && [ "$runs" -eq 2 ] || fail "another client's wording of a 503 is read ($status, $runs)"
+run gone 1
+[ "$status" -eq 7 ] && [ "$runs" -eq 1 ] || fail "a 404 isn't tried again: another try won't mend it ($status, $runs)"
 run signed 1
 [ "$status" -eq 7 ] && [ "$runs" -eq 1 ] || fail "a failure in a later step, signing, isn't the download's ($status, $runs)"
 # A setting that isn't a whole number is refused before anything runs,

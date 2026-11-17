@@ -43,7 +43,8 @@ pause=$((10#$pause))
 log="$(mktemp)"
 trap 'rm -f "$log"' EXIT
 # Ctrl-C, or a cancelled job, stops it rather than counting as a failed try.
-trap 'exit 130' INT TERM
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # Colours and Windows line ends, spelled by bash so any sed reads them (a
 # Mac's doesn't know \x1b or \r).
@@ -53,15 +54,21 @@ cr=$'\r'
 # Whether it failed on a download: of the bundler's steps (a capitalised
 # word like Downloading, Bundling or Running starting a line, after any
 # "Info"), the last before its "failed to bundle project" is Downloading,
-# and the failure is a network's or a broken file's (an HTTP status, a
-# timeout, a dropped connection, a bad hash or archive), not, say, a
-# template that wouldn't render after the download had worked.
+# and the failure, on its line or the cause lines after it, is a network's
+# or a broken file's: a server's 5xx, 408 or 429, a timeout, a dropped
+# connection, a bad hash or archive. Not a 404, which another try won't
+# mend, nor, say, a template that wouldn't render after the download worked.
 # Other lines between (a warning, a progress count, an error's causes, a
 # lowercase "Info validating hash") don't count either way. Colours and
 # Windows line ends are taken off first.
 failed_downloading() {
   sed -e "s/${esc}\[[0-9;]*[A-Za-z]//g" -e "s/${cr}\$//" "$1" | awk '
-    /failed to bundle project/ { if (step == "Downloading" && tolower($0) ~ /http status|timed out|timeout|connection|connect|dns|resolve|network|tls|reset|eof|io:|error sending request|hash|zip|archive/) found = 1 }
+    # The reason is on the failure line or the cause lines after it.
+    /failed to bundle project/ { reading = (step == "Downloading") ? 6 : 0 }
+    reading > 0 {
+      reading--
+      if (tolower($0) ~ /(http status|status code)[: ]*(5[0-9][0-9]|408|429)|timed out|timeout|connection|dns|resolve|network|tls|reset|eof|io:|error sending request|hash|zip|archive/) found = 1
+    }
     { word = ($1 == "Info") ? $2 : $1; if (word ~ /^(Downloading|Bundling|Running|Finished|Built|Compiling|Signing|Packaging|Patching|Installing)$/) step = word }
     END { exit found ? 0 : 1 }'
 }
