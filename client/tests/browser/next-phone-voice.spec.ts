@@ -214,6 +214,60 @@ test("another room opened while the phone's microphone opens calls it off, and t
   await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible();
 });
 
+/** What `tests/fixtures/page-recorder.ts` puts on the window, with the held encoder flushes. */
+interface Driven {
+  heldFlushes: Array<() => void>;
+  pageRecorder: {
+    start: () => Promise<string>;
+    stop: () => void;
+    stopped: (which: number) => Promise<number>;
+    ended: () => string[];
+  };
+}
+
+test("a start while the last stop still finishes: each recording keeps its own sound, and the old one's end says nothing (#920)", async ({ page }) => {
+  // The encoder's last packets held back, so the first recording is still
+  // finishing while the second records. The panel can't do this on a phone
+  // (another room means the conversation goes, which calls a recording off),
+  // so the recorder is driven on its own.
+  await page.addInitScript(() => {
+    const held: Array<() => void> = [];
+    Object.assign(window, { heldFlushes: held });
+    const real = AudioEncoder.prototype.flush;
+    AudioEncoder.prototype.flush = function (this: AudioEncoder) {
+      return new Promise<void>((resolve, reject) => held.push(() => void real.call(this).then(resolve, reject)));
+    };
+  });
+  const flushes = () => page.evaluate(() => (window as unknown as Driven).heldFlushes.length);
+  const letFlush = () => page.evaluate(() => void (window as unknown as Driven).heldFlushes.shift()?.());
+  const start = () => page.evaluate(() => (window as unknown as Driven).pageRecorder.start());
+  const stop = () => page.evaluate(() => (window as unknown as Driven).pageRecorder.stop());
+  const stopped = (which: number) => page.evaluate((index) => (window as unknown as Driven).pageRecorder.stopped(index), which);
+  await page.goto("/tests/fixtures/page-recorder.html");
+  expect(await start()).toBe("started");
+  await page.waitForTimeout(2500);
+  await stop();
+  await expect.poll(flushes).toBe(1);
+  // The next start, while the first still finishes.
+  expect(await start()).toBe("started");
+  await page.waitForTimeout(1000);
+  // The first's last packets come now, into the first.
+  await letFlush();
+  const first = await stopped(0);
+  await page.waitForTimeout(300);
+  await stop();
+  await expect.poll(flushes).toBe(1);
+  await letFlush();
+  const second = await stopped(1);
+  // Twenty milliseconds a packet: about 2.5 seconds, and about 1.3.
+  expect(first).toBeGreaterThan(110);
+  expect(first).toBeLessThan(200);
+  expect(second).toBeGreaterThan(45);
+  expect(second).toBeLessThan(100);
+  // The first's microphone ending, after the second began, isn't the second's.
+  expect(await page.evaluate(() => (window as unknown as Driven).pageRecorder.ended())).toEqual([]);
+});
+
 test("a phone that won't give the microphone says so in words, and Record can be tried again", async ({ page }) => {
   await page.addInitScript(() => {
     if (typeof MediaDevices === "undefined") return;

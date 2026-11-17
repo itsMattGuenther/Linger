@@ -449,6 +449,19 @@ on a world that has changed.
   late. The parity fixture holds a start until a test opens it
   (`?holdmic`, and `?holdcancel` to hold a cancel's answer) and can take the page away (`unmount`); a browser test of each
   case fails without the fix.
+- **#923: the phone recorder's own fix for a start while the last stop
+  finishes had no test.** Each start got its own recording, which its
+  encoder writes into, so a stop still flushing hands back its own sound,
+  but nothing held a flush while another start recorded. Caught by
+  Greptile. *Missed because* the phone's panel can't reach that order
+  (another room takes the conversation away, which calls a recording off),
+  so the tests went through the panel and never got there, and the change
+  came from a fresh review's finding, checked by reading. *Changed:*
+  `tests/fixtures/page-recorder.ts` drives the recorder on its own, and a
+  browser test holds the encoder's flush while a second recording runs; it
+  fails when a stop hands back the current recording. The question on going
+  wrong partway now says to drive a part on its own when no screen reaches
+  the order.
 
 - **#918 (2 catches): the review gate took a flag's value for a flag, and
   missed `--auto` after a body.** A body saying `--repo=other/project` read
