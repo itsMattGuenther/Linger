@@ -58,16 +58,37 @@ export const REVIEWER_TOOLS = [
 const PIECE = String.raw`(?:"(?:[^"\\$\x60]|\\[\\"$\x60])*"|'[^']*'|[^\s;&|<>()"'$\x60\\*?\[\]{}#])`;
 const WORD = `(?:${PIECE}+)`;
 const ASSIGN = String.raw`[A-Za-z_]\w*=(?:${WORD})?`;
-// Where a command starts: the start, or after ; & | newline or (.
-const START = String.raw`(^|[;&|\n(])[ \t]*`;
-const GH = (action) => new RegExp(`${START}((?:${ASSIGN}[ \\t]+)*)gh[ \\t]+pr[ \\t]+${action}(?=$|[ \\t;&|)\\n])`, "g");
+// What ends one command: ; | ) a newline, or an & that doesn't start `&>`.
+const SEPARATOR = String.raw`[;|)\n]|&(?!>)`;
+// Where a word ends, as in the shell: a blank, a separator, the end, or a
+// redirection glued to it (`--squash>out`, `x&>log`).
+const AFTER = String.raw`(?=$|[ \t<>&]|${SEPARATOR})`;
+// A redirection, operators longest first, and what it reads or writes: the
+// shell's, not one of gh's words (#924). One whose target the gate can't read
+// (a substitution, a variable) doesn't match, so the command is stopped.
+const REDIR = String.raw`(?:\d*(?:>>|>&|>\||>|<<<|<&|<>|<)|&>>|&>)[ \t]*${WORD}${AFTER}`;
+// Where a redirection starts, read or not, so its digits (`2>`) are never a word.
+const NOT_REDIR = String.raw`(?!\d*[<>])`;
+// Where a command starts: the start, or after ; newline ( or a | or & that
+// isn't part of a redirection (`>|`, `>&`, `<&`, `&>`).
+const START = String.raw`(^|[;\n(]|(?<![<>])\||(?<![<>])&(?!>))[ \t]*`;
+// Before gh, among the settings, and between gh, pr and the action, the shell
+// allows redirections too (`2>/dev/null gh pr 2>&1 merge 5`), glued together or
+// not; they're passed over. A redirection's target that looks like a setting
+// (`>GH_REPO=o/r` writes a file of that name) is never one: FRONT says which.
+const FRONT = String.raw`(?:(${ASSIGN})[ \t]+|${REDIR}[ \t]*)`;
+const GAP = String.raw`(?:(?:[ \t]+|(?=[<>&]))${REDIR})*[ \t]+`;
+const GH = (action) => new RegExp(`${START}((?:${FRONT})*)gh${GAP}pr${GAP}${action}${AFTER}`, "g");
 // What may come before the command on its line: changes of folder and a push.
-const STEP = new RegExp(String.raw`^\s*(?:cd[ \t]+(${WORD})|git[ \t]+push(?:[ \t]+${WORD})*)[ \t]*(?:&&|;|\n)`);
-const ASSIGNS = new RegExp(String.raw`^\s*(?:${ASSIGN}[ \t]+)*$`);
-const ASSIGN_ONE = new RegExp(String.raw`(${ASSIGN})`, "g");
-const TOKEN = new RegExp(String.raw`^[ \t]*(${WORD})(?=$|[ \t;&|)\n])`);
+// Either may have redirections (`2>/dev/null`), and their digits are never its words.
+const STEP = new RegExp(String.raw`^\s*(?:cd(?:[ \t]+${REDIR})*[ \t]+${NOT_REDIR}(${WORD})${AFTER}(?:[ \t]*${REDIR})*|git[ \t]+push${AFTER}(?:[ \t]*${REDIR}|[ \t]+${NOT_REDIR}${WORD}${AFTER})*)[ \t]*(?:&&|;|\n)`);
+// What's in front of gh, one setting or redirection at a time, as GH matched it.
+const IN_FRONT = new RegExp(FRONT, "y");
+const TOKEN = new RegExp(String.raw`^[ \t]*${NOT_REDIR}(${WORD})${AFTER}`);
 // Where the command ends: a separator, the end, or a comment (a # that starts a word).
-const END = /^(?:[ \t]*(?:$|[;&|)\n])|[ \t]+#)/;
+// `&>` is a redirection, not an end.
+const END = new RegExp(String.raw`^(?:[ \t]*(?:$|${SEPARATOR})|[ \t]+#)`);
+const REDIRECT = new RegExp(String.raw`^[ \t]*${REDIR}`);
 
 /** gh's flags that take a value, for each command: the long name, and its short one if it has one. */
 const VALUED = {
@@ -95,9 +116,17 @@ export function parseWords(words, action) {
       if (Object.hasOwn(long, name)) add(name, eq > 0 ? word.slice(eq + 1) : (words[(i += 1)] ?? ""));
       else add(name, null);
     } else if (word.startsWith("-") && word.length > 1) {
-      const letter = word.slice(0, 2);
-      if (short[letter]) add(short[letter], word.length > 2 ? word.slice(2) : (words[(i += 1)] ?? ""));
-      else add(letter, null);
+      // A group of short flags (`-dB main`), as gh reads it: each letter is
+      // a flag until one takes a value, which is the rest of the group or the
+      // next word.
+      for (let at = 1; at < word.length; at += 1) {
+        const letter = `-${word[at]}`;
+        if (short[letter]) {
+          add(short[letter], at + 1 < word.length ? word.slice(at + 1) : (words[(i += 1)] ?? ""));
+          break;
+        }
+        add(letter, null);
+      }
     } else {
       positional.push({ word, at: i });
     }
@@ -119,6 +148,26 @@ export function unquote(word) {
 const stop = (why) => ({ fail: why });
 
 /**
+ * Whether `words` come in this order in `command`, each a word of its own,
+ * anywhere. The gate's fallback when it can't place the command exactly:
+ * Claude Code fired the hook from its own reading, so with the words there
+ * in order it might be the command, however it's spelled (`command gh`, a
+ * path, quotes, a redirection the gate can't read between them, a line
+ * continued). One pass left to right, so no command makes it slow.
+ */
+function inOrder(command, words) {
+  let from = 0;
+  for (const word of words) {
+    const found = new RegExp(String.raw`\b${word}\b`, "g");
+    found.lastIndex = from;
+    const hit = found.exec(command);
+    if (!hit) return false;
+    from = hit.index + word.length;
+  }
+  return true;
+}
+
+/**
  * What a command asks of `gh pr <action>`: the folders it changes to first,
  * which pull request (`selector`, for ready and merge), the base branch (for
  * create) and another repository if it names one. Null when it doesn't run
@@ -130,10 +179,9 @@ export function readCommand(command, action) {
   const matches = [...command.matchAll(GH(action))];
   if (!matches.length) {
     // Claude Code's own reading of the command chose this hook, so the three
-    // words in a row in any other form (`command gh`, `"gh"`, a path to gh)
-    // are a command the gate can't place. Without them in a row it isn't one
-    // at all, as for a hook that fired for every command.
-    if (new RegExp(String.raw`\bgh\W{1,6}pr\W{1,6}${action}\b`).test(command)) {
+    // words in order in any other form are a command the gate can't place.
+    // Without them it isn't one at all.
+    if (inOrder(command, ["gh", "pr", action])) {
       return stop(`it couldn't find \`gh pr ${action}\` where a command starts`);
     }
     return null;
@@ -160,9 +208,12 @@ export function readCommand(command, action) {
   rest = rest.replace(/[\s;&|(]+$/, "");
   if (rest.trim()) return stop(`something runs before \`gh pr ${action}\` that the gate doesn't read (\`${rest.trim().slice(0, 60)}\`)`);
 
-  if (!ASSIGNS.test(assignments)) return stop("its settings in front of gh can't be read");
   const env = {};
-  for (const [assignment] of assignments.matchAll(ASSIGN_ONE)) {
+  // GH matched it as FRONT items, so it reads back whole, one at a time.
+  IN_FRONT.lastIndex = 0;
+  for (let item = IN_FRONT.exec(assignments); item; item = IN_FRONT.exec(assignments)) {
+    const [, assignment] = item;
+    if (assignment === undefined) continue;
     const eq = assignment.indexOf("=");
     env[assignment.slice(0, eq)] = unquote(assignment.slice(eq + 1));
   }
@@ -173,6 +224,11 @@ export function readCommand(command, action) {
   const words = [];
   let readable = true;
   for (;;) {
+    const redirection = REDIRECT.exec(after);
+    if (redirection) {
+      after = after.slice(redirection[0].length);
+      continue;
+    }
     if (END.test(after)) break;
     const token = TOKEN.exec(after);
     if (!token) { readable = false; break; }
@@ -191,7 +247,10 @@ export function readCommand(command, action) {
   // flag that matters after it might be the command's or the body's, so it
   // stops rather than guess.
   if (!readable && action !== "create") return stop(`a word after \`gh pr ${action}\` can't be read; run it with plain words, the body in --body-file`);
-  if (!readable && /(?:^|[ \t])-(?:-repo|R|-head|H|-base|B)/.test(after)) {
+  // After any non-word character (a blank, a line continued), with quotes and
+  // escapes taken out as the shell does (`--ba''se`, `-""B`), and in a group
+  // of short flags (`-dB`).
+  if (!readable && /(?:^|[^\w-])-(?:-(?:repo|head|base)|[A-Za-z]*[RHB])/.test(after.replace(/["'\\]/g, ""))) {
     return stop("`--repo`, `--head` or `--base` may come after a word it can't read; put them first, or the body in --body-file");
   }
   const repos = new Set(flags.get("--repo") ?? []);

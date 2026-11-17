@@ -49,6 +49,45 @@ test("reads which pull request, folder and branch a command is about", () => {
     ["merge", "gh pr merge https://github.com/o/r/pull/9 -R O/R", { repo: "o/r" }],
     ["merge", "gh pr merge 5 --repo=o/r", { selector: "5", repo: "o/r" }],
     ["merge", "cd /w && gh pr merge 5 --squash && git pull", { selector: "5", dirs: ["/w"] }],
+    // A redirection is the shell's, not one of gh's words (#924).
+    ["merge", "gh pr merge 5 --squash --admin 2>&1 | tail -3", { selector: "5" }],
+    ["merge", "gh pr merge 5 2>/dev/null", { selector: "5" }],
+    ["merge", "gh pr merge 5 >&2 --admin", { selector: "5" }],
+    ["merge", "gh pr merge 5 &>log.txt", { selector: "5" }],
+    ["merge", "gh pr merge 5 --squash>out.txt 2>&-", { selector: "5" }],
+    // As the shell reads it: digits glued to > name what's redirected, not a pull request.
+    ["merge", "gh pr merge 5>out.txt", { selector: null }],
+    ["merge", "gh pr merge 5 2>&1>out.txt", { selector: "5" }],
+    ["merge", "gh pr merge 5 >>log.txt <in.txt 0<&-", { selector: "5" }],
+    ["merge", "gh pr merge>log.txt 5", { selector: "5" }],
+    ["create", "gh pr create -t x -B release 2>>log.txt", { base: "release" }],
+    ["create", "git push -u origin HEAD 2>&1 && gh pr create -t x", { dirs: [] }],
+    ["merge", "cd /w 2>/dev/null && gh pr merge 5", { selector: "5", dirs: ["/w"] }],
+    ["merge", "cd 2>/dev/null /w && gh pr merge 5", { selector: "5", dirs: ["/w"] }],
+    // Before gh and between its words, as the shell allows them.
+    ["merge", "gh 2>&1 pr merge 5", { selector: "5" }],
+    ["merge", "gh pr 2>/dev/null merge 5", { selector: "5" }],
+    ["merge", "2>/dev/null gh pr merge 5", { selector: "5" }],
+    ["create", "GH_REPO=o/r >log.txt gh pr create -t x", { repo: "o/r" }],
+    // A redirection's target that looks like a setting is a file's name.
+    ["create", ">GH_REPO=o/r gh pr create -t x", { repo: null }],
+    ["merge", "gh pr merge 5 >| out.txt <> rw.txt <<< x", { selector: "5" }],
+    // Glued together, before gh or between its words.
+    ["merge", "2>/dev/null>log.txt gh pr merge 5", { selector: "5" }],
+    ["merge", "gh 2>a.txt>b.txt pr merge 5", { selector: "5" }],
+    ["merge", "gh>log.txt pr>log.txt merge 5", { selector: "5" }],
+    // A group of short flags, as gh reads it: each a flag until one takes a value.
+    ["merge", "gh pr merge 5 -sR o/r", { selector: "5", repo: "o/r" }],
+    ["create", "gh pr create -t x -dB release", { base: "release" }],
+    ["create", "gh pr create -t x -dBrelease", { base: "release" }],
+    // A body it can't read, or a comment, that mentions the command is text.
+    ["create", "gh pr create -t x --body \"$(cat <<'EOF'\nThe gate reads gh pr create now.\nEOF\n)\"", { base: null }],
+    ["merge", "gh pr merge 5 # then gh pr merge 6 later", { selector: "5" }],
+    // Commands after it that name the action are theirs (#925 reads a second copy by words).
+    ["merge", "gh pr merge 920 --admin && gh pr comment 921 --body 'ready to merge'", { selector: "920" }],
+    ["merge", "gh pr merge 5 && gh pr checkout 6 && git merge main", { selector: "5" }],
+    ["create", "gh pr create -t x > out.txt", { base: null }],
+    ["create", "gh pr create -t x -B release 2>&1", { base: "release" }],
     ["ready", "gh pr ready", { selector: null }],
     ["ready", "gh pr ready 12", { selector: "12" }],
   ];
@@ -79,6 +118,38 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     ["create", "echo gh pr create"],
     ["merge", "\"gh\" pr merge 5"],
     ["merge", "gh pr merge --squash 912"],
+    // A redirection whose target it can't read is still a word it can't read.
+    ["merge", "gh pr merge 5 > $(mktemp)"],
+    ["merge", 'gh pr merge 5 2>"$LOG"'],
+    // Its digits are never a word, so never a flag's value (#924).
+    ["create", 'gh pr create -t x --repo 2>"$LOG" o/r'],
+    ["create", 'gh pr create -t x -B 2>"$LOG" release'],
+    ["merge", "cd 2>/dev/null && gh pr merge 5"],
+    // &> is a redirection, not the command's end, so what follows is read.
+    ["merge", 'gh pr merge 5 &>"$LOG" --auto'],
+    ["merge", "gh pr merge 5 &>log.txt --auto"],
+    // Between gh's words: read, so --auto is seen; or not read, and stopped.
+    ["merge", "gh pr 2>/dev/null merge 5 --auto"],
+    ["merge", 'gh pr 2>"$X y" merge 5'],
+    ["merge", "gh pr \\\n        merge 5"],
+    ["merge", "gh pr merge 5 --body-file - <<'EOF'\nwords\nEOF"],
+    // A target it can't read after a blank, or with a blank escaped in it.
+    ["merge", "gh pr 2> $LOG merge 5 --auto"],
+    ["merge", 'gh 2> "$L" pr merge 5'],
+    ["merge", "gh pr 2>a\\ b merge 5"],
+    // The & of &> doesn't start a command: gh here is true's word, and the
+    // words in order are enough to stop it.
+    ["merge", "true &>/dev/null gh pr merge 5"],
+    // A flag that matters, after a body it can't read and a line continued, or quoted.
+    ["create", 'gh pr create -b "$(cat x)" \\\n-B release'],
+    ["create", 'gh pr create -b "$(cat x)" "-R" o/r'],
+    ["create", "gh pr create -b \"$(cat x)\" --ba''se release"],
+    ["create", 'gh pr create -b "$(cat x)" -""B release'],
+    ["create", 'gh pr create -b "$(cat x)" -dB release'],
+    ["create", "gh pr create -t x -dH other"],
+    // Claude Code fired the hook from its own reading, so the words in order
+    // are enough: the gate can't tell this from a merge it can't read.
+    ["merge", "gh pr create --title merge"],
     ["merge", 'gh pr merge 912 --body "$(cat x)" -R o/r'],
     ["merge", 'gh pr merge 912 -R o/r --body "$(cat x)"'],
     ["merge", 'gh pr merge 5 --body "$(cat message.txt)" --auto --squash'],
@@ -108,6 +179,17 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
   }
 });
 
+test("a long command it can't place comes back, rather than running on", () => {
+  // In a process of its own, so a pattern that backtracks without end is
+  // stopped and fails here rather than holding up every test after it. The
+  // limit is far past the milliseconds it takes, so a busy machine can't fail it.
+  const script = `import { readCommand } from ${JSON.stringify(new URL("./review-gate.mjs", import.meta.url).href)};
+const longs = ["gh " + "=>".repeat(20_000) + " x", "gh pr " + "2>".repeat(20_000) + " x", ">|A= ".repeat(20_000) + "x", ">&A= ".repeat(20_000) + "x"];
+for (const long of longs) if (readCommand(long, "merge") !== null) process.exit(2);`;
+  const run = spawnSync(process.execPath, ["--input-type=module"], { input: script, timeout: 60_000 });
+  assert.equal(run.status, 0, run.signal ? `still running after a minute (${run.signal})` : String(run.error ?? run.stderr));
+});
+
 test("a command that isn't one leaves the gate out", () => {
   for (const [action, command] of [
     ["create", "gh pr view 1"],
@@ -115,8 +197,9 @@ test("a command that isn't one leaves the gate out", () => {
     ["create", "git status"],
     ["create", "gh pr create --help"],
     ["merge", "gh pr merge -h"],
-    ["merge", "gh pr create --title merge"],
     ["ready", "gh pr view --json isDraft"],
+    // gh2 isn't gh: digits glued to > belong to the word before.
+    ["merge", "gh2>a pr merge 5"],
     ["ready", "gh pr ready 12 --undo"],
   ]) assert.equal(readCommand(command, action), null, command);
 });
