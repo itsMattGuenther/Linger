@@ -156,6 +156,12 @@ test("reads which pull request, folder and branch a command is about", () => {
     // A branch named for the command, in a command with exotic syntax.
     ["create", "git push -u origin fix/gh-pr-create-flags && gh pr create -t x --body \"$(cat <<'EOF'\nUses `x`\nEOF\n)\"", { dirs: [] }],
     ["merge", "cd ~/src/gh-pr-merge-bot && gh pr merge 5 --subject 'the empty case'", { selector: "5" }],
+    // English words that are also keywords, in quoted text, aren't exotic syntax.
+    ["merge", 'gh pr merge 931 --squash --subject "Fix case handling" && echo "next: gh pr merge 932"', { selector: "931" }],
+    // printf and echo change nothing, inside a merge's body.
+    ["merge", 'gh pr merge 931 --squash --body "$(printf \'%s\\n\' "$NOTES")"', { selector: "931" }],
+    // wait $! waits for the merge put in the background.
+    ["merge", "gh pr merge 5 --squash &\nwait $!\ngit pull", { selector: "5" }],
     ["ready", "gh pr ready", { selector: null }],
     ["ready", "gh pr ready 12", { selector: "12" }],
   ];
@@ -426,6 +432,10 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     ["merge", "printf 'g\\x68 pr merge 5 --admin' | bash"],
     // A wait inside an if that may not run.
     ["merge", "gh pr merge 5 &\nif false; then\nwait\nfi\ngit push -f origin HEAD:feat"],
+    // $'\c' ends at its quote, so the push beside the merge is seen.
+    ["merge", "gh pr merge 5 --subject $'\\c' & git push -f origin HEAD:feat ; echo 'a\\'"],
+    // A gh subcommand named like an object's own property.
+    ["merge", 'gh pr merge 5 --body "$(gh constructor)"'],
     // Text bash would refuse, that might be the command.
     ["merge", 'gh pr merge 5 "oops'],
   ];

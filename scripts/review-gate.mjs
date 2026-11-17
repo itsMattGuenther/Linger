@@ -502,7 +502,7 @@ function readAnsiC(reader) {
       const hex = new RegExp(`^[0-9a-fA-F]{1,${next === "u" ? 4 : 8}}`).exec(source.slice(reader.at + 2));
       text += hex ? String.fromCodePoint(Math.min(parseInt(hex[0], 16), 0x10ffff)) : "\\" + next;
       reader.at += 2 + (hex ? hex[0].length : 0);
-    } else if (next === "c" && reader.at + 2 < source.length) {
+    } else if (next === "c" && reader.at + 2 < source.length && source[reader.at + 2] !== "'") {
       text += String.fromCharCode(source.charCodeAt(reader.at + 2) & 0x1f);
       reader.at += 3;
     } else if (next === "x") {
@@ -565,6 +565,8 @@ const isGh = (word) => word.known && /^gh(?:\.exe)?$/.test(word.text);
 const mayBeGh = (word) => !word.known || /(?:^|[/\\])gh(?:\.exe)?$/i.test(word.text);
 /** The words that close a compound command. */
 const CLOSERS = ["done", "fi", "esac", "}"];
+/** Words of a compound command's own, which run no program. */
+const LOOP = new Set([...LEADING, ...CLOSERS, "for", "select", "case", "in"]);
 
 /** Programs that run nothing they're given, and change nothing but the screen. */
 const INERT = new Set(["echo", "printf", "true", "false", ":", "jq", "grep", "egrep", "fgrep", "wc", "head", "tail", "cut", "tr", "ls", "cat", "test", "sleep", "date", "pwd", "basename", "dirname", "realpath", "stat", "diff", "cmp", "comm", "column", "nl", "fold", "file", "which", "type", "id", "whoami", "hostname", "uname", "mktemp"]);
@@ -631,9 +633,11 @@ function readsOnly(command) {
   const known = programOf(command);
   if (!known || command.redirects.some(writesFile)) return false;
   const { name, program, first, second } = known;
-  if (INERT.has(program)) return inert(command);
+  // Writing no file, these change nothing (printf -v sets only a shell variable).
+  if (INERT.has(program)) return true;
   if (program === "git") return GIT_READS.has(first) || (["log", "show", "diff"].includes(first) && command.words.every((word) => word.known && !/^--(?:output|ext-diff|textconv)/.test(word.text)));
-  return isGh(name) && (GH_READS[first]?.includes("*") || GH_READS[first]?.includes(second)) === true;
+  const reads = Object.hasOwn(GH_READS, first) ? GH_READS[first] : [];
+  return isGh(name) && (reads.includes("*") || reads.includes(second));
 }
 
 /**
@@ -700,7 +704,11 @@ const texts = new WeakMap();
 /** Every setting, word, here-string and here-document in a token list and the substitutions in it. */
 function allText(tokens) {
   if (texts.has(tokens)) return texts.get(tokens);
-  const text = [...everyList(commandsOf(tokens))].flatMap(({ commands }) => commands.flatMap((command) => [...command.settings.map((word) => word.text), ...textOf(command)])).join(" ");
+  const text = commandsOf(tokens).flatMap((command) => [
+    ...command.settings.map((word) => word.text),
+    ...textOf(command),
+    ...wordsOf(command).flatMap((word) => word.inner.map(allText)),
+  ]).join(" ");
   texts.set(tokens, text);
   return text;
 }
@@ -842,7 +850,20 @@ function inOrder(text, words) {
  * text (`inOrder`), so it is never less strict than main was (#925). Ordinary commands
  * (quotes, $(…), here-documents, pipes) don't need it.
  */
-const EXOTIC = /\$\{|\$'|\$"|`|\(\(|\$\[|[<>]\(|(?<![\w-])(?:eval|exec|case|coproc|function)(?![\w-])/;
+const EXOTIC = /\$\{|\$"|`|\(\(|\$\[|[<>]\(/;
+/** Keywords whose commands the reader can't follow as bash does. */
+const EXOTIC_WORDS = new Set(["eval", "exec", "case", "coproc", "function"]);
+
+/**
+ * Whether a command has exotic syntax: `$'…'` anywhere, the punctuation
+ * outside single quotes (where nothing is special), or a keyword as an
+ * unquoted command word (`--subject "the empty case"` is text).
+ */
+function exotic(source, lists) {
+  if (source.includes("$'")) return true;
+  if (EXOTIC.test(source.replace(/'[^']*'/g, ""))) return true;
+  return lists.some(({ commands }) => commands.some((command) => command.leading.includes("coproc") || command.words.slice(0, 2).some((word, at) => word.known && !word.quoted && EXOTIC_WORDS.has(word.text) && (at === 0 || ["command", "builtin", "env", "sudo", "time"].includes(command.words[0].text)))));
+}
 
 
 /** Where a command's own words, settings and redirection targets sit in the text it was read from. */
@@ -861,16 +882,19 @@ function endOf(commands, from, joins) {
   let depth = 0;
   for (let index = from; index < commands.length; index += 1) {
     const command = commands[index];
-    if (index > from) {
-      const [first] = command.words;
-      if (command.leading.some((word) => ["while", "until", "if", "{"].includes(word)) || (first?.known && ["for", "case", "select"].includes(first.text))) depth += 1;
-      if (first?.known && CLOSERS.includes(first.text)) depth -= 1;
-    }
+    if (index > from) depth += opens(command);
     if (command.after === "(") depth += 1;
     else if (command.after === ")") depth -= 1;
     else if (depth <= 0 && !joins.includes(command.after)) return { last: index, by: command.after };
   }
   return { last: commands.length - 1, by: null };
+}
+
+/** How a command moves compound-command depth: +1 opening one, -1 closing one. */
+function opens(command) {
+  const [first] = command.words;
+  if (command.leading.some((word) => ["while", "until", "if", "{"].includes(word)) || (first?.known && ["for", "case", "select"].includes(first.text))) return 1;
+  return first?.known && CLOSERS.includes(first.text) ? -1 : 0;
 }
 
 /** A step before the command the gate can follow: `cd <folder>` or `git push …`. */
@@ -910,20 +934,17 @@ export function readCommand(command, action) {
   const found = lists.flatMap(({ commands: list, nested }) => list.map((entry) => ({ command: entry, nested, kind: classify(entry, action) }))).filter((entry) => entry.kind);
   const exact = found.filter((entry) => entry.kind === "exact");
   const target = exact.length === 1 && !exact[0].nested ? exact[0].command : null;
-  // Text a program may run, with the three words in it, is a command the gate can't place.
   // Once exec points a stream at a file, what any program prints may land
-  // in a script, so no program's words are data.
-  // So does a write on a group, subshell or loop (`{ echo …; } > f`,
-  // `( … ) > f`, `done > f`): the redirection sits on its closing word.
+  // in a script, so no program's words are data. So does a write on a group,
+  // subshell or loop (`{ echo …; } > f`, `( … ) > f`, `done > f`): the
+  // redirection sits on its closing word.
   const closes = (command) => !command.words.length || (command.words.length === 1 && command.words[0].known && CLOSERS.includes(command.words[0].text));
   const trusting = !lists.some(({ commands: list }) => list.some((command) => (command.words.slice(0, 2).some((word) => word.known && word.text === "exec") && command.redirects.length) || (closes(command) && command.redirects.some(writesFile))));
-  // Text piped into a program that runs text may have been stored before (a
-  // commit message read back with git log): then every word counts.
   // Stored text (a commit message) can come back through a pipe, a
-  // substitution or a file, so when anything here may run text, every word
-  // counts, as main's rule did. Commands made only of data-only and
-  // read-only programs, steps and loop words keep the precise reading.
-  const LOOP = new Set(["for", "select", "case", "in", "do", "done", "then", "else", "elif", "fi", "esac", "{", "}", "if", "while", "until", "!"]);
+  // substitution or a file, so when anything here may run text, each
+  // command's own text is checked, as main's rule did. Commands made only
+  // of data-only and read-only programs, steps and loop words keep the
+  // precise reading.
   const runsText = (command) => command !== target && command.words.length > 0 && !inert(command) && !readsOnly(command) && !stepOf(command) && !(command.words[0].known && LOOP.has(command.words[0].text));
   const fed = lists.some(({ commands: list }) => list.some(runsText));
   // The reviewed command's own body (`--body "$(cat <<'EOF' …)"`) isn't stored text.
@@ -931,7 +952,7 @@ export function readCommand(command, action) {
   const stored = fed && lists.filter(({ commands: list }) => !own.has(list)).some(({ commands: list }) => list.some((command) => command !== target && inOrder([...command.settings.map((word) => word.text), ...textOf(command)].join(" "), ["gh", "pr", action])));
   const carried = stored || lists.some(({ commands: list }) => pipelinesOf(list).some((pipeline) => inOrder(pipelineText(pipeline, target, trusting), ["gh", "pr", action])));
   // Exotic syntax: main's rule too, outside the reviewed command's own words.
-  if (EXOTIC.test(command)) {
+  if (exotic(command, lists)) {
     const span = target ? spanOf(target) : null;
     // The reviewed command's own words, and the here-documents it reads,
     // are its own: a body that names the command isn't a second one.
@@ -1027,15 +1048,15 @@ export function readCommand(command, action) {
     let depth = 0;
     for (let index = list.last + 1; index < commands.length; index += 1) {
       const command = commands[index];
-      const [first] = command.words;
-      if (command.leading.some((word) => ["while", "until", "if", "{"].includes(word)) || (first?.known && ["for", "case", "select"].includes(first.text))) depth += 1;
-      if (first?.known && CLOSERS.includes(first.text)) depth -= 1;
+      depth += opens(command);
       if (command.after === "(") depth += 1;
       else if (command.after === ")") depth -= 1;
       // A bare wait in the main shell: not behind && or ||, not in a
       // subshell or pipeline, and not itself in the background.
       const before = commands[index - 1]?.after;
-      const waits = command.words.length === 1 && command.words[0].known && command.words[0].text === "wait" && !command.leading.length && !command.redirects.length;
+      // `wait`, or `wait $!` for the job just put in the background.
+      const [verb, job] = command.words;
+      const waits = verb?.known === true && verb.text === "wait" && (command.words.length === 1 || (command.words.length === 2 && /^"?\$!"?$/.test(job.raw))) && !command.leading.length && !command.redirects.length;
       if (waits && depth <= 0 && ["&", ";", "\n"].includes(before) && [";", "\n", null].includes(command.after)) break;
       alongside.push(command);
     }
