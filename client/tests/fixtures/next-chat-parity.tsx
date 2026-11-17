@@ -161,7 +161,10 @@ const desktop = fakeDesktop({
     },
     clip_stop: async () => {
       desktop.note("clip_stop");
-      booked = null;
+      // As clip.rs: one still opening is called off and keeps its place.
+      const opening = heldStarts.find((held) => held.start === booked);
+      if (opening) opening.calledOff = true;
+      else booked = null;
       await recordingLoaded;
       return (recorded ?? new Uint8Array(2)).slice().buffer;
     },

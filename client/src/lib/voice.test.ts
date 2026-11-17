@@ -118,7 +118,7 @@ describe("voiceStartProblem (#261)", () => {
     ["the microphone wouldn't open: The requested device is temporarily busy.", false, "The microphone is in use by another app."],
     ["the speakers wouldn't open: The requested device is temporarily busy.", false, "The speakers are in use by another app."],
     ["Voice only works in the desktop app.", false, "Voice only works in the desktop app."],
-    ["A voice message is already being recorded.", false, "A voice message is being recorded in another window."],
+    ["A voice message is already being recorded.", false, "A voice message is already under way."],
     ["Not connected yet.", false, "Something went wrong. Try again."],
   ])("%s (windows: %s)", (problem, windows, line) => {
     // These don't depend on which device was asked for, and name no fix of their own (#273).
