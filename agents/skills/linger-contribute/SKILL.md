@@ -95,6 +95,12 @@ commits that carry them (`scripts/lint-rules.sh`).
   **every** issue the PR resolves; a bare mention doesn't link it. Afterwards,
   check the link took:
   `gh pr view <n> --json closingIssuesReferences`.
+- CI runs only the checks your change can reach, by which app builds each
+  file. If it touches files both apps build (the page, the shared parts of
+  the shell) but can't change what the phone app does, open it with the
+  `desktop-only` label (`gh pr create --label desktop-only`) and say why in
+  the body: the 40-minute iPhone run is left out. Not for anything a phone
+  shows or runs; when unsure, leave it off. `AGENTS.md` has the rule.
 - Before opening it, run `node scripts/pr-questions.mjs`. It prints the
   questions past reviews taught, for the parts of the project your branch
   changed. Answer each for your change, and say what you checked in the Tests

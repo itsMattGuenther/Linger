@@ -68,6 +68,22 @@ to be right for every shape that window takes.
 
 ## A check its surroundings can fool
 
+- **#915: a capability file moved off the phone would have skipped the
+  iPhone checks.** The new sorting of files by app read each capability
+  file's `platforms` as they are after the change. A change that moves one
+  from the phone's platforms to the desktop's reads as the desktop's, and
+  the iPhone runs were left out of the very change that takes permissions
+  from the phone app; and the other way round for the installers. Caught by
+  Greptile. *Missed because* I tested files as they stand, one app's or
+  the other's, and not a change from one to the other: the thing sorted
+  can itself be what changed. *Changed:* a capability file is read at both
+  commits, and one that was either app's runs that app's checks; a
+  `desktop-only` label is ignored for one that was the phone's. New in the
+  change, it's what it is now; unreadable at either commit, it's both's.
+  Modules don't need it: which app builds one is said in `lib.rs`, which
+  is both apps' whenever it changes. Tests: each move, new and deleted
+  files, and the script run across two real commits.
+
 - **#910: the voice check on real streams passed with no test run, and its
   deadline couldn't end it.** Two of Greptile's. Given a test binary built
   before the test existed (or the test renamed), Rust's runner matches

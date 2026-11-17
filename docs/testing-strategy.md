@@ -16,7 +16,7 @@ what CI adds on top.
 |---|---|---|---|
 | Your machine | Before every push | `scripts/check.sh`: the checks for what the branch touched | Under a second for docs; about 3 minutes for a client change with WebKit, 1½ without, more when the branch edits browser tests (each runs ten times); a Rust change also rebuilds, which is slow in a fresh copy |
 | A pull request | Every push | `ci.yml`: the same selection, plus S3 against MinIO, the relay and a real server update in Docker, the WebKit browser tests, and the browser tests the PR added or edited ten times in both engines; `package-check.yml` builds the desktop packages on Linux and Windows; `ios-simulator.yml` builds the iPhone app for the simulator on a Mac and drives it with Maestro, when the PR touches the app | About 5 minutes; the packages about 10; the iPhone about 25 |
-| A pull request that changes the iPhone app's Xcode project, the app's Rust or the server | Every push | `share-window.yml`: the iPhone's share extension and notification extension build for the iPhone Simulator on GitHub's Mac, the notification extension's tests open RFC 8291's example and what the server sends and read the keys as the app's Rust writes them (#889), the app's Rust builds for the iPhone (code only an iPhone compiles is built by nothing else on a pull request, #822), and the share window's sender (`ShareSender.swift`) runs on Linux against a real server (`scripts/share-sender-test.sh`, which needs Docker and runs the same locally) | About 10 minutes |
+| A pull request that changes the iPhone app's Xcode project, the app's Rust that a phone builds, or the server (not Rust only the desktop app builds, and not one labelled `desktop-only`: "What a change sets off") | Every push | `share-window.yml`: the iPhone's share extension and notification extension build for the iPhone Simulator on GitHub's Mac, the notification extension's tests open RFC 8291's example and what the server sends and read the keys as the app's Rust writes them (#889), the app's Rust builds for the iPhone (code only an iPhone compiles is built by nothing else on a pull request, #822), and the share window's sender (`ShareSender.swift`) runs on Linux against a real server (`scripts/share-sender-test.sh`, which needs Docker and runs the same locally) | About 10 minutes |
 | `main` | Every merge | `ci.yml` for what the merge changed. A run still waiting is cancelled when a newer merge lands, since the newer run covers it | As a PR |
 | `main`, nightly | 08:23 UTC | `nightly.yml`: every CI check, the package checks, the Windows and macOS shell builds, the iPhone app in the simulator, every browser test three times with no retries, and whether a fix Linger pins has come out upstream. A failure opens an issue | About 40 minutes |
 | A release | A `v*` tag | `release.yml` and `image.yml` each run every CI check on the tagged commit first and build nothing unless it passes; then the signed packages, their audio, the Buddy list starting on Linux, the Windows shortcuts, and the server image | About 25 minutes |
@@ -68,12 +68,26 @@ only changes documentation.
 | The server, `crates/linger-server/` | fmt, clippy, the Rust tests, bindings drift | S3 against a real MinIO |
 | The client, `client/` | Typecheck, unit tests, the browser tests in Chromium and (with Docker) WebKit, the production build's CSP check, and that the app icons are what the pinned Tauri CLI makes (`scripts/app-icons.mjs --check`, #836) | The packages on Linux and Windows, the iPhone app in the simulator, and WebKit when `check.sh` couldn't run it |
 | Only browser tests, `client/tests/browser/` | As the client | WebKit when `check.sh` couldn't run it (no packages) |
-| The desktop shell, `client/src-tauri/` | Its clippy and tests, when the GUI libraries are installed, and the app icons check | The packages, and the iPhone app in the simulator |
+| The shell, `client/src-tauri/`: a file both apps build (`lib.rs`, `Cargo.toml`, a module with no `cfg`) | Its clippy and tests, when the GUI libraries are installed, and the app icons check | The packages, and the iPhone app in the simulator |
+| The shell: a file only the desktop app builds (a module behind `#[cfg(desktop)]`, a desktop window's capability file, `linux/`, `windows/`) | As the shell | The packages. Not the iPhone app |
+| The shell: a file only the phone app builds (a module behind `#[cfg(any(mobile, test))]` or for iOS, `capabilities/phone.json`, `gen/apple/`) | As the shell | The iPhone app in the simulator. Not the packages |
 | Only the iPhone flows, `client/tests/ios/`, or their https front (`scripts/https-front.mjs`, `scripts/test-certs.sh`) | The rules lint, the version check and the front's tests | The iPhone app in the simulator |
 | `deploy/` | The Rust checks and the update script's test | S3, the voice relay and a real server update in Docker |
 | The push relay, `push-relay/` | Its typecheck on the Workers runtime's types, and its tests against stand-ins for Apple and Google | Nothing more; it's deployed by hand |
 | The startup measurement, `scripts/startup-time.mjs` | Its own tests (below); the measuring itself is run by hand ([performance.md](performance.md)) | Nothing more |
 | Shared types (`crates/linger-core/`, `client/src/generated/`), CI, `scripts/`, anything else | Everything | Everything |
+
+**Only the checks a change can reach** (#914). Which app builds a file of
+the shell is read from the code: the `cfg` on its module in `lib.rs`, the
+`platforms` of a capability file, before the change and after it, so a file
+moved from one app to the other runs both apps' checks. What says nothing,
+or can't be read, is both apps'. A pull request labelled `desktop-only` leaves the iPhone runs out
+(the simulator's, and `share-window.yml`'s builds) for files both apps
+build, which is how a change to the page says it can't reach a phone
+(`AGENTS.md` has when to use it). The label is ignored when a
+file that's the phone app's alone changed, and never holds back a run of
+everything. The nightly run on main is the backstop for a label that was
+wrong: it runs the iPhone app in the simulator whatever changed.
 
 Every run, locally and in CI, also runs the rules lint (`scripts/lint-rules.sh`:
 AI attribution, dropped vocabulary, file names only differing in case), the

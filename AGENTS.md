@@ -144,6 +144,19 @@ pass.
   Describe the remaining checks explicitly; missing acceptance evidence is not a
   reason to leave an issue looking unclaimed. Linked issues close on merge when
   repository auto-closing is enabled, so finish their acceptance checks before merging.
+- **Label a pull request `desktop-only` when nothing in it can change what
+  the phone app does**, and it touches files both apps build: the page, or
+  the shared parts of the shell. The iPhone runs are then left out
+  (`gh pr create --label desktop-only`; added later, it counts from the next
+  push). Use it for work on what only the desktop app has: voice in the
+  shell, the tray, the windows, updates, the Settings rows a phone doesn't
+  show. Don't use it for anything a phone shows or runs: the list, a
+  conversation, the message box, sign-in, servers, notifications, the share
+  window, a phone's voice (`pageVoice.ts`), or code the page shares that
+  those use. When you can't tell, leave it off: the run is 40 minutes, a
+  phone app that doesn't start is worse. It's ignored when files that are
+  the phone app's alone changed, and the nightly run is what catches a label
+  that was wrong, so say in the pull request why it's there.
 - **Before opening a pull request, run `node scripts/pr-questions.mjs`** and
   answer the questions it prints for your change: the kinds of mistake
   reviews have caught, for the parts of the project your branch changed. Say
@@ -250,6 +263,19 @@ branch added or edited run ten times over, and the build's CSP check; a shell
 change adds the desktop-shell pass; `deploy/` adds the update script's test. A
 docs-only change takes under a second. `--all` runs everything. Green here should mean green there, and
 `docs/testing-strategy.md` has what runs where and which test a change needs.
+
+**Only the checks a change can reach run on its pull request** (Matt,
+2026-11-16, #914). The slow ones belong to one app each: the desktop
+installers, and the iPhone app in the simulator, which is 40 minutes on a Mac
+for every push. `scripts/ci-scope.mjs` reads which app builds each file from
+the code itself (`#[cfg(desktop)]` on a module in `lib.rs`, `platforms` in a
+capability file). A file only the desktop app builds doesn't start the iPhone
+runs (the simulator's flows, and the iPhone builds in `share-window.yml`),
+and a file only the phone app builds doesn't start the desktop installers. A file both build (the page, `lib.rs`, `Cargo.toml`) starts both,
+unless the pull request says otherwise: see the `desktop-only` label under
+*Pull requests and issues*. The nightly run on main runs everything, whatever
+changed.
+
 The pieces:
 
 ```bash

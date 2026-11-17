@@ -17,6 +17,11 @@
      test fits. Then a line or two on what you checked from the questions
      `node scripts/pr-questions.mjs` prints for this change. -->
 
+<!-- Desktop-only? If this touches files both apps build (the page, the shared
+     parts of the shell) and can't change what the phone app does, label it
+     `desktop-only` and say why here: the iPhone run is left out (AGENTS.md,
+     "Pull requests and issues"). Not for anything a phone shows or runs. -->
+
 ## Checklist
 
 - [ ] Every issue this PR proposes to resolve is formally linked and verified,
