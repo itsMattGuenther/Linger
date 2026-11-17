@@ -457,6 +457,10 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     // gh commands that can start a run hand it text that may be run.
     ["merge", "gh workflow run deploy.yml -f script='gh pr merge 5 --admin'"],
     ["merge", "gh api repos/o/r/actions/workflows/d.yml/dispatches -f 'inputs[script]=gh pr merge 5'"],
+    // ${ closes at the first }: the second merge isn't inside the first's word.
+    ["merge", 'gh pr merge 5 --squash --subject "${x:-{}" ; gh pr merge 6 --squash --subject "}"'],
+    // The reviewed command's own body piping text into a shell.
+    ["create", 'gh pr create --title t --body "$(echo \'gh pr create -H other -B main\' | sh)"'],
     // Text bash would refuse, that might be the command.
     ["merge", 'gh pr merge 5 "oops'],
   ];

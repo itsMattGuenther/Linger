@@ -401,7 +401,8 @@ function readExpansion(reader, word, quoted) {
         reader.at = end + 1;
       } else if (at === '"') readDoubleQuoted(reader, scratch);
       else {
-        if (at === "{") depth += 1;
+        // Bash closes `${` at the first `}`: only a nested `${` opens another.
+        if (at === "{" && source[reader.at - 1] === "$") depth += 1;
         if (at === "}") depth -= 1;
         reader.at += 1;
       }
@@ -995,7 +996,10 @@ function readTokensOf(command, action) {
   // The reviewed command's own body (`--body "$(cat <<'EOF' …)"`) isn't stored text.
   const own = new Set(target ? wordsOf(target).flatMap((word) => word.inner).flatMap((tokens) => [...everyList(commandsOf(tokens), true)].map((entry) => entry.commands)) : []);
   const stored = fed && lists.filter(({ commands: list }) => !own.has(list)).some(({ commands: list }) => list.some((command) => command !== target && inOrder([...command.settings.map((word) => word.text), ...textOf(command)].join(" "), ["gh", "pr", action])));
-  const carried = stored || lists.filter(({ commands: list }) => !own.has(list)).some(({ commands: list }) => pipelinesOf(list).some((pipeline) => inOrder(pipelineText(pipeline, target, trusting), ["gh", "pr", action])));
+  // Its own body is out of the text check only when everything in it only
+  // reads: `"$(echo '…' | sh)"` runs what it pipes.
+  const quiet = (list) => own.has(list) && list.every(readsOnly);
+  const carried = stored || lists.filter(({ commands: list }) => !quiet(list)).some(({ commands: list }) => pipelinesOf(list).some((pipeline) => inOrder(pipelineText(pipeline, target, trusting), ["gh", "pr", action])));
   // Exotic syntax: main's rule too, outside the reviewed command's own words.
   if (exotic(odd, lists)) {
     const span = target ? spanOf(target) : null;
