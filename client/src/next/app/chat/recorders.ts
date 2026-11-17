@@ -137,7 +137,9 @@ export function shellRecorder(events: RecorderEvents, input: () => string | null
       await sending;
     },
     stop: async () => {
-      const stopping = invoke<ArrayBuffer>("clip_stop");
+      // Names its start, as a cancel does, so a stop from before a reload
+      // never takes the new page's recording (#920).
+      const stopping = current.then((start) => invoke<ArrayBuffer>("clip_stop", { start }));
       settled(within(stopping, LONGEST_OPEN_WAIT_MS));
       return readClip(new Uint8Array(await stopping));
     },

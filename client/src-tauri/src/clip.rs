@@ -169,9 +169,11 @@ impl Clips {
     /// is never touched (#920).
     fn call_off(&self, window: &str, start: u64) -> Option<Recording> {
         let mut books = self.lock();
-        // Never above a number the window was handed: a wrong one can't set
-        // a mark that refuses every start to come (#920).
-        let start = start.min(books.tickets.get(window).copied().unwrap_or(0));
+        // A number the window was never handed counts for nothing: no mark
+        // that would refuse every start to come, and no recording taken.
+        if start == 0 || start > books.tickets.get(window).copied().unwrap_or(0) {
+            return None;
+        }
         books.call_off_up_to(window, start);
         books.call_off_or_take(|recording| recording.window == window && recording.start == start)
     }
@@ -409,11 +411,13 @@ const CALLED_OFF: &str = "The voice message was called off while the microphone 
 /// stopped by itself (full, or the microphone gone) is handed back the same
 /// way.
 #[tauri::command]
-pub async fn clip_stop(app: AppHandle, window: Window) -> Result<Response, String> {
-    // This window's own: one window never stops another's. One still opening
-    // its microphone is called off, keeping its place, and `clip_start`
-    // throws it away once the microphone opens (#920).
+pub async fn clip_stop(app: AppHandle, window: Window, start: u64) -> Result<Response, String> {
+    // This window's own, and the start it names: one window never stops
+    // another's, and a stop from before a reload never takes the new page's
+    // recording. One still opening its microphone is called off, keeping its
+    // place, and `clip_start` throws it away once the microphone opens (#920).
     let label = window.label();
+    let named = |recording: &Recording| recording.window == label && recording.start == start;
     // The lock is let go of here, before anything is waited for.
     let (opening, recording) = {
         let clips = app.state::<Clips>();
@@ -421,11 +425,8 @@ pub async fn clip_stop(app: AppHandle, window: Window) -> Result<Response, Strin
         let opening = books
             .recording
             .as_ref()
-            .is_some_and(|recording| recording.window == label && recording.started.is_none());
-        (
-            opening,
-            books.call_off_or_take(|recording| recording.window == label),
-        )
+            .is_some_and(|recording| named(recording) && recording.started.is_none());
+        (opening, books.call_off_or_take(named))
     };
     let started = match recording {
         // Still opening: called off, keeping its place until it opens.
