@@ -155,6 +155,21 @@ mod not_read;
 #[cfg(desktop)]
 #[cfg(feature = "x")]
 mod two_cfgs;
+#[cfg(desktop)]
+mod twice;
+#[cfg(mobile)]
+mod twice;
+#[cfg(desktop)]
+#[path = "elsewhere.rs"]
+mod moved;
+#[cfg(any(
+    target_os = "ios",
+    test
+))]
+mod over_lines;
+#[cfg(desktop)]
+// A comment between the two.
+mod commented;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {}
 `;
@@ -184,6 +199,8 @@ test("the shell's modules are read from lib.rs, and what isn't plain is both's",
   assert.deepEqual(shellModules(LIB), {
     acl: "tests", tray: "desktop", voice: "desktop", desktop_entry: "desktop", gateway: "both", secrets: "both",
     phone_scene: "phone", phone_keyboard: "phone", share_window: "phone", both_named: "both", not_read: "both", two_cfgs: "both",
+    // Declared twice, kept in another file, a cfg over several lines, a comment in between: none is read as one app's.
+    twice: "both", moved: "both", over_lines: "both", commented: "both",
   });
 });
 

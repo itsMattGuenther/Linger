@@ -75,7 +75,9 @@ export function shellModules(lib) {
   for (const [, attributes, name] of lib.matchAll(declared)) {
     const cfgs = [...attributes.matchAll(/^[ \t]*#\[cfg\((.*)\)\]$/gm)].map((line) => line[1]);
     // Two `cfg`s on one module, or some other attribute carrying one: not read, so both's.
-    found[name] = cfgs.length === 0 ? "both" : cfgs.length === 1 && !/cfg_attr/.test(attributes) ? cfgReach(cfgs[0]) : "both";
+    const reach = cfgs.length === 0 ? "both" : cfgs.length === 1 && !/cfg_attr/.test(attributes) ? cfgReach(cfgs[0]) : "both";
+    // Declared twice (once for each app, say, each with its own file): both's.
+    found[name] = name in found || /#\[path\b/.test(attributes) ? "both" : reach;
   }
   return found;
 }
