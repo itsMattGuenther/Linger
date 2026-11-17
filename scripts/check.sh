@@ -52,6 +52,7 @@ bash scripts/tidy-branches-test.sh >/dev/null
 bash scripts/apt-mirrors-test.sh >/dev/null
 bash scripts/apt-install-test.sh >/dev/null
 bash scripts/appimage-fetch-test.sh >/dev/null
+bash scripts/bundle-retry-test.sh >/dev/null
 bash scripts/actionlint-test.sh >/dev/null
 if docker info >/dev/null 2>&1; then
   echo "== workflow files =="

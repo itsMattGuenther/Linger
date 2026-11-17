@@ -510,6 +510,18 @@ rules that came out of them:
   against its checksum before it's used. `scripts/appimage-fetch-test.sh`
   has a stand-in server drop, turn away (503) or never answer the first
   request, and checks the file still arrives.
+- **The Windows bundler's tools**, WiX, NSIS and `nsis_tauri_utils.dll`, come
+  from GitHub releases when Tauri's bundler doesn't have them, and it tries
+  each once: one 504 threw away a Windows package build on 2026-11-17
+  (#916). The package check keeps their folder (`~/AppData/Local/tauri`) in
+  GitHub's cache, keyed on the lockfile, so most runs fetch nothing, and
+  builds through `scripts/bundle-retry.sh`, which runs the build again, up
+  to three times, when it failed straight after the bundler said
+  `Downloading`. Any other failure fails at once. The Rust build is done by
+  then, so another try costs the bundling. `scripts/bundle-retry-test.sh`
+  has a stand-in build fail on a download, coloured and plain, and fail
+  every other way, and checks which are tried again. The release workflow
+  doesn't use it yet: the package check goes first.
 - **actionlint's image** comes from Docker Hub, through
   `scripts/actionlint.sh`, the one place CI and `check.sh` run it and name its
   version. A 502 from Docker Hub failed a pull request's `rules` job on
