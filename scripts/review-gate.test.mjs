@@ -146,6 +146,8 @@ test("reads which pull request, folder and branch a command is about", () => {
     // pflag keeps the last value; git log reads only, without --output.
     ["ready", "gh pr ready 5 --undo --undo=false", { selector: "5" }],
     ["merge", 'gh pr merge 925 --squash --admin --body "$(git log -1 --format=%B)"', { selector: "925" }],
+    // Arithmetic inside double quotes is read.
+    ["create", 'gh pr create -t x --body "Count: $((1+1))"', { base: null }],
     ["ready", "gh pr ready", { selector: null }],
     ["ready", "gh pr ready 12", { selector: "12" }],
   ];
@@ -362,6 +364,15 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     ["merge", "gh pr merge 5 --help --help=false --auto"],
     // Bash reads it; the gate doesn't read case in a substitution, and its text stops it.
     ["merge", "x=$(case a in a) :;; esac); `gh pr merge 5`"],
+    // Parentheses paired as bash pairs them: a quoted )) doesn't make a subshell arithmetic.
+    ["merge", '((gh pr merge 5; echo "))" ) ) # "'],
+    ["merge", 'echo $((gh pr merge 5; echo "))" ) ) # "'],
+    // A here-document left open in a substitution is empty: the next line is a command.
+    ["merge", "echo $(cat <<EOF)\ngh pr merge 5 --auto\nEOF"],
+    // A setting can make a read-only program run something.
+    ["merge", "gh pr merge 5 | GIT_EXTERNAL_DIFF=./push.sh git diff HEAD~1"],
+    // coproc doesn't hide a later & that backgrounds the merge.
+    ["merge", "gh pr merge 5 && coproc true & git push -f"],
     // Text bash would refuse, that might be the command.
     ["merge", 'gh pr merge 5 "oops'],
   ];
@@ -376,7 +387,7 @@ test("a long command it can't place comes back, rather than running on", () => {
   // stopped and fails here rather than holding up every test after it. The
   // limit is far past the milliseconds it takes, so a busy machine can't fail it.
   const script = `import { readCommand } from ${JSON.stringify(new URL("./review-gate.mjs", import.meta.url).href)};
-const longs = ["gh " + "=>".repeat(20_000) + " x", "gh pr " + "2>".repeat(20_000) + " x", ">|A= ".repeat(20_000) + "x", ">&A= ".repeat(20_000) + "x", "$((".repeat(20_000), "$(".repeat(20_000), "((".repeat(20_000) + " x"];
+const longs = ["gh " + "=>".repeat(20_000) + " x", "gh pr " + "2>".repeat(20_000) + " x", ">|A= ".repeat(20_000) + "x", ">&A= ".repeat(20_000) + "x", "$((".repeat(20_000), "$(".repeat(20_000), "((".repeat(20_000) + " x", "(".repeat(50_000) + "x" + " )".repeat(50_000)];
 for (const long of longs) if (readCommand(long, "merge") !== null) process.exit(2);`;
   const run = spawnSync(process.execPath, ["--input-type=module"], { input: script, timeout: 60_000 });
   assert.equal(run.status, 0, run.signal ? `still running after a minute (${run.signal})` : String(run.error ?? run.stderr));

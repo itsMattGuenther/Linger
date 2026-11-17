@@ -122,7 +122,7 @@ function readTokens(reader, closer) {
     // `((…))` where a command starts: arithmetic, read as one word, its own
     // `<<` a shift, not a here-document.
     const before = tokens[tokens.length - 1];
-    const startsCommand = !before || "op" in before || ("word" in before && before.word.known && LEADING.has(before.word.text));
+    const startsCommand = !before || "op" in before || ("word" in before && before.word.known && !before.word.quoted && LEADING.has(before.word.text));
     const shape = startsCommand && source.startsWith("((", reader.at) ? closing(source, reader.at) : null;
     if (startsCommand && source.startsWith("((", reader.at) && !shape) throw new Unreadable("a `((` isn't closed");
     if (shape?.together) {
@@ -156,7 +156,9 @@ function readTokens(reader, closer) {
     if (op) {
       reader.at += op.length;
       if (op === ")" && closer === ")" && depth === 0) {
-        readHeredocs(reader, heredocs);
+        // Its here-documents not ended inside it are empty, as bash leaves
+        // them: the lines after the substitution are commands, not their text.
+        for (const heredoc of heredocs.splice(0)) heredoc.token.body = "";
         return tokens;
       }
       if (op === "(") depth += 1;
@@ -411,17 +413,60 @@ function readExpansion(reader, word, quoted) {
  * a subshell inside one, `( (…) )`.
  */
 function closing(source, open) {
-  let depth = 0;
-  let inner = -1;
-  for (let at = open; at < source.length; at += 1) {
-    if (source[at] === "(") depth += 1;
-    else if (source[at] === ")") {
-      depth -= 1;
-      if (depth === 1 && inner < 0) inner = at;
-      if (depth === 0) return { end: at, together: inner === at - 1 };
+  const end = closeOf(source, open);
+  if (end < 0) return null;
+  return { end, together: source[open + 1] === "(" && closeOf(source, open + 1) === end - 1 };
+}
+
+/**
+ * Where the `(` at `open` closes, as bash pairs them: a `)` inside quotes,
+ * after a backslash or in a comment doesn't count. Worked out for the whole
+ * text at once, so long runs of parentheses stay linear; an `(` inside a
+ * double-quoted string (`"$((1+1))"`) is scanned for on its own.
+ */
+function closeOf(source, open) {
+  if (paired.source !== source) {
+    const pairs = new Map();
+    const opened = [];
+    for (let at = 0; at < source.length; at += 1) {
+      const past = pastQuoted(source, at);
+      if (past !== at) at = past;
+      else if (source[at] === "(") opened.push(at);
+      else if (source[at] === ")" && opened.length) pairs.set(opened.pop(), at);
     }
+    paired = { source, pairs };
   }
-  return null;
+  const known = paired.pairs.get(open);
+  if (known !== undefined) return known;
+  let depth = 0;
+  for (let at = open; at < source.length; at += 1) {
+    const past = at === open ? at : pastQuoted(source, at);
+    if (past !== at) at = past;
+    else if (source[at] === "(") depth += 1;
+    else if (source[at] === ")" && (depth -= 1) === 0) return at;
+  }
+  return -1;
+}
+let paired = { source: null, pairs: null };
+
+/** If a quote, an escape or a comment starts at `at`, where it ends; otherwise `at`. */
+function pastQuoted(source, at) {
+  const char = source[at];
+  if (char === "\\") return Math.min(at + 1, source.length - 1);
+  if (char === "'") {
+    const end = source.indexOf("'", at + 1);
+    return end < 0 ? source.length - 1 : end;
+  }
+  if (char === '"') {
+    let end = at + 1;
+    while (end < source.length && source[end] !== '"') end += source[end] === "\\" ? 2 : 1;
+    return Math.min(end, source.length - 1);
+  }
+  if (char === "#" && (at === 0 || /[\s;&|()<>]/.test(source[at - 1]))) {
+    const end = source.indexOf("\n", at);
+    return end < 0 ? source.length - 1 : end - 1;
+  }
+  return at;
 }
 
 /** Whether `$((` opens arithmetic rather than a substitution holding a subshell. */
@@ -568,6 +613,8 @@ function inert(command) {
  */
 function readsOnly(command) {
   if (!command.words.length) return !command.settings.length && !command.redirects.length;
+  // A setting in front can make it run something (GIT_EXTERNAL_DIFF, GIT_PAGER).
+  if (command.settings.length) return false;
   const [word] = command.words;
   if (command.words.length === 1 && word.known && !word.quoted && ["done", "fi", "esac", "}"].includes(word.text)) return !command.redirects.some(writesFile);
   if (word.known && ["read", "wait"].includes(word.text) && command.words.every((each) => each.known)) return !command.redirects.some(writesFile);
@@ -774,7 +821,7 @@ function endOf(commands, from, joins) {
     const command = commands[index];
     if (index > from) {
       const [first] = command.words;
-      if (command.leading.some((word) => ["while", "until", "if", "{", "coproc"].includes(word)) || (first?.known && ["for", "case", "select"].includes(first.text))) depth += 1;
+      if (command.leading.some((word) => ["while", "until", "if", "{"].includes(word)) || (first?.known && ["for", "case", "select"].includes(first.text))) depth += 1;
       if (first?.known && ["done", "fi", "esac", "}"].includes(first.text)) depth -= 1;
     }
     if (command.after === "(") depth += 1;
