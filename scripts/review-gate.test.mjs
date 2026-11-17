@@ -148,6 +148,8 @@ test("reads which pull request, folder and branch a command is about", () => {
     ["merge", 'gh pr merge 925 --squash --admin --body "$(git log -1 --format=%B)"', { selector: "925" }],
     // Arithmetic inside double quotes is read.
     ["create", 'gh pr create -t x --body "Count: $((1+1))"', { base: null }],
+    // The reviewed command's own body names the command, and its output goes to tee.
+    ["create", "cd wt && gh pr create -t x --body \"$(cat <<'EOF'\nThe gate now reads gh pr create.\nEOF\n)\" 2>&1 | tee /tmp/pr.txt", { dirs: ["wt"] }],
     ["ready", "gh pr ready", { selector: null }],
     ["ready", "gh pr ready 12", { selector: "12" }],
   ];
@@ -382,6 +384,10 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     // Text stored and read back into a program that runs text.
     ["merge", "git commit --allow-empty -qm 'gh pr merge 5 --admin' && git log -1 --format=%B | bash"],
     ["merge", "gh pr comment 9 --body 'gh pr merge 5' && gh pr view 9 --comments | bash"],
+    // Piped into a loop that runs what it reads.
+    ["merge", "git commit --allow-empty -qm 'gh pr merge 6 --admin' && git log -1 --format=%B | while read -r a b c d e; do $a $b $c $d $e; done"],
+    // GH in another case, in text a shell runs.
+    ["merge", "gh pr merge 5 --squash; echo 'GH pr merge 6 --admin' | bash"],
     // Text bash would refuse, that might be the command.
     ["merge", 'gh pr merge 5 "oops'],
   ];

@@ -98,6 +98,7 @@ class Unreadable extends Error {}
  * (an unclosed quote or substitution, a redirection with no target).
  */
 export function tokenize(source) {
+  budget.left = PAIRING;
   return readTokens({ source, at: 0 }, null);
 }
 
@@ -338,7 +339,7 @@ function readExpansion(reader, word, quoted) {
     }
     if (end >= source.length) throw new Unreadable("a backtick isn't closed");
     reader.at = end + 1;
-    word.inner.push(tokenize(inner));
+    word.inner.push(readTokens({ source: inner, at: 0 }, null));
     unknown();
     return true;
   }
@@ -352,9 +353,11 @@ function readExpansion(reader, word, quoted) {
     unknown();
     return true;
   }
-  if (next === "(" && source[reader.at + 2] === "(" && closesTogether(source, reader.at + 1)) {
+  const shape = next === "(" && source[reader.at + 2] === "(" ? closing(source, reader.at + 1) : null;
+  if (next === "(" && source[reader.at + 2] === "(" && !shape) throw new Unreadable("a `$((` isn't closed");
+  if (shape?.together) {
     // Arithmetic: a number, read for the commands it could hold all the same.
-    const { end } = closing(source, reader.at + 1);
+    const { end } = shape;
     const body = source.slice(reader.at + 3, end - 1);
     if (/\$\(|`/.test(body)) word.inner.push(...substitutionsIn(body));
     reader.at = end + 1;
@@ -470,12 +473,6 @@ function pastQuoted(source, at) {
   return at;
 }
 
-/** Whether `$((` opens arithmetic rather than a substitution holding a subshell. */
-function closesTogether(source, open) {
-  const shape = closing(source, open);
-  if (!shape) throw new Unreadable("a `$((` isn't closed");
-  return shape.together;
-}
 
 /** The text of `$'…'`, its escapes undone, the reader past its closing quote. */
 function readAnsiC(reader) {
@@ -559,6 +556,9 @@ function commandsOf(tokens) {
 const isGh = (word) => word.known && /(?:^|\/)gh(?:\.exe)?$/.test(word.text);
 /** Whether a word could be gh: gh however it's spelled, or one the gate can't read. */
 const mayBeGh = (word) => !word.known || /(?:^|[/\\])gh(?:\.exe)?$/i.test(word.text);
+/** The words that close a compound command. */
+const CLOSERS = ["done", "fi", "esac", "}"];
+
 /** Programs that run nothing they're given, and change nothing but the screen. */
 const INERT = new Set(["echo", "printf", "true", "false", ":", "jq", "grep", "egrep", "fgrep", "wc", "head", "tail", "cut", "tr", "ls", "cat", "test", "sleep", "date", "pwd", "basename", "dirname", "realpath", "stat", "diff", "cmp", "comm", "column", "nl", "fold", "file", "which", "type", "id", "whoami", "hostname", "uname", "mktemp"]);
 /**
@@ -617,7 +617,7 @@ function readsOnly(command) {
   // A setting in front can make it run something (GIT_EXTERNAL_DIFF, GIT_PAGER).
   if (command.settings.length) return false;
   const [word] = command.words;
-  if (command.words.length === 1 && word.known && !word.quoted && ["done", "fi", "esac", "}"].includes(word.text)) return !command.redirects.some(writesFile);
+  if (command.words.length === 1 && word.known && !word.quoted && CLOSERS.includes(word.text)) return !command.redirects.some(writesFile);
   if (word.known && ["read", "wait"].includes(word.text) && command.words.every((each) => each.known)) return !command.redirects.some(writesFile);
   const known = programOf(command);
   if (!known || command.redirects.some(writesFile)) return false;
@@ -785,7 +785,6 @@ export function parseWords(words, action) {
 
 /** A word as the shell hands it over: quotes taken off, escapes undone. */
 export function unquote(word) {
-  budget.left = PAIRING;
   return tokenize(word).find((token) => "word" in token)?.word.text ?? "";
 }
 
@@ -806,7 +805,7 @@ function inOrder(text, words) {
     // whatever is beside it: blanks, brackets, commas, backticks. gh may end
     // a path (`/usr/bin/gh`), be gh.exe, or be a word the gate can't read.
     const found = word === "gh"
-      ? new RegExp(String.raw`(?<![\w.-])(?:gh(?:\.exe)?|${UNKNOWN})(?![\w.-])`, "g")
+      ? new RegExp(String.raw`(?<![\w.-])(?:[gG][hH](?:\.[eE][xX][eE])?|${UNKNOWN})(?![\w.-])`, "g")
       : new RegExp(String.raw`(?<![\w./-])${word}(?![\w./-])`, "g");
     found.lastIndex = from;
     const hit = found.exec(text);
@@ -829,7 +828,7 @@ function endOf(commands, from, joins) {
     if (index > from) {
       const [first] = command.words;
       if (command.leading.some((word) => ["while", "until", "if", "{"].includes(word)) || (first?.known && ["for", "case", "select"].includes(first.text))) depth += 1;
-      if (first?.known && ["done", "fi", "esac", "}"].includes(first.text)) depth -= 1;
+      if (first?.known && CLOSERS.includes(first.text)) depth -= 1;
     }
     if (command.after === "(") depth += 1;
     else if (command.after === ")") depth -= 1;
@@ -863,11 +862,11 @@ export function readCommand(command, action) {
   if (!ACTIONS.includes(action)) throw new Error(`unknown action ${action}`);
   let tokens;
   try {
-    budget.left = PAIRING;
     tokens = tokenize(command);
   } catch (error) {
     if (!(error instanceof Unreadable) && !(error instanceof RangeError)) throw error;
-    // Bash would refuse it too; if it might be the command, say so.
+    // Text the reader can't read, bash's error or not: if it might be the
+    // command, it's stopped rather than guessed.
     return inOrder(command, ["gh", "pr", action]) ? stop(`it can't be read as the shell would (${error.message})`) : null;
   }
   const commands = commandsOf(tokens);
@@ -880,12 +879,15 @@ export function readCommand(command, action) {
   // in a script, so no program's words are data.
   // So does a write on a group, subshell or loop (`{ echo …; } > f`,
   // `( … ) > f`, `done > f`): the redirection sits on its closing word.
-  const closes = (command) => !command.words.length || (command.words.length === 1 && command.words[0].known && ["}", "done", "fi", "esac"].includes(command.words[0].text));
+  const closes = (command) => !command.words.length || (command.words.length === 1 && command.words[0].known && CLOSERS.includes(command.words[0].text));
   const trusting = !lists.some(({ commands: list }) => list.some((command) => (command.words[0]?.known && command.words[0].text === "exec" && command.redirects.length) || (closes(command) && command.redirects.some(writesFile))));
   // Text piped into a program that runs text may have been stored before (a
   // commit message read back with git log): then every word counts.
-  const fed = lists.some(({ commands: list }) => pipelinesOf(list).some((pipeline) => pipeline.slice(1).some((command) => command.words.length && !inert(command) && !readsOnly(command))));
-  const everything = fed ? lists.flatMap(({ commands: list }) => list.filter((command) => command !== target).flatMap((command) => [...command.settings.map((word) => word.text), ...textOf(command)])).join(" ") : "";
+  // `read` counts: what it reads into variables, a loop may run.
+  const fed = lists.some(({ commands: list }) => pipelinesOf(list).some((pipeline) => pipeline.slice(1).some((command) => command.words.length && !inert(command))));
+  // The reviewed command's own body (`--body "$(cat <<'EOF' …)"`) isn't stored text.
+  const own = new Set(target ? [...target.words, ...target.settings, ...target.redirects.map((token) => token.target)].flatMap((word) => word.inner).flatMap((tokens) => [...everyList(commandsOf(tokens), true)].map((entry) => entry.commands)) : []);
+  const everything = fed ? lists.filter(({ commands: list }) => !own.has(list)).flatMap(({ commands: list }) => list.filter((command) => command !== target).flatMap((command) => [...command.settings.map((word) => word.text), ...textOf(command)])).join(" ") : "";
   const carried = (fed && inOrder(everything, ["gh", "pr", action])) || lists.some(({ commands: list }) => pipelinesOf(list).some((pipeline) => inOrder(pipelineText(pipeline, target, trusting), ["gh", "pr", action])));
   if (!found.length && !carried) return null;
   if (found.some((entry) => entry.kind === "maybe") || carried) return stop(`it might run \`gh pr ${action}\` in a form the gate can't read exactly (a word it can't follow, or text another program runs)`);
