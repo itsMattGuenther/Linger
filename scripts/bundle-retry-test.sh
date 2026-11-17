@@ -38,6 +38,8 @@ if [ "$n" -le "$failing" ]; then
     stalled) printf ' Downloading https://github.com/x/nsis.zip\nfailed to bundle project: timeout: recv_response\n' ;;
     windows) printf ' Downloading https://github.com/x/wix.zip\nfailed to bundle project: io: An existing connection was forcibly closed by the remote host. (os error 10054)\n' ;;
     cutoff) printf ' Downloading https://github.com/x/wix.zip\nfailed to bundle project: io: peer closed connection without sending TLS close_notify\n' ;;
+    winnohost) printf ' Downloading https://github.com/x/wix.zip\nfailed to bundle project: io: No such host is known. (os error 11001)\n' ;;
+    linuxdns) printf ' Downloading https://github.com/x/AppRun\nfailed to bundle project: failed to lookup address information: Temporary failure in name resolution\n' ;;
     nohost) printf ' Downloading https://github.com/x/wix.zip\nfailed to bundle project: host not found\n' ;;
     zipgone) printf ' Downloading https://github.com/x/wix314-binaries.zip\nfailed to bundle project: https://github.com/x/wix314-binaries.zip: status code 404\n' ;;
     denied) printf ' Downloading https://github.com/x/wix314-binaries.zip\n        Info extracting WIX\nfailed to bundle project: io: Access is denied. (os error 5)\n' ;;
@@ -83,7 +85,7 @@ run chain 1
 [ "$status" -eq 0 ] && [ "$runs" -eq 2 ] || fail "a reason on the cause line after the failure is read ($status, $runs)"
 run wording 1
 [ "$status" -eq 0 ] && [ "$runs" -eq 2 ] || fail "another client's wording of a 503 is read ($status, $runs)"
-for how in stalled windows cutoff nohost; do
+for how in stalled windows cutoff winnohost linuxdns nohost; do
   run "$how" 1
   [ "$status" -eq 0 ] && [ "$runs" -eq 2 ] || fail "$how: the HTTP client's own wording of a network failure is tried again ($status, $runs)"
 done
@@ -114,10 +116,11 @@ grep -qF 'given: {"bundle":{"createUpdaterArtifacts":false}}' "$work/out" || fai
 
 # The Windows package check builds through it, and keeps the tools.
 workflow=.github/workflows/package-check.yml
-grep -qE "bash \.\./scripts/bundle-retry\.sh pnpm tauri build" "$workflow" || fail "$workflow builds through bundle-retry.sh"
+grep -qE "^ +bash \.\./scripts/bundle-retry\.sh pnpm tauri build --debug" "$workflow" || fail "$workflow builds through bundle-retry.sh, on a line of its own"
+grep -qE "^ +pnpm tauri build" "$workflow" && fail "$workflow builds once without bundle-retry.sh as well"
 grep -q "path: ~/AppData/Local/tauri" "$workflow" || fail "$workflow keeps the bundler's tools folder between runs"
 grep -q "steps.tauri-cli.outputs.version" "$workflow" || fail "$workflow keys the tools on the Tauri CLI's version"
-grep -q "uses: actions/cache/save@" "$workflow" || fail "$workflow keeps the tools straight after the build, not only when the whole job passes"
+grep -qF 'key: ${{ steps.tauri-tools.outputs.cache-primary-key }}' "$workflow" || fail "$workflow saves the tools under the key it restored them by, straight after the build"
 
 # No command is refused, rather than passing as a build that worked.
 set +e; bash scripts/bundle-retry.sh >/dev/null 2>&1; none=$?; set -e

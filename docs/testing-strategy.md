@@ -102,7 +102,8 @@ version check, and the tests of these scripts themselves
 `python3 scripts/linux-audio-check.test.py`,
 `scripts/android-signing-test.sh`, `scripts/tidy-branches-test.sh`,
 `scripts/apt-mirrors-test.sh`, `scripts/apt-install-test.sh`,
-`scripts/appimage-fetch-test.sh`, and `scripts/actionlint-test.sh`).
+`scripts/appimage-fetch-test.sh`, `scripts/bundle-retry-test.sh` (also in
+the Windows package check, in Git Bash), and `scripts/actionlint-test.sh`).
 
 **One required check.** GitHub requires only `all green` before a merge. It
 waits for every other `ci.yml` job and passes when each passed or was skipped

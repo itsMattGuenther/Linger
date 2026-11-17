@@ -170,7 +170,7 @@ export function classify(paths, { labels = [], read = fromDisk, before = null } 
     // Checks and tools that ship nothing (docs/performance.md,
     // docs/pr-questions.md, docs/testing-strategy.md): the rules job runs
     // them and their tests on every change.
-    if (/^scripts\/(startup-time|pr-questions|review-catches|tauri-versions|ios-flows|ios-plist|upstream-fixes|android-jni|installed-packages|maestro-driver|app-at-rest|browser-fakes)(\.test)?\.mjs$|^scripts\/fixtures\/(dexdump-[\w.]+\.txt|maestro-[\w-]+\.log)$|^scripts\/(actionlint(-test)?|bundle-retry-test)\.sh$/.test(path)) continue;
+    if (/^scripts\/(startup-time|pr-questions|review-catches|tauri-versions|ios-flows|ios-plist|upstream-fixes|android-jni|installed-packages|maestro-driver|app-at-rest|browser-fakes)(\.test)?\.mjs$|^scripts\/fixtures\/(dexdump-[\w.]+\.txt|maestro-[\w-]+\.log)$|^scripts\/actionlint(-test)?\.sh$/.test(path)) continue;
     if (path.startsWith("crates/linger-core/") || path.startsWith("client/src/generated/")) add(...domains);
     else if (path.startsWith("crates/linger-server/")) add("rust", "s3");
     else if (path.startsWith(SHELL)) {
@@ -186,7 +186,7 @@ export function classify(paths, { labels = [], read = fromDisk, before = null } 
     else if (/^scripts\/(https-front(\.test)?\.mjs|share-window-ready\.mjs|test-certs\.sh)$/.test(path)) add("ios");
     else if (path.startsWith("client/")) add("web", "packages", "ios");
     else if (path.startsWith("assets/logo/")) add("web", "packages");
-    else if (/^scripts\/(.*audio.*|.*icon.*|windows-update-check\.ps1|video-runtime-probe\.js|fixtures\/tone-h264-aac\.mp4|appimage-.*|bundle-retry\.sh)$/.test(path)) add("packages");
+    else if (/^scripts\/(.*audio.*|.*icon.*|windows-update-check\.ps1|video-runtime-probe\.js|fixtures\/tone-h264-aac\.mp4|appimage-.*|bundle-retry(-test)?\.sh)$/.test(path)) add("packages");
     else if (path.startsWith("deploy/")) add("rust", "s3", "coturn");
     else if (path.startsWith("push-relay/")) add("relay");
     else add(...domains);

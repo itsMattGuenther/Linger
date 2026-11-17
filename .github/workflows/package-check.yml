@@ -132,9 +132,10 @@ jobs:
         with:
           path: ~/AppData/Local/tauri
           key: tauri-bundler-tools-${{ runner.os }}-${{ steps.tauri-cli.outputs.version }}
-      - name: The bundler's retry works in this runner's shell
-        # On Windows that's Git Bash, whose sed and awk the rules job never
-        # runs; the retry would otherwise first meet them on a real 504 (#916).
+      - name: The bundler's retry works in Git Bash
+        # The rules job runs its test on Linux; here, Windows' Git Bash, whose
+        # sed and awk the retry would otherwise first meet on a real 504 (#916).
+        if: runner.os == 'Windows'
         shell: bash
         run: bash scripts/bundle-retry-test.sh
       - name: Build unsigned packages without updater artifacts
