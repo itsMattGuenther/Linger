@@ -24,8 +24,10 @@ review `scripts/review-gate.mjs` runs before a pull request opens or merges
 ## Automate first
 
 A question costs every pull request a read. A check in CI costs nobody
-anything. So when a catch is recorded, ask first whether a test or a lint can
-find that kind of mistake. Write a question only when no check can. When a
+anything. So when a check for a kind of catch is picked (suggested under
+*Found along the way*, never built in the pull request the catch was on,
+`AGENTS.md`), ask first whether a test or a lint can find that kind of
+mistake. Write a question only when no check can. When a
 check comes to cover a question, move its kind to the checks at the end and
 take the question off; its history stays in the record. This list should get
 shorter over time, not longer.

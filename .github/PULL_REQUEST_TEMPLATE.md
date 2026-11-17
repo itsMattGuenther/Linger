@@ -22,6 +22,13 @@
      `desktop-only` and say why here: the iPhone run is left out (AGENTS.md,
      "Pull requests and issues"). Not for anything a phone shows or runs. -->
 
+## Found along the way
+
+<!-- Anything you noticed that this PR doesn't fix: a nearby bug, a check
+     or question a review catch suggests, a test that failed at random (with
+     its run). Don't open issues for these mid-task; Matt sorts this list
+     after the merge (AGENTS.md). Delete the section if there's nothing. -->
+
 ## Checklist
 
 - [ ] Every issue this PR proposes to resolve is formally linked and verified,
@@ -36,4 +43,4 @@
 - [ ] The task's acceptance criteria all pass
 - [ ] Docs updated in the same commit as the behavior they describe
 - [ ] Regenerated TS bindings committed, if any `linger-core` type changed
-- [ ] Task flipped to ✅ in `TASKS.md` with a dated landing note (surprises included)
+- [ ] If this finishes a `TASKS.md` task: flipped to ✅ with a dated landing note

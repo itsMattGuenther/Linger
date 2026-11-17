@@ -1,21 +1,21 @@
 # AGENTS.md — working agreement
 
-Read `SPEC.md`, `ARCHITECTURE.md`, and `PROTOCOL.md` before writing code. They are the
-source of truth. If code and docs disagree, the docs win — or the docs get changed
-first, in the same commit.
+`SPEC.md`, `ARCHITECTURE.md` and `PROTOCOL.md` are the source of truth. If code
+and docs disagree, the docs win — or the docs get changed first, in the same
+commit. They are large: read the sections your change touches, not whole files.
 
 ---
 
 ## Start every session by reading
 
-1. `SPEC.md` §2 (design thesis) and §6 (scope)
-2. `ARCHITECTURE.md` §10 (milestones) — identify the current milestone
-3. `PROTOCOL.md` for anything crossing the client/server boundary
-4. `TASKS.md` for the queue and your task. Closed milestones are archived in
-   `docs/tasks/` — read an archive only when your task points at it. The history
-   is large, and you do not need it by default.
-
-Then state which milestone you are on before writing code.
+1. Your task: the GitHub issue, or the `TASKS.md` entry it points at. Open
+   `TASKS.md` only when the task is there. It is large, and so are its
+   archives in `docs/tasks/`.
+2. `SPEC.md` §2 (design thesis) and §6 (scope), so you know what Linger
+   refuses to be.
+3. The sections of `SPEC.md`, `ARCHITECTURE.md` and `PROTOCOL.md` your
+   change touches, and `PROTOCOL.md` for anything crossing the client/server
+   boundary.
 
 ---
 
@@ -97,9 +97,12 @@ pass.
 - A bug fix comes with a test that fails without the fix, and a new rule with a
   test that proves it, at the lowest level that can
   (`docs/testing-strategy.md` says which).
-- A test that fails at random gets an issue the same day, not a re-run and a
-  shrug. Sometimes it is the app (#266). No blanket retries (L-31);
-  `docs/testing-strategy.md` has the steps.
+- A check that fails on GitHub's machinery (a runner, the simulator, a
+  download) gets one re-run, and no issue or investigation. A test of ours
+  that fails at random goes under *Found along the way* in the pull request,
+  with the run, and gets an issue only when it fails a second time.
+  Sometimes it is the app (#266), so never hide it with retries in the test
+  (L-31); `docs/testing-strategy.md` has the steps.
 
 **Commits**
 - Conventional-ish: `feat(gateway): resume with sequence replay`
@@ -125,25 +128,23 @@ pass.
   only people with access to the repository assign anyone, themselves
   included, so if it refuses, comment on the issue that you're working on it
   and Matt assigns you. A branch on a fork doesn't count: nobody else can see it.
+- **Don't open new issues while you work on one**, unless the person you
+  work for asks. A nearby bug, a gap a review showed, a check worth adding,
+  a test that failed at random: each goes under **Found along the way** in
+  the pull request, and Matt sorts that list after it merges. Issues opened
+  mid-task became the next task, and one bug became four (#933).
 - **One job per issue**: one piece of work that one pull request, or one
   decision, finishes. Checkboxes in an issue are its finish line ("Done
   when"), never a list of separate jobs. Jobs that belong together are a
   parent issue labelled `tracking`, with each job a sub-issue of it. That
   way each job is assigned and claimed on its own and closes when its pull
   request merges, and GitHub shows on the parent how many are done. A
-  `tracking` issue isn't one to pick up: pick one of its sub-issues. A
-  checklist of separate jobs had to be ticked by hand, and the person
-  assigned looked like they owned all of it (#779).
-- Every issue-driven PR must formally link every issue it proposes to resolve.
-  Put `Fixes #<number>` or `Closes #<number>` in the PR description for each issue;
-  a bare issue mention or a commit-message reference is not sufficient.
-- Verify the links appear in GitHub's Development section, or through
-  `gh pr view <number> --json closingIssuesReferences`. Do this when opening the
-  PR and whenever another issue is added to its scope.
-- Link proposed fixes while the PR is open, even when validation is still pending.
-  Describe the remaining checks explicitly; missing acceptance evidence is not a
-  reason to leave an issue looking unclaimed. Linked issues close on merge when
-  repository auto-closing is enabled, so finish their acceptance checks before merging.
+  `tracking` issue isn't one to pick up: pick one of its sub-issues (#779).
+- **Link every issue a PR resolves** with a `Fixes #<number>` or
+  `Closes #<number>` line in its description, from the moment it opens (a
+  bare mention or a commit message doesn't link), and check it took:
+  `gh pr view <number> --json closingIssuesReferences`. Linked issues close
+  on merge, so finish their acceptance checks before merging.
 - **Label a pull request `desktop-only` when nothing in it can change what
   the phone app does**, and it touches files both apps build: the page, or
   the shared parts of the shell. The iPhone runs are then left out
@@ -188,21 +189,34 @@ pass.
   opening (it needs the `claude` command, or `LINGER_REVIEWER` set to it,
   which Windows needs when Claude Code came from npm), or your tool's own
   review in a fresh session.
-- **A real review catch strengthens the project, not only the code it was on.**
+- **Three review rounds, then stop.** The reviewer always finds something
+  (84 reviews in one day, every one with findings, #933), so the rounds end
+  only when you end them. If the same kind of finding comes back a third
+  time, the design is wrong: stop patching, rethink it, and tell the person
+  you work for. After the third round, only a real bug in what the pull
+  request changes holds it up; the rest goes under *Found along the way*,
+  and the same commit passes.
+- **A real review catch is fixed and logged, not turned into more process.**
   When a reviewer (Greptile, which reviews every pull request but a `docs/…`
-  branch's, or a person) finds a real problem, fix it, then say in the pull
-  request why our own checks missed it, and close that gap: a test or check
-  that would have caught it, code shaped so the mistake is hard to make
-  again, or a rule in the docs. Do it in the same pull request, or file an
-  issue for it before merging, and add the catch to `docs/review-catches.md`.
-  **Automate first:** a check in CI costs no tokens, so close the gap with a
-  test or a lint whenever one can find that kind of mistake. Only a kind no
-  check can find gets a question in `docs/pr-questions.md`, and a question a
-  check comes to cover comes off it. `node scripts/review-catches.mjs` counts
-  real catches per pull request, week by week, to show whether they fall.
-  A comment that's wrong gets a reply saying why, and a line there too. Never
-  take a reviewer's fix with GitHub's one-click "commit suggestion": it makes
-  the bot a co-author (hard rule 1).
+  branch's, or a person) finds a real problem, fix it with its test, and add
+  one entry to `docs/review-catches.md` under the gap it fits. Don't build a
+  new check, question or rule for it in the same pull request: suggest it
+  under *Found along the way*, and Matt picks the ones worth building. Every
+  catch used to add process, and nothing came off (#933). The one exception
+  is a gap the record has never had: it needs a question in
+  `docs/pr-questions.md`, which its test checks. When a check is picked,
+  **automate first**: a check in CI costs no tokens, a question costs every
+  pull request a read. `node scripts/review-catches.mjs` counts real catches
+  per pull request, week by week. A comment that's wrong gets a reply saying
+  why, and a line there too. Never take a reviewer's fix with GitHub's
+  one-click "commit suggestion": it makes the bot a co-author (hard rule 1).
+- **Merge when every check that applies is green.** The admin override that
+  merges a pull request skips `all green` too, so wait for it, and for the
+  iPhone, share-window and package runs when they ran. A check that didn't
+  run because the change can't reach it isn't waited for. A check that
+  failed on something the change can't reach (GitHub's machinery, a
+  download, a part it didn't touch) gets one re-run; if it fails again, it
+  doesn't hold up the merge, and the pull request says why.
 - `agents/skills/` holds two skills for people's own agents (#147):
   `linger-report` turns a problem into a well-formed, private-safe issue, and
   `linger-contribute` is the short path from a fix to a PR under these rules. They
@@ -236,11 +250,6 @@ the docs that name it in the same commit. A file that only exists at an older
 commit or on another branch is named in git's own notation,
 `218cc2b:scripts/desktop-check.py`.
 
-Two failure modes to watch for. First, a build step that "everyone knows" — the dev-box
-quirks in `CLAUDE.md` exist because they were not written down the first time. Second,
-the README promising something the code no longer does; that is worse than saying
-nothing, so when a feature moves or gets cut, fix the README in the same commit.
-
 The website, [linger.im](https://linger.im), built from the private
 `itsMattGuenther/linger-site` repo, is the other front door. It
 is brought up to date once per release, not in feature pull requests: step 5 of
@@ -249,11 +258,7 @@ is brought up to date once per release, not in feature pull requests: step 5 of
 **The overview docs**
 
 Some docs describe the whole project rather than one feature, so no feature's
-pull request reads them, and they go stale first. By 2026-11-01,
-`ARCHITECTURE.md` still drew the server without voice forwarding and the client
-without the phone app, its schema was missing three tables, the README's layout
-was missing a crate, and three files still called shipped work "started". These
-are the overview docs:
+pull request reads them, and they go stale first. These are the overview docs:
 
 - `ARCHITECTURE.md` §1 (the drawing), §2 (stack choices), §3 (repository
   layout), §5 (schema), §9 (deployment) and §10 (milestones).
@@ -291,17 +296,14 @@ change adds the desktop-shell pass; `deploy/` adds the update script's test. A
 docs-only change takes under a second. `--all` runs everything. Green here should mean green there, and
 `docs/testing-strategy.md` has what runs where and which test a change needs.
 
-**Only the checks a change can reach run on its pull request** (Matt,
-2026-11-16, #914). The slow ones belong to one app each: the desktop
-installers, and the iPhone app in the simulator, which is 40 minutes on a Mac
-for every push. `scripts/ci-scope.mjs` reads which app builds each file from
-the code itself (`#[cfg(desktop)]` on a module in `lib.rs`, `platforms` in a
-capability file). A file only the desktop app builds doesn't start the iPhone
-runs (the simulator's flows, and the iPhone builds in `share-window.yml`),
-and a file only the phone app builds doesn't start the desktop installers. A file both build (the page, `lib.rs`, `Cargo.toml`) starts both,
-unless the pull request says otherwise: see the `desktop-only` label under
-*Pull requests and issues*. The nightly run on main runs everything, whatever
-changed.
+**Only the checks a change can reach run on its pull request** (#914).
+`scripts/ci-scope.mjs` reads which app builds each file from the code itself
+(`#[cfg(desktop)]` on a module in `lib.rs`, `platforms` in a capability
+file). A file only the desktop app builds doesn't start the iPhone runs (the
+simulator's flows, and the iPhone builds in `share-window.yml`), a file only
+the phone app builds doesn't start the desktop installers, and a file both
+build (the page, `lib.rs`, `Cargo.toml`) starts both, unless the pull
+request is labelled `desktop-only`. The nightly run on main runs everything.
 
 The pieces:
 
@@ -346,9 +348,7 @@ Things that trip people up, whatever machine or agent you're on:
 
 TypeScript bindings are generated into `client/src/generated/` by `cargo test -p
 linger-core` (`TS_RS_EXPORT_DIR` is set in `.cargo/config.toml`) and are
-committed; CI fails if they drift. `client/src-tauri` is deliberately **not** in
-the root cargo workspace — it needs GUI system libs that CI and server boxes
-don't have; build it via `pnpm tauri`.
+committed; CI fails if they drift.
 
 Machine-specific setup notes (which deps you installed, where your shims live)
 belong in your own agent's home-directory config (`~/.claude/CLAUDE.md`,
@@ -454,24 +454,15 @@ M0 scaffold → M1 server REST → M2 gateway → M3 client shell
   → backburner: entrance sounds (T-901…T-903)
 ```
 
-V1 is built, and so are **M9 (knock), M10 (search), M11 (DMs), M12 (voice)
-and M15 (the Buddy list client)**. M10's notes are in `docs/tasks/m10.md`, and
-its second half changed how the client holds history, so read it before
-touching message loading. **All nine release checks closed on 2026-09-25**
-from real use of the published app; the steps are kept in
-`docs/tasks/release-checks.md` for re-running when their area changes. **M13
-(ambient voice) is cut** (Matt, 2026-10-11, `docs/decisions.md`); it was never
-started, so don't build toward it. Larger groups and the voice rework (a
-forwarding server) were #197, closed 2026-10-19. **M16 (screen sharing) shipped
-in 0.5.2** (2026-10-27); its real check (T-1908) is still owed, so it isn't
-closed. **Mobile is started** (Matt, 2026-10-02): a phone app for
-iPhone and Android from the same Tauri 2 crate. It started text only and
-with no push, and got voice on 2026-10-19 (#429). **Phone notifications are
-being built** (Matt, 2026-11-11, #830): chosen by kind, through one relay
-Linger runs, encrypted so the relay, Apple and Google can't read them. It
-has been on Android since 0.4.8 and on friends' iPhones through TestFlight
-since 0.5.1. Read SPEC §4.15 before touching it; its tasks are `TASKS.md`
-§Mobile. Close a milestone's checks before starting the next.
+Everything above the backburner line is built, but **M13 (ambient voice),
+which is cut** (`docs/decisions.md`): don't build toward it. M16's real check
+(T-1908) is still owed. **The phone app** (iPhone and Android, from the same
+Tauri 2 crate) and **phone notifications** (#830; read SPEC §4.15 first) are
+being built; their tasks are `TASKS.md` §Mobile. Before touching message
+loading, read `docs/tasks/m10.md`: M10 changed how the client holds history.
+The release checks' steps are in `docs/tasks/release-checks.md`, for
+re-running when their area changes. Close a milestone's checks before
+starting the next.
 
 **The app is the Buddy list client, in `client/src/next/` (M15, #198).** Read
 `docs/design/architecture.md` before touching it; what's left of M15 is in
@@ -479,8 +470,7 @@ since 0.5.1. Read SPEC §4.15 before touching it; its tasks are `TASKS.md`
 - **Visual rules:** `docs/design/system.md` governs, and the kit's tests
   enforce it.
 - **Shared logic:** `client/src/lib/` is the logic the windows share (`.ts`
-  only, no components), and `client/src/generated/` the wire types. The
-  previous client that also used them was deleted after 0.4.3 (#306).
+  only, no components), and `client/src/generated/` the wire types.
 
 ---
 
@@ -491,5 +481,6 @@ since 0.5.1. Read SPEC §4.15 before touching it; its tasks are `TASKS.md`
 - A protocol change would break an existing client
 - A dependency would add >2 MB to the client bundle
 - Any workaround requires transmitting or storing a window title
-- A third fix attempt on the same bug fails — stop and name the assumption that might be
-  wrong instead of trying a fourth
+- A third fix attempt on the same bug fails, or a third review round finds the same
+  kind of problem — stop and name the assumption that might be wrong instead of
+  trying a fourth
