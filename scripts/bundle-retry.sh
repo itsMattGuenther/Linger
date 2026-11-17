@@ -6,29 +6,43 @@
 # GitHub releases whenever its folder doesn't have them, and tries each once:
 # one 504 threw away a 15-minute package build. GitHub's cache keeps that
 # folder between runs (package-check.yml), so this is for the run that has
-# to fetch them. The bundler says `Downloading <address>` just before each,
-# and a failed one fails the bundle on the next line; only that failure is
-# tried again. The build itself is done by then, so another try costs the
-# bundling, not the job.
+# to fetch them. The bundler says `Downloading <address>` before each; when
+# that's the last thing it said before the bundle failed, the build is tried
+# once more. Any other failure fails at once. Another try is all of
+# `tauri build` again: the frontend and the Rust are mostly cached by then,
+# but it's minutes, not seconds, so it's one more try, not several.
 #
 #   scripts/bundle-retry.sh <command> [args…]
 #
-# BUNDLE_RETRY_TRIES (default 3) and BUNDLE_RETRY_WAIT (seconds before the
-# second try, doubled after each; default 30) are for its test.
+# BUNDLE_RETRY_TRIES (default 2) and BUNDLE_RETRY_WAIT (seconds before the
+# next try, doubled after each; default 30) are for its test.
 set -uo pipefail
 
-tries="${BUNDLE_RETRY_TRIES:-3}"
+tries="${BUNDLE_RETRY_TRIES:-2}"
 wait="${BUNDLE_RETRY_WAIT:-30}"
+for number in "$tries" "$wait"; do
+  if ! [[ "$number" =~ ^[0-9]+$ ]] || [ "$tries" -lt 1 ]; then
+    echo "bundle-retry: BUNDLE_RETRY_TRIES must be 1 or more and BUNDLE_RETRY_WAIT 0 or more, whole numbers" >&2
+    exit 2
+  fi
+done
 log="$(mktemp)"
 trap 'rm -f "$log"' EXIT
 
-# Whether it failed on a download: the last line with anything on it before
-# the bundler's "failed to bundle project" says Downloading, with colours
-# and Windows line ends taken off first.
+# Whether it failed on a download: of the bundler's steps (a word like
+# Downloading, Bundling or Running at the start of a line), the last before
+# its "failed to bundle project" is Downloading. Other lines between, such
+# as a warning, a progress count or an error's causes, don't count either
+# way. Colours and Windows line ends are taken off first.
 failed_downloading() {
   sed -e 's/\x1b\[[0-9;]*[A-Za-z]//g' -e 's/\r$//' "$1" | awk '
-    /failed to bundle project/ { if (last ~ /^[[:space:]]*(Info[[:space:]]+)?Downloading[[:space:]]/) found = 1 }
-    NF { last = $0 }
+    /failed to bundle project/ { if (step == "Downloading") found = 1 }
+    match($0, /^[[:space:]]*(Info[[:space:]]+)?(Downloading|Bundling|Running|Finished|Built|Compiling|Signing|Packaging|Patching|Extracting|Verifying|Installing)[[:space:]]/) {
+      line = $0
+      sub(/^[[:space:]]*(Info[[:space:]]+)?/, "", line)
+      split(line, words, /[[:space:]]+/)
+      step = words[1]
+    }
     END { exit found ? 0 : 1 }'
 }
 

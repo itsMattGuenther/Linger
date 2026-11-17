@@ -26,6 +26,8 @@ if [ "$n" -le "$failing" ]; then
     coloured) printf '\033[32m Downloading\033[0m https://github.com/x/y.zip\r\n\033[31mfailed to bundle project\033[0m: `io: connection reset`\r\n' ;;
     info) printf '        Info Downloading https://github.com/x/y.zip\n\nfailed to bundle project: `timed out`\n' >&2 ;;
     later) printf ' Downloading https://github.com/x/y.zip\n    Bundling Linger.msi\n     Running light.exe\nfailed to bundle project: `light.exe failed`\n' ;;
+    between) printf ' Downloading https://github.com/x/y.zip\n        Warn the server was slow\n  45%% 12 MB\nfailed to bundle project: `http status: 502`\nCaused by:\n    0: http status: 502\n' ;;
+    extract) printf ' Downloading https://github.com/x/y.zip\n  Extracting y.zip\nfailed to bundle project: `zip archive is broken`\n' ;;
     compile) printf 'error[E0308]: mismatched types\n' ;;
   esac
   exit 7
@@ -40,16 +42,30 @@ run() {
   bash scripts/bundle-retry.sh bash "$work/build.sh" "$work/count" "$@" >"$work/out" 2>&1
   status=$?
   set -e
-  runs="$(cat "$work/count")"
+  runs="$(cat "$work/count" 2>/dev/null || true)"
 }
 
 run download 0
 [ "$status" -eq 0 ] && [ "$runs" -eq 1 ] || fail "a build that works runs once ($status, $runs)"
-run download 2
-[ "$status" -eq 0 ] && [ "$runs" -eq 3 ] || fail "two failed downloads, then it works ($status, $runs)"
+run download 1
+[ "$status" -eq 0 ] && [ "$runs" -eq 2 ] || fail "a failed download, then it works ($status, $runs)"
 grep -q "trying again" "$work/out" || fail "the log says it's trying again"
 run download 9
-[ "$status" -eq 7 ] && [ "$runs" -eq 3 ] || fail "three tries, then the build's own status ($status, $runs)"
+[ "$status" -eq 7 ] && [ "$runs" -eq 2 ] || fail "two tries, then the build's own status ($status, $runs)"
+BUNDLE_RETRY_TRIES=3 run download 2
+[ "$status" -eq 0 ] && [ "$runs" -eq 3 ] || fail "three tries when asked ($status, $runs)"
+run between 1
+[ "$status" -eq 0 ] && [ "$runs" -eq 2 ] || fail "a warning, a progress count and causes after it don't hide the download ($status, $runs)"
+run extract 1
+[ "$status" -eq 7 ] && [ "$runs" -eq 1 ] || fail "a failure unpacking what came isn't the download's ($status, $runs)"
+# A setting that isn't a whole number is refused before anything runs,
+# rather than tried for ever; an empty one is the default.
+for bad in three -1 0 1.5; do
+  BUNDLE_RETRY_TRIES="$bad" run download 9
+  [ "$status" -eq 2 ] && [ -z "$runs" ] || fail "BUNDLE_RETRY_TRIES=$bad is refused ($status, $runs)"
+done
+BUNDLE_RETRY_TRIES="" run download 9
+[ "$status" -eq 7 ] && [ "$runs" -eq 2 ] || fail "an empty BUNDLE_RETRY_TRIES is the default, two tries ($status, $runs)"
 run coloured 1
 [ "$status" -eq 0 ] && [ "$runs" -eq 2 ] || fail "coloured, with Windows line ends ($status, $runs)"
 run info 1
@@ -67,4 +83,5 @@ grep -qF 'given: {"bundle":{"createUpdaterArtifacts":false}}' "$work/out" || fai
 workflow=.github/workflows/package-check.yml
 grep -qE "bash \.\./scripts/bundle-retry\.sh pnpm tauri build" "$workflow" || fail "$workflow builds through bundle-retry.sh"
 grep -q "path: ~/AppData/Local/tauri" "$workflow" || fail "$workflow keeps the bundler's tools folder between runs"
+grep -q "steps.tauri-cli.outputs.version" "$workflow" || fail "$workflow keys the tools on the Tauri CLI's version"
 echo "bundle-retry: ok"

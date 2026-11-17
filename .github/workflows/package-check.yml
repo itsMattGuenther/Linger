@@ -107,16 +107,23 @@ jobs:
         working-directory: client
       - name: Approved artwork is current
         run: node scripts/app-icons.mjs --check
+      - name: The Tauri CLI's version
+        id: tauri-cli
+        if: runner.os == 'Windows'
+        working-directory: client
+        shell: bash
+        run: echo "version=$(node -p "require('@tauri-apps/cli/package.json').version")" >> "$GITHUB_OUTPUT"
       - name: Keep the Windows bundler's tools between runs
         # WiX, NSIS and nsis_tauri_utils.dll otherwise come from GitHub releases
-        # on every run, and one 504 threw a whole build away (#916). Keyed on the
-        # lockfile, which pins the Tauri CLI that picks their versions; no
-        # restore-keys, so a new CLI never starts from an older one's tools.
+        # on every run, and one 504 threw a whole build away (#916). Keyed on
+        # the CLI's version, which picks theirs, so another package's bump
+        # doesn't fetch them again; no restore-keys, so a new CLI never starts
+        # from an older one's tools.
         if: runner.os == 'Windows'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/AppData/Local/tauri
-          key: tauri-bundler-tools-${{ runner.os }}-${{ hashFiles('client/pnpm-lock.yaml') }}
+          key: tauri-bundler-tools-${{ runner.os }}-${{ steps.tauri-cli.outputs.version }}
       - name: Build unsigned packages without updater artifacts
         working-directory: client
         # Debug profile saves CI time; tauri build still packages the built frontend.
