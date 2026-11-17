@@ -80,6 +80,9 @@ test("reads which pull request, folder and branch a command is about", () => {
     ["merge", "gh pr merge 5 -sR o/r", { selector: "5", repo: "o/r" }],
     ["create", "gh pr create -t x -dB release", { base: "release" }],
     ["create", "gh pr create -t x -dBrelease", { base: "release" }],
+    // A body it can't read, or a comment, that mentions the command is text, not a second copy.
+    ["create", "gh pr create -t x --body \"$(cat <<'EOF'\nThe gate reads gh pr create now.\nEOF\n)\"", { base: null }],
+    ["merge", "gh pr merge 5 # then gh pr merge 6 later", { selector: "5" }],
     ["create", "gh pr create -t x > out.txt", { base: null }],
     ["create", "gh pr create -t x -B release 2>&1", { base: "release" }],
     ["ready", "gh pr ready", { selector: null }],

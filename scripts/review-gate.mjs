@@ -237,8 +237,10 @@ export function readCommand(command, action) {
     after = after.slice(token[0].length);
   }
   // A second copy after this one, even one it can't read (`; "gh" pr merge 6`),
-  // would run unreviewed beside the one reviewed.
-  if (inOrder(after, ["gh", "pr", action])) return stop(`it may run \`gh pr ${action}\` more than once; run each on its own, a body in --body-file`);
+  // would run unreviewed beside the one reviewed. Looked for only when the
+  // command was read whole, and past a comment that ends it: a create's body
+  // the gate couldn't read is text, and may well mention the command.
+  if (readable && inOrder(after.replace(/^[ \t]+#[^\n]*/, ""), ["gh", "pr", action])) return stop(`it may run \`gh pr ${action}\` more than once; run each on its own, a body in --body-file`);
   const { flags, positional } = parseWords(words, action);
   if (flags.has("--help") || flags.has("-h")) return null;
   // Back to a draft takes a pull request away from review; nothing to gate.
