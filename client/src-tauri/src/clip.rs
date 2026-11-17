@@ -61,6 +61,10 @@ struct Recording {
     window: String,
     /// The page's number for this start, which its cancel names (#920).
     start: u64,
+    /// Called off while its microphone was still opening: it keeps its
+    /// place on the books until the microphone has opened (or failed), so a
+    /// next start never opens a second microphone beside it (#920).
+    called_off: bool,
     /// There once its microphone is open. Before that the recording is only
     /// a name on the books.
     started: Option<Started>,
@@ -131,6 +135,7 @@ impl Clips {
             id,
             window: window.to_owned(),
             start,
+            called_off: false,
             started: None,
         });
         Ok(id)
@@ -144,7 +149,15 @@ impl Clips {
     fn call_off(&self, window: &str, start: u64) -> Option<Recording> {
         let mut books = self.lock();
         books.call_off_up_to(window, start);
-        books.take_if(|recording| recording.window == window && recording.start == start)
+        let named = |recording: &Recording| recording.window == window && recording.start == start;
+        match books.recording.as_mut() {
+            // Still opening: marked, and thrown away once it opens.
+            Some(recording) if named(recording) && recording.started.is_none() => {
+                recording.called_off = true;
+                None
+            }
+            _ => books.take_if(named),
+        }
     }
 
     /// A window has gone, or its page is loaded afresh: its recording taken,
@@ -163,14 +176,14 @@ impl Clips {
     /// it's thrown away here instead, and that's said.
     fn started(&self, id: u64, started: Started) -> bool {
         let mut books = self.lock();
-        if let Some(recording) = books
-            .recording
-            .as_mut()
-            .filter(|recording| recording.id == id && recording.started.is_none())
-        {
+        if let Some(recording) = books.recording.as_mut().filter(|recording| {
+            recording.id == id && recording.started.is_none() && !recording.called_off
+        }) {
             recording.started = Some(started);
             return true;
         }
+        // Called off while it opened: its place is given up now.
+        books.take_if(|recording| recording.id == id);
         started.discard();
         false
     }
@@ -654,11 +667,17 @@ mod tests {
 
     /// A cancel takes only starts up to the one it names: an earlier start's
     /// cancel, arriving late, leaves a later recording alone (#920).
-    #[test]
-    fn a_late_cancel_never_takes_a_later_start() {
+    #[tokio::test]
+    async fn a_late_cancel_never_takes_a_later_start() {
         let clips = Clips::default();
-        clips.begin("main", 1).expect("the first");
-        assert!(clips.call_off("main", 1).is_some());
+        let first = clips.begin("main", 1).expect("the first");
+        assert!(
+            clips.call_off("main", 1).is_none(),
+            "taken while still opening"
+        );
+        let (stop, _stopped) = oneshot::channel();
+        let done = tokio::spawn(async { Ok(Clip::default()) });
+        assert!(!clips.started(first, Started { stop, done }));
         clips.begin("main", 2).expect("the second");
         assert!(clips.call_off("main", 1).is_none());
         assert!(
@@ -668,14 +687,20 @@ mod tests {
     }
 
     /// One recording at a time: a later start of the same window's waits
-    /// for the earlier one to be called off, rather than replacing it (the
-    /// page sends a start only once its last cancel or stop is done).
-    #[test]
-    fn a_later_start_waits_for_the_earlier_to_be_called_off() {
+    /// for the earlier recording to be called off, rather than replacing it
+    /// (the page sends a start only once its last cancel or stop is done).
+    #[tokio::test]
+    async fn a_later_start_waits_for_the_earlier_to_be_called_off() {
         let clips = Clips::default();
-        clips.begin("main", 1).expect("the first");
+        let first = clips.begin("main", 1).expect("the first");
+        let (stop, _stopped) = oneshot::channel();
+        let done = tokio::spawn(async { Ok(Clip::default()) });
+        assert!(clips.started(first, Started { stop, done }));
         assert_eq!(clips.begin("main", 2).err(), Some(ALREADY));
-        assert!(clips.call_off("main", 1).is_some());
+        assert!(
+            clips.call_off("main", 1).is_some(),
+            "a cancel didn't take the recording under way"
+        );
         assert!(clips.begin("main", 2).is_ok());
     }
 
@@ -699,6 +724,28 @@ mod tests {
         assert!(clips.begin("main", next).is_ok());
         // Another window's numbers are its own.
         assert_eq!(clips.lock().ticket("chat"), 1);
+    }
+
+    /// A start called off while its microphone opens keeps its place until
+    /// the microphone has opened, so the next start never opens a second
+    /// microphone beside it; then it's thrown away and the next goes (#920).
+    #[tokio::test]
+    async fn a_start_called_off_while_opening_keeps_its_place_until_it_opens() {
+        let clips = Clips::default();
+        let first = clips.begin("main", 1).expect("the first");
+        assert!(clips.call_off("main", 1).is_none());
+        assert_eq!(
+            clips.begin("main", 2).err(),
+            Some(ALREADY),
+            "a second microphone opened beside the first"
+        );
+        let (stop, _stopped) = oneshot::channel();
+        let done = tokio::spawn(async { Ok(Clip::default()) });
+        assert!(
+            !clips.started(first, Started { stop, done }),
+            "it went ahead after its cancel"
+        );
+        assert!(clips.begin("main", 3).is_ok());
     }
 
     /// A cancel takes only its own start: an earlier recording still being

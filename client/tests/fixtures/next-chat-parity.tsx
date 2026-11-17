@@ -167,7 +167,8 @@ const desktop = fakeDesktop({
       desktop.note(`clip_cancel:${JSON.stringify(args)}`);
       // Up to the start it names, and no later one, as the shell does.
       calledOffUpTo = Math.max(calledOffUpTo, Number(args.start));
-      if (booked === Number(args.start)) booked = null;
+      // A start still opening keeps its place until it opens, as clip.rs does.
+      if (booked === Number(args.start) && !heldStarts.some((held) => held.start === booked)) booked = null;
       // Only the start it names is taken; one at or below the mark that
       // hasn't come yet is refused when it does (above).
       for (const held of heldStarts) if (held.start === Number(args.start)) held.calledOff = true;

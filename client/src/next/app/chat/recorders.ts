@@ -74,6 +74,8 @@ const LEVEL_EVERY_MS = 40;
  * computer needs no tap to start its sound, so waiting costs nothing.
  */
 let shellSettling: Promise<void> = Promise.resolve();
+/** The page's last ticket asked: the next is asked after it, so later starts get higher numbers (#920). */
+let shellTicket: Promise<unknown> = Promise.resolve();
 const settled = (asked: Promise<unknown>) => {
   const done = asked.then(
     () => undefined,
@@ -112,7 +114,8 @@ export function shellRecorder(events: RecorderEvents, input: () => string | null
       // page's or an earlier page's. Asked now, before anything is waited
       // for: a cancel while it waits waits for this number and names it, and
       // the shell calls off that start and no later one (#920).
-      const numbered = invoke<number>("clip_ticket");
+      const numbered = shellTicket.then(() => invoke<number>("clip_ticket"));
+      shellTicket = numbered.catch(() => undefined);
       current = numbered;
       const start = await numbered;
       await shellSettling;
@@ -351,6 +354,9 @@ export function pageRecorder(events: RecorderEvents): Recorder {
       const mine = attempt;
       clip = { preSkip: USUAL_PRE_SKIP, packets: [] };
       stopped = false;
+      // One a failed start left open is closed, not dropped.
+      const left = encoder as AudioEncoder | null;
+      if (left !== null && left.state !== "closed") left.close();
       encoder = null;
       const Processor = trackProcessor();
       // Made and started now, in the tap that pressed Record, before
