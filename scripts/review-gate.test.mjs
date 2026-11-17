@@ -143,6 +143,9 @@ test("reads which pull request, folder and branch a command is about", () => {
     // The word case as an argument inside a substitution is a word.
     ["create", 'gh pr create -t x --body "$(echo fixes the empty case)"', { base: null }],
     ["merge", 'gh pr merge 5 --subject "$(echo covers the empty case)"', { selector: "5" }],
+    // pflag keeps the last value; git log reads only, without --output.
+    ["ready", "gh pr ready 5 --undo --undo=false", { selector: "5" }],
+    ["merge", 'gh pr merge 925 --squash --admin --body "$(git log -1 --format=%B)"', { selector: "925" }],
     ["ready", "gh pr ready", { selector: null }],
     ["ready", "gh pr ready 12", { selector: "12" }],
   ];
@@ -344,6 +347,21 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     ["merge", 'echo "$(case x in y) echo esac;; x) gh pr merge 5;; esac)"'],
     // A cd in another form.
     ["merge", "cd -- /w && gh pr merge 5"],
+    // The three words beside brackets, commas or backticks, in text a program runs.
+    ["merge", "python3 -c 'import subprocess; subprocess.run([\"gh\",\"pr\",\"merge\",\"5\"])'"],
+    ["merge", "node -e 'execSync(`gh pr merge 5`)'"],
+    ["merge", "bash -c 'x=`gh pr merge 5`'"],
+    // A word the gate can't read standing for gh, in text a program runs.
+    ["merge", 'sh -c "$(command -v gh) pr merge 5"'],
+    // After exec points a stream at a file, printed text may be a script.
+    ["merge", "exec >m.sh; echo 'gh pr merge 5'; exec >/dev/tty; bash m.sh"],
+    ["merge", "exec 2>m.sh; echo 'gh pr merge 5' >&2; bash m.sh"],
+    // A line continued inside text a program runs.
+    ["merge", "bash -c 'gh pr mer\\\nge 5'"],
+    // pflag keeps the last value: help off, so --auto is read.
+    ["merge", "gh pr merge 5 --help --help=false --auto"],
+    // Bash reads it; the gate doesn't read case in a substitution, and its text stops it.
+    ["merge", "x=$(case a in a) :;; esac); `gh pr merge 5`"],
     // Text bash would refuse, that might be the command.
     ["merge", 'gh pr merge 5 "oops'],
   ];

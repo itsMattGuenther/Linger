@@ -575,7 +575,7 @@ function readsOnly(command) {
   if (!known || command.redirects.some(writesFile)) return false;
   const { name, program, first, second } = known;
   if (INERT.has(program)) return inert(command);
-  if (program === "git") return GIT_READS.has(first);
+  if (program === "git") return GIT_READS.has(first) || (["log", "show", "diff"].includes(first) && command.words.every((word) => word.known && !/^--(?:output|ext-diff|textconv)/.test(word.text)));
   return isGh(name) && (GH_READS[first]?.includes("*") || GH_READS[first]?.includes(second)) === true;
 }
 
@@ -615,8 +615,8 @@ function classify(command, action) {
  * the gate knows otherwise, so a program it doesn't know (node, python, a
  * script) can't carry the command past it.
  */
-function pipelineText(pipeline, target) {
-  const live = pipeline.some((command) => !inert(command));
+function pipelineText(pipeline, target, trusting = true) {
+  const live = !trusting || pipeline.some((command) => !inert(command));
   const parts = [];
   for (const command of pipeline) {
     parts.push(...command.settings.map((word) => word.text));
@@ -665,9 +665,16 @@ function* everyList(commands, nested = false) {
 
 
 /** Whether pflag reads a boolean flag's values as on: bare, or a true value. */
-const isOn = (values) => (values ?? []).some((value) => value === null || ["1", "t", "T", "true", "TRUE", "True"].includes(value));
+const isOn = (values) => {
+  // pflag keeps the last value given: `--help --help=false` is off.
+  const last = values?.[values.length - 1];
+  return values?.length > 0 && (last === null || ["1", "t", "T", "true", "TRUE", "True"].includes(last));
+};
 /** Whether every value pflag reads for a boolean flag is false. */
-const isOff = (values) => (values ?? []).every((value) => value !== null && ["0", "f", "F", "false", "FALSE", "False"].includes(value));
+const isOff = (values) => {
+  const last = values?.[values.length - 1];
+  return values?.length > 0 && last !== null && ["0", "f", "F", "false", "FALSE", "False"].includes(last);
+};
 
 /** gh's flags that take a value, for each command: the long name, and its short one if it has one. */
 const VALUED = {
@@ -736,20 +743,21 @@ const stop = (why) => ({ fail: why });
  * a command bash would refuse anyway still can't slip through.
  */
 function inOrder(text, words) {
-  // Quotes and escapes taken out, as the shell would: `g''h` is gh.
-  text = text.replace(/["'\\]/g, "");
+  // A line continued is one line, and quotes and escapes come out, as the
+  // shell would: `g''h` is gh.
+  text = text.replace(/\\\n/g, "").replace(/["'\\]/g, "");
   let from = 0;
-  for (const [index, word] of words.entries()) {
-    // A word of its own: between blanks, operators or the ends, so a branch
-    // like fix/gh-pr-create-flags isn't one. gh may follow a path's / or a
-    // setting's =, and be gh.exe.
-    const before = index === 0 ? "[\\s;&|()<>=/]" : "[\\s;&|()<>]";
-    const after = index === 0 ? "(?:\\.exe)?" : "";
-    const found = new RegExp(String.raw`(?:^|(?<=${before}))${word}${after}(?=$|[\s;&|()<>])`, "g");
+  for (const word of words) {
+    // A word not inside a longer name (fix/gh-pr-create-flags isn't one),
+    // whatever is beside it: blanks, brackets, commas, backticks. gh may end
+    // a path (`/usr/bin/gh`), be gh.exe, or be a word the gate can't read.
+    const found = word === "gh"
+      ? new RegExp(String.raw`(?<![\w.-])(?:gh(?:\.exe)?|${UNKNOWN})(?![\w.-])`, "g")
+      : new RegExp(String.raw`(?<![\w./-])${word}(?![\w./-])`, "g");
     found.lastIndex = from;
     const hit = found.exec(text);
     if (!hit) return false;
-    from = hit.index + word.length;
+    from = hit.index + hit[0].length;
   }
   return true;
 }
@@ -813,7 +821,10 @@ export function readCommand(command, action) {
   const exact = found.filter((entry) => entry.kind === "exact");
   const target = exact.length === 1 && !exact[0].nested ? exact[0].command : null;
   // Text a program may run, with the three words in it, is a command the gate can't place.
-  const carried = lists.some(({ commands: list }) => pipelinesOf(list).some((pipeline) => inOrder(pipelineText(pipeline, target), ["gh", "pr", action])));
+  // Once exec points a stream at a file, what any program prints may land
+  // in a script, so no program's words are data.
+  const trusting = !lists.some(({ commands: list }) => list.some((command) => command.words[0]?.known && command.words[0].text === "exec" && command.redirects.length));
+  const carried = lists.some(({ commands: list }) => pipelinesOf(list).some((pipeline) => inOrder(pipelineText(pipeline, target, trusting), ["gh", "pr", action])));
   if (!found.length && !carried) return null;
   if (found.some((entry) => entry.kind === "maybe") || carried) return stop(`it might run \`gh pr ${action}\` in a form the gate can't read exactly (a word it can't follow, or text another program runs)`);
   if (exact.length > 1) return stop(`it runs \`gh pr ${action}\` more than once`);
