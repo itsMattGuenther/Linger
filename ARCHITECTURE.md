@@ -285,6 +285,8 @@ linger/
 │                             #   docs/tasks/ archives closed milestones
 ├─ scripts/                   # check.sh (what CI runs) and the checks it calls
 ├─ .github/                   # CI workflows, issue forms, the PR template
+├─ .claude/                   # settings.json: Claude Code's hook that runs a fresh
+│                             #   review before a PR opens or merges (#917)
 └─ .cargo/                    # config.toml: where cargo test writes the TS bindings
 ```
 

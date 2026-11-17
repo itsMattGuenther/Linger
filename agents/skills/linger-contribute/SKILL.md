@@ -105,6 +105,13 @@ commits that carry them (`scripts/lint-rules.sh`).
   questions past reviews taught, for the parts of the project your branch
   changed. Answer each for your change, and say what you checked in the Tests
   section, in a line or two.
+- A fresh review runs before the pull request opens (#917). In Claude Code,
+  the repository's hook runs it when you run `gh pr create`: run that on its
+  own, with only `cd <folder> &&` or `git push … &&` in front. If it stops
+  the command with findings, fix what's real and run it again (the same
+  commit passes the second time), and say in the Tests section what it found
+  and what you did. With another tool, run `node scripts/review-gate.mjs`
+  first, or your tool's own review in a fresh session.
 - Explain the change the way `AGENTS.md` asks: short, plain sentences for a
   smart friend who didn't read the code. Say what was wrong, what changed, how
   it was tested, and what still needs a real computer to confirm.

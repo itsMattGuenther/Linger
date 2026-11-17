@@ -43,7 +43,7 @@ export function knownParts(path) {
   else if (/^client\/tests\/(?:ios|share-sender|share-window-preview)\//.test(path)) add("phone");
   else if (path.startsWith("client/scripts/")) add("ci");
   else if (path.startsWith("client/")) add("page");
-  else if (/^(?:scripts|\.github|packaging|agents)\/|^\.git(?:ignore|attributes)$/.test(path)) add("ci");
+  else if (/^(?:scripts|\.github|\.claude|packaging|agents)\/|^\.git(?:ignore|attributes)$/.test(path)) add("ci");
   else if (path.startsWith("deploy/")) add("deploy");
   else if (path.startsWith("push-relay/")) add("server");
   else return null;

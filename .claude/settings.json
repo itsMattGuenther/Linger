@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(gh pr create:*)",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/review-gate.mjs\" --hook create",
+            "timeout": 2400,
+            "onFailure": "block"
+          },
+          {
+            "type": "command",
+            "if": "Bash(gh pr ready:*)",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/review-gate.mjs\" --hook ready",
+            "timeout": 2400,
+            "onFailure": "block"
+          },
+          {
+            "type": "command",
+            "if": "Bash(gh pr merge:*)",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/review-gate.mjs\" --hook merge",
+            "timeout": 2400,
+            "onFailure": "block"
+          }
+        ]
+      }
+    ]
+  }
+}

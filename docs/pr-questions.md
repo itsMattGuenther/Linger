@@ -16,6 +16,11 @@ It prints only the questions for the parts your branch changed. Answer each
 one for your change, test what needs a test, and say what you checked in the
 pull request's Tests section, in a line or two.
 
+The author answering their own questions misses what the author missed, so
+they're also handed to a reviewer that reads the change cold: the fresh
+review `scripts/review-gate.mjs` runs before a pull request opens or merges
+(#917, `AGENTS.md`).
+
 ## Automate first
 
 A question costs every pull request a read. A check in CI costs nobody
