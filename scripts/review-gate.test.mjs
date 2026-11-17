@@ -742,6 +742,7 @@ test("after a review, a new commit is reviewed for what it adds; the whole chang
     let call = box.calls().at(-1);
     assert.equal(call.args[1], `/code-review high ${box.head}...${second}`);
     assert.match(call.args.at(-1), new RegExp(`\\(${box.main}\\.\\.\\.${box.head}\\) was reviewed already`), "told what was reviewed before");
+    assert.match(call.args.at(-1), /what those changes do to code they didn't change/, "and to look at what the new commits affect");
 
     // Docs added since the last review aren't reviewed.
     box.commit(box.repo, "docs/notes.md", "notes\n");
@@ -766,6 +767,11 @@ test("after a review, a new commit is reviewed for what it adds; the whole chang
     const redone = box.commit(box.repo, "client/src/thing.ts", "export const one = 3;\n");
     assert.equal(box.gate("create", "gh pr create -t t").code, 2);
     assert.equal(box.calls().at(-1).args[1], `/code-review high ${moved}...${redone}`, "the whole change again");
+
+    // A lighter review doesn't stand in for a stricter one.
+    const stricter = box.commit(box.repo, "client/src/thing.ts", "export const one = 4;\n");
+    assert.equal(box.gate("create", "gh pr create -t t", { extra: { LINGER_REVIEW_LEVEL: "max" } }).code, 2);
+    assert.equal(box.calls().at(-1).args[1], `/code-review max ${moved}...${stricter}`, "the whole change, at the stricter level");
   } finally {
     box.done();
   }
