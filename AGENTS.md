@@ -100,7 +100,9 @@ pass.
 - A check that fails on GitHub's machinery (a runner, the simulator, a
   download) gets one re-run, and no issue or investigation. A test of ours
   that fails at random goes under *Found along the way* in the pull request,
-  with the run, and gets an issue only when it fails a second time.
+  with the run, and gets an issue only when it fails a second time. The
+  nightly run opens an issue on any failure: when it was GitHub's
+  machinery, close it with one line saying so, and don't investigate.
   Sometimes it is the app (#266), so never hide it with retries in the test
   (L-31); `docs/testing-strategy.md` has the steps.
 

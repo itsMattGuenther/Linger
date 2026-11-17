@@ -401,7 +401,9 @@ Two things catch these before they bite:
   in both engines, with fewer repeats (never under two) when a PR touches many
   tests, to stay near 300 runs per engine.
 - **Every night, every browser test runs three times** with no retries
-  (`nightly.yml`). A test that fails there opens the nightly issue.
+  (`nightly.yml`). A test that fails there opens the nightly issue. When
+  the failure was GitHub's machinery, that issue is closed with one line
+  saying so, not investigated (#933).
 
 ## Waiting in a browser test
 
