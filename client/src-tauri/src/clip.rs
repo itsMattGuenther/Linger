@@ -45,10 +45,12 @@ struct Books {
     next: u64,
     recording: Option<Recording>,
     /// For each window, the highest start its page has called off (#920).
-    /// The page numbers its starts from the clock, always rising, even
+    /// The page numbers its starts from its clock, always rising, even
     /// across a reload, so a start at or below it is refused when it comes,
     /// whatever order the commands were handled in, and a cancel takes a
-    /// booked start at or below it. Forgotten when the window goes.
+    /// booked start at or below it. Kept for as long as Linger runs, one
+    /// number for each window it has opened, since that's what refuses a
+    /// start a closed or reloaded window sent and the shell heard late.
     called_off: HashMap<String, u64>,
 }
 
@@ -77,6 +79,15 @@ impl Started {
 }
 
 impl Books {
+    /// Take the recording on the books if `wanted` says it's the one.
+    fn take_if(&mut self, wanted: impl FnOnce(&Recording) -> bool) -> Option<Recording> {
+        if self.recording.as_ref().is_some_and(wanted) {
+            self.recording.take()
+        } else {
+            None
+        }
+    }
+
     /// Raise `window`'s called-off mark to `start`, never lower it.
     fn call_off_up_to(&mut self, window: &str, start: u64) {
         let up_to = self.called_off.entry(window.to_owned()).or_insert(0);
@@ -120,15 +131,7 @@ impl Clips {
     fn call_off(&self, window: &str, start: u64) -> Option<Recording> {
         let mut books = self.lock();
         books.call_off_up_to(window, start);
-        if books
-            .recording
-            .as_ref()
-            .is_some_and(|recording| recording.window == window && recording.start <= start)
-        {
-            books.recording.take()
-        } else {
-            None
-        }
+        books.take_if(|recording| recording.window == window && recording.start <= start)
     }
 
     /// A window has gone, or its page is loaded afresh: its recording taken,
@@ -138,15 +141,7 @@ impl Clips {
     fn forget_window(&self, window: &str, now: u64) -> Option<Recording> {
         let mut books = self.lock();
         books.call_off_up_to(window, now);
-        if books
-            .recording
-            .as_ref()
-            .is_some_and(|recording| recording.window == window)
-        {
-            books.recording.take()
-        } else {
-            None
-        }
+        books.take_if(|recording| recording.window == window)
     }
 
     /// Recording `id` has its microphone open and is under way. When it was
@@ -187,16 +182,7 @@ impl Clips {
 
     /// Take the recording `window` started, if that's the one on the books.
     fn take_from(&self, window: &str) -> Option<Recording> {
-        let mut books = self.lock();
-        if books
-            .recording
-            .as_ref()
-            .is_some_and(|recording| recording.window == window)
-        {
-            books.recording.take()
-        } else {
-            None
-        }
+        self.lock().take_if(|recording| recording.window == window)
     }
 
     fn lock(&self) -> MutexGuard<'_, Books> {

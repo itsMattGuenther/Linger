@@ -130,7 +130,7 @@ const desktop = fakeDesktop({
       // As the shell says it when the system has no microphone.
       if (query.has("nomic")) throw "no input device available";
       // As the shell does (clip.rs): a start at or below what this window
-      // called off is refused, and one held from before is superseded.
+      // called off is refused, and one recording is booked at a time.
       const start = Number(args.start);
       if (start <= calledOffUpTo) throw "The voice message was called off while the microphone opened.";
       if (booked !== null) throw "A voice message is already being recorded.";
@@ -159,12 +159,14 @@ const desktop = fakeDesktop({
       await recordingLoaded;
       return (recorded ?? new Uint8Array(2)).slice().buffer;
     },
-    clip_cancel: (args) => {
+    clip_cancel: async (args) => {
       desktop.note(`clip_cancel:${JSON.stringify(args)}`);
       // Up to the start it names, and no later one, as the shell does.
       calledOffUpTo = Math.max(calledOffUpTo, Number(args.start));
       if (booked !== null && booked <= calledOffUpTo) booked = null;
       for (const held of heldStarts) if (held.start <= calledOffUpTo) held.calledOff = true;
+      // With `?holdcancel` its answer waits for `window.parity.clip.cancelled()`.
+      if (query.has("holdcancel")) await new Promise<void>((answer) => heldCancels.push(answer));
       return null;
     },
     dropped_files: () => {
@@ -261,6 +263,8 @@ const heldStarts: { start: number; calledOff: boolean; open: () => void; heard: 
 // The highest start this window called off, and the one booked, as clip.rs keeps them.
 let calledOffUpTo = 0;
 let booked: number | null = null;
+// Cancels whose answers are held (`?holdcancel`).
+const heldCancels: Array<() => void> = [];
 
 // History reads being held for the test (`holdReads`): each is asked of the
 // server at once, so it shows in `data-did`, and answered when the test says.
@@ -351,6 +355,8 @@ declare global {
         hands: (bytes: number[]) => void;
         /** With `?holdmic`: the oldest start's microphone opens; settles once the page has heard it. */
         opens: () => Promise<void>;
+        /** With `?holdcancel`: every cancel held so far is answered. */
+        cancelled: () => void;
       };
       /** The window's page goes, as a docked chat folding takes it away. */
       unmount: () => void;
@@ -387,6 +393,9 @@ window.parity = {
     lost: () => desktop.deliver("clip:lost", null),
     hands: (bytes) => {
       recorded = Uint8Array.from(bytes);
+    },
+    cancelled: () => {
+      for (const answer of heldCancels.splice(0)) answer();
     },
     opens: () => {
       const held = heldStarts.shift();

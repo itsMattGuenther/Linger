@@ -75,6 +75,16 @@ const LEVEL_EVERY_MS = 40;
 let shellStarts = 0;
 
 /**
+ * The page's last cancel or stop asked of the shell, settled either way: a
+ * start goes once it's done, so the shell hears them in order and a start
+ * never meets the one before it still booked (#920). The page's, not one
+ * recorder's, so a chat that unfolds again waits for the cancel its last
+ * self sent. A computer needs no tap to start its sound, so waiting costs
+ * nothing there.
+ */
+let shellSettling: Promise<unknown> = Promise.resolve();
+
+/**
  * The desktop shell's recorder (src-tauri/src/clip.rs), through its commands
  * and events. `input` is the microphone Settings picked, by name, or null for
  * the computer's default, read as each recording starts.
@@ -91,29 +101,24 @@ export function shellRecorder(events: RecorderEvents, input: () => string | null
   void bus.listen("clip:full", () => events.ended("full")).then(hold);
   void bus.listen("clip:lost", () => events.ended("lost")).then(hold);
   let current = 0;
-  /**
-   * The last cancel or stop asked of the shell, settled either way: a start
-   * goes once it's done, so the shell hears them in order and a start never
-   * meets the one before it still booked (#920). A computer needs no tap
-   * to start its sound, so waiting costs nothing there.
-   */
-  let settling: Promise<unknown> = Promise.resolve();
   return {
     start: async () => {
-      await settling;
-      // Each start's own number: its cancel names it, so the shell calls off
-      // that start and no later one, whichever it hears first (#920).
+      // Each start's own number, taken before anything is waited for, so a
+      // cancel while it waits names it; the shell calls off that start and
+      // no later one, whichever it hears first (#920).
       shellStarts = Math.max(shellStarts + 1, Math.floor((performance.timeOrigin + performance.now()) * 1000));
-      current = shellStarts;
-      await invoke("clip_start", { input: input(), start: current });
+      const mine = shellStarts;
+      current = mine;
+      await shellSettling;
+      await invoke("clip_start", { input: input(), start: mine });
     },
     stop: async () => {
       const stopping = invoke<ArrayBuffer>("clip_stop");
-      settling = stopping.catch(() => undefined);
+      shellSettling = stopping.catch(() => undefined);
       return readClip(new Uint8Array(await stopping));
     },
     cancel: () => {
-      settling = invoke("clip_cancel", { start: current }).catch(() => undefined);
+      shellSettling = invoke("clip_cancel", { start: current }).catch(() => undefined);
     },
     dispose: () => {
       gone = true;
