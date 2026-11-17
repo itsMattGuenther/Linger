@@ -124,7 +124,7 @@ function readTokens(reader, closer) {
     // `((…))` where a command starts: arithmetic, read as one word, its own
     // `<<` a shift, not a here-document.
     const before = tokens[tokens.length - 1];
-    const startsCommand = !before || "op" in before || ("word" in before && before.word.known && !before.word.quoted && LEADING.has(before.word.text));
+    const startsCommand = !before || "op" in before || ("word" in before && before.word.known && !before.word.quoted && (LEADING.has(before.word.text) || before.word.text === "for"));
     const shape = startsCommand && source.startsWith("((", reader.at) ? closing(source, reader.at) : null;
     if (startsCommand && source.startsWith("((", reader.at) && !shape) throw new Unreadable("a `((` isn't closed");
     if (shape?.together) {
@@ -995,10 +995,10 @@ function readTokensOf(command, action) {
   const fed = lists.some(({ commands: list }) => list.some(runsText));
   // The reviewed command's own body (`--body "$(cat <<'EOF' …)"`) isn't stored text.
   const own = new Set(target ? wordsOf(target).flatMap((word) => word.inner).flatMap((tokens) => [...everyList(commandsOf(tokens), true)].map((entry) => entry.commands)) : []);
-  const stored = fed && lists.filter(({ commands: list }) => !own.has(list)).some(({ commands: list }) => list.some((command) => command !== target && inOrder([...command.settings.map((word) => word.text), ...textOf(command)].join(" "), ["gh", "pr", action])));
   // Its own body is out of the text check only when everything in it only
   // reads: `"$(echo '…' | sh)"` runs what it pipes.
   const quiet = (list) => own.has(list) && list.every(readsOnly);
+  const stored = fed && lists.filter(({ commands: list }) => !quiet(list)).some(({ commands: list }) => list.some((command) => command !== target && inOrder([...command.settings.map((word) => word.text), ...textOf(command)].join(" "), ["gh", "pr", action])));
   const carried = stored || lists.filter(({ commands: list }) => !quiet(list)).some(({ commands: list }) => pipelinesOf(list).some((pipeline) => inOrder(pipelineText(pipeline, target, trusting), ["gh", "pr", action])));
   // Exotic syntax: main's rule too, outside the reviewed command's own words.
   if (exotic(odd, lists)) {

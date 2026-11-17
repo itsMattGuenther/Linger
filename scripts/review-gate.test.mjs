@@ -461,6 +461,10 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     ["merge", 'gh pr merge 5 --squash --subject "${x:-{}" ; gh pr merge 6 --squash --subject "}"'],
     // The reviewed command's own body piping text into a shell.
     ["create", 'gh pr create --title t --body "$(echo \'gh pr create -H other -B main\' | sh)"'],
+    // Stored and run back inside the reviewed command's own body.
+    ["create", 'gh pr create -t x --body "$(git commit --allow-empty -qm \'gh pr create -H other\'; git log -1 --format=%B | sh)"'],
+    // for ((…)): a shift, not a here-document, so the next line is read.
+    ["merge", "for ((;;true<<1)); do :; done\ngh pr merge 5 --auto"],
     // Text bash would refuse, that might be the command.
     ["merge", 'gh pr merge 5 "oops'],
   ];
