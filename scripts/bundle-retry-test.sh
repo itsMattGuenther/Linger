@@ -12,6 +12,10 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 export BUNDLE_RETRY_WAIT=0
 
+# It reads as a script at all: a syntax error after its loop would pass every
+# case below, since the loop always exits first (#916's review).
+bash -n scripts/bundle-retry.sh || { echo "FAIL: scripts/bundle-retry.sh doesn't parse"; exit 1; }
+
 # The stand-in: fails the way it's told for its first runs, then builds.
 cat > "$work/build.sh" <<'SH'
 #!/usr/bin/env bash
@@ -85,6 +89,10 @@ grep -qE "bash \.\./scripts/bundle-retry\.sh pnpm tauri build" "$workflow" || fa
 grep -q "path: ~/AppData/Local/tauri" "$workflow" || fail "$workflow keeps the bundler's tools folder between runs"
 grep -q "steps.tauri-cli.outputs.version" "$workflow" || fail "$workflow keys the tools on the Tauri CLI's version"
 grep -q "uses: actions/cache/save@" "$workflow" || fail "$workflow keeps the tools straight after the build, not only when the whole job passes"
+
+# No command is refused, rather than passing as a build that worked.
+set +e; bash scripts/bundle-retry.sh >/dev/null 2>&1; none=$?; set -e
+[ "$none" -eq 2 ] || fail "no command is refused ($none)"
 
 # A wait with a leading zero is decimal, not octal (08 isn't an octal number).
 BUNDLE_RETRY_WAIT=00 run download 1

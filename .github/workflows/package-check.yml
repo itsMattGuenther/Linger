@@ -121,17 +121,17 @@ jobs:
       - name: Bring back the Windows bundler's tools
         # WiX, NSIS and nsis_tauri_utils.dll otherwise come from GitHub releases
         # on every run, and one 504 threw a whole build away (#916). Keyed on
-        # the CLI's version, which picks theirs, and on tauri.conf.json, which
-        # picks which are needed, so another package's bump doesn't fetch them
-        # again; no restore-keys, so a new CLI never starts from an older one's
-        # tools. Kept straight after the build (below), not at the job's end,
-        # so a later step failing doesn't lose them.
+        # the CLI's version, which picks theirs, so another package's bump or
+        # a release doesn't fetch them again; no restore-keys, so a new CLI
+        # never starts from an older one's tools. Kept straight after a build
+        # that worked (below), not at the job's end, so a later step failing
+        # doesn't lose them; a build that failed may have only some of them.
         id: tauri-tools
         if: runner.os == 'Windows'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/AppData/Local/tauri
-          key: tauri-bundler-tools-${{ runner.os }}-${{ steps.tauri-cli.outputs.version }}-${{ hashFiles('client/src-tauri/tauri.conf.json') }}
+          key: tauri-bundler-tools-${{ runner.os }}-${{ steps.tauri-cli.outputs.version }}
       - name: Build unsigned packages without updater artifacts
         working-directory: client
         # Debug profile saves CI time; tauri build still packages the built frontend.

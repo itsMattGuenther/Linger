@@ -514,8 +514,8 @@ rules that came out of them:
   from GitHub releases when Tauri's bundler doesn't have them, and it tries
   each once: one 504 threw away a Windows package build on 2026-11-17 (UTC,
   #916). The package check keeps their folder (`~/AppData/Local/tauri`) in
-  GitHub's cache, keyed on the Tauri CLI's version, so most runs fetch
-  nothing, and builds through `scripts/bundle-retry.sh`, which runs the
+  GitHub's cache, keyed on the Tauri CLI's version, so only the first run
+  after a new CLI fetches them, and builds through `scripts/bundle-retry.sh`, which runs the
   build once more when the bundler's last step before it failed was
   `Downloading`. Any other failure fails at once. Another try is all of
   `tauri build`, mostly cached by then. `scripts/bundle-retry-test.sh` has
