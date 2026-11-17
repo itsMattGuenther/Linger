@@ -69,12 +69,41 @@ const TOKEN = new RegExp(String.raw`^[ \t]*(${WORD})(?=$|[ \t;&|)\n])`);
 // Where the command ends: a separator, the end, or a comment (a # that starts a word).
 const END = /^(?:[ \t]*(?:$|[;&|)\n])|[ \t]+#)/;
 
-/** Flags of `gh pr merge` and `gh pr ready` that take a value as the next word. */
+/** gh's flags that take a value, for each command: the long name, and its short one if it has one. */
 const VALUED = {
-  merge: new Set(["-A", "--author-email", "-b", "--body", "-F", "--body-file", "-t", "--subject", "--match-head-commit", "-R", "--repo"]),
-  ready: new Set(["-R", "--repo"]),
-  create: new Set(),
+  create: { "--title": "-t", "--body": "-b", "--body-file": "-F", "--base": "-B", "--head": "-H", "--assignee": "-a", "--label": "-l", "--milestone": "-m", "--project": "-p", "--reviewer": "-r", "--repo": "-R", "--template": "-T", "--recover": null },
+  merge: { "--author-email": "-A", "--body": "-b", "--body-file": "-F", "--subject": "-t", "--match-head-commit": null, "--repo": "-R" },
+  ready: { "--repo": "-R" },
 };
+
+/**
+ * A command's flags and the words that aren't flags, each flag read with its
+ * value (`--x y`, `--x=y`, `-x y`, `-xy`), so a value is never taken for a
+ * flag: a body that says `--repo=x` is a body. Flags by their long names.
+ */
+export function parseWords(words, action) {
+  const long = VALUED[action];
+  const short = Object.fromEntries(Object.entries(long).filter(([, letter]) => letter).map(([name, letter]) => [letter, name]));
+  const flags = new Map();
+  const positional = [];
+  const add = (name, value) => flags.set(name, [...(flags.get(name) ?? []), value]);
+  for (let i = 0; i < words.length; i += 1) {
+    const word = words[i];
+    if (word.startsWith("--") && word.length > 2) {
+      const eq = word.indexOf("=");
+      const name = eq > 0 ? word.slice(0, eq) : word;
+      if (Object.hasOwn(long, name)) add(name, eq > 0 ? word.slice(eq + 1) : (words[(i += 1)] ?? ""));
+      else add(name, null);
+    } else if (word.startsWith("-") && word.length > 1) {
+      const letter = word.slice(0, 2);
+      if (short[letter]) add(short[letter], word.length > 2 ? word.slice(2) : (words[(i += 1)] ?? ""));
+      else add(letter, null);
+    } else {
+      positional.push({ word, at: i });
+    }
+  }
+  return { flags, positional };
+}
 
 /** A word as the shell hands it over: quotes taken off, escapes in double quotes undone. */
 export function unquote(word) {
@@ -150,27 +179,30 @@ export function readCommand(command, action) {
     words.push(unquote(token[1]));
     after = after.slice(token[0].length);
   }
-  if (words.includes("--help") || words.includes("-h")) return null;
+  const { flags, positional } = parseWords(words, action);
+  if (flags.has("--help") || flags.has("-h")) return null;
   // Back to a draft takes a pull request away from review; nothing to gate.
-  if (action === "ready" && words.includes("--undo")) return null;
+  if (action === "ready" && flags.has("--undo")) return null;
 
   // The flags that change what's reviewed are read from this command's own
-  // words, never from a body's text or the next command. One that comes
-  // after a word the gate can't read (a body made by `$(…)`) might be the
-  // command's or the body's, so it stops rather than guess either way.
-  const MATTER = action === "create" ? ["--repo", "-R", "--head", "-H", "--base", "-B"] : ["--repo", "-R"];
-  if (!readable && new RegExp(String.raw`(?:^|[ \t])(?:${MATTER.join("|")})(?=$|[ \t=])`).test(after)) {
-    return stop(`\`${MATTER.join("`, `")}\` come after a word it can't read; put them first, or the body in --body-file`);
+  // words, never from a body's text or the next command. A merge or ready
+  // is read whole: after a word the gate can't read, `--auto` or another
+  // pull request could hide. A create may make its body with `$(…)`, but a
+  // flag that matters after it might be the command's or the body's, so it
+  // stops rather than guess.
+  if (!readable && action !== "create") return stop(`a word after \`gh pr ${action}\` can't be read; run it with plain words, the body in --body-file`);
+  if (!readable && /(?:^|[ \t])-(?:-repo|R|-head|H|-base|B)/.test(after)) {
+    return stop("`--repo`, `--head` or `--base` may come after a word it can't read; put them first, or the body in --body-file");
   }
-  const repos = new Set(valuesOf(words, ["--repo", "-R"]));
+  const repos = new Set(flags.get("--repo") ?? []);
   if (env.GH_REPO !== undefined) repos.add(env.GH_REPO);
   if (repos.has("") || repos.size > 1) return stop("which repository it's for can't be read");
   const read = { action, dirs, selector: null, base: null, repo: [...repos][0] ?? null };
   if (action === "create") {
     // The gate reviews the branch the folder is on, so a pull request from
     // another branch is stopped rather than reviewed as the wrong one.
-    if (valuesOf(words, ["--head", "-H"]).length) return stop("it names a branch with `--head`");
-    const bases = new Set(valuesOf(words, ["--base", "-B"]));
+    if (flags.has("--head")) return stop("it names a branch with `--head`");
+    const bases = new Set(flags.get("--base") ?? []);
     if (bases.has("")) return stop("its `--base` can't be read");
     if (bases.size > 1) return stop("it names more than one `--base`");
     read.base = [...bases][0] ?? null;
@@ -181,24 +213,14 @@ export function readCommand(command, action) {
   // gate looked at it, and --auto merges whatever is pushed later, so the
   // commit reviewed wouldn't be the commit merged.
   if (pushes) return stop(`a push before \`gh pr ${action}\` would change the pull request after the review; push first, on its own`);
-  if (action === "merge" && words.includes("--auto")) return stop("`--auto` merges commits pushed after the review");
+  if (action === "merge" && flags.has("--auto")) return stop("`--auto` merges commits pushed after the review");
 
   // The pull request, if named, is the first word after the command. Named
   // anywhere else, the gate can't be sure which word it is.
-  const valued = VALUED[action];
-  for (let i = 0; i < words.length; i += 1) {
-    const word = words[i];
-    const eq = word.startsWith("--") ? word.indexOf("=") : -1;
-    const flag = eq > 0 ? word.slice(0, eq) : word;
-    if (word.startsWith("-")) {
-      // A flag's value is the next word, unless it came with the flag (--x=y).
-      if (valued.has(flag) && eq < 0) i += 1;
-      continue;
-    }
-    if (i === 0) { read.selector = word; continue; }
+  if (positional.length > 1 || (positional.length === 1 && positional[0].at !== 0)) {
     return stop(`the pull request isn't the first word after \`gh pr ${action}\``);
   }
-  if (!readable && read.selector === null) return stop(`a word after \`gh pr ${action}\` can't be read, so it might name the pull request`);
+  read.selector = positional[0]?.word ?? null;
   // A pull request's address names its repository too.
   const named = /github\.com\/([^/\s]+\/[^/\s]+)\/pull\/\d+/i.exec(read.selector ?? "");
   if (named) {
@@ -206,17 +228,6 @@ export function readCommand(command, action) {
     read.repo = named[1];
   }
   return read;
-}
-
-/** The words after each of these flags, given as `--x y` or `--x=y`; "" when none follows. */
-function valuesOf(words, flags) {
-  const values = [];
-  for (let i = 0; i < words.length; i += 1) {
-    const eq = words[i].startsWith("--") ? words[i].indexOf("=") : -1;
-    const flag = eq > 0 ? words[i].slice(0, eq) : words[i];
-    if (flags.includes(flag)) values.push(eq > 0 ? words[i].slice(eq + 1) : words[i + 1] ?? "");
-  }
-  return values;
 }
 
 /** owner/name as gh takes it (`owner/name`, `github.com/owner/name`, an address), lowercased. */
@@ -338,14 +349,7 @@ function target(read, cwd) {
     return { top, source, head, base: read.base ?? "main", number: null };
   }
   if (read.repo && !ours(normalRepo(read.repo))) return null;
-  const gh = process.env.LINGER_REVIEW_GH || "gh";
-  const args = ["pr", "view", ...(read.selector ? [read.selector] : []), ...(read.repo ? ["--repo", read.repo] : []), "--json", "number,headRefOid,baseRefName,state,url"];
-  let pr;
-  try {
-    pr = JSON.parse(execFileSync(gh, args, { cwd: top, encoding: "utf8", timeout: NETWORK_MS, stdio: ["ignore", "pipe", "pipe"] }));
-  } catch (error) {
-    throw new Error(`gh couldn't say which pull request this is (${String(error.stderr || error.message).trim().split("\n")[0]})`);
-  }
+  const pr = viewPr(read, top);
   if (!/^[0-9a-f]{40}$/.test(pr.headRefOid ?? "") || !Number.isInteger(pr.number)) throw new Error("gh's answer about the pull request can't be read");
   // The repository from gh's own answer, so it's the one gh will act on,
   // whatever its default or the remotes' names.
@@ -362,10 +366,29 @@ function target(read, cwd) {
   return { top, source, head: pr.headRefOid, base: pr.baseRefName || "main", number: pr.number };
 }
 
-/** A review's record: one per head commit and base branch, since another base is another change. */
+/** What gh says of the pull request a ready or merge is about. */
+function viewPr(read, top) {
+  const gh = process.env.LINGER_REVIEW_GH || "gh";
+  const args = ["pr", "view", ...(read.selector ? [read.selector] : []), ...(read.repo ? ["--repo", read.repo] : []), "--json", "number,headRefOid,baseRefName,state,url"];
+  try {
+    return JSON.parse(execFileSync(gh, args, { cwd: top, encoding: "utf8", timeout: NETWORK_MS, stdio: ["ignore", "pipe", "pipe"] }));
+  } catch (error) {
+    throw new Error(`gh couldn't say which pull request this is (${String(error.stderr || error.message).trim().split("\n")[0]})`);
+  }
+}
+
+/**
+ * A review's record: one per head commit and base branch, since another
+ * base is another change. Each character a file name might not hold is
+ * spelled out (`%2f;`), `%` too, so two names never share a record.
+ */
+export function recordName(head, base) {
+  return `${head}-${base.replace(/[^\w.-]/g, (character) => `%${character.codePointAt(0).toString(16)};`)}.json`;
+}
+
 function markerPath(top, head, base) {
   const common = git(top, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
-  return join(common, "linger-review", `${head}-${base.replace(/[^\w.-]/g, "_")}.json`);
+  return join(common, "linger-review", recordName(head, base));
 }
 
 function saveMarker(path, record) {
@@ -411,13 +434,14 @@ function clearStale(top, records) {
  */
 function questionsFor(dir, base) {
   const script = join(HERE, "pr-questions.mjs");
-  if (!existsSync(script)) return "";
+  let out;
   try {
-    const out = execFileSync(process.execPath, [script, base], { cwd: dir, encoding: "utf8", timeout: NETWORK_MS, stdio: ["ignore", "pipe", "ignore"] });
-    return out.length > MOST_QUESTIONS ? `${out.slice(0, MOST_QUESTIONS)}\n…` : out;
-  } catch {
-    return "";
+    out = execFileSync(process.execPath, [script, base], { cwd: dir, encoding: "utf8", timeout: NETWORK_MS, stdio: ["ignore", "pipe", "pipe"] });
+  } catch (error) {
+    // A review without them would look like one with them: stop instead.
+    throw new Error(`the project's questions couldn't be read (${String(error.stderr || error.message).trim().split("\n").pop()})`);
   }
+  return out.length > MOST_QUESTIONS ? `${out.slice(0, MOST_QUESTIONS)}\n…` : out;
 }
 
 /**
@@ -530,6 +554,17 @@ export function hook(action, input) {
     };
   }
   if (!done.ran || done.verdict === "clean") {
+    // A review takes minutes, and a push meanwhile would merge a commit it
+    // never saw. Asked again now, the gap is the moment before gh runs.
+    if (done.ran && found.number !== null) {
+      let now;
+      try { now = viewPr(read, found.top).headRefOid; } catch (error) {
+        return { code: 2, message: `Stopped: after the review, ${error.message}. Run the command again.` };
+      }
+      if (now !== found.head) {
+        return { code: 2, message: `Stopped: pull request ${found.number} changed during the review (${short(found.head)} was reviewed; it's at ${short(String(now))} now). Run the command again to review what's there.` };
+      }
+    }
     return done.ran ? { code: 0, note: `A fresh review of ${short(done.head)} found nothing.` } : { code: 0 };
   }
   return {

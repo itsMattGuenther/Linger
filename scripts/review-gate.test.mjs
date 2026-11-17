@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { ACTIONS, NETWORK_MS, REVIEW_MS, WORKTREE_PREFIX, folderOf, readCommand, repoOf, reviewerArgs, reviewerCommand, unquote, verdict } from "./review-gate.mjs";
+import { ACTIONS, NETWORK_MS, REVIEW_MS, WORKTREE_PREFIX, folderOf, parseWords, readCommand, recordName, repoOf, reviewerArgs, reviewerCommand, unquote, verdict } from "./review-gate.mjs";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const GATE = fileURLToPath(new URL("./review-gate.mjs", import.meta.url));
@@ -38,7 +38,12 @@ test("reads which pull request, folder and branch a command is about", () => {
     ["merge", "gh pr merge https://github.com/o/r/pull/9 --admin", { selector: "https://github.com/o/r/pull/9" }],
     ["merge", "gh pr merge --squash --admin", { selector: null }],
     ["merge", "gh pr merge --squash --admin # after", { selector: null }],
-    ["merge", 'gh pr merge 912 -R o/r --body "$(cat x)"', { selector: "912", repo: "o/r" }],
+    ["merge", "gh pr merge 912 -R o/r --body-file m.txt", { selector: "912", repo: "o/r" }],
+    // A value is read with its flag, so a body or title that looks like a flag is text.
+    ["create", "gh pr create --title test --body '--repo=other/project'", { repo: null }],
+    ["create", "gh pr create -t '-H x' -b '--base=release'", { base: null }],
+    ["create", "gh pr create -Bmain -tTitle", { base: "main" }],
+    ["merge", "gh pr merge 5 --subject '--auto' --squash", { selector: "5" }],
     ["merge", "gh pr merge 912 --squash && gh issue comment 5 -R o/site --body x", { selector: "912", repo: null }],
     ["merge", "gh pr merge https://github.com/o/site/pull/5 --squash", { repo: "o/site" }],
     ["merge", "gh pr merge https://github.com/o/r/pull/9 -R O/R", { repo: "o/r" }],
@@ -75,6 +80,10 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     ["merge", "\"gh\" pr merge 5"],
     ["merge", "gh pr merge --squash 912"],
     ["merge", 'gh pr merge 912 --body "$(cat x)" -R o/r'],
+    ["merge", 'gh pr merge 912 -R o/r --body "$(cat x)"'],
+    ["merge", 'gh pr merge 5 --body "$(cat message.txt)" --auto --squash'],
+    ["create", "gh pr create -Hother"],
+    ["create", "gh pr create -t x -Hother"],
     ["merge", "gh pr merge https://github.com/o/r/pull/9 -R a/b"],
     ["create", "gh pr create --title t --body \"$(cat <<'EOF'\nwords\nEOF\n)\" --base release"],
     ["create", 'gh pr create --body "$(cat x)" -H other'],
@@ -110,6 +119,23 @@ test("a command that isn't one leaves the gate out", () => {
     ["ready", "gh pr view --json isDraft"],
     ["ready", "gh pr ready 12 --undo"],
   ]) assert.equal(readCommand(command, action), null, command);
+});
+
+test("each flag is read with its value", () => {
+  const { flags, positional } = parseWords(["5", "--subject", "--auto", "-b--repo=x", "--squash", "-A", "me@x"], "merge");
+  assert.deepEqual(flags.get("--subject"), ["--auto"]);
+  assert.deepEqual(flags.get("--body"), ["--repo=x"]);
+  assert.deepEqual(flags.get("--author-email"), ["me@x"]);
+  assert.equal(flags.has("--auto"), false);
+  assert.equal(flags.has("--repo"), false);
+  assert.deepEqual(positional, [{ word: "5", at: 0 }]);
+});
+
+test("two base branches never share a record", () => {
+  const head = "a".repeat(40);
+  const names = ["release/foo", "release_foo", "release%2ffoo", "release%2f;foo", "main"].map((base) => recordName(head, base));
+  assert.equal(new Set(names).size, names.length, names.join(" "));
+  for (const name of names) assert.match(name, /^[\w.%;-]+$/);
 });
 
 test("words come out as the shell hands them over", () => {
@@ -229,6 +255,7 @@ function sandbox() {
     return run(dir, "rev-parse", "HEAD");
   };
   put(repo, "scripts/review-gate.mjs", "// the gate, so this repository is gated\n");
+  put(repo, "docs/pr-questions.md", readFileSync(join(ROOT, "docs/pr-questions.md"), "utf8"));
   const main = commit(repo, "README.md", "readme\n");
   run(repo, "push", "--quiet", "origin", "main");
   run(repo, "checkout", "--quiet", "-b", "feat/x");
@@ -244,10 +271,11 @@ if (how === "error") { console.log(JSON.stringify({ type: "result", is_error: tr
 console.log(JSON.stringify({ type: "result", is_error: false, result: how === "clean" ? "(none)\\nREVIEW: clean" : "1. client/src/thing.ts:1: a stand-in finding.\\nREVIEW: findings" }));
 `);
   writeFileSync(env.LINGER_REVIEW_GH, `#!/usr/bin/env node
-import { appendFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
 appendFileSync(process.env.STUB_LOG, JSON.stringify({ who: "gh", args: process.argv.slice(2) }) + "\\n");
 if (!process.env.STUB_PR) { console.error("HTTP 401: Bad credentials"); process.exit(1); }
-console.log(process.env.STUB_PR);
+const asked = readFileSync(process.env.STUB_LOG, "utf8").split("\\n").filter((line) => line.includes('"who":"gh"')).length;
+console.log(asked > 1 && process.env.STUB_PR_LATER ? process.env.STUB_PR_LATER : process.env.STUB_PR);
 `);
   chmodSync(env.LINGER_REVIEWER, 0o755);
   chmodSync(env.LINGER_REVIEW_GH, 0o755);
@@ -281,7 +309,7 @@ test("findings stop the pull request once and are handed over; the same commit t
     assert.equal(call.cold, "1", "the reviewer's own commands don't start another review");
     assert.ok(call.cwd.startsWith(join(box.env.TMPDIR, WORKTREE_PREFIX)), `a clean copy of the commit, not the folder: ${call.cwd}`);
     assert.equal(existsSync(call.cwd), false, "the copy is removed");
-    assert.deepEqual(box.markers(), [`${box.head}-main.json`]);
+    assert.deepEqual(box.markers(), [recordName(box.head, "main")]);
 
     const again = box.gate("create", "gh pr create --title t --body b");
     assert.equal(again.code, 0, again.stderr);
@@ -293,7 +321,7 @@ test("findings stop the pull request once and are handed over; the same commit t
     assert.match(JSON.parse(fixed.stdout).systemMessage, /found nothing/);
     assert.equal(box.calls().length, 2, "a new commit gets a new review");
     assert.equal(box.calls()[1].args[1], `/code-review high ${box.main}...${next}`);
-    assert.equal(JSON.parse(readFileSync(join(box.repo, ".git/linger-review", `${next}-main.json`), "utf8")).verdict, "clean");
+    assert.equal(JSON.parse(readFileSync(join(box.repo, ".git/linger-review", recordName(next, "main")), "utf8")).verdict, "clean");
   } finally {
     box.done();
   }
@@ -395,7 +423,7 @@ test("a merge reviews the pull request's own commit in a copy, fetching it if ne
     assert.equal(existsSync(reviewer.cwd), false, "the copy is removed");
     assert.equal(existsSync(stale), false, "the copy a killed run left is cleared");
     assert.equal(box.run(clone, "worktree", "list", "--porcelain").split("\n").filter((line) => line.startsWith("worktree ")).length, 1);
-    assert.deepEqual(box.markers(clone), [`${box.head}-main.json`]);
+    assert.deepEqual(box.markers(clone), [recordName(box.head, "main")]);
 
     assert.equal(box.gate("merge", "gh pr merge 7 --squash --admin", { cwd: clone, extra: { STUB_PR: pr } }).code, 0, "the same commit passes");
   } finally {
@@ -425,7 +453,6 @@ test("a merge of a pull request that isn't open passes, and gh failing stops it"
 test("the reviewer is given the questions for the change, and the pull request's own scripts never run", () => {
   const box = sandbox();
   try {
-    box.commit(box.repo, "docs/pr-questions.md", readFileSync(join(ROOT, "docs/pr-questions.md"), "utf8"));
     const ran = join(box.root, "ran");
     box.commit(box.repo, "scripts/pr-questions.mjs", `require("node:fs").writeFileSync(${JSON.stringify(ran)}, "x");\n`);
     assert.equal(box.gate("create", "gh pr create -t t").code, 2);
@@ -444,7 +471,7 @@ test("a review is per base branch, and records past keeping are deleted", () => 
     box.run(box.repo, "push", "--quiet", "origin", "main:release");
     const records = join(box.repo, ".git", "linger-review");
     mkdirSync(records, { recursive: true });
-    const old = join(records, "0".repeat(40) + "-main.json");
+    const old = join(records, recordName("0".repeat(40), "main"));
     writeFileSync(old, "{}");
     const then = (Date.now() - 40 * 24 * 60 * 60 * 1000) / 1000;
     utimesSync(old, then, then);
@@ -489,7 +516,7 @@ test("code moved into docs is still reviewed", () => {
     box.commit(box.repo, "client/src/old.ts", "export const old = 1;\n");
     box.run(box.repo, "push", "--quiet", "origin", "main");
     box.run(box.repo, "checkout", "--quiet", "-b", "feat/move");
-    mkdirSync(join(box.repo, "docs"));
+    mkdirSync(join(box.repo, "docs"), { recursive: true });
     box.run(box.repo, "mv", "client/src/old.ts", "docs/old.md");
     box.run(box.repo, "commit", "--quiet", "-m", "move");
     assert.equal(box.gate("create", "gh pr create -t t").code, 2);
@@ -521,6 +548,37 @@ test("from a fork, the pull request's base is upstream's, and naming upstream is
     box.commit(box.repo, "client/src/mine.ts", "mine again\n");
     assert.equal(box.gate("create", "gh pr create -t t").code, 2, "with none named, upstream");
     assert.match(box.calls()[1].args[1], new RegExp(`^/code-review high ${newer}\\.\\.\\.`));
+  } finally {
+    box.done();
+  }
+});
+
+test("the questions not read stops the review, rather than reviewing without them", () => {
+  const box = sandbox();
+  try {
+    box.run(box.repo, "rm", "--quiet", "docs/pr-questions.md");
+    box.commit(box.repo, "client/src/thing.ts", "export const one = 3;\n");
+    const result = box.gate("create", "gh pr create -t t");
+    assert.equal(result.code, 2);
+    assert.match(result.stderr, /questions couldn't be read/);
+    assert.equal(box.calls().length, 0);
+    assert.deepEqual(box.markers(), []);
+  } finally {
+    box.done();
+  }
+});
+
+test("a pull request pushed to during its review isn't merged", () => {
+  const box = sandbox();
+  try {
+    box.run(box.repo, "push", "--quiet", "origin", `${box.head}:refs/pull/7/head`);
+    const pr = (head) => JSON.stringify({ number: 7, headRefOid: head, baseRefName: "main", state: "OPEN", url: "https://github.com/test/linger/pull/7" });
+    const moved = box.gate("merge", "gh pr merge 7 --squash", { extra: { STUB_VERDICT: "clean", STUB_PR: pr(box.head), STUB_PR_LATER: pr("b".repeat(40)) } });
+    assert.equal(moved.code, 2, moved.stderr);
+    assert.match(moved.stderr, /changed during the review/);
+    // Reviewed and unchanged, it goes through.
+    const same = box.gate("merge", "gh pr merge 7 --squash", { extra: { STUB_PR: pr(box.head) } });
+    assert.equal(same.code, 0, same.stderr);
   } finally {
     box.done();
   }
