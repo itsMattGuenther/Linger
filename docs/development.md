@@ -626,7 +626,7 @@ person does. It builds with Xcode 27.1, as the TestFlight build does, and
 runs on the plain iPhone (an iPhone 17) of the newest iOS that has one. It
 runs on every pull request that touches the app
 (`client/src`, `client/src-tauri`, the flows; `scripts/ci-scope.mjs` says
-exactly), every night on `main`, and by hand:
+exactly) once it's out of draft (#933), every night on `main`, and by hand:
 
 ```bash
 gh workflow run ios-simulator.yml --ref <your-branch>   # whatever the branch changed

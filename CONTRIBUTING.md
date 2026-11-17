@@ -60,7 +60,8 @@ text already decided.
 
 The repo is arranged so a session reads little and misses nothing:
 
-- `AGENTS.md` (~11 KB) and `TASKS.md` (~23 KB) are the only always-read files.
+- `AGENTS.md` is the only always-read file; `TASKS.md` only when your task
+  is there.
 - Finished milestones live in `docs/tasks/`, decisions in `docs/decisions.md`.
   Read those only when your task points at them.
 - Tasks cite exact spec sections (`SPEC §4.4`, `PROTOCOL §6`). Read the cited
@@ -71,6 +72,8 @@ The repo is arranged so a session reads little and misses nothing:
 ## Pull requests
 
 - One task per PR, branched from and targeting `main`.
+- Open it as a draft, and mark it ready once it's done and `ci` is green: the
+  iPhone checks on GitHub's Mac (35 to 60 minutes) wait until then.
 - CI must be green: rust gates, web gates, the desktop-shell pass, and the
   rules lint.
 - Docs move in the same commit as the behavior they describe. The rules for the

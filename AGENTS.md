@@ -145,19 +145,27 @@ pass.
   bare mention or a commit message doesn't link), and check it took:
   `gh pr view <number> --json closingIssuesReferences`. Linked issues close
   on merge, so finish their acceptance checks before merging.
-- **Label a pull request `desktop-only` when nothing in it can change what
-  the phone app does**, and it touches files both apps build: the page, or
-  the shared parts of the shell. The iPhone runs are then left out
-  (`gh pr create --label desktop-only`; added later, it counts from the next
-  push). Use it for work on what only the desktop app has: voice in the
-  shell, the tray, the windows, updates, the Settings rows a phone doesn't
-  show. Don't use it for anything a phone shows or runs: the list, a
-  conversation, the message box, sign-in, servers, notifications, the share
-  window, a phone's voice (`pageVoice.ts`), or code the page shares that
-  those use. When you can't tell, leave it off: the run is 40 minutes, a
-  phone app that doesn't start is worse. It's ignored when files that are
-  the phone app's alone changed, and the nightly run is what catches a label
-  that was wrong, so say in the pull request why it's there.
+- **Open a pull request as a draft** (`gh pr create --draft`), and mark it
+  ready (`gh pr ready`) once the work is done and `ci` is green. While it's a
+  draft, a push runs `ci` (about 10 minutes) but not the iPhone runs on
+  GitHub's Mac (35 to 60 minutes): they start when it's marked ready, and
+  still have to pass before it merges (#933). `all green` doesn't include
+  them, so wait for them; a Mac job skipped while it was a draft isn't one
+  that doesn't apply. Push your fixes together, not one at a time: after it's
+  ready, every push runs them again.
+- **Label a pull request `desktop-only` when nothing in it can change what the
+  phone app does**, and it touches files both apps build: the page, or the
+  shared parts of the shell. The iPhone runs are then left out (`gh pr create
+  --label desktop-only`; added later, it counts from the next push, or from
+  marking a draft ready). Use it for work on what only the desktop app has:
+  voice in the shell, the tray, the windows, updates, the Settings rows a
+  phone doesn't show. Don't use it for anything a phone shows or runs: the
+  list, a conversation, the message box, sign-in, servers, notifications, the
+  share window, a phone's voice (`pageVoice.ts`), or code the page shares that
+  those use. When you can't tell, leave it off: the run is 40 minutes, a phone
+  app that doesn't start is worse. It's ignored when files that are the phone
+  app's alone changed, and the nightly run is what catches a label that was
+  wrong, so say in the pull request why it's there.
 - **Before opening a pull request, run `node scripts/pr-questions.mjs`** and
   answer the questions it prints for your change: the kinds of mistake
   reviews have caught, for the parts of the project your branch changed. Say
@@ -306,7 +314,9 @@ file). A file only the desktop app builds doesn't start the iPhone runs (the
 simulator's flows, and the iPhone builds in `share-window.yml`), a file only
 the phone app builds doesn't start the desktop installers, and a file both
 build (the page, `lib.rs`, `Cargo.toml`) starts both, unless the pull
-request is labelled `desktop-only`. The nightly run on main runs everything.
+request is labelled `desktop-only`. A draft pull request doesn't start the
+iPhone runs until it's marked ready (#933). The nightly run on main runs
+everything.
 
 The pieces:
 
