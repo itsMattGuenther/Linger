@@ -107,6 +107,37 @@ jobs:
         working-directory: client
       - name: Approved artwork is current
         run: node scripts/app-icons.mjs --check
+      - name: The Tauri CLI's version
+        id: tauri-cli
+        if: runner.os == 'Windows'
+        working-directory: client
+        shell: bash
+        # On its own line, so a failed read fails the step rather than making
+        # the key a constant that every later CLI would share.
+        run: |
+          version="$(node -p "require('@tauri-apps/cli/package.json').version")"
+          [ -n "$version" ]
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Bring back the Windows bundler's tools
+        # WiX, NSIS and nsis_tauri_utils.dll otherwise come from GitHub releases
+        # on every run, and one 504 threw a whole build away (#916). Keyed on
+        # the CLI's version, which picks theirs, so another package's bump or
+        # a release doesn't fetch them again; no restore-keys, so a new CLI
+        # never starts from an older one's tools. Kept straight after a build
+        # that worked (below), not at the job's end, so a later step failing
+        # doesn't lose them; a build that failed may have only some of them.
+        id: tauri-tools
+        if: runner.os == 'Windows'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/AppData/Local/tauri
+          key: tauri-bundler-tools-${{ runner.os }}-${{ steps.tauri-cli.outputs.version }}
+      - name: The bundler's retry works in Git Bash
+        # The rules job runs its test on Linux; here, Windows' Git Bash, whose
+        # sed and awk the retry would otherwise first meet on a real 504 (#916).
+        if: runner.os == 'Windows'
+        shell: bash
+        run: bash scripts/bundle-retry-test.sh
       - name: Build unsigned packages without updater artifacts
         working-directory: client
         # Debug profile saves CI time; tauri build still packages the built frontend.
@@ -118,7 +149,14 @@ jobs:
           if [ "$RUNNER_OS" = Linux ]; then export LD_LIBRARY_PATH="$RUNNER_TEMP/ffmpeg/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"; fi
           # Every desktop has its own libwayland; the AppImage's would break newer Mesa (#479).
           export LINUXDEPLOY_EXCLUDED_LIBRARIES='libwayland-*'
-          pnpm tauri build --debug --config '{"bundle":{"createUpdaterArtifacts":false}}'
+          # A bundler download that fails is tried again; nothing else is (#916).
+          bash ../scripts/bundle-retry.sh pnpm tauri build --debug --config '{"bundle":{"createUpdaterArtifacts":false}}'
+      - name: Keep the Windows bundler's tools
+        if: runner.os == 'Windows' && steps.tauri-tools.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/AppData/Local/tauri
+          key: ${{ steps.tauri-tools.outputs.cache-primary-key }}
       - name: Linux package contents
         if: runner.os == 'Linux'
         shell: bash
