@@ -253,6 +253,37 @@ test("a file both apps build, or one this can't place, starts both", () => {
   }
 });
 
+// A capability file says which app it's for inside itself, so a change can
+// move it from one app to the other (#915's review). What it was counts as
+// much as what it is.
+test("a capability file moved from one app to the other starts both apps' checks", () => {
+  const path = "client/src-tauri/capabilities/share.json";
+  const DESKTOP = '{"platforms":["linux","macOS","windows"]}';
+  const PHONE = '{"platforms":["android","iOS"]}';
+  const moved = (was, now, options = {}) =>
+    reached([path], { read: shell({ [path]: now }), before: (asked) => (asked === path ? was : undefined), ...options });
+  // Off the phone: it takes something from the phone app, though it reads as the desktop's now.
+  assert.deepEqual(moved(PHONE, DESKTOP), ["shell", "packages", "ios"]);
+  // And onto it.
+  assert.deepEqual(moved(DESKTOP, PHONE), ["shell", "packages", "ios"]);
+  // Changed, and the same app's before and after: that app's checks alone.
+  assert.deepEqual(moved(DESKTOP, '{"platforms":["linux","macOS","windows"],"permissions":["x"]}'), ["shell", "packages"]);
+  assert.deepEqual(moved(PHONE, '{"platforms":["iOS"]}'), ["shell", "ios"]);
+  // New in this change (it wasn't there before): what it is now.
+  assert.deepEqual(moved(undefined, DESKTOP), ["shell", "packages"]);
+  assert.deepEqual(moved(undefined, PHONE), ["shell", "ios"]);
+  // Deleted by this change, or unreadable either side: both's.
+  assert.deepEqual(moved(PHONE, null), ["shell", "packages", "ios"]);
+  assert.deepEqual(moved(DESKTOP, null), ["shell", "packages", "ios"]);
+  assert.deepEqual(moved(null, DESKTOP), ["shell", "packages", "ios"]);
+  assert.deepEqual(moved("not json", DESKTOP), ["shell", "packages", "ios"]);
+  // A desktop-only label can't be true of a file that was the phone's: it's ignored.
+  assert(moved(PHONE, DESKTOP, { labels: [DESKTOP_ONLY] }).includes("ios"));
+  assert(moved(PHONE, null, { labels: [DESKTOP_ONLY] }).includes("ios"));
+  // With nothing known of before, what it is now is all there is to go by.
+  assert.deepEqual(reached([path], { read: shell({ [path]: DESKTOP }) }), ["shell", "packages"]);
+});
+
 test("what can't be read is both's: no lib.rs, or one with nothing this recognises", () => {
   for (const lib of [null, "", "fn main() {}"]) {
     const read = (path) => (path === "client/src-tauri/src/lib.rs" ? lib : null);
@@ -300,6 +331,13 @@ test("the pull request's labels are read from what the workflow hands over, and 
   for (const value of [undefined, "", "null", "{}", "desktop-only", "[1,null]"]) assert.deepEqual(labelsFrom(value), [], String(value));
 });
 
+/** A folder outside the repository under test, for GITHUB_OUTPUT: a file inside would be committed by the next `git add .` and count as a change. */
+function outside(t) {
+  const dir = mkdtempSync(join(tmpdir(), "ci-scope-out-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  return dir;
+}
+
 // As CI runs it: a pull request's two commits, its labels in PR_LABELS, and the answer in GITHUB_OUTPUT.
 test("in CI: a labelled pull request leaves the iPhone run out, an unlabelled one runs it, and it says which", (t) => {
   const { dir, git } = branchRepo(t);
@@ -312,7 +350,7 @@ test("in CI: a labelled pull request leaves the iPhone run out, an unlabelled on
   const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
   const script = fileURLToPath(new URL("./ci-scope.mjs", import.meta.url));
   const run = (labels) => {
-    const output = join(dir, "output");
+    const output = join(outside(t), "output");
     writeFileSync(output, "");
     const env = { ...process.env, GITHUB_EVENT_NAME: "pull_request", BASE_SHA: base, HEAD_SHA: head, GITHUB_OUTPUT: output, CI_SCOPE_ALL: "" };
     if (labels === undefined) delete env.PR_LABELS;
@@ -330,9 +368,41 @@ test("in CI: a labelled pull request leaves the iPhone run out, an unlabelled on
   writeFileSync(join(dir, "client/src-tauri/src/phone_scene.rs"), "b\n");
   git("add", "."); git("commit", "-q", "-m", "and the phone's scenes");
   const head2 = execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
-  const output = join(dir, "output");
+  const output = join(outside(t), "output");
   writeFileSync(output, "");
   const said = execFileSync("node", [script], { cwd: dir, encoding: "utf8", env: { ...process.env, GITHUB_EVENT_NAME: "pull_request", BASE_SHA: base, HEAD_SHA: head2, GITHUB_OUTPUT: output, CI_SCOPE_ALL: "", PR_LABELS: '["desktop-only"]' } });
   assert.match(readFileSync(output, "utf8"), /^ios=true$/m);
   assert.match(said, /The desktop-only label is ignored: this changes files that are the phone app's alone\./);
+});
+
+test("in CI: a capability file moved off the phone still runs the iPhone checks, read from both commits", (t) => {
+  const { dir, git } = branchRepo(t);
+  execFileSync("mkdir", ["-p", join(dir, "client/src-tauri/capabilities")]);
+  const file = join(dir, "client/src-tauri/capabilities/share.json");
+  writeFileSync(file, '{"platforms":["android","iOS"]}\n');
+  writeFileSync(join(dir, "client/src-tauri/capabilities/owner.json"), '{"platforms":["linux","macOS","windows"]}\n');
+  git("add", "."); git("commit", "-q", "-m", "a capability for the phone, one for the desktop");
+  const base = execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
+  const script = fileURLToPath(new URL("./ci-scope.mjs", import.meta.url));
+  const run = () => {
+    const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
+    const output = join(outside(t), "output");
+    writeFileSync(output, "");
+    execFileSync("node", [script], { cwd: dir, encoding: "utf8", env: { ...process.env, GITHUB_EVENT_NAME: "pull_request", BASE_SHA: base, HEAD_SHA: head, GITHUB_OUTPUT: output, CI_SCOPE_ALL: "", PR_LABELS: "[]" } });
+    const out = readFileSync(output, "utf8");
+    return { ios: /^ios=(.*)$/m.exec(out)?.[1], packages: /^packages=(.*)$/m.exec(out)?.[1] };
+  };
+  // The desktop's file changed, still the desktop's: no iPhone run.
+  writeFileSync(join(dir, "client/src-tauri/capabilities/owner.json"), '{"platforms":["linux","macOS","windows"],"permissions":["x"]}\n');
+  git("commit", "-q", "-am", "a permission for the desktop");
+  assert.deepEqual(run(), { ios: "false", packages: "true" });
+  // The phone's file moved to the desktop: the iPhone run too, though it reads as the desktop's now.
+  writeFileSync(file, '{"platforms":["linux","macOS","windows"]}\n');
+  git("commit", "-q", "-am", "moved off the phone");
+  assert.deepEqual(run(), { ios: "true", packages: "true" });
+  // A new one for the desktop wasn't there before: the desktop's.
+  git("reset", "-q", "--hard", base);
+  writeFileSync(join(dir, "client/src-tauri/capabilities/tools.json"), '{"platforms":["linux","macOS","windows"]}\n');
+  git("add", "."); git("commit", "-q", "-m", "a new one for the desktop");
+  assert.deepEqual(run(), { ios: "false", packages: "true" });
 });

@@ -30,6 +30,7 @@ const SHELL = "client/src-tauri/";
 const DESKTOP_SYSTEMS = ["linux", "windows", "macos"];
 const DESKTOP_PLATFORMS = ["linux", "macOS", "windows"];
 const PHONE_PLATFORMS = ["iOS", "android"];
+const CAPABILITY = /^capabilities\/[^/]+\.json$/;
 
 const fromDisk = (path) => {
   try {
@@ -82,11 +83,42 @@ export function shellModules(lib) {
   return found;
 }
 
+/** Which platforms a capability file is for, from its text: "desktop", "phone", or "both" for anything else. */
+function capabilityReach(text) {
+  let platforms = null;
+  try {
+    platforms = JSON.parse(text ?? "null")?.platforms;
+  } catch {
+    // Not JSON: not read, so both's.
+  }
+  if (!Array.isArray(platforms) || !platforms.length) return "both";
+  if (platforms.every((platform) => DESKTOP_PLATFORMS.includes(platform))) return "desktop";
+  if (platforms.every((platform) => PHONE_PLATFORMS.includes(platform))) return "phone";
+  return "both";
+}
+
+/**
+ * Which app a capability file was for and is for now, as two answers. A
+ * capability file carries its own platforms, so a change can move it from
+ * one app to the other, and what it was matters as much as what it is:
+ * moved off the phone, it takes something from the phone app. `before`
+ * hands back the file's text as it was before the change, `undefined` when
+ * it wasn't there, or null when that can't be told.
+ */
+function capabilityReaches(path, read, before) {
+  const now = capabilityReach(read(path));
+  if (!before) return [now];
+  const was = before(path);
+  return was === undefined ? [now] : [now, capabilityReach(was)];
+}
+
 /**
  * Which app a file of the shell reaches: "desktop", "phone", "tests" or
- * "both". `read` hands back a file's text, or null.
+ * "both". `read` hands back a file's text, or null; `before`, the same as
+ * it was before the change (`capabilityReaches`). A file that was one app's
+ * and is now the other's is both's.
  */
-export function shellReach(path, read = fromDisk) {
+export function shellReach(path, read = fromDisk, before = null) {
   const inside = path.slice(SHELL.length);
   if (/^(linux|windows)\//.test(inside)) return "desktop";
   // The iPhone's own project and settings. The shell's tests read some of
@@ -94,20 +126,13 @@ export function shellReach(path, read = fromDisk) {
   // run for it too. Android's stay both's: what checks them isn't sorted
   // by app yet.
   if (/^(gen\/apple\/|Info\.ios\.plist$|tauri\.ios\.conf\.json$)/.test(inside)) return "phone";
-  const capability = /^capabilities\/[^/]+\.json$/.test(inside);
-  if (capability) {
-    let platforms = null;
-    try {
-      platforms = JSON.parse(read(path) ?? "null")?.platforms;
-    } catch {
-      // Not JSON: not read, so both's.
-    }
-    if (!Array.isArray(platforms) || !platforms.length) return "both";
-    if (platforms.every((platform) => DESKTOP_PLATFORMS.includes(platform))) return "desktop";
-    if (platforms.every((platform) => PHONE_PLATFORMS.includes(platform))) return "phone";
-    return "both";
+  if (CAPABILITY.test(inside)) {
+    const reaches = new Set(capabilityReaches(path, read, before));
+    return reaches.size === 1 ? [...reaches][0] : "both";
   }
   // `src/tray.rs` and `src/voice/device.rs` are the modules `tray` and `voice`.
+  // Which app builds a module is said in lib.rs, not in the module's file,
+  // so moving one between the apps is a change to lib.rs, which is both's.
   const module = /^src\/(\w+)(?:\.rs$|\/)/.exec(inside)?.[1];
   if (!module || module === "lib" || module === "main") return "both";
   const lib = read(`${SHELL}src/lib.rs`);
@@ -119,11 +144,13 @@ export function shellReach(path, read = fromDisk) {
  * can't be true of: its flows and what they run on, the workflows that
  * build and run it, and what only the phone app builds.
  */
-function phonesOwn(path, read) {
+function phonesOwn(path, read, before) {
   if (/^client\/tests\/(ios|share-sender|share-window-preview)\//.test(path)) return true;
   if (/^\.github\/workflows\/(ios[\w-]*|share-window)\.yml$/.test(path)) return true;
   if (/^scripts\/(https-front(\.test)?\.mjs|share-window-ready\.mjs|test-certs\.sh|app-at-rest(\.test)?\.mjs|share-window-shots\.sh|share-sender-test\.sh)$/.test(path)) return true;
   if (!path.startsWith(SHELL)) return false;
+  // The phone's now, or the phone's before this change moved it.
+  if (CAPABILITY.test(path.slice(SHELL.length))) return capabilityReaches(path, read, before).includes("phone");
   return shellReach(path, read) === "phone";
 }
 
@@ -131,9 +158,10 @@ function phonesOwn(path, read) {
  * The checks a change sets off. `labels` are the pull request's: with
  * `desktop-only`, the iPhone run is left out, unless a file that is the
  * phone app's alone changed, which the label can't be true of. `read` hands
- * back a file's text, for the tests.
+ * back a file's text as it is now, and `before` as it was before the change
+ * (`beforeAt`); without `before`, only what a file is now is known.
  */
-export function classify(paths, { labels = [], read = fromDisk } = {}) {
+export function classify(paths, { labels = [], read = fromDisk, before = null } = {}) {
   const selected = new Set();
   const add = (...names) => names.forEach((name) => selected.add(name));
   if (!paths.length) add(...domains);
@@ -148,7 +176,7 @@ export function classify(paths, { labels = [], read = fromDisk } = {}) {
     else if (path.startsWith(SHELL)) {
       // The shell's own tests run for any of it; the installers for what
       // the desktop app builds, the iPhone run for what the phone app does.
-      const reach = shellReach(path, read);
+      const reach = shellReach(path, read, before);
       add("shell");
       if (reach === "desktop" || reach === "both") add("packages");
       if (reach === "phone" || reach === "both") add("ios");
@@ -163,7 +191,7 @@ export function classify(paths, { labels = [], read = fromDisk } = {}) {
     else if (path.startsWith("push-relay/")) add("relay");
     else add(...domains);
   }
-  if (labels.includes(DESKTOP_ONLY) && paths.length && !paths.some((path) => phonesOwn(path, read))) selected.delete("ios");
+  if (labels.includes(DESKTOP_ONLY) && paths.length && !paths.some((path) => phonesOwn(path, read, before))) selected.delete("ios");
   return Object.fromEntries(domains.map((name) => [name, selected.has(name)]));
 }
 
@@ -177,11 +205,38 @@ export function labelsFrom(value) {
   }
 }
 
+/** The commit a change is measured from: where the branch left `base`, for a pull request. */
+export function startOf(base, head, pullRequest, cwd = process.cwd()) {
+  return pullRequest ? execFileSync("git", ["merge-base", base, head], { cwd, encoding: "utf8" }).trim() : base;
+}
+
 export function changedPaths(base, head, pullRequest) {
   const git = (...args) => execFileSync("git", args, { encoding: "utf8" }).trim();
-  const start = pullRequest ? git("merge-base", base, head) : base;
+  const start = startOf(base, head, pullRequest);
   // No rename detection: removing source by moving it into docs still tests source.
   return git("diff", "--no-renames", "--name-only", "-z", start, head).split("\0").filter(Boolean);
+}
+
+/**
+ * A reader of files as they were at `start`, for `classify`'s `before`: a
+ * file's text, `undefined` when it wasn't there then, or null when Git
+ * can't say (which reads as both apps').
+ */
+export function beforeAt(start, cwd = process.cwd()) {
+  return (path) => {
+    const quiet = { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] };
+    try {
+      return execFileSync("git", ["show", `${start}:${path}`], quiet);
+    } catch {
+      try {
+        // The commit is there and the file isn't in it: it's new.
+        execFileSync("git", ["cat-file", "-e", `${start}^{commit}`], quiet);
+        return execFileSync("git", ["ls-tree", "--name-only", start, "--", path], quiet).trim() === "" ? undefined : null;
+      } catch {
+        return null;
+      }
+    }
+  };
 }
 
 // What a branch on a laptop has changed since it left `base`: its commits,
@@ -202,25 +257,29 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     // One `name=true|false` line per domain, and `changed=<count>`, for the
     // shell. No comparison (no base, or nothing changed) selects everything.
     let paths = [];
+    let before = null;
     try {
       paths = localPaths(process.argv[3] || "origin/main");
+      before = beforeAt(startOf(process.argv[3] || "origin/main", "HEAD", true));
     } catch {
       console.error(`Can't compare with ${process.argv[3] || "origin/main"}; checking everything.`);
     }
-    const scope = classify(paths);
+    const scope = classify(paths, { before });
     console.log([`changed=${paths.length}`, ...Object.entries(scope).map(([key, value]) => `${key}=${value}`)].join("\n"));
   } else {
     // A manual run, or a caller asking for everything (a release, the
     // nightly run: CI_SCOPE_ALL), checks every domain.
     let paths = [];
+    let before = null;
     if (process.env.GITHUB_EVENT_NAME !== "workflow_dispatch" && process.env.CI_SCOPE_ALL !== "true") {
       try {
-        paths = changedPaths(process.env.BASE_SHA, process.env.HEAD_SHA,
-          process.env.GITHUB_EVENT_NAME === "pull_request");
+        const pullRequest = process.env.GITHUB_EVENT_NAME === "pull_request";
+        paths = changedPaths(process.env.BASE_SHA, process.env.HEAD_SHA, pullRequest);
+        before = beforeAt(startOf(process.env.BASE_SHA, process.env.HEAD_SHA, pullRequest));
       } catch { console.log("Comparison unavailable; selecting every test domain."); }
     }
     const labels = labelsFrom(process.env.PR_LABELS);
-    const scope = classify(paths, { labels });
+    const scope = classify(paths, { labels, before });
     console.log(JSON.stringify({ paths, labels, scope }, null, 2));
     if (labels.includes(DESKTOP_ONLY) && paths.length)
       console.log(scope.ios ? `The ${DESKTOP_ONLY} label is ignored: this changes files that are the phone app's alone.` : `Labelled ${DESKTOP_ONLY}: the iPhone app in the simulator isn't run. The nightly run on main still runs it.`);

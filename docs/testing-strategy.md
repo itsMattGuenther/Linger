@@ -79,8 +79,9 @@ only changes documentation.
 
 **Only the checks a change can reach** (#914). Which app builds a file of
 the shell is read from the code: the `cfg` on its module in `lib.rs`, the
-`platforms` of a capability file. What says nothing, or can't be read, is
-both apps'. A pull request labelled `desktop-only` leaves the iPhone runs out
+`platforms` of a capability file, before the change and after it, so a file
+moved from one app to the other runs both apps' checks. What says nothing,
+or can't be read, is both apps'. A pull request labelled `desktop-only` leaves the iPhone runs out
 (the simulator's, and `share-window.yml`'s builds) for files both apps
 build, which is how a change to the page says it can't reach a phone
 (`AGENTS.md` has when to use it). The label is ignored when a
