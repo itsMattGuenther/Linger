@@ -60,6 +60,11 @@ test("the Tauri version check and the iPhone flows' own test run only in the rul
     "scripts/browser-fakes.test.mjs"]), []);
   assert.deepEqual(active(["client/tests/ios/link-open.yaml"]), ["ios"]);
 });
+test("the Windows bundler's retry rebuilds the packages, and its test runs only in the rules job (#916)", () => {
+  assert.deepEqual(active(["scripts/bundle-retry.sh"]), ["packages"]);
+  assert.deepEqual(active(["scripts/bundle-retry-test.sh"]), []);
+  assert.equal(active(["scripts/bundle-retry-other.sh"]).length, 8);
+});
 test("actionlint's script and its test run only in the rules job (#874)", () => {
   assert.deepEqual(active(["scripts/actionlint.sh", "scripts/actionlint-test.sh"]), []);
   assert.equal(active(["scripts/actionlint-other.sh"]).length, 8);

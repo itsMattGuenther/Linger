@@ -84,4 +84,11 @@ workflow=.github/workflows/package-check.yml
 grep -qE "bash \.\./scripts/bundle-retry\.sh pnpm tauri build" "$workflow" || fail "$workflow builds through bundle-retry.sh"
 grep -q "path: ~/AppData/Local/tauri" "$workflow" || fail "$workflow keeps the bundler's tools folder between runs"
 grep -q "steps.tauri-cli.outputs.version" "$workflow" || fail "$workflow keys the tools on the Tauri CLI's version"
+grep -q "uses: actions/cache/save@" "$workflow" || fail "$workflow keeps the tools straight after the build, not only when the whole job passes"
+
+# A wait with a leading zero is decimal, not octal (08 isn't an octal number).
+BUNDLE_RETRY_WAIT=00 run download 1
+[ "$status" -eq 0 ] && [ "$runs" -eq 2 ] || fail "BUNDLE_RETRY_WAIT=00 waits no time ($status, $runs)"
+BUNDLE_RETRY_WAIT=x run download 1
+[ "$status" -eq 2 ] || fail "BUNDLE_RETRY_WAIT=x is refused ($status)"
 echo "bundle-retry: ok"
