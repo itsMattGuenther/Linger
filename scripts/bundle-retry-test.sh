@@ -31,7 +31,8 @@ if [ "$n" -le "$failing" ]; then
     info) printf '        Info Downloading https://github.com/x/y.zip\n\nfailed to bundle project: `timed out`\n' >&2 ;;
     later) printf ' Downloading https://github.com/x/y.zip\n    Bundling Linger.msi\n     Running light.exe\nfailed to bundle project: `light.exe failed`\n' ;;
     between) printf ' Downloading https://github.com/x/y.zip\n        Warn the server was slow\n  45%% 12 MB\nfailed to bundle project: `http status: 502`\nCaused by:\n    0: http status: 502\n' ;;
-    extract) printf ' Downloading https://github.com/x/y.zip\n  Extracting y.zip\nfailed to bundle project: `zip archive is broken`\n' ;;
+    broken) printf ' Downloading https://github.com/x/wix314-binaries.zip\n        Info validating hash\n        Info extracting WIX\nfailed to bundle project: `invalid zip archive`\n' ;;
+    signed) printf ' Downloading https://github.com/x/y.zip\n     Signing Linger.msi\nfailed to bundle project: `signtool failed`\n' ;;
     compile) printf 'error[E0308]: mismatched types\n' ;;
   esac
   exit 7
@@ -60,8 +61,10 @@ BUNDLE_RETRY_TRIES=3 run download 2
 [ "$status" -eq 0 ] && [ "$runs" -eq 3 ] || fail "three tries when asked ($status, $runs)"
 run between 1
 [ "$status" -eq 0 ] && [ "$runs" -eq 2 ] || fail "a warning, a progress count and causes after it don't hide the download ($status, $runs)"
-run extract 1
-[ "$status" -eq 7 ] && [ "$runs" -eq 1 ] || fail "a failure unpacking what came isn't the download's ($status, $runs)"
+run broken 1
+[ "$status" -eq 0 ] && [ "$runs" -eq 2 ] || fail "a download that arrived broken (Tauri's lowercase checking and unpacking lines) is tried again ($status, $runs)"
+run signed 1
+[ "$status" -eq 7 ] && [ "$runs" -eq 1 ] || fail "a failure in a later step, signing, isn't the download's ($status, $runs)"
 # A setting that isn't a whole number is refused before anything runs,
 # rather than tried for ever; an empty one is the default.
 for bad in three -1 0 1.5; do
