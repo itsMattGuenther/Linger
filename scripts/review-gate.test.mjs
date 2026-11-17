@@ -149,8 +149,6 @@ test("reads which pull request, folder and branch a command is about", () => {
     ["create", 'gh pr create -t x --body "Count: $((1+1))"', { base: null }],
     // The reviewed command's own body names the command, and its output goes to tee.
     ["create", "cd wt && gh pr create -t x --body \"$(cat <<'EOF'\nThe gate now reads gh pr create.\nEOF\n)\" 2>&1 | tee /tmp/pr.txt", { dirs: ["wt"] }],
-    // A background merge, then a wait: what follows runs after it.
-    ["merge", "gh pr merge 5 --squash &\nwait\ngit pull --ff-only", { selector: "5" }],
     // The reviewed command's own here-document names the command, in exotic syntax.
     ["create", "gh pr create --title t --body-file - <<'EOF'\nThe gate now runs before `gh pr create`.\nEOF", { base: null }],
     // A branch named for the command, in a command with exotic syntax.
@@ -160,8 +158,9 @@ test("reads which pull request, folder and branch a command is about", () => {
     ["merge", 'gh pr merge 931 --squash --subject "Fix case handling" && echo "next: gh pr merge 932"', { selector: "931" }],
     // printf and echo change nothing, inside a merge's body.
     ["merge", 'gh pr merge 931 --squash --body "$(printf \'%s\\n\' "$NOTES")"', { selector: "931" }],
-    // wait $! waits for the merge put in the background.
-    ["merge", "gh pr merge 5 --squash &\nwait $!\ngit pull", { selector: "5" }],
+    // A body read from a file, and the merge's output logged with tee.
+    ["merge", 'gh pr merge 925 --squash --body "$(<msg.md)"', { selector: "925" }],
+    ["merge", "gh pr merge 925 --squash --admin 2>&1 | tee /tmp/merge.log", { selector: "925" }],
     ["ready", "gh pr ready", { selector: null }],
     ["ready", "gh pr ready 12", { selector: "12" }],
   ];
@@ -436,6 +435,12 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     ["merge", "gh pr merge 5 --subject $'\\c' & git push -f origin HEAD:feat ; echo 'a\\'"],
     // A gh subcommand named like an object's own property.
     ["merge", 'gh pr merge 5 --body "$(gh constructor)"'],
+    // A merge or ready in the background: nothing an agent needs, so it stops.
+    ["merge", "gh pr merge 5 --squash &\nwait\ngit pull --ff-only"],
+    ["merge", "gh pr merge 5 & sleep 0 & wait $!; git push -f origin HEAD:feat"],
+    ["ready", "gh pr ready 5 &"],
+    // Exotic syntax noted where the reader reads it, apostrophes in double quotes or not.
+    ["merge", "echo \"it's\"; x=${u:-gh pr merge 5}; $x; echo \"it's\""],
     // Text bash would refuse, that might be the command.
     ["merge", 'gh pr merge 5 "oops'],
   ];
@@ -450,7 +455,7 @@ test("a long command it can't place comes back, rather than running on", () => {
   // stopped and fails here rather than holding up every test after it. The
   // limit is far past the milliseconds it takes, so a busy machine can't fail it.
   const script = `import { readCommand } from ${JSON.stringify(new URL("./review-gate.mjs", import.meta.url).href)};
-const longs = ["gh " + "=>".repeat(20_000) + " x", "gh pr " + "2>".repeat(20_000) + " x", ">|A= ".repeat(20_000) + "x", ">&A= ".repeat(20_000) + "x", "$((".repeat(20_000), "$(".repeat(20_000), "((".repeat(20_000) + " x", "(".repeat(50_000) + "x" + " )".repeat(50_000), ("$((1))" + String.fromCharCode(96) + "$((1))" + String.fromCharCode(96) + " ").repeat(20_000), ("g" + "h pr ").repeat(20_000) + String.fromCharCode(39)];
+const longs = ["gh " + "=>".repeat(20_000) + " x", "gh pr " + "2>".repeat(20_000) + " x", ">|A= ".repeat(20_000) + "x", ">&A= ".repeat(20_000) + "x", "$((".repeat(20_000), "$(".repeat(20_000), "((".repeat(20_000) + " x", "(".repeat(50_000) + "x" + " )".repeat(50_000), ("$((1))" + String.fromCharCode(96) + "$((1))" + String.fromCharCode(96) + " ").repeat(20_000), ("g" + "h pr ").repeat(20_000) + String.fromCharCode(39), "echo " + "$(x ".repeat(3_000) + ")".repeat(3_000)];
 for (const long of longs) if (readCommand(long, "merge") !== null) process.exit(2);`;
   const run = spawnSync(process.execPath, ["--input-type=module"], { input: script, timeout: 60_000 });
   assert.equal(run.status, 0, run.signal ? `still running after a minute (${run.signal})` : String(run.error ?? run.stderr));

@@ -99,6 +99,7 @@ class Unreadable extends Error {}
  */
 export function tokenize(source) {
   budget.left = PAIRING;
+  budget.exotic = false;
   return readTokens({ source, at: 0 }, null);
 }
 
@@ -127,6 +128,7 @@ function readTokens(reader, closer) {
     const shape = startsCommand && source.startsWith("((", reader.at) ? closing(source, reader.at) : null;
     if (startsCommand && source.startsWith("((", reader.at) && !shape) throw new Unreadable("a `((` isn't closed");
     if (shape?.together) {
+      budget.exotic = true;
       const body = source.slice(reader.at + 2, shape.end - 1);
       reader.at = shape.end + 1;
       tokens.push({ word: { text: UNKNOWN, known: false, single: true, quoted: false, inner: /\$\(|`/.test(body) ? substitutionsIn(body) : [], raw: "((" + body + "))" } });
@@ -263,6 +265,7 @@ function readWord(reader) {
     if (METACHARS.has(char)) {
       // `<(…)` and `>(…)` at the start of a word: a process substitution.
       if ((char === "<" || char === ">") && reader.at === start && source[reader.at + 1] === "(") {
+        budget.exotic = true;
         reader.at += 2;
         word.inner.push(readTokens(reader, ")"));
         unknown(true);
@@ -293,6 +296,7 @@ function readWord(reader) {
       continue;
     }
     if (char === "$" && source[reader.at + 1] === "'") {
+      budget.exotic = true;
       reader.at += 2;
       word.quoted = true;
       word.text += readAnsiC(reader);
@@ -300,6 +304,7 @@ function readWord(reader) {
     }
     if (char === "$" && source[reader.at + 1] === '"') {
       // A string for translation: read as a double-quoted one.
+      budget.exotic = true;
       reader.at += 1;
       continue;
     }
@@ -335,6 +340,7 @@ function readExpansion(reader, word, quoted) {
   // Inside double quotes an expansion stays one argument, but for `$@` and `${a[@]}`.
   const unknown = (several = false) => markUnknown(word, quoted && !several);
   if (char === "`") {
+    budget.exotic = true;
     let end = reader.at + 1;
     let inner = "";
     for (; end < source.length && source[end] !== "`"; end += 1) {
@@ -349,6 +355,7 @@ function readExpansion(reader, word, quoted) {
   }
   const next = source[reader.at + 1];
   if (next === "[") {
+    budget.exotic = true;
     const end = source.indexOf("]", reader.at + 2);
     if (end < 0) throw new Unreadable("a `$[` isn't closed");
     const body = source.slice(reader.at + 2, end);
@@ -361,6 +368,7 @@ function readExpansion(reader, word, quoted) {
   if (next === "(" && source[reader.at + 2] === "(" && !shape) throw new Unreadable("a `$((` isn't closed");
   if (shape?.together) {
     // Arithmetic: a number, read for the commands it could hold all the same.
+    budget.exotic = true;
     const { end } = shape;
     const body = source.slice(reader.at + 3, end - 1);
     if (/\$\(|`/.test(body)) word.inner.push(...substitutionsIn(body));
@@ -377,6 +385,7 @@ function readExpansion(reader, word, quoted) {
   if (next === "{") {
     // Its own substitutions, quotes and braces, read in place: a `}` inside
     // a `$(…)` or a quote doesn't close it.
+    budget.exotic = true;
     reader.at += 2;
     const bodyStart = reader.at;
     let depth = 1;
@@ -448,7 +457,7 @@ function closeOf(source, open) {
 }
 
 /** How much pairing one reading of a command may do. */
-const budget = { left: 0 };
+const budget = { left: 0, exotic: false };
 const PAIRING = 4_000_000;
 
 /** If a quote, an escape or a comment starts at `at`, where it ends; otherwise `at`. */
@@ -624,17 +633,20 @@ function inert(command) {
  * beside it must be (#932 will bind the merge to the reviewed commit too).
  */
 function readsOnly(command) {
-  if (!command.words.length) return !command.settings.length && !command.redirects.length;
+  if (!command.words.length) return !command.settings.length && !command.redirects.some(writesFile);
   // A setting in front can make it run something (GIT_EXTERNAL_DIFF, GIT_PAGER).
   if (command.settings.length) return false;
   const [word] = command.words;
   if (command.words.length === 1 && word.known && !word.quoted && CLOSERS.includes(word.text)) return !command.redirects.some(writesFile);
   if (word.known && ["read", "wait"].includes(word.text) && command.words.every((each) => each.known)) return !command.redirects.some(writesFile);
   const known = programOf(command);
+  if (known?.program === "tee" && !command.redirects.some(writesFile)) return command.words.every((word) => word.known);
   if (!known || command.redirects.some(writesFile)) return false;
   const { name, program, first, second } = known;
   // Writing no file, these change nothing (printf -v sets only a shell variable).
   if (INERT.has(program)) return true;
+  // tee writes the files it's named, a log, not a pull request or a branch.
+  if (program === "tee") return command.words.every((word) => word.known);
   if (program === "git") return GIT_READS.has(first) || (["log", "show", "diff"].includes(first) && command.words.every((word) => word.known && !/^--(?:output|ext-diff|textconv)/.test(word.text)));
   const reads = Object.hasOwn(GH_READS, first) ? GH_READS[first] : [];
   return isGh(name) && (reads.includes("*") || reads.includes(second));
@@ -819,6 +831,17 @@ const stop = (why) => ({ fail: why });
  * gate's answer when the shell's own reading fails (an unclosed quote), so
  * a command bash would refuse anyway still can't slip through.
  */
+/** The pattern inOrder finds a word by, compiled once per word. */
+const patterns = new Map();
+function patternFor(word) {
+  if (!patterns.has(word)) {
+    patterns.set(word, word === "gh"
+      ? new RegExp(String.raw`(?<![\w.])(?:[gG][hH](?:\.[eE][xX][eE])?|${UNKNOWN})(?![\w./-])`, "g")
+      : new RegExp(String.raw`(?<![\w./-])${word}(?![\w./-])`, "g"));
+  }
+  return patterns.get(word);
+}
+
 function inOrder(text, words) {
   // A line continued is one line, and quotes and escapes come out, as the
   // shell would: `g''h` is gh.
@@ -833,9 +856,7 @@ function inOrder(text, words) {
     // nothing it holds is followed by - / or .), whatever else is beside it:
     // blanks, brackets, commas, backticks, a `${u:-gh}`. gh may end a path
     // (`/usr/bin/gh`), be gh.exe in any case, or be a word the gate can't read.
-    const found = word === "gh"
-      ? new RegExp(String.raw`(?<![\w.])(?:[gG][hH](?:\.[eE][xX][eE])?|${UNKNOWN})(?![\w./-])`, "g")
-      : new RegExp(String.raw`(?<![\w./-])${word}(?![\w./-])`, "g");
+    const found = patternFor(word);
     found.lastIndex = from;
     const hit = found.exec(text);
     if (!hit) return false;
@@ -850,18 +871,16 @@ function inOrder(text, words) {
  * text (`inOrder`), so it is never less strict than main was (#925). Ordinary commands
  * (quotes, $(…), here-documents, pipes) don't need it.
  */
-const EXOTIC = /\$\{|\$"|`|\(\(|\$\[|[<>]\(/;
 /** Keywords whose commands the reader can't follow as bash does. */
 const EXOTIC_WORDS = new Set(["eval", "exec", "case", "coproc", "function"]);
 
 /**
- * Whether a command has exotic syntax: `$'…'` anywhere, the punctuation
- * outside single quotes (where nothing is special), or a keyword as an
- * unquoted command word (`--subject "the empty case"` is text).
+ * Whether a command has exotic syntax: what the reader noted reading it
+ * (`${…}`, `$'…'`, backticks, arithmetic, `<(…)`, `$"…"`), or a keyword as
+ * an unquoted command word (`--subject "the empty case"` is text).
  */
-function exotic(source, lists) {
-  if (source.includes("$'")) return true;
-  if (EXOTIC.test(source.replace(/'[^']*'/g, ""))) return true;
+function exotic(read, lists) {
+  if (read) return true;
   return lists.some(({ commands }) => commands.some((command) => command.leading.includes("coproc") || command.words.slice(0, 2).some((word, at) => word.known && !word.quoted && EXOTIC_WORDS.has(word.text) && (at === 0 || ["command", "builtin", "env", "sudo", "time"].includes(command.words[0].text)))));
 }
 
@@ -920,15 +939,20 @@ function stepOf(command) {
  */
 export function readCommand(command, action) {
   if (!ACTIONS.includes(action)) throw new Error(`unknown action ${action}`);
-  let tokens;
   try {
-    tokens = tokenize(command);
+    return readTokensOf(command, action);
   } catch (error) {
     if (!(error instanceof Unreadable) && !(error instanceof RangeError)) throw error;
-    // Text the reader can't read, bash's error or not: if it might be the
-    // command, it's stopped rather than guessed.
+    // Text the reader can't read (bash's error or not, or nesting too deep to
+    // follow): if it might be the command, it's stopped rather than guessed.
     return inOrder(command, ["gh", "pr", action]) ? stop(`it can't be read as the shell would (${error.message})`) : null;
   }
+}
+
+/** readCommand's work, on a command the reader can read. */
+function readTokensOf(command, action) {
+  const tokens = tokenize(command);
+  const odd = budget.exotic;
   const commands = commandsOf(tokens);
   const lists = [...everyList(commands)];
   const found = lists.flatMap(({ commands: list, nested }) => list.map((entry) => ({ command: entry, nested, kind: classify(entry, action) }))).filter((entry) => entry.kind);
@@ -952,7 +976,7 @@ export function readCommand(command, action) {
   const stored = fed && lists.filter(({ commands: list }) => !own.has(list)).some(({ commands: list }) => list.some((command) => command !== target && inOrder([...command.settings.map((word) => word.text), ...textOf(command)].join(" "), ["gh", "pr", action])));
   const carried = stored || lists.some(({ commands: list }) => pipelinesOf(list).some((pipeline) => inOrder(pipelineText(pipeline, target, trusting), ["gh", "pr", action])));
   // Exotic syntax: main's rule too, outside the reviewed command's own words.
-  if (exotic(command, lists)) {
+  if (exotic(odd, lists)) {
     const span = target ? spanOf(target) : null;
     // The reviewed command's own words, and the here-documents it reads,
     // are its own: a body that names the command isn't a second one.
@@ -1038,29 +1062,12 @@ export function readCommand(command, action) {
   // own substitutions: what runs there must only read (#932 binds the merge
   // to the reviewed commit itself).
   const reading = (lists) => lists.every(({ commands: list }) => list.every(readsOnly));
-  // The rest of its pipeline runs beside it; and when the and-or list
-  // holding it ends in `&`, so does everything after that `&`.
+  // In the background, whatever follows runs beside it: an agent has no
+  // need of that, so it's stopped rather than followed.
+  if (endOf(commands, at, ["&&", "||", "|", "|&"]).by === "&") return stop(`it runs \`gh pr ${action}\` in the background; run it in the foreground, on its own`);
+  // The rest of its pipeline runs beside it.
   const pipeline = endOf(commands, at, ["|", "|&"]);
   const alongside = commands.slice(at + 1, pipeline.last + 1);
-  const list = endOf(commands, at, ["&&", "||", "|", "|&"]);
-  if (list.by === "&") {
-    // Up to a `wait`, which waits for the merge to finish.
-    let depth = 0;
-    for (let index = list.last + 1; index < commands.length; index += 1) {
-      const command = commands[index];
-      depth += opens(command);
-      if (command.after === "(") depth += 1;
-      else if (command.after === ")") depth -= 1;
-      // A bare wait in the main shell: not behind && or ||, not in a
-      // subshell or pipeline, and not itself in the background.
-      const before = commands[index - 1]?.after;
-      // `wait`, or `wait $!` for the job just put in the background.
-      const [verb, job] = command.words;
-      const waits = verb?.known === true && verb.text === "wait" && (command.words.length === 1 || (command.words.length === 2 && /^"?\$!"?$/.test(job.raw))) && !command.leading.length && !command.redirects.length;
-      if (waits && depth <= 0 && ["&", ";", "\n"].includes(before) && [";", "\n", null].includes(command.after)) break;
-      alongside.push(command);
-    }
-  }
   if (!reading([...everyList(alongside)])) return stop(`something runs alongside \`gh pr ${action}\` that could change the pull request while it's merged; run it on its own`);
   const inside = wordsOf(target).flatMap((word) => word.inner);
   if (!inside.every((tokens) => reading([...everyList(commandsOf(tokens), true)]))) return stop(`a substitution in \`gh pr ${action}\` runs something that could change the pull request first; put it in a file, and the file in the command`);
