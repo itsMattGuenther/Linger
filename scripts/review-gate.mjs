@@ -589,7 +589,7 @@ const GIT_DATA = new Set(["commit", "status", "tag", "branch", "add", "rm", "mv"
 /** git's subcommands that change nothing a pull request depends on: no branch, remote or push. */
 const GIT_READS = new Set(["status", "merge-base", "rev-parse", "rev-list", "describe", "ls-files", "blame"]);
 /** gh's commands whose words are data: a list of those known, as an alias or extension can be anything. */
-const GH_DATA = new Set(["pr", "issue", "run", "workflow", "release", "label", "search", "status", "browse", "api"]);
+const GH_DATA = new Set(["pr", "issue", "label", "search", "status", "browse"]);
 /** gh's commands that only read, by command and subcommand (`*` for all of them). */
 const GH_READS = { pr: ["view", "list", "checks", "diff", "status"], issue: ["view", "list", "status"], run: ["view", "list", "watch"], workflow: ["view", "list"], release: ["view", "list"], label: ["list"], search: ["*"], status: ["*"], browse: ["*"] };
 
@@ -633,18 +633,20 @@ function inert(command) {
  * beside it must be (#932 will bind the merge to the reviewed commit too).
  */
 function readsOnly(command) {
-  if (!command.words.length) return !command.settings.length && !command.redirects.some(writesFile);
+  // Writing a file through a redirection is a change, whatever the command.
+  if (command.redirects.some(writesFile)) return false;
   // A setting in front can make it run something (GIT_EXTERNAL_DIFF, GIT_PAGER).
   if (command.settings.length) return false;
+  if (!command.words.length) return true;
   const [word] = command.words;
-  if (command.words.length === 1 && word.known && !word.quoted && CLOSERS.includes(word.text)) return !command.redirects.some(writesFile);
-  if (word.known && ["read", "wait"].includes(word.text) && command.words.every((each) => each.known)) return !command.redirects.some(writesFile);
+  if (command.words.length === 1 && word.known && !word.quoted && CLOSERS.includes(word.text)) return true;
+  if (word.known && ["read", "wait"].includes(word.text) && command.words.every((each) => each.known)) return true;
   // Loop syntax runs no program: its words are a list (`for f in a b`).
-  if (word.known && !word.quoted && ["for", "select", "case"].includes(word.text)) return !command.redirects.some(writesFile);
+  if (word.known && !word.quoted && ["for", "select", "case"].includes(word.text)) return true;
   // Into .git, a file is a branch, a ref or a hook.
   if (command.words.some((each) => /(?:^|\/)\.git(?:\/|$)/.test(each.text))) return false;
   const known = programOf(command);
-  if (!known || command.redirects.some(writesFile)) return false;
+  if (!known) return false;
   const { name, program, first, second } = known;
   // Writing no file, these change nothing (printf -v sets only a shell variable).
   if (INERT.has(program)) return true;
@@ -887,9 +889,22 @@ const EXOTIC_WORDS = new Set(["eval", "exec", "case", "coproc", "function"]);
  */
 function exotic(read, lists) {
   if (read) return true;
-  return lists.some(({ commands }) => commands.some((command) => command.leading.includes("coproc") || command.words.slice(0, 2).some((word, at) => word.known && !word.quoted && EXOTIC_WORDS.has(word.text) && (at === 0 || ["command", "builtin", "env", "sudo", "time"].includes(command.words[0].text)))));
+  return lists.some(({ commands }) => commands.some((command) => command.leading.includes("coproc") || command.words.slice(0, 2).some((word, at) => word.known && !word.quoted && EXOTIC_WORDS.has(word.text) && (at === 0 || ["command", "builtin", "env", "sudo"].includes(command.words[0].text)))));
 }
 
+
+/** Text with its comments taken out, quotes kept: a comment is nothing bash runs. */
+function withoutComments(text) {
+  let out = "";
+  for (let at = 0; at < text.length; at += 1) {
+    const past = pastQuoted(text, at);
+    if (past !== at) {
+      if (text[at] !== "#") out += text.slice(at, past + 1);
+      at = past;
+    } else out += text[at];
+  }
+  return out;
+}
 
 /** Where a command's own words, settings and redirection targets sit in the text it was read from. */
 function spanOf(command) {
@@ -980,7 +995,7 @@ function readTokensOf(command, action) {
   // The reviewed command's own body (`--body "$(cat <<'EOF' …)"`) isn't stored text.
   const own = new Set(target ? wordsOf(target).flatMap((word) => word.inner).flatMap((tokens) => [...everyList(commandsOf(tokens), true)].map((entry) => entry.commands)) : []);
   const stored = fed && lists.filter(({ commands: list }) => !own.has(list)).some(({ commands: list }) => list.some((command) => command !== target && inOrder([...command.settings.map((word) => word.text), ...textOf(command)].join(" "), ["gh", "pr", action])));
-  const carried = stored || lists.some(({ commands: list }) => pipelinesOf(list).some((pipeline) => inOrder(pipelineText(pipeline, target, trusting), ["gh", "pr", action])));
+  const carried = stored || lists.filter(({ commands: list }) => !own.has(list)).some(({ commands: list }) => pipelinesOf(list).some((pipeline) => inOrder(pipelineText(pipeline, target, trusting), ["gh", "pr", action])));
   // Exotic syntax: main's rule too, outside the reviewed command's own words.
   if (exotic(odd, lists)) {
     const span = target ? spanOf(target) : null;
@@ -994,7 +1009,7 @@ function readTokensOf(command, action) {
       at = Math.max(at, cut.to);
     }
     outside += command.slice(at);
-    if (inOrder(outside, ["gh", "pr", action])) return stop(`it holds \`gh pr ${action}\` in syntax the gate can't be sure it reads as bash does; write it plainly, the body in --body-file`);
+    if (inOrder(withoutComments(outside), ["gh", "pr", action])) return stop(`it holds \`gh pr ${action}\` in syntax the gate can't be sure it reads as bash does; write it plainly, the body in --body-file`);
   }
   if (!found.length && !carried) return null;
   if (found.some((entry) => entry.kind === "maybe") || carried) return stop(`it might run \`gh pr ${action}\` in a form the gate can't read exactly (a word it can't follow, or text another program runs)`);
@@ -1018,7 +1033,7 @@ function readTokensOf(command, action) {
     if (step.tilde) return stop("it changes to a folder with a `~` bash won't expand as the gate would (quoted, or another user's home)");
     if (step.push) pushes = true;
     else if (step.odd) return stop("it changes folder in a form the gate doesn't follow; use `cd <folder>`");
-    else if (step.dir === "-" || step.dir === "") return stop("it changes folder with `cd -`, or to the home folder");
+    else if (step.dir === "-" || step.dir === "") return stop("it changes folder with `cd -`, or with `cd` and no folder");
     else dirs.push(step.dir);
   }
 

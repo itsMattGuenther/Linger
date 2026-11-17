@@ -164,6 +164,10 @@ test("reads which pull request, folder and branch a command is about", () => {
     // An email address in a default is one word; a loop that only reads after a pipe.
     ["merge", 'gh pr merge 5 --author-email "${EMAIL:-me@example.com}"', { selector: "5" }],
     ["merge", "gh pr merge 5 | for l in x; do :; done", { selector: "5" }],
+    // The reviewed command's own body, built with printf, names the command.
+    ["create", "gh pr create -t x --body \"$(printf 'Fixes the gh pr create gate\\n\\nMore')\"", { base: null }],
+    // A comment after it in exotic syntax: bash never runs a comment.
+    ["merge", 'gh pr merge 5 --subject "${T}" # then gh pr merge 6', { selector: "5" }],
     ["ready", "gh pr ready", { selector: null }],
     ["ready", "gh pr ready 12", { selector: "12" }],
   ];
@@ -450,6 +454,9 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     ["merge", "GH_REPO[0]=someone/else gh pr merge 5"],
     // tee into .git writes a ref.
     ["merge", 'gh pr merge 5 --body "$(echo x | tee .git/refs/heads/feat)"'],
+    // gh commands that can start a run hand it text that may be run.
+    ["merge", "gh workflow run deploy.yml -f script='gh pr merge 5 --admin'"],
+    ["merge", "gh api repos/o/r/actions/workflows/d.yml/dispatches -f 'inputs[script]=gh pr merge 5'"],
     // Text bash would refuse, that might be the command.
     ["merge", 'gh pr merge 5 "oops'],
   ];
