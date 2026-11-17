@@ -83,6 +83,25 @@ impl Started {
     }
 }
 
+/// What calling off a recording did (#920).
+enum CalledOff {
+    /// Still opening its microphone: marked, keeping its place until it
+    /// opens or fails, and thrown away then.
+    Marked,
+    /// Under way: taken off the books, to stop or throw away.
+    Taken(Started),
+    /// Nothing on the books that it names.
+    Nothing,
+}
+
+#[cfg(test)]
+impl CalledOff {
+    /// Whether a recording under way was taken.
+    fn took(&self) -> bool {
+        matches!(self, CalledOff::Taken(_))
+    }
+}
+
 impl Books {
     /// Take the recording on the books if `wanted` says it's the one.
     fn take_if(&mut self, wanted: impl FnOnce(&Recording) -> bool) -> Option<Recording> {
@@ -110,14 +129,23 @@ impl Books {
     /// Call off the recording `wanted` picks: one still opening is marked,
     /// keeping its place until its microphone opens or fails, so no second
     /// microphone opens beside it; one under way is taken (#920).
-    fn call_off_or_take(&mut self, wanted: impl Fn(&Recording) -> bool) -> Option<Recording> {
+    fn call_off_or_take(&mut self, wanted: impl Fn(&Recording) -> bool) -> CalledOff {
         match self.recording.as_mut() {
             Some(recording) if wanted(recording) && recording.started.is_none() => {
                 recording.called_off = true;
-                None
+                CalledOff::Marked
             }
-            _ => self.take_if(wanted),
+            // Taken only when under way: one still opening was marked above.
+            _ => match self.take_if(wanted).and_then(|recording| recording.started) {
+                Some(started) => CalledOff::Taken(started),
+                None => CalledOff::Nothing,
+            },
         }
+    }
+
+    /// Whether the shell handed `window` the number `start` (`clip_ticket`).
+    fn handed_out(&self, window: &str, start: u64) -> bool {
+        start != 0 && start <= self.tickets.get(window).copied().unwrap_or(0)
     }
 
     /// Hand `window` its next start number.
@@ -137,7 +165,7 @@ impl Clips {
     fn begin(&self, window: &str, start: u64) -> Result<u64, &'static str> {
         let mut books = self.lock();
         // Only a number the shell handed this window (`clip_ticket`).
-        if start == 0 || start > books.tickets.get(window).copied().unwrap_or(0) {
+        if !books.handed_out(window, start) {
             return Err(UNKNOWN_START);
         }
         if books
@@ -167,22 +195,30 @@ impl Clips {
     /// earlier one of the window's. Only that start is taken: an earlier
     /// recording still being stopped is left to its Stop, and a later one
     /// is never touched (#920).
-    fn call_off(&self, window: &str, start: u64) -> Option<Recording> {
+    fn call_off(&self, window: &str, start: u64) -> CalledOff {
         let mut books = self.lock();
         // A number the window was never handed counts for nothing: no mark
         // that would refuse every start to come, and no recording taken.
-        if start == 0 || start > books.tickets.get(window).copied().unwrap_or(0) {
-            return None;
+        if !books.handed_out(window, start) {
+            return CalledOff::Nothing;
         }
         books.call_off_up_to(window, start);
         books.call_off_or_take(|recording| recording.window == window && recording.start == start)
+    }
+
+    /// Stop `window`'s start numbered `start`: the recording under way
+    /// handed over to be stopped, one still opening called off. Named, as a
+    /// cancel is, so a stop from a page since reloaded never takes the new
+    /// page's recording, nor one window another's (#920).
+    fn stop(&self, window: &str, start: u64) -> CalledOff {
+        self.call_off(window, start)
     }
 
     /// A window has gone, or its page is loaded afresh: its recording taken,
     /// in one go with every start number handed out to it so far called
     /// off, so one heard late is refused rather than recording for nobody
     /// (#920). The next page's numbers are handed out above them.
-    fn forget_window(&self, window: &str) -> Option<Recording> {
+    fn forget_window(&self, window: &str) -> CalledOff {
         let mut books = self.lock();
         let last = books.tickets.get(window).copied().unwrap_or(0);
         books.call_off_up_to(window, last);
@@ -416,27 +452,12 @@ pub async fn clip_stop(app: AppHandle, window: Window, start: u64) -> Result<Res
     // another's, and a stop from before a reload never takes the new page's
     // recording. One still opening its microphone is called off, keeping its
     // place, and `clip_start` throws it away once the microphone opens (#920).
-    let label = window.label();
-    let named = |recording: &Recording| recording.window == label && recording.start == start;
-    // The lock is let go of here, before anything is waited for.
-    let (opening, recording) = {
-        let clips = app.state::<Clips>();
-        let mut books = clips.lock();
-        let opening = books
-            .recording
-            .as_ref()
-            .is_some_and(|recording| named(recording) && recording.started.is_none());
-        (opening, books.call_off_or_take(named))
-    };
-    let started = match recording {
+    // The books' lock is let go of in `stop`, before anything is waited for.
+    let started = match app.state::<Clips>().stop(window.label(), start) {
+        CalledOff::Taken(started) => started,
         // Still opening: called off, keeping its place until it opens.
-        None if opening => return Err(CALLED_OFF.into()),
-        None => return Err("Nothing is being recorded.".into()),
-        Some(Recording { started: None, .. }) => return Err(CALLED_OFF.into()),
-        Some(Recording {
-            started: Some(started),
-            ..
-        }) => started,
+        CalledOff::Marked => return Err(CALLED_OFF.into()),
+        CalledOff::Nothing => return Err("Nothing is being recorded.".into()),
     };
     let _ = started.stop.send(());
     let clip = started.done.await.map_err(|error| error.to_string())??;
@@ -447,8 +468,7 @@ pub async fn clip_stop(app: AppHandle, window: Window, start: u64) -> Result<Res
 /// and no other (#920).
 #[tauri::command]
 pub async fn clip_cancel(app: AppHandle, window: Window, start: u64) {
-    let recording = app.state::<Clips>().call_off(window.label(), start);
-    if let Some(started) = recording.and_then(|recording| recording.started) {
+    if let CalledOff::Taken(started) = app.state::<Clips>().call_off(window.label(), start) {
         started.discard();
     }
 }
@@ -460,8 +480,7 @@ pub async fn clip_cancel(app: AppHandle, window: Window, start: u64) {
 /// One whose microphone is still opening is called off and keeps its place
 /// until it opens, and `clip_start` throws it away then (#913, #920).
 pub fn forget(app: &AppHandle, label: &str) {
-    let recording = app.state::<Clips>().forget_window(label);
-    if let Some(started) = recording.and_then(|recording| recording.started) {
+    if let CalledOff::Taken(started) = app.state::<Clips>().forget_window(label) {
         started.discard();
     }
 }
@@ -662,9 +681,9 @@ mod tests {
         // Another window can't start one while this microphone opens, and
         // its closing takes nothing that isn't its own.
         assert_eq!(clips.begin("chat", 5).err(), Some(ALREADY));
-        assert!(clips.forget_window("chat").is_none());
+        assert!(!clips.forget_window("chat").took());
         // Marked, keeping its place until its microphone opens (#920).
-        assert!(clips.forget_window("main").is_none());
+        assert!(!clips.forget_window("main").took());
         let fresh = clips.lock().ticket("chat");
         assert_eq!(
             clips.begin("chat", fresh).err(),
@@ -728,7 +747,7 @@ mod tests {
         let clips = Clips::default();
         handed(&clips, "main", 20);
         handed(&clips, "chat", 20);
-        assert!(clips.call_off("main", 7).is_none());
+        assert!(!clips.call_off("main", 7).took());
         assert_eq!(clips.begin("main", 7).err(), Some(CALLED_OFF));
         assert_eq!(clips.begin("main", 3).err(), Some(CALLED_OFF));
         assert!(clips.begin("chat", 7).is_ok());
@@ -745,14 +764,14 @@ mod tests {
         handed(&clips, "chat", 20);
         let first = clips.begin("main", 1).expect("the first");
         assert!(
-            clips.call_off("main", 1).is_none(),
+            !clips.call_off("main", 1).took(),
             "taken while still opening"
         );
         let (stop, _stopped) = oneshot::channel();
         let done = tokio::spawn(async { Ok(Clip::default()) });
         assert!(!clips.started(first, Started { stop, done }));
         clips.begin("main", 2).expect("the second");
-        assert!(clips.call_off("main", 1).is_none());
+        assert!(!clips.call_off("main", 1).took());
         assert!(
             clips.take().is_some_and(|recording| recording.start == 2),
             "the second was taken by the first's cancel"
@@ -773,7 +792,7 @@ mod tests {
         assert!(clips.started(first, Started { stop, done }));
         assert_eq!(clips.begin("main", 2).err(), Some(ALREADY));
         assert!(
-            clips.call_off("main", 1).is_some(),
+            clips.call_off("main", 1).took(),
             "a cancel didn't take the recording under way"
         );
         assert!(clips.begin("main", 2).is_ok());
@@ -791,7 +810,7 @@ mod tests {
         let late = clips.lock().ticket("main");
         let id = clips.begin("main", first).expect("a start");
         // Still opening: it keeps its place until its microphone opens.
-        assert!(clips.forget_window("main").is_none());
+        assert!(!clips.forget_window("main").took());
         assert_eq!(
             clips.begin("main", late).err(),
             Some(CALLED_OFF),
@@ -819,7 +838,7 @@ mod tests {
         handed(&clips, "main", 20);
         handed(&clips, "chat", 20);
         let first = clips.begin("main", 1).expect("the first");
-        assert!(clips.call_off("main", 1).is_none());
+        assert!(!clips.call_off("main", 1).took());
         assert_eq!(
             clips.begin("main", 2).err(),
             Some(ALREADY),
@@ -846,7 +865,7 @@ mod tests {
         let done = tokio::spawn(async { Ok(Clip::default()) });
         assert!(clips.started(first, Started { stop, done }));
         assert!(
-            clips.call_off("main", 2).is_none(),
+            !clips.call_off("main", 2).took(),
             "a later start's cancel took the first"
         );
         assert!(clips
@@ -901,11 +920,41 @@ mod tests {
         handed(&clips, "main", 3);
         assert_eq!(clips.begin("main", 4).err(), Some(UNKNOWN_START));
         assert_eq!(clips.begin("main", 0).err(), Some(UNKNOWN_START));
-        assert!(clips.call_off("main", 1_000_000).is_none());
+        assert!(!clips.call_off("main", 1_000_000).took());
         let next = clips.lock().ticket("main");
         assert!(
             clips.begin("main", next).is_ok(),
             "a wrong cancel refused every start to come"
         );
+    }
+
+    /// A stop names its start, as a cancel does: one from a page since
+    /// reloaded never takes the new page's recording, and one window never
+    /// stops another's (#920).
+    #[tokio::test]
+    async fn a_stop_takes_only_the_start_it_names() {
+        let clips = Clips::default();
+        handed(&clips, "main", 1);
+        let old = clips.begin("main", 1).expect("the old page's start");
+        let (stop, _old_stopped) = oneshot::channel();
+        let done = tokio::spawn(async { Ok(Clip::default()) });
+        assert!(clips.started(old, Started { stop, done }));
+        // The page is loaded afresh: its recording goes, and the new page starts.
+        assert!(clips.forget_window("main").took());
+        let fresh = clips.lock().ticket("main");
+        let new = clips.begin("main", fresh).expect("the new page's start");
+        let (stop, _new_stopped) = oneshot::channel();
+        let done = tokio::spawn(async { Ok(Clip::default()) });
+        assert!(clips.started(new, Started { stop, done }));
+        // The old page's stop, heard late, names its own start: nothing.
+        assert!(
+            matches!(clips.stop("main", 1), CalledOff::Nothing),
+            "a stop from before the reload took the new page's recording"
+        );
+        // Another window's stop with the same number: nothing.
+        handed(&clips, "chat", fresh);
+        assert!(matches!(clips.stop("chat", fresh), CalledOff::Nothing));
+        // The new page's own stop takes it.
+        assert!(clips.stop("main", fresh).took());
     }
 }

@@ -159,9 +159,11 @@ const desktop = fakeDesktop({
       desktop.note(`clip_ticket:${tickets}`);
       return tickets;
     },
-    clip_stop: async () => {
+    clip_stop: async (args) => {
       desktop.note("clip_stop");
-      // As clip.rs: one still opening is called off and keeps its place.
+      // As clip.rs: only the start it names (#920).
+      if (booked === null || Number(args.start) !== booked) throw "Nothing is being recorded.";
+      // One still opening is called off and keeps its place.
       const opening = heldStarts.find((held) => held.start === booked);
       if (opening) opening.calledOff = true;
       else booked = null;
