@@ -97,6 +97,9 @@ commits that carry them (`scripts/lint-rules.sh`).
   **every** issue the PR resolves; a bare mention doesn't link it. Afterwards,
   check the link took:
   `gh pr view <n> --json closingIssuesReferences`.
+- Open the pull request as a draft (`gh pr create --draft`) and mark it
+  ready (`gh pr ready`) when it's done and `ci` is green: the 35 to 60
+  minute iPhone runs wait until then.
 - CI runs only the checks your change can reach, by which app builds each
   file. If it touches files both apps build (the page, the shared parts of
   the shell) but can't change what the phone app does, open it with the

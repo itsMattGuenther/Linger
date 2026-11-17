@@ -16,7 +16,10 @@ name: share window
 # RFC 8291's example and what the server sends, and reads the keys as the
 # app's Rust writes them (gen/apple/NotificationServiceTests).
 on:
+  # Like the simulator's run, it waits while a pull request is a draft, and
+  # starts when it's marked ready (#933).
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - client/src-tauri/gen/apple/**
       - client/src-tauri/src/**
@@ -52,7 +55,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      phone: ${{ steps.classify.outputs.ios == 'true' || steps.classify.outputs.rust == 'true' }}
+      phone: ${{ !github.event.pull_request.draft && (steps.classify.outputs.ios == 'true' || steps.classify.outputs.rust == 'true') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

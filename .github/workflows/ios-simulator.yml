@@ -22,7 +22,11 @@ name: iphone simulator
 # problem is Xcode 27's: the TestFlight build can still be made with it until
 # Apple requires the iOS 27 SDK, in April 2027.
 on:
+  # A draft pull request doesn't run it: it starts when the pull request is
+  # marked ready, and on each push after (#933). It's 35 to 60 minutes on a
+  # Mac, and drafts are where a change is still being worked out.
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
     inputs:
       xcode:
@@ -71,7 +75,7 @@ jobs:
   simulator:
     name: the iPhone app in the simulator
     needs: changes
-    if: ${{ needs.changes.outputs.ios == 'true' }}
+    if: ${{ needs.changes.outputs.ios == 'true' && !github.event.pull_request.draft }}
     # The Mac and Xcode ios.yml builds the TestFlight app with (#779, #839).
     runs-on: ${{ startsWith(inputs.xcode || '27.1', '26') && 'macos-26' || 'xcode-27' }}
     timeout-minutes: 75

@@ -145,6 +145,12 @@ pass.
   bare mention or a commit message doesn't link), and check it took:
   `gh pr view <number> --json closingIssuesReferences`. Linked issues close
   on merge, so finish their acceptance checks before merging.
+- **Open a pull request as a draft** (`gh pr create --draft`), and mark it
+  ready (`gh pr ready`) once the work is done and `ci` is green. While it's
+  a draft, a push runs `ci` (about 10 minutes) but not the iPhone runs on
+  GitHub's Mac (35 to 60 minutes): they start when it's marked ready, and
+  still have to pass before it merges (#933). Push your fixes together,
+  not one at a time: after it's ready, every push runs them again.
 - **Label a pull request `desktop-only` when nothing in it can change what
   the phone app does**, and it touches files both apps build: the page, or
   the shared parts of the shell. The iPhone runs are then left out
@@ -303,7 +309,9 @@ file). A file only the desktop app builds doesn't start the iPhone runs (the
 simulator's flows, and the iPhone builds in `share-window.yml`), a file only
 the phone app builds doesn't start the desktop installers, and a file both
 build (the page, `lib.rs`, `Cargo.toml`) starts both, unless the pull
-request is labelled `desktop-only`. The nightly run on main runs everything.
+request is labelled `desktop-only`. A draft pull request doesn't start the
+iPhone runs until it's marked ready (#933). The nightly run on main runs
+everything.
 
 The pieces:
 
