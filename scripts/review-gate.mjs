@@ -16,9 +16,11 @@
 //
 // Each commit is reviewed once. With findings, the hook stops the command and
 // hands them to the agent, and the same commit passes the next time: the agent
-// fixes what's real and answers what isn't. A new commit gets a new review.
-// Docs-only changes aren't reviewed. A command the gate can't read is stopped,
-// never guessed at, with the plain form to use instead.
+// fixes what's real and answers what isn't. A new commit gets a review of what
+// it adds since the newest reviewed commit it still holds; the whole change
+// when it holds none, or took in its base branch (#933). Docs-only changes aren't
+// reviewed. A command the gate can't read is stopped, never guessed at, with
+// the plain form to use instead.
 //
 // LINGER_REVIEW_LEVEL picks /code-review's level (default high). Tests stand
 // in for Claude and gh with LINGER_REVIEWER and LINGER_REVIEW_GH.
@@ -1175,18 +1177,20 @@ export function repoOf(url) {
 }
 
 /** What the reviewer is told besides `/code-review`'s own recipe. */
-export function instructions({ base, head, questions }) {
+export function instructions({ base, head, questions, since = null }) {
   return [
-    `You are reviewing a change to this repository before it is proposed or merged, for an agent that will fix what you find. The change is the commits ${base}...${head}; review only what they change.`,
+    since
+      ? `You are reviewing the latest commits of a change before it is proposed or merged, for an agent that will fix what you find. The change so far (${base}...${since}) was reviewed already, and its findings were handed to the author. Review what ${since}...${head} changes, and what those changes do to code they didn't change (a new caller of an old function, say); don't report again what these commits neither touch nor affect.`
+      : `You are reviewing a change to this repository before it is proposed or merged, for an agent that will fix what you find. The change is the commits ${base}...${head}; review only what they change.`,
     "Besides your own review, check the change against the project's questions below, which come from mistakes earlier reviews caught. Where the change fails one, that is a finding.",
     "End your final message with one line on its own: `REVIEW: clean` if you report no findings, or `REVIEW: findings` if you report any.",
     questions ? `\n${questions}` : "",
   ].join("\n");
 }
 
-export function reviewerArgs({ level, base, head, questions }) {
+export function reviewerArgs({ level, base, head, questions, since = null }) {
   return [
-    "-p", `/code-review ${level} ${base}...${head}`,
+    "-p", `/code-review ${level} ${since ?? base}...${head}`,
     "--output-format", "json",
     "--no-session-persistence",
     // The user's own settings only, and no MCP servers: a pull request's
@@ -1195,7 +1199,7 @@ export function reviewerArgs({ level, base, head, questions }) {
     "--strict-mcp-config",
     "--permission-mode", "dontAsk",
     "--allowedTools", ...REVIEWER_TOOLS,
-    "--append-system-prompt", instructions({ base, head, questions }),
+    "--append-system-prompt", instructions({ base, head, questions, since }),
   ];
 }
 
@@ -1316,6 +1320,33 @@ function saveMarker(path, record) {
   renameSync(temp, path);
 }
 
+/**
+ * The newest earlier review this change builds on: the change's own line of
+ * commits (not a branch merged into it), newest first, until one has a
+ * record for the same base branch, made from the same point on it, at this
+ * level or a stricter one, and not past keeping. Null when there's none: a
+ * rebase or an amend that left no reviewed commit, or a branch that took in
+ * its base since, which no earlier review saw.
+ */
+function lastReviewed(top, records, { baseName, base, head, level }) {
+  // Only this change's commits are looked up, so the records kept for every
+  // other branch are never read.
+  const mine = (tryGit(top, ["rev-list", "--first-parent", head, `^${base}`]) ?? "").split("\n").filter(Boolean);
+  for (const commit of mine) {
+    const path = join(records, recordName(commit, baseName));
+    let record;
+    try {
+      if (Date.now() - statSync(path).mtimeMs > KEEP_MS) continue;
+      record = JSON.parse(readFileSync(path, "utf8"));
+    } catch { continue; }
+    if (record?.head !== commit || record.base !== base) continue;
+    // A lighter review than this one doesn't stand in for it.
+    if (LEVELS.indexOf(record.level) < LEVELS.indexOf(level)) continue;
+    return commit;
+  }
+  return null;
+}
+
 /** A path as git lists it: real (a Mac's /var is /private/var) and with / between its parts. */
 const plain = (path) => {
   let real = path;
@@ -1374,9 +1405,9 @@ export function reviewerCommand(env = process.env) {
 }
 
 /** Runs the reviewer in `dir` and hands back its words, or throws why it couldn't. */
-function runReviewer(dir, { level, base, head, questions }) {
+function runReviewer(dir, { level, base, head, since, questions }) {
   const command = reviewerCommand();
-  const result = spawnSync(command, reviewerArgs({ level, base, head, questions }), {
+  const result = spawnSync(command, reviewerArgs({ level, base, head, since, questions }), {
     cwd: dir,
     encoding: "utf8",
     timeout: REVIEW_MS,
@@ -1395,7 +1426,9 @@ function runReviewer(dir, { level, base, head, questions }) {
 /**
  * Reviews `found` once per head commit. Answers `{ ran: false, why }` when
  * there was nothing to review or it was reviewed before, and
- * `{ ran: true, verdict, text, head, base }` after a review.
+ * `{ ran: true, verdict, text, head, base, since }` after a review: `since`
+ * is the earlier review's commit when only what came after it was
+ * reviewed, null when the whole change was.
  */
 export function review(found, { level = DEFAULT_LEVEL } = {}) {
   const marker = markerPath(found.top, found.head, found.base);
@@ -1413,10 +1446,15 @@ export function review(found, { level = DEFAULT_LEVEL } = {}) {
   const base = tryGit(found.top, ["merge-base", baseRef, found.head]);
   if (!base) throw new Error(`couldn't find where ${short(found.head)} left ${found.base}`);
   if (base === found.head) return { ran: false, why: "nothing to review" };
+  // After the first review, a new commit is reviewed for what it adds
+  // (#933). A fresh reviewer always finds something in a whole change: 84
+  // whole-change reviews in a day all had findings, so rounds never ended.
+  const since = lastReviewed(found.top, dirname(marker), { baseName: found.base, base, head: found.head, level });
+  const from = since ?? base;
   // Each side of a rename, as ci-scope reads them: code moved into docs/
   // is still a code change.
-  const paths = git(found.top, ["diff", "--name-only", "--no-renames", base, found.head]).split("\n").filter(Boolean);
-  if (paths.every((path) => partsOf(path).length === 0)) return { ran: false, why: "docs only" };
+  const paths = git(found.top, ["diff", "--name-only", "--no-renames", from, found.head]).split("\n").filter(Boolean);
+  if (paths.every((path) => partsOf(path).length === 0)) return { ran: false, why: since ? "docs only since the last review" : "docs only" };
 
   // Always a clean copy of the commit, never the folder: what's uncommitted
   // there isn't in the pull request, and mustn't be reviewed as if it were.
@@ -1425,10 +1463,12 @@ export function review(found, { level = DEFAULT_LEVEL } = {}) {
     clearStale(found.top, dirname(marker));
     copy = mkdtempSync(join(tmpdir(), WORKTREE_PREFIX));
     git(found.top, ["worktree", "add", "--quiet", "--detach", copy, found.head]);
-    const text = runReviewer(copy, { level, base, head: found.head, questions: questionsFor(copy, base) });
+    // The whole change's questions: the reviewer is asked what new commits
+    // do to the code they didn't change, too.
+    const text = runReviewer(copy, { level, base, head: found.head, since, questions: questionsFor(copy, base) });
     const said = verdict(text);
-    saveMarker(marker, { head: found.head, base, level, verdict: said, at: new Date().toISOString(), text });
-    return { ran: true, verdict: said, text, head: found.head, base };
+    saveMarker(marker, { head: found.head, base, since, level, verdict: said, at: new Date().toISOString(), text });
+    return { ran: true, verdict: said, text, head: found.head, base, since };
   } finally {
     if (copy) {
       tryGit(found.top, ["worktree", "remove", "--force", copy]);
@@ -1488,8 +1528,8 @@ export function hook(action, input) {
   return {
     code: 2,
     message: [
-      `Stopped: a fresh review of ${short(done.head)} (the changes since ${short(done.base)}) found something before this pull request ${VERB[action]}.`,
-      "Fix what's real and run the command again: a new commit gets a new review. This commit passes as it is, so a finding you judge wrong doesn't hold you up; say why in the pull request. Its Tests section says what the review found and what you did.",
+      `Stopped: a fresh review of ${short(done.head)} (the changes since ${short(done.since ?? done.base)}) found something before this pull request ${VERB[action]}.`,
+      "Fix what's real and run the command again: a new commit gets a review of what it adds. This commit passes as it is, so a finding you judge wrong doesn't hold you up; say why in the pull request. Its Tests section says what the review found and what you did. After three rounds, only a real bug in what the pull request changes holds it up (AGENTS.md).",
       "",
       done.text.trim(),
     ].join("\n"),
