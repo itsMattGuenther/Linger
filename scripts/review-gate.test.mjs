@@ -153,6 +153,9 @@ test("reads which pull request, folder and branch a command is about", () => {
     ["merge", "gh pr merge 5 --squash &\nwait\ngit pull --ff-only", { selector: "5" }],
     // The reviewed command's own here-document names the command, in exotic syntax.
     ["create", "gh pr create --title t --body-file - <<'EOF'\nThe gate now runs before `gh pr create`.\nEOF", { base: null }],
+    // A branch named for the command, in a command with exotic syntax.
+    ["create", "git push -u origin fix/gh-pr-create-flags && gh pr create -t x --body \"$(cat <<'EOF'\nUses `x`\nEOF\n)\"", { dirs: [] }],
+    ["merge", "cd ~/src/gh-pr-merge-bot && gh pr merge 5 --subject 'the empty case'", { selector: "5" }],
     ["ready", "gh pr ready", { selector: null }],
     ["ready", "gh pr ready 12", { selector: "12" }],
   ];
@@ -413,6 +416,16 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     ["merge", "gh pr merge 5 & false && wait; git push origin x"],
     ["merge", "gh pr merge 5 & wait & git push origin x"],
     ["merge", "gh pr merge 5 & wait | cat; git push origin x"],
+    // Stored text read back through a substitution or a file, not a pipe.
+    ["merge", "git commit --allow-empty -qm 'gh pr merge 5 --admin' && bash -c \"$(git log -1 --format=%B)\""],
+    ["merge", "git commit --allow-empty -qm 'gh pr merge 5 --admin' && $(git log -1 --format=%B)"],
+    ["merge", "git commit --allow-empty -qm 'gh pr merge 5 --admin' && git log -1 --format=%B > m.sh && bash m.sh"],
+    // gh repo clone hands its words to git clone.
+    ["merge", "gh repo clone o/r /tmp/x -- -c core.sshCommand='gh pr merge 5 --admin #'"],
+    // Escapes spell the command where the words don't.
+    ["merge", "printf 'g\\x68 pr merge 5 --admin' | bash"],
+    // A wait inside an if that may not run.
+    ["merge", "gh pr merge 5 &\nif false; then\nwait\nfi\ngit push -f origin HEAD:feat"],
     // Text bash would refuse, that might be the command.
     ["merge", 'gh pr merge 5 "oops'],
   ];
