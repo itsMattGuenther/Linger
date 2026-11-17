@@ -35,13 +35,111 @@ const LEVEL_EVERY: usize = 2;
 
 /// What's being recorded, if anything.
 #[derive(Default)]
-pub struct Clips(Mutex<Option<Recording>>);
+pub struct Clips(Mutex<Books>);
+
+#[derive(Default)]
+struct Books {
+    /// The next recording's number: how a recording tells itself from a
+    /// later one.
+    next: u64,
+    recording: Option<Recording>,
+}
 
 struct Recording {
+    id: u64,
     /// The window that started it, and the only one told about it.
     window: String,
+    /// There once its microphone is open. Before that the recording is only
+    /// a name on the books.
+    started: Option<Started>,
+}
+
+struct Started {
     stop: oneshot::Sender<()>,
     done: JoinHandle<Result<Clip, String>>,
+}
+
+impl Started {
+    /// Stop it and throw it away, unheard.
+    fn discard(self) {
+        let _ = self.stop.send(());
+        self.done.abort();
+    }
+}
+
+impl Clips {
+    /// Put a recording on the books for `window`, before anything is waited
+    /// for: opening a microphone takes a moment, and a window closed in that
+    /// moment has to find its recording here to take it away (`forget`,
+    /// #913). Refused while another is being recorded, or opened.
+    fn begin(&self, window: &str) -> Result<u64, &'static str> {
+        let mut books = self.lock();
+        if books.recording.is_some() {
+            return Err(ALREADY);
+        }
+        books.next += 1;
+        let id = books.next;
+        books.recording = Some(Recording {
+            id,
+            window: window.to_owned(),
+            started: None,
+        });
+        Ok(id)
+    }
+
+    /// Recording `id` has its microphone open and is under way. When it was
+    /// taken off the books meanwhile (its window closed, or it was stopped),
+    /// it's thrown away here instead, and that's said.
+    fn started(&self, id: u64, started: Started) -> bool {
+        let mut books = self.lock();
+        if let Some(recording) = books
+            .recording
+            .as_mut()
+            .filter(|recording| recording.id == id && recording.started.is_none())
+        {
+            recording.started = Some(started);
+            return true;
+        }
+        started.discard();
+        false
+    }
+
+    /// Recording `id` never got going (its microphone wouldn't open): off
+    /// the books, unless a later one is there now.
+    fn failed(&self, id: u64) {
+        let mut books = self.lock();
+        if books
+            .recording
+            .as_ref()
+            .is_some_and(|recording| recording.id == id)
+        {
+            books.recording = None;
+        }
+    }
+
+    /// Take whatever is on the books, opening or under way.
+    #[cfg(test)]
+    fn take(&self) -> Option<Recording> {
+        self.lock().recording.take()
+    }
+
+    /// Take the recording `window` started, if that's the one on the books.
+    fn take_from(&self, window: &str) -> Option<Recording> {
+        let mut books = self.lock();
+        if books
+            .recording
+            .as_ref()
+            .is_some_and(|recording| recording.window == window)
+        {
+            books.recording.take()
+        } else {
+            None
+        }
+    }
+
+    fn lock(&self) -> MutexGuard<'_, Books> {
+        self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    }
 }
 
 /// A recording: Opus packets of 20 ms each, and how many samples at the
@@ -130,16 +228,22 @@ pub async fn clip_start(
     window: Window,
     input: Option<String>,
 ) -> Result<(), String> {
-    if lock(&app.state::<Clips>()).is_some() {
-        return Err(ALREADY.into());
-    }
-    let microphone = tokio::task::spawn_blocking(move || {
+    let label = window.label().to_string();
+    let id = app.state::<Clips>().begin(&label)?;
+    // Off the books again however this ends before it's under way: an error,
+    // or this command being dropped while it waits.
+    let mut booked = Booked {
+        app: app.clone(),
+        id,
+        under_way: false,
+    };
+    let opened = tokio::task::spawn_blocking(move || {
         crate::voice::device::Microphone::open(input.as_deref())
     })
     .await
-    .map_err(|error| error.to_string())?
-    .map_err(|error| error.to_string())?;
-    let label = window.label().to_string();
+    .map_err(|error| error.to_string())
+    .and_then(|opened| opened.map_err(|error| error.to_string()));
+    let microphone = opened?;
     let (stop, stopped) = oneshot::channel();
     let heard = (app.clone(), label.clone());
     let told = (app.clone(), label.clone());
@@ -160,64 +264,74 @@ pub async fn clip_start(
         )
         .await
     });
-    let clips = app.state::<Clips>();
-    let mut held = lock(&clips);
-    if held.is_some() {
-        // Another window started one while this microphone was opening.
-        done.abort();
-        return Err(ALREADY.into());
+    if app.state::<Clips>().started(id, Started { stop, done }) {
+        booked.under_way = true;
+        Ok(())
+    } else {
+        // Its window closed, or it was stopped, while the microphone opened.
+        Err(CALLED_OFF.into())
     }
-    *held = Some(Recording {
-        window: label,
-        stop,
-        done,
-    });
-    Ok(())
+}
+
+/// A recording on the books that isn't under way yet: dropped before it is,
+/// it comes off them, so nothing is left to refuse the next one.
+struct Booked {
+    app: AppHandle,
+    id: u64,
+    under_way: bool,
+}
+
+impl Drop for Booked {
+    fn drop(&mut self) {
+        if !self.under_way {
+            self.app.state::<Clips>().failed(self.id);
+        }
+    }
 }
 
 const ALREADY: &str = "A voice message is already being recorded.";
+const CALLED_OFF: &str = "The voice message was called off while the microphone opened.";
 
 /// Stop recording and hand the clip back (`Clip::to_bytes`). One that already
 /// stopped by itself (full, or the microphone gone) is handed back the same
 /// way.
 #[tauri::command]
-pub async fn clip_stop(app: AppHandle) -> Result<Response, String> {
-    let recording = lock(&app.state::<Clips>()).take();
-    let Some(recording) = recording else {
-        return Err("Nothing is being recorded.".into());
+pub async fn clip_stop(app: AppHandle, window: Window) -> Result<Response, String> {
+    // This window's own: one window never stops another's. One still opening
+    // its microphone is taken off the books, and `clip_start` throws it away
+    // once the microphone opens.
+    let recording = app.state::<Clips>().take_from(window.label());
+    let started = match recording {
+        None => return Err("Nothing is being recorded.".into()),
+        Some(Recording { started: None, .. }) => return Err(CALLED_OFF.into()),
+        Some(Recording {
+            started: Some(started),
+            ..
+        }) => started,
     };
-    let _ = recording.stop.send(());
-    let clip = recording.done.await.map_err(|error| error.to_string())??;
+    let _ = started.stop.send(());
+    let clip = started.done.await.map_err(|error| error.to_string())??;
     Ok(Response::new(clip.to_bytes()))
 }
 
 /// Stop recording and throw it away.
 #[tauri::command]
-pub async fn clip_cancel(app: AppHandle) {
-    let recording = lock(&app.state::<Clips>()).take();
-    if let Some(recording) = recording {
-        let _ = recording.stop.send(());
-        recording.done.abort();
+pub async fn clip_cancel(app: AppHandle, window: Window) {
+    let recording = app.state::<Clips>().take_from(window.label());
+    if let Some(started) = recording.and_then(|recording| recording.started) {
+        started.discard();
     }
 }
 
 /// A window has gone: a recording it started goes with it, unheard.
+///
+/// One whose microphone is still opening is taken off the books, and
+/// `clip_start` throws it away once the microphone opens (#913).
 pub fn forget(app: &AppHandle, label: &str) {
-    let clips = app.state::<Clips>();
-    let mut held = lock(&clips);
-    if held
-        .as_ref()
-        .is_some_and(|recording| recording.window == label)
-    {
-        if let Some(recording) = held.take() {
-            let _ = recording.stop.send(());
-            recording.done.abort();
-        }
+    let recording = app.state::<Clips>().take_from(label);
+    if let Some(started) = recording.and_then(|recording| recording.started) {
+        started.discard();
     }
-}
-
-fn lock(clips: &Clips) -> MutexGuard<'_, Option<Recording>> {
-    clips.0.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 #[cfg(test)]
@@ -385,5 +499,67 @@ mod tests {
         };
         assert_eq!(clip.to_bytes(), vec![0x38, 0x01, 2, 0, 9, 8, 1, 0, 7]);
         assert_eq!(Clip::default().to_bytes(), vec![0, 0]);
+    }
+
+    /// A recording is on the books before its microphone opens (#913), so
+    /// a window that closes in that moment takes it away: nothing records
+    /// afterwards, and the next voice message starts.
+    #[tokio::test]
+    async fn a_window_closed_while_the_microphone_opens_takes_its_recording_with_it() {
+        let clips = Clips::default();
+        let id = clips.begin("main").expect("the first recording");
+        // Another window can't start one while this microphone opens, and
+        // its closing takes nothing that isn't its own.
+        assert_eq!(clips.begin("chat").err(), Some(ALREADY));
+        assert!(clips.take_from("chat").is_none());
+        assert!(
+            clips.take_from("main").is_some(),
+            "the window's closing found nothing"
+        );
+        // The microphone is open now, and too late: what would have recorded
+        // is stopped, not started.
+        // The task never finishes by itself; it's thrown away when what it
+        // holds is dropped, which says so at once rather than after a wait.
+        let (stop, _stopped) = oneshot::channel();
+        let (alive, gone) = oneshot::channel::<()>();
+        let done = tokio::spawn(async move {
+            let _alive = alive;
+            std::future::pending::<()>().await;
+            Ok(Clip::default())
+        });
+        assert!(!clips.started(id, Started { stop, done }));
+        let ended = tokio::time::timeout(std::time::Duration::from_secs(5), gone).await;
+        assert!(matches!(ended, Ok(Err(_))), "it recorded anyway");
+        // And the next voice message starts, as if nothing had happened.
+        assert!(clips.begin("main").is_ok());
+    }
+
+    /// A microphone that won't open leaves nothing on the books, and an
+    /// earlier recording that ends late doesn't take a later one with it.
+    #[tokio::test]
+    async fn each_recording_ends_only_itself() {
+        let clips = Clips::default();
+        let first = clips.begin("main").expect("the first recording");
+        clips.failed(first);
+        let second = clips
+            .begin("main")
+            .expect("free again after a failed microphone");
+        clips.failed(first);
+        assert_eq!(
+            clips.begin("main").err(),
+            Some(ALREADY),
+            "the first's failure ended the second"
+        );
+        // The first's microphone opening this late is thrown away, and the
+        // second carries on.
+        let (stop, _stopped) = oneshot::channel();
+        let done = tokio::spawn(async { Ok(Clip::default()) });
+        assert!(!clips.started(first, Started { stop, done }));
+        let (stop, _stopped) = oneshot::channel();
+        let done = tokio::spawn(async { Ok(Clip::default()) });
+        assert!(clips.started(second, Started { stop, done }));
+        assert!(clips
+            .take()
+            .is_some_and(|recording| recording.started.is_some()));
     }
 }
