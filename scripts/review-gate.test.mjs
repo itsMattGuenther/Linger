@@ -124,6 +124,10 @@ test("reads which pull request, folder and branch a command is about", () => {
     // A short flag's value after =, as pflag reads it.
     ["create", "gh pr create -B=release", { base: "release" }],
     ["merge", "gh pr merge 5 -R=o/r", { selector: "5", repo: "o/r" }],
+    // An assignment of any kind in front, and gh by its Windows name.
+    ["merge", "X+=1 gh pr merge 5", { selector: "5" }],
+    ["merge", "a[0]=1 gh pr merge 5", { selector: "5" }],
+    ["merge", "gh.exe pr merge 5", { selector: "5" }],
     // ANSI-C quoting is quoting.
     ["create", "gh pr create --$'base' release", { base: "release" }],
     ["ready", "gh pr ready", { selector: null }],
@@ -207,6 +211,28 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     ["merge", "gh pr merge 5 $FLAGS"],
     ["create", 'gh pr create --base "$B"'],
     ["create", "GH_REPO=$R gh pr create"],
+    // The three words in order, as words of one command, whatever runs them:
+    // stopped rather than guessed (#925).
+    ["create", "echo gh pr create"],
+    ["merge", "true &>/dev/null gh pr merge 5"],
+    ["merge", "gh pr create --title merge"],
+    ["merge", "gh pr -R o/r merge 5"],
+    ["merge", "/usr/bin/env gh pr merge 5"],
+    ["merge", 'W=env; "$W" gh pr merge 5'],
+    ["merge", '"$(echo sudo)" gh pr merge 5'],
+    ["merge", "function f { gh pr merge 5; }; f"],
+    ["merge", "coproc X { gh pr merge 5; }"],
+    ["merge", "time -p gh pr merge 5"],
+    ["merge", "CMD='gh pr merge 5'; $CMD"],
+    // A program that runs text, given the command as text.
+    ["merge", "bash -c 'gh pr \"merge\" 5'"],
+    ["merge", "bash <<<'gh pr merge 5'"],
+    ["merge", "bash <<EOF\ngh pr merge 5\nEOF"],
+    ["merge", "echo gh pr merge 5 | sh"],
+    // Substitutions bash runs, however they're wrapped.
+    ["merge", 'cat <<EOF\na\\" $(gh pr merge 5)\nEOF'],
+    ["merge", 'echo "${x:-$(echo }; gh pr merge 5)}"'],
+    ["merge", "echo $((gh pr merge 5) )"],
     // Text bash would refuse, that might be the command.
     ["merge", 'gh pr merge 5 "oops'],
   ];
@@ -235,10 +261,7 @@ test("a command that isn't one leaves the gate out", () => {
     ["create", "gh pr create --help"],
     ["merge", "gh pr merge -h"],
     ["ready", "gh pr view --json isDraft"],
-    // Words, not text (#925): these only name the command, or run another gh pr.
-    ["create", "echo gh pr create"],
-    ["merge", "true &>/dev/null gh pr merge 5"],
-    ["merge", "gh pr create --title merge"],
+    // Words, not text (#925): a quoted string, a here-document body and jq's text are data.
     ["merge", "for pr in 919 921; do gh pr view $pr --json state --jq '\"merged\"'; done"],
     ["merge", 'git commit -m "fix: gh pr merge 5 later"'],
     ["create", "node - <<'JS'\n['create', 'gh pr create -t x']\nJS"],
