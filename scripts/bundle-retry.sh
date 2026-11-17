@@ -10,8 +10,8 @@
 # same way. The bundler says `Downloading <address>` before each; when
 # that's its last step before the bundle failed, the build is tried again.
 # Checking or unpacking what came (Tauri's lowercase "validating hash",
-# "extracting") isn't a step of its own: a download that arrived broken is
-# tried again too. Any other failure fails at once. Another try is all of
+# "extracting") isn't a step of its own, but only a network's failure is
+# tried again. Any other failure fails at once. Another try is all of
 # `tauri build` again: the frontend and the Rust are mostly cached by then,
 # but it's minutes, not seconds, so it's one more try, not several.
 #
@@ -42,9 +42,9 @@ pause=$((10#$pause))
 
 log="$(mktemp)"
 trap 'rm -f "$log"' EXIT
-# Ctrl-C, or a cancelled job, stops it rather than counting as a failed try.
+# Ctrl-C stops it rather than counting as a failed try. (No TERM trap: one
+# would wait for the build to finish before a cancelled job could stop.)
 trap 'exit 130' INT
-trap 'exit 143' TERM
 
 # Colours and Windows line ends, spelled by bash so any sed reads them (a
 # Mac's doesn't know \x1b or \r).
@@ -54,21 +54,20 @@ cr=$'\r'
 # Whether it failed on a download: of the bundler's steps (a capitalised
 # word like Downloading, Bundling or Running starting a line, after any
 # "Info"), the last before its "failed to bundle project" is Downloading,
-# and the failure, on its line or the cause lines after it, is a network's
-# or a broken file's: a server's 5xx, 408 or 429, a timeout, a dropped
-# connection, a bad hash or archive. Not a 404, which another try won't
-# mend, nor, say, a template that wouldn't render after the download worked.
+# and the failure, on its line or the cause lines after it, is a network's:
+# a server's 5xx, 408 or 429, a timeout, or a connection dropped, refused or
+# not found. Not a 404, which another try won't mend, nor a file that came
+# broken, nor, say, a template that wouldn't render after the download.
 # Other lines between (a warning, a progress count, an error's causes, a
 # lowercase "Info validating hash") don't count either way. Colours and
 # Windows line ends are taken off first.
 failed_downloading() {
   sed -e "s/${esc}\[[0-9;]*[A-Za-z]//g" -e "s/${cr}\$//" "$1" | awk '
-    # The reason is on the failure line or the cause lines after it.
-    /failed to bundle project/ { reading = (step == "Downloading") ? 6 : 0 }
-    reading > 0 {
-      reading--
-      if (tolower($0) ~ /(http status|status code)[: ]*(5[0-9][0-9]|408|429)|timed out|timeout|connection|dns|resolve|network|tls|reset|eof|io:|error sending request|hash|zip|archive/) found = 1
-    }
+    # The reason is on the failure line or the cause lines after it, to the
+    # end: the build stopped there. Only words a network uses count, never a
+    # loose one an address or a path could hold (L-31: no blanket retries).
+    /failed to bundle project/ { reading = (step == "Downloading") }
+    reading && tolower($0) ~ /(http status|status code):? *(5[0-9][0-9]|408|429)([^0-9]|$)|timed out|connection (reset|refused|failed|closed)|dns failed|error sending request/ { found = 1 }
     { word = ($1 == "Info") ? $2 : $1; if (word ~ /^(Downloading|Bundling|Running|Finished|Built|Compiling|Signing|Packaging|Patching|Installing)$/) step = word }
     END { exit found ? 0 : 1 }'
 }

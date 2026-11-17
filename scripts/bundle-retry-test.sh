@@ -35,6 +35,8 @@ if [ "$n" -le "$failing" ]; then
     template) printf ' Downloading https://github.com/x/wix314-binaries.zip\n        Info validating hash\nfailed to bundle project: `failed to render main.wxs`\n' ;;
     chain) printf ' Downloading https://github.com/x/nsis.zip\n       Error failed to bundle project:\n    - http status: 504\n' ;;
     wording) printf ' Downloading https://github.com/x/nsis.zip\nfailed to bundle project: https://github.com/x/nsis.zip: status code 503\n' ;;
+    zipgone) printf ' Downloading https://github.com/x/wix314-binaries.zip\nfailed to bundle project: https://github.com/x/wix314-binaries.zip: status code 404\n' ;;
+    denied) printf ' Downloading https://github.com/x/wix314-binaries.zip\n        Info extracting WIX\nfailed to bundle project: io: Access is denied. (os error 5)\n' ;;
     gone) printf ' Downloading https://github.com/x/nsis.zip\nfailed to bundle project: `http status: 404`\n' ;;
     signed) printf ' Downloading https://github.com/x/y.zip\n     Signing Linger.msi\nfailed to bundle project: `signtool failed`\n' ;;
     compile) printf 'error[E0308]: mismatched types\n' ;;
@@ -66,7 +68,11 @@ BUNDLE_RETRY_TRIES=3 run download 2
 run between 1
 [ "$status" -eq 0 ] && [ "$runs" -eq 2 ] || fail "a warning, a progress count and causes after it don't hide the download ($status, $runs)"
 run broken 1
-[ "$status" -eq 0 ] && [ "$runs" -eq 2 ] || fail "a download that arrived broken (Tauri's lowercase checking and unpacking lines) is tried again ($status, $runs)"
+[ "$status" -eq 7 ] && [ "$runs" -eq 1 ] || fail "a download that arrived broken isn't a network's failure ($status, $runs)"
+run zipgone 1
+[ "$status" -eq 7 ] && [ "$runs" -eq 1 ] || fail "a 404 for a .zip isn't retried because its address says zip ($status, $runs)"
+run denied 1
+[ "$status" -eq 7 ] && [ "$runs" -eq 1 ] || fail "a file that can't be written isn't the network's ($status, $runs)"
 run template 1
 [ "$status" -eq 7 ] && [ "$runs" -eq 1 ] || fail "a failure after a download that worked, not a network's, runs once ($status, $runs)"
 run chain 1
