@@ -88,8 +88,14 @@ const settled = (asked: Promise<unknown>) => {
     () => undefined,
     () => undefined,
   );
-  shellSettling = Promise.all([shellSettling, done]).then(() => undefined);
+  shellSettling = shellSettling.then(() => done);
 };
+
+/**
+ * How long a start waits for an earlier start's microphone to open: one that
+ * hangs (a stuck driver) mustn't hold every later Record (#920).
+ */
+const LONGEST_OPEN_WAIT_MS = 10_000;
 
 /**
  * The desktop shell's recorder (src-tauri/src/clip.rs), through its commands
@@ -124,7 +130,7 @@ export function shellRecorder(events: RecorderEvents, input: () => string | null
       // The next start waits for this one too, until its microphone has
       // opened or it's refused, so one microphone opens at a time.
       const sending = invoke("clip_start", { input: input(), start });
-      settled(sending);
+      settled(within(sending, LONGEST_OPEN_WAIT_MS));
       await sending;
     },
     stop: async () => {
