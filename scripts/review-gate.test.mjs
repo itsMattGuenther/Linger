@@ -736,7 +736,7 @@ test("after a review, a new commit is reviewed for what it adds; the whole chang
     assert.equal(box.gate("create", "gh pr create -t t").code, 2);
     // A record that can't be read, or names a commit that isn't here, is passed over.
     writeFileSync(join(box.repo, ".git/linger-review", recordName("a".repeat(40), "main")), "not json");
-    writeFileSync(join(box.repo, ".git/linger-review", recordName("b".repeat(40), "main")), JSON.stringify({ head: "b".repeat(40), base: box.main }));
+    writeFileSync(join(box.repo, ".git/linger-review", recordName("b".repeat(40), "main")), JSON.stringify({ head: "b".repeat(40), base: box.main, level: "high" }));
     const second = box.commit(box.repo, "client/src/thing.ts", "export const one = 2;\n");
     assert.equal(box.gate("create", "gh pr create -t t").code, 2);
     let call = box.calls().at(-1);

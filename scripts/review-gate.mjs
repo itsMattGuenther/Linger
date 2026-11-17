@@ -1321,30 +1321,30 @@ function saveMarker(path, record) {
 }
 
 /**
- * The newest earlier review this change builds on: a record for the same
- * base branch, from the same point on it, whose commit is an ancestor of
- * this one. Null when there's none, or when the branch was rebased or took
- * in its base branch since: that's a change no earlier review saw.
+ * The newest earlier review this change builds on: the change's own
+ * commits, newest first, until one has a record for the same base branch,
+ * made from the same point on it, at this level or a stricter one. Null
+ * when there's none, or when the branch was rebased, amended or took in its
+ * base branch since: that's a change no earlier review saw.
  */
 function lastReviewed(top, records, { baseName, base, head, level }) {
-  let names = [];
-  try { names = readdirSync(records).sort(); } catch { return null; }
-  let best = null;
-  for (const name of names) {
-    // Named for this base branch, before anything is read.
-    const commit = name.slice(0, 40);
-    if (!/^[0-9a-f]{40}$/.test(commit) || commit === head || name !== recordName(commit, baseName)) continue;
+  // Only this change's commits are looked up, so the records kept for every
+  // other branch are never read.
+  const mine = (tryGit(top, ["rev-list", "--topo-order", head, `^${base}`]) ?? "").split("\n").filter(Boolean);
+  for (const commit of mine) {
+    if (commit === head) continue;
+    const path = join(records, recordName(commit, baseName));
     let record;
-    try { record = JSON.parse(readFileSync(join(records, name), "utf8")); } catch { continue; }
+    try {
+      if (Date.now() - statSync(path).mtimeMs > KEEP_MS) continue;
+      record = JSON.parse(readFileSync(path, "utf8"));
+    } catch { continue; }
     if (record?.head !== commit || record.base !== base) continue;
     // A lighter review than this one doesn't stand in for it.
-    if (!(LEVELS.indexOf(record.level) >= LEVELS.indexOf(level))) continue;
-    if (!gitOk(top, ["merge-base", "--is-ancestor", commit, head])) continue;
-    // The newest: two that don't descend from each other keep the first
-    // in name order, and the review covers the other's commits again.
-    if (best === null || gitOk(top, ["merge-base", "--is-ancestor", best, commit])) best = commit;
+    if (LEVELS.indexOf(record.level) < LEVELS.indexOf(level)) continue;
+    return commit;
   }
-  return best;
+  return null;
 }
 
 /** A path as git lists it: real (a Mac's /var is /private/var) and with / between its parts. */
@@ -1449,8 +1449,6 @@ export function review(found, { level = DEFAULT_LEVEL } = {}) {
   // After the first review, a new commit is reviewed for what it adds
   // (#933). A fresh reviewer always finds something in a whole change: 84
   // whole-change reviews in a day all had findings, so rounds never ended.
-  // Records past keeping go first, so none of them is chosen.
-  clearStale(found.top, dirname(marker));
   const since = lastReviewed(found.top, dirname(marker), { baseName: found.base, base, head: found.head, level });
   const from = since ?? base;
   // Each side of a rename, as ci-scope reads them: code moved into docs/
@@ -1462,6 +1460,7 @@ export function review(found, { level = DEFAULT_LEVEL } = {}) {
   // there isn't in the pull request, and mustn't be reviewed as if it were.
   let copy = null;
   try {
+    clearStale(found.top, dirname(marker));
     copy = mkdtempSync(join(tmpdir(), WORKTREE_PREFIX));
     git(found.top, ["worktree", "add", "--quiet", "--detach", copy, found.head]);
     const text = runReviewer(copy, { level, base, head: found.head, since, questions: questionsFor(copy, from) });

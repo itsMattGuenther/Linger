@@ -173,13 +173,13 @@ pass.
   Each commit is reviewed once. With findings, the command stops and they
   come back to you: fix what's real and run it again, and a new commit gets
   a review of what it adds since the last one (the whole change again after
-  a rebase or taking in main, #933). The same commit passes the second
-  time, so a finding you judge wrong doesn't hold you up; say why in the
-  pull request, and say in its Tests section what the review found and
-  what you did. Docs-only
-  changes aren't reviewed. Run the command on its own, with only `cd
-  <folder> &&` in front (and, before `gh pr create`, `git push … &&`), and
-  the number right after `gh pr merge`; push before a merge, never in the
+  a rebase, an amend or taking in main, #933: fix with a new commit). The
+  same commit passes the second time, so a finding you judge wrong doesn't
+  hold you up; say why in the pull request, and say in its Tests section
+  what the review found and what you did. Docs-only changes aren't
+  reviewed. Run the command on its own, with only `cd <folder> &&` in
+  front (and, before `gh pr create`, `git push … &&`), and the number
+  right after `gh pr merge`; push before a merge, never in the
   same command, and don't use `--auto`, since either would merge a commit
   the review never saw. Don't put a merge in the background, and pipe it
   only into what reads (`| tail`, `| tee log`); a body goes in
