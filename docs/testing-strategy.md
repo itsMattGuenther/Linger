@@ -520,9 +520,9 @@ rules that came out of them:
   through `scripts/bundle-retry.sh`, which runs the build once more when the
   bundler's last step before it failed was `Downloading` and the failure is
   the network's (a server's 5xx, 408 or 429, a timeout, a connection dropped),
-  and on Linux the AppImage bundler's downloads too. A 404, a broken file or a
-  disk error fails at once: no blanket retries (L-31). Any other failure fails
-  at once. Another try is all of `tauri build`, mostly cached by then.
+  and on Linux the AppImage bundler's downloads too. Anything else, a 404, a
+  broken file or a disk error among them, fails at once: no blanket retries
+  (L-31). Another try is all of `tauri build`, mostly cached by then.
   `scripts/bundle-retry-test.sh` has a stand-in build fail on a download,
   coloured and plain and with other lines after it, and fail every other way,
   and checks which are tried again. It retries the build rather than fetching

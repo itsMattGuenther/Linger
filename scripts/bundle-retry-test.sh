@@ -35,6 +35,9 @@ if [ "$n" -le "$failing" ]; then
     template) printf ' Downloading https://github.com/x/wix314-binaries.zip\n        Info validating hash\nfailed to bundle project: `failed to render main.wxs`\n' ;;
     chain) printf ' Downloading https://github.com/x/nsis.zip\n       Error failed to bundle project:\n    - http status: 504\n' ;;
     wording) printf ' Downloading https://github.com/x/nsis.zip\nfailed to bundle project: https://github.com/x/nsis.zip: status code 503\n' ;;
+    stalled) printf ' Downloading https://github.com/x/nsis.zip\nfailed to bundle project: timeout: recv_response\n' ;;
+    windows) printf ' Downloading https://github.com/x/wix.zip\nfailed to bundle project: io: An existing connection was forcibly closed by the remote host. (os error 10054)\n' ;;
+    nohost) printf ' Downloading https://github.com/x/wix.zip\nfailed to bundle project: host not found\n' ;;
     zipgone) printf ' Downloading https://github.com/x/wix314-binaries.zip\nfailed to bundle project: https://github.com/x/wix314-binaries.zip: status code 404\n' ;;
     denied) printf ' Downloading https://github.com/x/wix314-binaries.zip\n        Info extracting WIX\nfailed to bundle project: io: Access is denied. (os error 5)\n' ;;
     gone) printf ' Downloading https://github.com/x/nsis.zip\nfailed to bundle project: `http status: 404`\n' ;;
@@ -79,6 +82,10 @@ run chain 1
 [ "$status" -eq 0 ] && [ "$runs" -eq 2 ] || fail "a reason on the cause line after the failure is read ($status, $runs)"
 run wording 1
 [ "$status" -eq 0 ] && [ "$runs" -eq 2 ] || fail "another client's wording of a 503 is read ($status, $runs)"
+for how in stalled windows nohost; do
+  run "$how" 1
+  [ "$status" -eq 0 ] && [ "$runs" -eq 2 ] || fail "$how: the HTTP client's own wording of a network failure is tried again ($status, $runs)"
+done
 run gone 1
 [ "$status" -eq 7 ] && [ "$runs" -eq 1 ] || fail "a 404 isn't tried again: another try won't mend it ($status, $runs)"
 run signed 1
