@@ -153,8 +153,7 @@ const stop = (why) => ({ fail: why });
  * Claude Code fired the hook from its own reading, so with the words there
  * in order it might be the command, however it's spelled (`command gh`, a
  * path, quotes, a redirection the gate can't read between them, a line
- * continued), or a second copy after one it read. One pass left to right,
- * so no command makes it slow.
+ * continued). One pass left to right, so no command makes it slow.
  */
 function inOrder(command, words) {
   let from = 0;
@@ -236,11 +235,6 @@ export function readCommand(command, action) {
     words.push(unquote(token[1]));
     after = after.slice(token[0].length);
   }
-  // A second copy after this one, even one it can't read (`; "gh" pr merge 6`),
-  // would run unreviewed beside the one reviewed. Looked for only when the
-  // command was read whole, and past a comment that ends it: a create's body
-  // the gate couldn't read is text, and may well mention the command.
-  if (readable && inOrder(after.replace(/^[ \t]+#[^\n]*/, ""), ["gh", "pr", action])) return stop(`it may run \`gh pr ${action}\` more than once; run each on its own, a body in --body-file`);
   const { flags, positional } = parseWords(words, action);
   if (flags.has("--help") || flags.has("-h")) return null;
   // Back to a draft takes a pull request away from review; nothing to gate.

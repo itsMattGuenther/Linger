@@ -80,9 +80,12 @@ test("reads which pull request, folder and branch a command is about", () => {
     ["merge", "gh pr merge 5 -sR o/r", { selector: "5", repo: "o/r" }],
     ["create", "gh pr create -t x -dB release", { base: "release" }],
     ["create", "gh pr create -t x -dBrelease", { base: "release" }],
-    // A body it can't read, or a comment, that mentions the command is text, not a second copy.
+    // A body it can't read, or a comment, that mentions the command is text.
     ["create", "gh pr create -t x --body \"$(cat <<'EOF'\nThe gate reads gh pr create now.\nEOF\n)\"", { base: null }],
     ["merge", "gh pr merge 5 # then gh pr merge 6 later", { selector: "5" }],
+    // Commands after it that name the action are theirs (#925 reads a second copy by words).
+    ["merge", "gh pr merge 920 --admin && gh pr comment 921 --body 'ready to merge'", { selector: "920" }],
+    ["merge", "gh pr merge 5 && gh pr checkout 6 && git merge main", { selector: "5" }],
     ["create", "gh pr create -t x > out.txt", { base: null }],
     ["create", "gh pr create -t x -B release 2>&1", { base: "release" }],
     ["ready", "gh pr ready", { selector: null }],
@@ -144,9 +147,6 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     ["create", 'gh pr create -b "$(cat x)" -""B release'],
     ["create", 'gh pr create -b "$(cat x)" -dB release'],
     ["create", "gh pr create -t x -dH other"],
-    // A second copy after the one it read, read or not, would go unreviewed.
-    ["merge", 'gh pr merge 5 >/dev/null; gh 2>"$L" pr merge 6 --auto'],
-    ["merge", 'gh pr merge 5 && "gh" pr merge 6'],
     // Claude Code fired the hook from its own reading, so the words in order
     // are enough: the gate can't tell this from a merge it can't read.
     ["merge", "gh pr create --title merge"],
