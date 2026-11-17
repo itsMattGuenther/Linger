@@ -37,7 +37,8 @@
  * back. `?nomic` has no microphone to record from. With `?holdmic` each
  * `clip_start` waits, the microphone opening, until `window.parity.clip.opens()`;
  * a `clip_cancel` meanwhile calls it off, and it then rejects as the shell
- * does (#913, #920). `window.parity.unmount()` takes the window's page away,
+ * does (#913, #920); with `?cancelfirst` too, the cancel came before the start
+ * booked and the start goes ahead anyway. `window.parity.unmount()` takes the window's page away,
  * as a docked chat folding does.
  *
  * `window.parity.holdReads()` makes every history read from then on wait for
@@ -150,7 +151,9 @@ const desktop = fakeDesktop({
     },
     clip_cancel: () => {
       desktop.note("clip_cancel");
-      for (const held of heldStarts) held.calledOff = true;
+      // With `?cancelfirst` the shell heard the cancel before the start
+      // booked, so the start goes ahead anyway, as it can in the real one.
+      if (!query.has("cancelfirst")) for (const held of heldStarts) held.calledOff = true;
       return null;
     },
     dropped_files: () => {

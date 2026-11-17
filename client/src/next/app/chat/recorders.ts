@@ -39,8 +39,8 @@ export interface Recorder {
   start: () => Promise<void>;
   /** Stop, and hand the recording back; null when there's nothing readable. */
   stop: () => Promise<Recording | null>;
-  /** Stop and throw it away. */
-  cancel: () => void;
+  /** Stop and throw it away; settles once it's done, for one that has to ask the shell. */
+  cancel: () => void | Promise<void>;
   /** Let go of everything it listens to. */
   dispose: () => void;
 }
@@ -85,7 +85,10 @@ export function shellRecorder(events: RecorderEvents, input: () => string | null
       await invoke("clip_start", { input: input() });
     },
     stop: async () => readClip(new Uint8Array(await invoke<ArrayBuffer>("clip_stop"))),
-    cancel: () => void invoke("clip_cancel").catch(() => undefined),
+    cancel: () => invoke("clip_cancel").then(
+      () => undefined,
+      () => undefined,
+    ),
     dispose: () => {
       gone = true;
       for (const stop of stops) stop();
@@ -205,6 +208,8 @@ export function pageRecorder(events: RecorderEvents): Recorder {
   /** One stretch of sound, as one channel: encoded, and heard for the lines. `timestamp` is in microseconds. */
   const encode = (samples: Float32Array<ArrayBuffer>, rate: number, timestamp: number) => {
     if (encoder === null) {
+      // Made for the start under way: it speaks only for that one (#920).
+      const owner = attempt;
       encoder = new AudioEncoder({
         output: (chunk, meta) => {
           const found = preSkipOf(meta?.decoderConfig?.description);
@@ -212,13 +217,13 @@ export function pageRecorder(events: RecorderEvents): Recorder {
           const packet = new Uint8Array(chunk.byteLength);
           chunk.copyTo(packet);
           packets.push(packet);
-          if (packets.length === LONGEST_PACKETS && !stopped) {
+          if (packets.length === LONGEST_PACKETS && !stopped && attempt === owner) {
             release();
             events.ended("full");
           }
         },
         error: () => {
-          if (!stopped) events.ended("lost");
+          if (!stopped && attempt === owner) events.ended("lost");
         },
       });
       encoder.configure({ codec: "opus", sampleRate: rate, numberOfChannels: 1, bitrate: BITS_PER_SECOND, opus: { frameDuration: 20_000 } });

@@ -1871,6 +1871,31 @@ test.describe("voice messages (#401)", () => {
     await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible();
   });
 
+  for (const how of ["Escape", "the window going"] as const) {
+    test(`called off by ${how}, and started anyway, it's stopped as soon as it starts (#920)`, async ({ page }) => {
+      await open(page, "room=r-general&holdmic&cancelfirst");
+      await page.getByRole("button", { name: "Record a voice message" }).click();
+      await panel(page).getByRole("button", { name: "Record" }).click();
+      await expect(opening(page)).toBeVisible();
+      if (how === "Escape") await escape(page);
+      else await page.evaluate(() => window.parity?.unmount());
+      await expect.poll(() => asked(page, "clip_cancel")).toHaveLength(1);
+      // The shell heard that cancel first, and starts it anyway: the page
+      // stops it as soon as it hears, through the recorder it started with.
+      await opens(page);
+      await expect.poll(() => asked(page, "clip_cancel")).toHaveLength(2);
+      if (how === "Escape") {
+        await expect(panel(page)).toHaveCount(0);
+        // The next start waits for that stop, then starts.
+        await page.getByRole("button", { name: "Record a voice message" }).click();
+        await panel(page).getByRole("button", { name: "Record" }).click();
+        await expect.poll(() => starts(page)).toBe(2);
+        await opens(page);
+        await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible();
+      }
+    });
+  }
+
   test("the window going while the microphone opens calls it off (#920)", async ({ page }) => {
     await open(page, "room=r-general&holdmic");
     await page.getByRole("button", { name: "Record a voice message" }).click();

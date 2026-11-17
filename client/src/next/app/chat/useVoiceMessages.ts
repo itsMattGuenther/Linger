@@ -34,6 +34,9 @@ export interface VoiceMessageControls {
  * web view can't record (no microphone, or no Opus encoder, as on an iPhone
  * before iOS 26), which then offers no microphone button.
  */
+/** How long a start waits for the one before it to settle: one that hangs mustn't hold every later Record (#920). */
+const LONGEST_WAIT_MS = 5_000;
+
 export function useVoiceMessages(
   paneId: string | null,
   apis: ReadonlyMap<string, AuthedApi>,
@@ -143,7 +146,7 @@ export function useVoiceMessages(
     const starting = startingIn.current;
     if (starting !== null && starting.conversation !== paneId) {
       startingIn.current = null;
-      recorder.current?.cancel();
+      void recorder.current?.cancel();
       put(starting.conversation, { kind: "ready", problem: null });
     }
   }, [paneId, finish, put]);
@@ -172,13 +175,16 @@ export function useVoiceMessages(
     const mine = { conversation };
     startingIn.current = mine;
     const devices = loadVoicePrefs().devices;
-    // After the last start has settled, and only if this one wasn't called
-    // off meanwhile.
-    const starting = lastStart.current.then(() => {
+    // The recorder this start uses, kept: if it's called off and starts
+    // anyway, it's stopped through this one, even once the page has let the
+    // recorder go (#920).
+    const using = recorder.current;
+    // After the last start has settled (or a while, if one hangs), and only
+    // if this one wasn't called off meanwhile.
+    const starting = Promise.race([lastStart.current, new Promise((waited) => setTimeout(waited, LONGEST_WAIT_MS))]).then(() => {
       if (startingIn.current !== mine) throw new Error("called off");
-      return recorder.current?.start() ?? Promise.reject(new Error("no input device available"));
+      return using?.start() ?? Promise.reject(new Error("no input device available"));
     });
-    lastStart.current = starting.catch(() => undefined);
     // Only this start's answer counts, and only while it's still the one
     // starting: called off meanwhile, its answer is nobody's (#920).
     const stillThisOne = () => {
@@ -186,12 +192,12 @@ export function useVoiceMessages(
       startingIn.current = null;
       return true;
     };
-    starting.then(
-      () => {
+    const answered = starting.then(
+      async () => {
         // Called off, and it started anyway (the shell heard the cancel
-        // before the start): it's stopped now, before a next start begins.
+        // before the start): stopped now, and the next start waits for that.
         if (!stillThisOne()) {
-          recorder.current?.cancel();
+          await using?.cancel();
           return;
         }
         recordingIn.current = conversation;
@@ -202,6 +208,7 @@ export function useVoiceMessages(
         put(conversation, { kind: "ready", problem: startProblemWords(voiceStartProblem(error instanceof Error ? error.message : String(error), onWindows(), devices, onPhone())) });
       },
     );
+    lastStart.current = answered.catch(() => undefined);
   }, [paneId, put]);
 
   const stop = useCallback(() => {
@@ -214,7 +221,7 @@ export function useVoiceMessages(
     if (recordingIn.current === paneId || startingIn.current?.conversation === paneId) {
       recordingIn.current = null;
       startingIn.current = null;
-      recorder.current?.cancel();
+      void recorder.current?.cancel();
     }
     if (now?.kind === "kept") URL.revokeObjectURL(now.url);
     put(paneId, null);
