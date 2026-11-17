@@ -49,10 +49,15 @@ struct Books {
     /// refused when it comes. A few at most: each is used once, and a
     /// window that closes takes its own.
     called_off: Vec<(String, u32)>,
+    /// The starts heard lately, by window and the page's number, booked or
+    /// refused: a cancel for one of these has nothing to wait for (#920).
+    seen: Vec<(String, u32)>,
 }
 
-/// The most cancels kept for starts not yet booked; the oldest go first.
+/// The most cancels kept for starts not yet heard; the oldest go first.
 const MOST_CALLED_OFF: usize = 8;
+/// The most starts remembered as heard.
+const MOST_SEEN: usize = 32;
 
 struct Recording {
     id: u64,
@@ -86,6 +91,10 @@ impl Clips {
     /// A start its window called off before it got here is refused.
     fn begin(&self, window: &str, start: u32) -> Result<u64, &'static str> {
         let mut books = self.lock();
+        if books.seen.len() == MOST_SEEN {
+            books.seen.remove(0);
+        }
+        books.seen.push((window.to_owned(), start));
         if let Some(at) = books
             .called_off
             .iter()
@@ -111,29 +120,34 @@ impl Clips {
     /// Call off the start `window` numbered `start`: taken off the books if
     /// it's there, and remembered if it hasn't come yet. Never another start,
     /// so a later recording is safe from an earlier one's cancel (#920).
+    ///
+    /// Remembered only while the shell hasn't heard that start: one heard
+    /// and gone (refused, failed, stopped) has nothing left to call off.
     fn call_off(&self, window: &str, start: u32) -> Option<Recording> {
         let mut books = self.lock();
-        if books
-            .recording
-            .as_ref()
-            .is_some_and(|recording| recording.window == window && recording.start == start)
-        {
-            return books.recording.take();
+        let named = (window.to_owned(), start);
+        match books.recording.as_ref() {
+            Some(recording) if recording.window == window && recording.start == start => {
+                books.recording.take()
+            }
+            _ if books.seen.contains(&named) => None,
+            _ => {
+                if books.called_off.len() == MOST_CALLED_OFF {
+                    books.called_off.remove(0);
+                }
+                books.called_off.push(named);
+                None
+            }
         }
-        if books
-            .recording
-            .as_ref()
-            .is_some_and(|recording| recording.window == window && recording.start != start)
-        {
-            // A later start of the same window's is under way: this cancel
-            // is for one that has come and gone.
-            return None;
-        }
-        if books.called_off.len() == MOST_CALLED_OFF {
-            books.called_off.remove(0);
-        }
-        books.called_off.push((window.to_owned(), start));
-        None
+    }
+
+    /// A window has gone: its recording, and everything kept for it.
+    fn forget_window(&self, window: &str) -> Option<Recording> {
+        let taken = self.take_from(window);
+        let mut books = self.lock();
+        books.called_off.retain(|(by, _)| by != window);
+        books.seen.retain(|(by, _)| by != window);
+        taken
     }
 
     /// Recording `id` has its microphone open and is under way. When it was
@@ -172,11 +186,9 @@ impl Clips {
         self.lock().recording.take()
     }
 
-    /// Take the recording `window` started, if that's the one on the books,
-    /// and forget the cancels it was waiting on (it's gone).
+    /// Take the recording `window` started, if that's the one on the books.
     fn take_from(&self, window: &str) -> Option<Recording> {
         let mut books = self.lock();
-        books.called_off.retain(|(by, _)| by != window);
         if books
             .recording
             .as_ref()
@@ -382,7 +394,7 @@ pub async fn clip_cancel(app: AppHandle, window: Window, start: u32) {
 /// One whose microphone is still opening is taken off the books, and
 /// `clip_start` throws it away once the microphone opens (#913).
 pub fn forget(app: &AppHandle, label: &str) {
-    let recording = app.state::<Clips>().take_from(label);
+    let recording = app.state::<Clips>().forget_window(label);
     if let Some(started) = recording.and_then(|recording| recording.started) {
         started.discard();
     }
@@ -657,13 +669,48 @@ mod tests {
         assert_eq!(clips.lock().called_off.len(), MOST_CALLED_OFF);
         // The oldest went first.
         assert!(clips.begin("main", 0).is_ok());
-        assert!(clips.take_from("main").is_some());
+        assert!(clips.forget_window("main").is_some());
         assert!(
             clips.lock().called_off.is_empty(),
             "the window's going kept its cancels"
         );
         clips.call_off("chat", 3);
-        assert!(clips.take_from("main").is_none());
+        assert!(clips.forget_window("main").is_none());
         assert_eq!(clips.lock().called_off.len(), 1);
+    }
+
+    /// Commands can be handled in any order: start(A), cancel(A), start(B)
+    /// sent, B heard first. A's cancel still waits for A, through B's
+    /// failing or being stopped, and A is refused when it comes (#920).
+    #[test]
+    fn a_cancel_waits_for_its_start_whatever_comes_between() {
+        let clips = Clips::default();
+        let b = clips.begin("main", 2).expect("B first");
+        assert!(clips.call_off("main", 1).is_none());
+        clips.failed(b);
+        assert_eq!(
+            clips.begin("main", 1).err(),
+            Some(CALLED_OFF),
+            "A went ahead after B failed"
+        );
+        // And through a stop of a later recording (clip_stop takes it).
+        assert!(clips.call_off("main", 3).is_none());
+        clips.begin("main", 4).expect("the next");
+        assert!(clips.take_from("main").is_some());
+        assert_eq!(
+            clips.begin("main", 3).err(),
+            Some(CALLED_OFF),
+            "a Stop forgot the cancel"
+        );
+    }
+
+    /// A cancel for a start heard and gone isn't kept: nothing is waiting.
+    #[test]
+    fn a_cancel_for_a_start_come_and_gone_is_not_kept() {
+        let clips = Clips::default();
+        let a = clips.begin("main", 5).expect("A");
+        clips.failed(a);
+        assert!(clips.call_off("main", 5).is_none());
+        assert!(clips.lock().called_off.is_empty());
     }
 }

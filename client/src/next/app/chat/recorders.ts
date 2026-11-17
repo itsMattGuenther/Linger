@@ -214,6 +214,8 @@ export function pageRecorder(events: RecorderEvents): Recorder {
       const owner = attempt;
       encoder = new AudioEncoder({
         output: (chunk, meta) => {
+          // A late packet of an earlier start's never joins a later one's.
+          if (attempt !== owner) return;
           const found = preSkipOf(meta?.decoderConfig?.description);
           if (found !== null) preSkip = found;
           const packet = new Uint8Array(chunk.byteLength);
