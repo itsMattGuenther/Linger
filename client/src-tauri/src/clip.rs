@@ -56,8 +56,10 @@ struct Books {
     epochs: HashMap<String, u64>,
 }
 
-/// How far apart two epochs' numbers are: room for a page's own count.
-const EPOCH: u64 = 1 << 32;
+/// How far apart two epochs' numbers are: room for a page's own count, its
+/// milliseconds since it loaded, for 34 years. A page's numbers stay exact
+/// as JavaScript numbers for a window's first 8,192 epochs.
+const EPOCH: u64 = 1 << 40;
 
 struct Recording {
     id: u64,

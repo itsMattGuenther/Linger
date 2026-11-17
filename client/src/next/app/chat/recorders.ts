@@ -72,22 +72,22 @@ const LEVEL_EVERY_MS = 40;
  * sent, so no two pages' starts are ever confused, and no clock is compared.
  */
 let shellStarts = 0;
-/** The window's base, asked of the shell once per page. */
-let shellBase: Promise<number> | null = null;
-const base = () => (shellBase ??= invoke<number>("clip_epoch").catch(() => 0));
 
 /**
- * The page's last cancel or stop asked of the shell, settled either way: a
- * start goes once it's done, so the shell hears them in order and a start
- * never meets the one before it still booked (#920). The page's, not one
- * recorder's, so a chat that unfolds again waits for the cancel its last
- * self sent. A computer needs no tap to start its sound, so waiting costs
- * nothing there.
+ * Every cancel and stop the page has asked of the shell, settled either
+ * way: a start goes once they're done, so the shell hears them in order and
+ * a start never meets the one before it still booked (#920). The page's,
+ * not one recorder's, so a chat that unfolds again waits for the cancel its
+ * last self sent. Holds no answers, so no stopped clip is kept alive. A
+ * computer needs no tap to start its sound, so waiting costs nothing.
  */
-let shellSettling: Promise<unknown> = Promise.resolve();
-/** A start waits for every cancel and stop asked before it, not only the last. */
+let shellSettling: Promise<void> = Promise.resolve();
 const settled = (asked: Promise<unknown>) => {
-  shellSettling = Promise.all([shellSettling, asked.catch(() => undefined)]);
+  const done = asked.then(
+    () => undefined,
+    () => undefined,
+  );
+  shellSettling = Promise.all([shellSettling, done]).then(() => undefined);
 };
 
 /**
@@ -106,17 +106,21 @@ export function shellRecorder(events: RecorderEvents, input: () => string | null
   void bus.listen<number>("clip:level", (level) => events.level(level)).then(hold);
   void bus.listen("clip:full", () => events.ended("full")).then(hold);
   void bus.listen("clip:lost", () => events.ended("lost")).then(hold);
-  let current = 0;
+  /** The number the current start is sent with, once the shell has said the window's base. */
+  let current: Promise<number> = Promise.resolve(0);
   return {
     start: async () => {
-      // Each start's own number, taken before anything is waited for, so a
-      // cancel while it waits names it; the shell calls off that start and
-      // no later one, whichever it hears first (#920).
+      // Counted now, before anything is waited for, and above the window's
+      // base, asked each time so a start is always above the latest
+      // reload's mark. A cancel while it waits waits for this number and
+      // names it; the shell calls off that start and no later one (#920).
       shellStarts = Math.max(shellStarts + 1, Math.floor(performance.now()));
-      const mine = shellStarts;
-      current = mine;
+      const count = shellStarts;
+      const numbered = invoke<number>("clip_epoch").then((base) => base + count);
+      current = numbered;
+      const start = await numbered;
       await shellSettling;
-      await invoke("clip_start", { input: input(), start: (await base()) + mine });
+      await invoke("clip_start", { input: input(), start });
     },
     stop: async () => {
       const stopping = invoke<ArrayBuffer>("clip_stop");
@@ -124,8 +128,7 @@ export function shellRecorder(events: RecorderEvents, input: () => string | null
       return readClip(new Uint8Array(await stopping));
     },
     cancel: () => {
-      const mine = current;
-      settled(base().then((from) => invoke("clip_cancel", { start: from + mine })));
+      settled(current.then((start) => invoke("clip_cancel", { start })));
     },
     dispose: () => {
       gone = true;
