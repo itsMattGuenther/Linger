@@ -65,13 +65,19 @@ const START_WAIT_MS = 3_000;
 const LEVEL_EVERY_MS = 40;
 
 /**
+ * The number of the page's last shell start (#920): the clock's
+ * milliseconds times 1,000, and always rising, so a page loaded afresh, or
+ * a module loaded again while developing, numbers above anything an earlier
+ * one sent, and a late cancel of an earlier page's can't stop a later
+ * start. Exact as a JavaScript number until about the year 2255.
+ */
+let shellStarts = 0;
+
+/**
  * The desktop shell's recorder (src-tauri/src/clip.rs), through its commands
  * and events. `input` is the microphone Settings picked, by name, or null for
  * the computer's default, read as each recording starts.
  */
-/** The page's starts so far, across every shell recorder it makes (#920). */
-let shellStarts = 0;
-
 export function shellRecorder(events: RecorderEvents, input: () => string | null): Recorder {
   const bus = tauriBus();
   const stops: Array<() => void> = [];
@@ -86,10 +92,9 @@ export function shellRecorder(events: RecorderEvents, input: () => string | null
   let current = 0;
   return {
     start: async () => {
-      // Each start's own number, counted for the page: its cancel names it,
-      // so the shell calls off that start and no later one, whichever it
-      // hears first (#920). The shell forgets a window's when its page loads.
-      shellStarts += 1;
+      // Each start's own number: its cancel names it, so the shell calls off
+      // that start and no later one, whichever it hears first (#920).
+      shellStarts = Math.max(shellStarts + 1, Date.now() * 1000);
       current = shellStarts;
       await invoke("clip_start", { input: input(), start: current });
     },
@@ -202,6 +207,8 @@ export function pageRecorder(events: RecorderEvents): Recorder {
    * the microphone it's given without touching a later start's (#920).
    */
   let attempt = 0;
+  /** A stop is finishing its encoder: letting the recorder go leaves that be. */
+  let flushing = false;
 
   const release = () => {
     stopped = true;
@@ -363,14 +370,26 @@ export function pageRecorder(events: RecorderEvents): Recorder {
       await reading;
       reading = null;
       const held = encoder as AudioEncoder | null;
+      flushing = true;
       if (held !== null && held.state === "configured") await held.flush().catch(() => undefined);
-      // Closed already, after an encoder error or a dispose meanwhile.
+      flushing = false;
+      // Closed already, after an encoder error meanwhile.
       if (held !== null && held.state !== "closed") held.close();
       encoder = null;
       return { preSkip, packets };
     },
     cancel,
-    dispose: cancel,
+    // Lets go of the microphone and stops any start still waiting; a stop
+    // under way keeps its encoder and packets to finish with.
+    dispose: () => {
+      attempt += 1;
+      release();
+      if (!flushing) {
+        const held = encoder as AudioEncoder | null;
+        if (held !== null && held.state !== "closed") held.close();
+        encoder = null;
+      }
+    },
   };
 }
 

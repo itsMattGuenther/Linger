@@ -45,11 +45,11 @@ struct Books {
     next: u64,
     recording: Option<Recording>,
     /// For each window, the highest start its page has called off (#920).
-    /// The page numbers its starts 1, 2, 3…, so a start at or below it is
-    /// refused when it comes, whatever order the commands were handled in,
-    /// and a cancel takes a booked start at or below it. A page loaded
-    /// afresh starts counting again, and the window's is forgotten then.
-    called_off: HashMap<String, u32>,
+    /// The page numbers its starts from the clock, always rising, even
+    /// across a reload, so a start at or below it is refused when it comes,
+    /// whatever order the commands were handled in, and a cancel takes a
+    /// booked start at or below it. Forgotten when the window goes.
+    called_off: HashMap<String, u64>,
 }
 
 struct Recording {
@@ -57,7 +57,7 @@ struct Recording {
     /// The window that started it, and the only one told about it.
     window: String,
     /// The page's number for this start, which its cancel names (#920).
-    start: u32,
+    start: u64,
     /// There once its microphone is open. Before that the recording is only
     /// a name on the books.
     started: Option<Started>,
@@ -78,7 +78,7 @@ impl Started {
 
 impl Books {
     /// Raise `window`'s called-off mark to `start`, never lower it.
-    fn call_off_up_to(&mut self, window: &str, start: u32) {
+    fn call_off_up_to(&mut self, window: &str, start: u64) {
         let up_to = self.called_off.entry(window.to_owned()).or_insert(0);
         *up_to = (*up_to).max(start);
     }
@@ -90,7 +90,7 @@ impl Clips {
     /// moment has to find its recording here to take it away (`forget`,
     /// #913). Refused while another is being recorded, or opened.
     /// A start its window called off before it got here is refused.
-    fn begin(&self, window: &str, start: u32) -> Result<u64, &'static str> {
+    fn begin(&self, window: &str, start: u64) -> Result<u64, &'static str> {
         let mut books = self.lock();
         if books
             .called_off
@@ -134,7 +134,7 @@ impl Clips {
     /// books is taken off, and any that hasn't come yet is refused when it
     /// does. Never a later start, so a late cancel can't take a recording
     /// begun after it (#920).
-    fn call_off(&self, window: &str, start: u32) -> Option<Recording> {
+    fn call_off(&self, window: &str, start: u64) -> Option<Recording> {
         let mut books = self.lock();
         books.call_off_up_to(window, start);
         if books
@@ -304,7 +304,7 @@ pub async fn clip_start(
     app: AppHandle,
     window: Window,
     input: Option<String>,
-    start: u32,
+    start: u64,
 ) -> Result<(), String> {
     let label = window.label().to_string();
     let id = app.state::<Clips>().begin(&label, start)?;
@@ -395,7 +395,7 @@ pub async fn clip_stop(app: AppHandle, window: Window) -> Result<Response, Strin
 /// Stop recording and throw it away: the start the page numbered `start`,
 /// and no other (#920).
 #[tauri::command]
-pub async fn clip_cancel(app: AppHandle, window: Window, start: u32) {
+pub async fn clip_cancel(app: AppHandle, window: Window, start: u64) {
     let recording = app.state::<Clips>().call_off(window.label(), start);
     if let Some(started) = recording.and_then(|recording| recording.started) {
         started.discard();
@@ -591,9 +591,9 @@ mod tests {
         // Another window can't start one while this microphone opens, and
         // its closing takes nothing that isn't its own.
         assert_eq!(clips.begin("chat", 5).err(), Some(ALREADY));
-        assert!(clips.take_from("chat").is_none());
+        assert!(clips.forget_window("chat").is_none());
         assert!(
-            clips.take_from("main").is_some(),
+            clips.forget_window("main").is_some(),
             "the window's closing found nothing"
         );
         // The microphone is open now, and too late: what would have recorded
