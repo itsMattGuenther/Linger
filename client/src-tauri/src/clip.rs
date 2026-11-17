@@ -325,17 +325,12 @@ pub async fn clip_start(
         under_way: false,
     };
     // A microphone that never opens (a stuck driver) gives up its place on
-    // the books after a while, as voice's does, so it can't hold every later
-    // start (#920); one that opens after that is closed unused.
+    // the books after a while, so it can't hold every later start (#920);
+    // one that opens after that is closed unused.
     let opening = tokio::task::spawn_blocking(move || {
         crate::voice::device::Microphone::open(input.as_deref())
     });
-    let opened = tokio::time::timeout(LONGEST_OPEN, opening)
-        .await
-        .map_err(|_| SLOW_OPEN.to_string())
-        .and_then(|joined| joined.map_err(|error| error.to_string()))
-        .and_then(|opened| opened.map_err(|error| error.to_string()));
-    let microphone = opened?;
+    let microphone = opened_within(LONGEST_OPEN, opening).await?;
     let (stop, stopped) = oneshot::channel();
     let heard = (app.clone(), label.clone());
     let told = (app.clone(), label.clone());
@@ -387,6 +382,19 @@ const ALREADY: &str = "A voice message is already being recorded.";
 const LONGEST_OPEN: std::time::Duration = std::time::Duration::from_secs(30);
 /// Worded as the page's rules read an open that failed (`voiceStartProblem`).
 const SLOW_OPEN: &str = "the microphone wouldn't open in time";
+
+/// A microphone's opening, `limit` at most: past it, the start gives up
+/// (and with it its place on the books) rather than wait for ever (#920).
+async fn opened_within<T, E: ToString>(
+    limit: std::time::Duration,
+    opening: JoinHandle<Result<T, E>>,
+) -> Result<T, String> {
+    tokio::time::timeout(limit, opening)
+        .await
+        .map_err(|_| SLOW_OPEN.to_string())
+        .and_then(|joined| joined.map_err(|error| error.to_string()))
+        .and_then(|opened| opened.map_err(|error| error.to_string()))
+}
 const CALLED_OFF: &str = "The voice message was called off while the microphone opened.";
 
 /// Stop recording and hand the clip back (`Clip::to_bytes`). One that already
@@ -825,5 +833,25 @@ mod tests {
         assert!(clips
             .take_from("main")
             .is_some_and(|recording| recording.start == 1));
+    }
+
+    /// A microphone that never opens gives up after the limit, rather than
+    /// holding the start, and its place, for ever (#920); one that opens in
+    /// time, or fails, says so.
+    #[tokio::test]
+    async fn a_microphone_that_never_opens_gives_up_after_the_limit() {
+        let limit = std::time::Duration::from_millis(20);
+        let stuck = tokio::spawn(std::future::pending::<Result<(), String>>());
+        assert_eq!(
+            opened_within(limit, stuck).await.err().as_deref(),
+            Some(SLOW_OPEN)
+        );
+        let opens = tokio::spawn(async { Ok::<_, String>(7) });
+        assert_eq!(opened_within(limit, opens).await, Ok(7));
+        let fails = tokio::spawn(async { Err::<(), _>("busy") });
+        assert_eq!(
+            opened_within(limit, fails).await.err().as_deref(),
+            Some("busy")
+        );
     }
 }

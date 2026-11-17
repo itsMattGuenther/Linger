@@ -127,6 +127,12 @@ describe("voiceStartProblem (#261)", () => {
     }
   });
 
+  // A microphone that took too long to open (clip.rs, #920) reads as one
+  // that wouldn't open, with the same advice.
+  it("a microphone that wouldn't open in time", () => {
+    expect(voiceStartProblem("the microphone wouldn't open in time", false, byDefault)).toEqual({ line: "The default microphone wouldn't open.", fix: PICK_A_DEVICE });
+  });
+
   // What fixes a device that won't open depends on which one was asked for (#273).
   describe("a device that wouldn't open (#273)", () => {
     const microphone = "the microphone wouldn't open: The requested device could not be opened.";

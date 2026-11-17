@@ -1838,7 +1838,8 @@ test.describe("voice messages (#401)", () => {
     await expect(opening(page)).toBeVisible();
     await escape(page);
     await expect(panel(page)).toHaveCount(0);
-    expect(await asked(page, "clip_cancel")).toHaveLength(1);
+    // The cancel waits for its ticket, so it may come just after the panel goes.
+    await expect.poll(() => asked(page, "clip_cancel")).toHaveLength(1);
     // The microphone opens late: nothing comes back, and nothing says it went wrong.
     await opens(page);
     await expect(panel(page)).toHaveCount(0);
