@@ -74,9 +74,10 @@ const LEVEL_EVERY_MS = 40;
 let shellStarts = 0;
 
 /**
- * Every cancel and stop the page has asked of the shell, settled either
- * way: a start goes once they're done, so the shell hears them in order and
- * a start never meets the one before it still booked (#920). The page's,
+ * Every start, cancel and stop the page has asked of the shell, settled
+ * either way: a start goes once they're done, so the shell hears them in
+ * order, a start never meets the one before it still booked, and one
+ * microphone opens at a time (#920). The page's,
  * not one recorder's, so a chat that unfolds again waits for the cancel its
  * last self sent. Holds no answers, so no stopped clip is kept alive. A
  * computer needs no tap to start its sound, so waiting costs nothing.
@@ -120,7 +121,11 @@ export function shellRecorder(events: RecorderEvents, input: () => string | null
       current = numbered;
       const start = await numbered;
       await shellSettling;
-      await invoke("clip_start", { input: input(), start });
+      // The next start waits for this one too, until its microphone has
+      // opened or it's refused, so one microphone opens at a time.
+      const sending = invoke("clip_start", { input: input(), start });
+      settled(sending);
+      await sending;
     },
     stop: async () => {
       const stopping = invoke<ArrayBuffer>("clip_stop");

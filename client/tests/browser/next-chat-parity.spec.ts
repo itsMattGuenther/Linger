@@ -1860,13 +1860,14 @@ test.describe("voice messages (#401)", () => {
     await page.getByRole("button", { name: "Record a voice message" }).click();
     await panel(page).getByRole("button", { name: "Record" }).click();
     await expect(opening(page)).toBeVisible();
-    // The second starts at once, in its tap.
-    await expect.poll(() => starts(page)).toBe(2);
+    // The second waits for the first's microphone, so one opens at a time.
+    expect(await starts(page)).toBe(1);
     // The first start's late answer (refused, as it was called off) is
     // nobody's: the second is still opening, with nothing said.
     await opens(page);
     await expect(opening(page)).toBeVisible();
     await expect(panel(page).getByRole("alert")).toHaveCount(0);
+    await expect.poll(() => starts(page)).toBe(2);
     await opens(page);
     await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible();
   });
@@ -1882,11 +1883,11 @@ test.describe("voice messages (#401)", () => {
     await escape(page);
     await page.getByRole("button", { name: "Record a voice message" }).click();
     await panel(page).getByRole("button", { name: "Record" }).click();
+    await opens(page);
     await expect.poll(() => starts(page)).toBe(2);
     const [first, second] = await numbers(page, "clip_start");
     expect(first).not.toEqual(second);
     expect(await numbers(page, "clip_cancel")).toEqual([first]);
-    await opens(page);
     await opens(page);
     await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible();
   });
@@ -1904,11 +1905,12 @@ test.describe("voice messages (#401)", () => {
     await escape(page);
     await expect.poll(() => asked(page, "clip_cancel")).toHaveLength(2);
     await page.evaluate(() => window.parity?.clip.cancelled());
+    // The first's microphone opens (it's refused), and only then is the
+    // second sent: refused too, its cancel having named it.
+    await opens(page);
     await expect.poll(() => starts(page)).toBe(2);
-    // The second cancel named the second start, so the shell refused it.
     const [first, second] = await numbers(page, "clip_start");
     expect(await numbers(page, "clip_cancel")).toEqual([first, second]);
-    await opens(page);
     await page.evaluate(() => window.parity?.clip.cancelled());
     // And the next Record starts.
     await page.getByRole("button", { name: "Record a voice message" }).click();

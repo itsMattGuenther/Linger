@@ -438,11 +438,13 @@ on a world that has changed.
   fresh review's finding, late, with no test: nothing could hold a
   microphone opening. *Changed:* in #920 each start is its own object and
   only the current one's answer counts; the recorder's own clean-up calls
-  off what's starting before it goes; the page numbers its starts from its
-  steady clock and the shell keeps, per window, the highest called off,
-  refusing any start at or below it, so a late cancel can't take a later
-  recording; on a computer a start waits for the last cancel or stop, so
-  the shell hears them in order; every phone start stays
+  off what's starting before it goes; each start is numbered above its
+  window's epoch base from the shell (`clip_epoch`, raised on a reload or
+  close), and the shell keeps per window the highest called off, refusing
+  any start at or below it, so nothing compares clocks and a late cancel
+  can't take a later recording; on a computer a start waits for every
+  cancel, stop and start before it, so the shell hears them in order and
+  opens one microphone at a time; every phone start stays
   in the tap (#687); and the phone's recorder lets go of a microphone given
   late. The parity fixture holds a start until a test opens it
   (`?holdmic`, and `?cancelfirst` for a shell that hears the cancel
