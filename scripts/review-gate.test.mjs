@@ -257,6 +257,27 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     // A push running alongside the merge.
     ["merge", "gh pr merge 5 & git push origin HEAD:feat/x"],
     ["merge", "gh pr merge 5 | git push"],
+    // Text a program the gate doesn't know may run is code: node runs this.
+    ["create", "node - <<'JS'\n['create', 'gh pr create -t x']\nJS"],
+    ["merge", "node -e \"require('child_process').execSync('gh pr merge 5 --auto')\""],
+    ["merge", "env -S 'gh pr merge 5'"],
+    // Data written to a file may be run next.
+    ["merge", "echo 'gh pr merge 5' > x.sh && bash x.sh"],
+    ["merge", "cat > x.sh <<'EOF'\ngh pr merge 5\nEOF"],
+    // Piped from an inert program into one that runs text.
+    ["merge", "echo gh | xargs -I% % pr merge 5"],
+    // Arithmetic after a compound command's word, and a subshell that only looks like it.
+    ["merge", "if (( x <<EOF )); then :; fi\ngh pr merge 5 --auto\nEOF"],
+    ["merge", "((true); gh pr merge 5 --auto; (true))"],
+    // A here-document's end as bash decodes it.
+    ["merge", "cat <<$'EOF'\nx\nEOF\ngh pr merge 5 --auto"],
+    // A word that may be a whole flag, after create.
+    ["create", 'gh pr create -t x "$(printf -- --head=other)"'],
+    // A push that may run while the merge does, however it's written.
+    ["merge", "gh pr merge 5 & (git push)"],
+    ["merge", "gh pr merge 5 & { git push; }"],
+    ["merge", "gh pr merge 5 & sleep 1; git push"],
+    ["merge", "gh pr merge 5 & git -C . push origin HEAD:feat/x"],
     // Text bash would refuse, that might be the command.
     ["merge", 'gh pr merge 5 "oops'],
   ];
@@ -285,10 +306,14 @@ test("a command that isn't one leaves the gate out", () => {
     ["create", "gh pr create --help"],
     ["merge", "gh pr merge -h"],
     ["ready", "gh pr view --json isDraft"],
-    // Words, not text (#925): a quoted string, a here-document body and jq's text are data.
+    // Words, not text (#925): the words of a program that runs nothing it's
+    // given (echo, jq, git commit, gh itself) are data, when nothing in its
+    // pipeline runs text and it writes no file.
+    ["merge", "gh pr view 5 --jq '.merge' | head -1"],
+    ["merge", "gh api repos/o/r/pulls/5 --jq '\"merge=\\(.merged)\"' 2>/dev/null"],
+    ["merge", "echo 'gh pr merge 5' >&2"],
     ["merge", "for pr in 919 921; do gh pr view $pr --json state --jq '\"merged\"'; done"],
     ["merge", 'git commit -m "fix: gh pr merge 5 later"'],
-    ["create", "node - <<'JS'\n['create', 'gh pr create -t x']\nJS"],
     ["merge", "cat <<'EOF'\n$(gh pr merge 5)\nEOF"],
     // A here-document body is data, a line in it that reads like the command included.
     ["merge", "cat <<'EOF'\ngh pr merge 5\nEOF"],

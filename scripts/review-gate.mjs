@@ -78,12 +78,14 @@ class Unreadable extends Error {}
 
 /**
  * A command's tokens: words (`{ word }`), operators (`{ op }`) and
- * redirections (`{ redirect, target }`). A word is `{ text, known, single,
- * inner }`: `text` as the program sees it, with UNKNOWN where the gate can't
- * follow it; `known` when it has nothing it can't follow; `single` when it
- * is one argument whatever it holds (an expansion only inside double quotes,
- * and no glob or brace); `inner` the commands of the substitutions in it,
- * each a token list of its own. Throws Unreadable on text bash would refuse
+ * redirections (`{ redirect, target, fd, body }`: `fd` the stream's number
+ * if one is given, `body` a here-document's text). A word is `{ text, known,
+ * single, quoted, raw, inner }`: `text` as the program sees it, with UNKNOWN
+ * where the gate can't follow it; `known` when it has nothing it can't
+ * follow; `single` when it is one argument whatever it holds (an expansion
+ * only inside double quotes, and no glob or brace); `quoted` when any of it
+ * was quoted or escaped; `raw` as it was written; `inner` the commands of
+ * the substitutions in it, each a token list of its own. Throws Unreadable on text bash would refuse
  * (an unclosed quote or substitution, a redirection with no target).
  */
 export function tokenize(source) {
@@ -110,11 +112,12 @@ function readTokens(reader, closer) {
     }
     // `((…))` where a command starts: arithmetic, read as one word, its own
     // `<<` a shift, not a here-document.
-    if (source.startsWith("((", reader.at) && (tokens.length === 0 || "op" in tokens[tokens.length - 1])) {
-      const end = source.indexOf("))", reader.at + 2);
-      if (end < 0) throw new Unreadable("an arithmetic command isn't closed");
-      const body = source.slice(reader.at + 2, end);
-      reader.at = end + 2;
+    const before = tokens[tokens.length - 1];
+    const startsCommand = !before || "op" in before || ("word" in before && before.word.known && LEADING.has(before.word.text));
+    const shape = startsCommand && source.startsWith("((", reader.at) ? closing(source, reader.at) : null;
+    if (shape?.together) {
+      const body = source.slice(reader.at + 2, shape.end - 1);
+      reader.at = shape.end + 1;
       tokens.push({ word: { text: UNKNOWN, known: false, single: true, quoted: false, inner: /\$\(|`/.test(body) ? substitutionsIn(body) : [], raw: "((" + body + "))" } });
       continue;
     }
@@ -133,10 +136,10 @@ function readTokens(reader, closer) {
       const substitution = source.startsWith("<(", reader.at) || source.startsWith(">(", reader.at);
       if (reader.at >= source.length || (METACHARS.has(source[reader.at]) && !substitution)) throw new Unreadable(`\`${redirect}\` has nothing to read or write`);
       const target = readWord(reader);
-      const token = { redirect, target };
+      const token = { redirect, target, fd: stream ? stream[0] : null };
       tokens.push(token);
       // A here-document's end is its word with quotes taken off, never expanded.
-      if (redirect === "<<" || redirect === "<<-") heredocs.push({ end: target.raw.replace(/["'\\]/g, ""), quoted: /["'\\]/.test(target.raw), tabs: redirect === "<<-", token });
+      if (redirect === "<<" || redirect === "<<-") heredocs.push({ end: target.known ? target.text : target.raw.replace(/["'\\]/g, ""), quoted: /["'\\]/.test(target.raw), tabs: redirect === "<<-", token });
       continue;
     }
     const op = OPERATORS.find((candidate) => source.startsWith(candidate, reader.at));
@@ -192,6 +195,36 @@ function substitutionsIn(text) {
   return word.inner;
 }
 
+/** A double-quoted string at the reader, into `word`: its text, and the substitutions in it. */
+function readDoubleQuoted(reader, word) {
+  const { source } = reader;
+  reader.at += 1;
+  word.quoted = true;
+  for (;;) {
+    if (reader.at >= source.length) throw new Unreadable('a `"` isn\'t closed');
+    const inside = source[reader.at];
+    if (inside === '"') {
+      reader.at += 1;
+      return;
+    }
+    if (inside === "\\") {
+      const next = source[reader.at + 1];
+      if (next === "\n") reader.at += 2;
+      else if (next === "$" || next === "`" || next === '"' || next === "\\") {
+        word.text += next;
+        reader.at += 2;
+      } else {
+        word.text += "\\";
+        reader.at += 1;
+      }
+      continue;
+    }
+    if ((inside === "$" || inside === "`") && readExpansion(reader, word, true)) continue;
+    word.text += inside;
+    reader.at += 1;
+  }
+}
+
 /** One word, from where it starts to the first unquoted metacharacter. */
 function readWord(reader) {
   const { source } = reader;
@@ -233,33 +266,7 @@ function readWord(reader) {
       continue;
     }
     if (char === '"') {
-      reader.at += 1;
-      word.quoted = true;
-      for (;;) {
-        if (reader.at >= source.length) throw new Unreadable('a `"` isn\'t closed');
-        const inside = source[reader.at];
-        if (inside === '"') {
-          reader.at += 1;
-          break;
-        }
-        if (inside === "\\") {
-          const next = source[reader.at + 1];
-          if (next === "\n") reader.at += 2;
-          else if (next === "$" || next === "`" || next === '"' || next === "\\") {
-            word.text += next;
-            reader.at += 2;
-          } else {
-            word.text += "\\";
-            reader.at += 1;
-          }
-          continue;
-        }
-        if (inside === "$" || inside === "`") {
-          if (readExpansion(reader, word, true)) continue;
-        }
-        word.text += inside;
-        reader.at += 1;
-      }
+      readDoubleQuoted(reader, word);
       continue;
     }
     if (char === "$" && source[reader.at + 1] === "'") {
@@ -354,22 +361,18 @@ function readExpansion(reader, word, quoted) {
     // a `$(…)` or a quote doesn't close it.
     reader.at += 2;
     let depth = 1;
+    const scratch = { text: "", known: true, single: true, quoted: true, inner: word.inner };
     while (depth > 0) {
       if (reader.at >= source.length) throw new Unreadable("a `${` isn't closed");
       const at = source[reader.at];
       if (at === "\\") reader.at += 2;
-      else if ((at === "$" || at === "`") && readExpansion(reader, word, true)) continue;
+      else if ((at === "$" || at === "`") && readExpansion(reader, scratch, true)) continue;
       else if (at === "'" && !quoted) {
         const end = source.indexOf("'", reader.at + 1);
         if (end < 0) throw new Unreadable("a `'` isn't closed");
         reader.at = end + 1;
-      } else if (at === '"') {
-        const inner = readWord({ source: source.slice(reader.at).replace(/^("(?:[^"\\]|\\.)*").*$/s, "$1"), at: 0 });
-        word.inner.push(...inner.inner);
-        const end = /^"(?:[^"\\]|\\.)*"/s.exec(source.slice(reader.at));
-        if (!end) throw new Unreadable('a `"` isn\'t closed');
-        reader.at += end[0].length;
-      } else {
+      } else if (at === '"') readDoubleQuoted(reader, scratch);
+      else {
         if (at === "{") depth += 1;
         if (at === "}") depth -= 1;
         reader.at += 1;
@@ -388,10 +391,11 @@ function readExpansion(reader, word, quoted) {
 }
 
 /**
- * Whether `$((` opens arithmetic: its two parentheses close side by side
- * (`))`). Otherwise it's a substitution holding a subshell, `$( (…) )`.
+ * Where the parentheses opened at `open` close, and whether the pair inside
+ * closes right beside them (`))`): arithmetic when it does, and otherwise
+ * a subshell inside one, `( (…) )`.
  */
-function closesTogether(source, open) {
+function closing(source, open) {
   let depth = 0;
   let inner = -1;
   for (let at = open; at < source.length; at += 1) {
@@ -399,11 +403,14 @@ function closesTogether(source, open) {
     else if (source[at] === ")") {
       depth -= 1;
       if (depth === 1 && inner < 0) inner = at;
-      if (depth === 0) return inner === at - 1;
+      if (depth === 0) return { end: at, together: inner === at - 1 };
     }
   }
-  return false;
+  return null;
 }
+
+/** Whether `$((` opens arithmetic rather than a substitution holding a subshell. */
+const closesTogether = (source, open) => closing(source, open)?.together ?? false;
 
 /** The text of `$'…'`, its escapes undone, the reader past its closing quote. */
 function readAnsiC(reader) {
@@ -481,32 +488,42 @@ function commandsOf(tokens) {
 const isGh = (word) => word.known && /(?:^|\/)gh(?:\.exe)?$/.test(word.text);
 /** Whether a word could be gh: gh however it's spelled, or one the gate can't read. */
 const mayBeGh = (word) => !word.known || /(?:^|[/\\])gh(?:\.exe)?$/i.test(word.text);
-/** Programs that run text they're given, as arguments or as their input. */
-const RUNS_TEXT = new Set(["bash", "sh", "zsh", "dash", "ksh", "fish", "eval", "source", ".", "xargs", "parallel", "ssh", "su", "script", "watch"]);
+/** Programs that only read their words as data: they run nothing they're given. */
+const INERT = new Set(["echo", "printf", "true", "false", ":", "jq", "grep", "egrep", "fgrep", "rg", "wc", "head", "tail", "sort", "uniq", "cut", "tr", "ls", "cat", "test", "[", "sleep", "date", "pwd", "basename", "dirname", "realpath", "stat", "diff", "cmp", "comm", "column", "nl", "fold", "file", "which", "type", "id", "whoami", "hostname", "uname"]);
+/** git's subcommands that read their words as data (not `config`, whose aliases run). */
+const INERT_GIT = new Set(["commit", "log", "show", "diff", "status", "tag", "branch", "fetch", "pull", "push", "add", "rm", "mv", "restore", "switch", "checkout", "merge-base", "rev-parse", "rev-list", "describe", "ls-files", "ls-remote", "remote", "blame", "grep", "stash", "worktree"]);
+/** gh's commands that run what they're given. */
+const GH_RUNS = new Set(["alias", "extension", "ext", "codespace", "cs", "api"]);
+/** Redirections that write to a file. */
+const WRITES = new Set([">", ">>", ">|", "&>", "&>>", "<>"]);
+
+/**
+ * Whether a command only reads its words as data: a program that runs
+ * nothing it's given, writing only to the screen, stderr or /dev/null (a
+ * file it writes could be run next).
+ */
+function inert(command) {
+  const [name, first] = command.words;
+  if (!name?.known) return false;
+  const program = name.text.replace(/^.*[/\\]/, "");
+  const reads = INERT.has(program) || (program === "git" && first?.known && INERT_GIT.has(first.text)) || (isGh(name) && first?.known && !GH_RUNS.has(first.text));
+  return reads && command.redirects.every((token) => !WRITES.has(token.redirect) || token.fd === "2" || (token.target.known && token.target.text === "/dev/null"));
+}
 
 /**
  * Whether a simple command runs `gh pr <action>`: "exact" when its own
- * first words are those and the gate can read them; "maybe" when it might,
- * which stops the command; null when it doesn't. Maybe is gh (or a word that
- * could be gh), then `pr`, then the action, among the command's words in
- * that order: a word the gate can't read stands for the next one only right
- * after the one before it, and a quoted string is one word, so text that
- * only names the command (`--jq '"merged"'`, a commit message) isn't. A
- * program that runs text is checked on the text it's given: its arguments,
- * here-strings, here-documents and what's piped into it (`input`).
+ * first words are those and the gate can read them; "maybe" when gh (or a
+ * word that could be gh), then `pr`, then the action are among its words
+ * in that order, which stops it; null otherwise. A word the gate can't read
+ * stands for the next one only right after the one before it, and a quoted
+ * string is one word, so text that only names the command isn't. Text a
+ * program may run is the pipeline's to answer (`pipelineText`).
  */
-function classify(command, action, input, raw) {
+function classify(command, action, raw) {
   const { words } = command;
   if (!words.length) return null;
   const [name] = words;
   if (isGh(name) && words[1]?.known && words[1].text === "pr" && words[2]?.known && words[2].text === action) return "exact";
-  // A program that runs text, first or behind a wrapper (`env bash -c …`),
-  // checked on the text it's given; given text it can't read, on the whole
-  // command's.
-  if (words.some((word) => word.known && RUNS_TEXT.has(word.text.replace(/^.*[/\\]/, "")))) {
-    if (inOrder(input, ["gh", "pr", action])) return "maybe";
-    if (input.includes(UNKNOWN) && inOrder(raw, ["pr", action])) return "maybe";
-  }
   // An unquoted name the gate can't read may be the whole command.
   if (!name.known && !name.single && inOrder(raw, ["pr", action])) return "maybe";
   const wanted = [mayBeGh, (word) => word.known && word.text === "pr", (word) => word.known && word.text === action];
@@ -525,27 +542,54 @@ function classify(command, action, input, raw) {
 }
 
 /**
- * Every simple command in a list and in the substitutions inside it, with
- * how deep it sits and the text it's given: its arguments, here-strings,
- * here-documents, and the words of what's piped into it.
+ * The text a pipeline may run: every word, setting, here-string and
+ * here-document of its commands, but the reviewed command's own words and
+ * the words of a pipeline whose programs are all inert. Text is code unless
+ * the gate knows otherwise, so a program it doesn't know (node, python, a
+ * script) can't carry the command past it.
  */
-function* everyCommand(commands, nested = false) {
-  // The text flowing down the pipeline so far: each command's words and its
-  // here-strings and here-documents.
-  let flowing = [];
+function pipelineText(pipeline, target) {
+  const live = pipeline.some((command) => !inert(command));
+  const parts = [];
+  for (const command of pipeline) {
+    parts.push(...command.settings.map((word) => word.text));
+    if (!live || command === target) continue;
+    parts.push(...command.words.map((word) => word.text), ...command.redirects.map((token) => (token.redirect === "<<<" ? token.target.text : (token.body ?? ""))));
+  }
+  return parts.join(" ");
+}
+
+/** A command list split into its pipelines: commands joined by `|` or `|&`. */
+function pipelinesOf(commands) {
+  const pipelines = [];
+  let current = [];
   for (const command of commands) {
-    const own = [
-      ...command.words.map((word) => word.text),
-      ...command.redirects.map((token) => (token.redirect === "<<<" ? token.target.text : (token.body ?? ""))),
-    ];
-    const input = [...own.slice(1), ...flowing].join(" ");
-    yield { command, nested, input };
-    flowing = ["|", "|&"].includes(command.after) ? [...flowing, ...own] : [];
+    current.push(command);
+    if (!["|", "|&"].includes(command.after)) {
+      pipelines.push(current);
+      current = [];
+    }
+  }
+  if (current.length) pipelines.push(current);
+  return pipelines;
+}
+
+/** Every command list: the top one, and those of the substitutions inside it, with how deep each sits. */
+function* everyList(commands, nested = false) {
+  yield { commands, nested };
+  for (const command of commands) {
     for (const word of [...command.words, ...command.settings, ...command.redirects.map((token) => token.target)]) {
-      for (const inner of word.inner) yield* everyCommand(commandsOf(inner), true);
+      for (const inner of word.inner) yield* everyList(commandsOf(inner), true);
     }
   }
 }
+
+/** Whether a command pushes with git, however it's written (`git -C . push`). */
+const pushesWithGit = (command) => {
+  const texts = command.words.map((word) => word.text);
+  const git = texts.findIndex((text) => text.replace(/^.*[/\\]/, "") === "git");
+  return git >= 0 && texts.slice(git + 1).includes("push");
+};
 
 /** Whether pflag reads a boolean flag's values as on: bare, or a true value. */
 const isOn = (values) => (values ?? []).some((value) => value === null || ["1", "t", "T", "true", "TRUE", "True"].includes(value));
@@ -654,12 +698,16 @@ export function readCommand(command, action) {
     return inOrder(command, ["gh", "pr", action]) ? stop(`it can't be read as the shell would (${error.message})`) : null;
   }
   const commands = commandsOf(tokens);
-  const found = [...everyCommand(commands)].map((entry) => ({ ...entry, kind: classify(entry.command, action, entry.input, command) })).filter((entry) => entry.kind);
-  if (!found.length) return null;
-  if (found.some((entry) => entry.kind === "maybe")) return stop(`it might run \`gh pr ${action}\` in a form the gate can't read exactly (a word it can't follow, or inside another program)`);
-  if (found.length > 1) return stop(`it runs \`gh pr ${action}\` more than once`);
-  if (found[0].nested) return stop(`it runs \`gh pr ${action}\` inside a substitution`);
-  const target = found[0].command;
+  const lists = [...everyList(commands)];
+  const found = lists.flatMap(({ commands: list, nested }) => list.map((entry) => ({ command: entry, nested, kind: classify(entry, action, command) }))).filter((entry) => entry.kind);
+  const exact = found.filter((entry) => entry.kind === "exact");
+  const target = exact.length === 1 && !exact[0].nested ? exact[0].command : null;
+  // Text a program may run, with the three words in it, is a command the gate can't place.
+  const carried = lists.some(({ commands: list }) => pipelinesOf(list).some((pipeline) => inOrder(pipelineText(pipeline, target), ["gh", "pr", action])));
+  if (!found.length && !carried) return null;
+  if (found.some((entry) => entry.kind === "maybe") || carried) return stop(`it might run \`gh pr ${action}\` in a form the gate can't read exactly (a word it can't follow, or text another program runs)`);
+  if (exact.length > 1) return stop(`it runs \`gh pr ${action}\` more than once`);
+  if (!target) return stop(`it runs \`gh pr ${action}\` inside a substitution`);
   if (target.leading.length) return stop(`it runs \`gh pr ${action}\` inside a compound command (\`${target.leading[0]}\`)`);
 
   // Before it: only `cd <folder> &&` and `git push … &&`, so the gate knows
@@ -707,6 +755,7 @@ export function readCommand(command, action) {
   if (repos.has("") || repos.has(UNKNOWN) || repos.size > 1) return stop("which repository it's for can't be read");
   const read = { action, dirs, selector: null, base: null, repo: [...repos][0] ?? null };
   if (action === "create") {
+    if (positional.length) return stop("a word after `gh pr create` isn't one of its flags or their values (it may be a whole flag, like `--head=…`)");
     // The gate reviews the branch the folder is on, so a pull request from
     // another branch is stopped rather than reviewed as the wrong one.
     if (flags.has("--head")) return stop("it names a branch with `--head`");
@@ -721,10 +770,10 @@ export function readCommand(command, action) {
   // gate looked at it, and --auto merges whatever is pushed later, so the
   // commit reviewed wouldn't be the commit merged.
   if (pushes) return stop(`a push before \`gh pr ${action}\` would change the pull request after the review; push first, on its own`);
-  // Nor one running at the same time, after `&` or in its pipeline.
-  for (let index = at, joined = target.after; index + 1 < commands.length && ["&", "|", "|&"].includes(joined); index += 1) {
-    joined = commands[index + 1].after;
-    if (stepOf(commands[index + 1])?.push) return stop(`a push alongside \`gh pr ${action}\` could change the pull request while it's merged; push first, on its own`);
+  // Nor one that may run at the same time: anything after it, when it runs
+  // in the background or in a pipeline.
+  if (["&", "|", "|&"].includes(target.after) && [...everyList(commands.slice(at + 1))].some(({ commands: list }) => list.some(pushesWithGit))) {
+    return stop(`a push alongside \`gh pr ${action}\` could change the pull request while it's merged; push first, on its own`);
   }
   if (action === "merge" && flags.has("--auto") && !(flags.get("--auto") ?? []).every((value) => value !== null && ["0", "f", "F", "false", "FALSE", "False"].includes(value))) {
     return stop("`--auto` merges commits pushed after the review");
