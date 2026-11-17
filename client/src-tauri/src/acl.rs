@@ -269,7 +269,7 @@ fn only_the_chat_windows_and_the_list_window_record_a_voice_message() {
     // The microphone is recorded only from a message box (#401): Settings,
     // Search and Media have none, and never get the recorder.
     for (file, windows, commands) in granted() {
-        if !["clip_start", "clip_stop", "clip_cancel"]
+        if !["clip_start", "clip_stop", "clip_cancel", "clip_ticket"]
             .iter()
             .any(|command| commands.contains(*command))
         {
@@ -287,7 +287,7 @@ fn only_the_chat_windows_and_the_list_window_record_a_voice_message() {
         .filter(|(_, windows, _)| windows.iter().any(|window| window == "chat-*"))
         .flat_map(|(_, _, commands)| commands)
         .collect();
-    for command in ["clip_start", "clip_stop", "clip_cancel"] {
+    for command in ["clip_start", "clip_stop", "clip_cancel", "clip_ticket"] {
         assert!(chats.contains(command), "the chat windows can't {command}");
     }
 }

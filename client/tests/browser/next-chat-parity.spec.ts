@@ -1751,7 +1751,8 @@ test.describe("voice messages (#401)", () => {
     expect(await asked(page, "clip_start")).toEqual([]);
     await panel(page).getByRole("button", { name: "Record" }).click();
     await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible();
-    expect(await asked(page, "clip_start")).toEqual([`clip_start:${JSON.stringify({ input: null })}`]);
+    const [started] = await asked(page, "clip_start");
+    expect(JSON.parse(started?.slice("clip_start:".length) ?? "{}")).toMatchObject({ input: null, start: expect.any(Number) });
 
     // The lines move with your voice: the newest on the right.
     const newest = panel(page).locator(".nx-voicemsg-lines i").last();
@@ -1817,6 +1818,122 @@ test.describe("voice messages (#401)", () => {
     await panel(page).getByRole("button", { name: "Close the voice message" }).click();
     await expect(panel(page)).toHaveCount(0);
     expect(await asked(page, "clip_start")).toHaveLength(1);
+  });
+
+  // Called off while the microphone opens (#920): Escape, another start, or
+  // the window going. The stand-in shell holds each start until the test
+  // opens its microphone, and throws away one called off meanwhile, as the
+  // real one does (#913).
+  const opening = (page: Page) => panel(page).getByText("Opening the microphone…");
+  const escape = (page: Page) => panel(page).dispatchEvent("keydown", { key: "Escape" });
+  /** The oldest held start's microphone opens; back once the page has heard its answer. */
+  const opens = (page: Page) => page.evaluate(() => window.parity?.clip.opens());
+  /** Starts asked of the shell so far. */
+  const starts = (page: Page) => asked(page, "clip_start").then((all) => all.length);
+
+  test("Escape while the microphone opens calls it off: nothing records, and the next Record starts (#920)", async ({ page }) => {
+    await open(page, "room=r-general&holdmic");
+    await page.getByRole("button", { name: "Record a voice message" }).click();
+    await panel(page).getByRole("button", { name: "Record" }).click();
+    await expect(opening(page)).toBeVisible();
+    await escape(page);
+    await expect(panel(page)).toHaveCount(0);
+    // The cancel waits for its ticket, so it may come just after the panel goes.
+    await expect.poll(() => asked(page, "clip_cancel")).toHaveLength(1);
+    // The microphone opens late: nothing comes back, and nothing says it went wrong.
+    await opens(page);
+    await expect(panel(page)).toHaveCount(0);
+    await page.getByRole("button", { name: "Record a voice message" }).click();
+    await expect(panel(page)).toContainText("Press Record when you're ready.");
+    await expect(panel(page).getByRole("alert")).toHaveCount(0);
+    await panel(page).getByRole("button", { name: "Record" }).click();
+    await expect.poll(() => starts(page)).toBe(2);
+    await opens(page);
+    await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible();
+  });
+
+  test("called off and started again before the first microphone opens, the second records (#920)", async ({ page }) => {
+    await open(page, "room=r-general&holdmic");
+    await page.getByRole("button", { name: "Record a voice message" }).click();
+    await panel(page).getByRole("button", { name: "Record" }).click();
+    await expect(opening(page)).toBeVisible();
+    await escape(page);
+    await page.getByRole("button", { name: "Record a voice message" }).click();
+    await panel(page).getByRole("button", { name: "Record" }).click();
+    await expect(opening(page)).toBeVisible();
+    // The second waits for the first's microphone, so one opens at a time.
+    expect(await starts(page)).toBe(1);
+    // The first start's late answer (refused, as it was called off) is
+    // nobody's: the second is still opening, with nothing said.
+    await opens(page);
+    await expect(opening(page)).toBeVisible();
+    await expect(panel(page).getByRole("alert")).toHaveCount(0);
+    await expect.poll(() => starts(page)).toBe(2);
+    await opens(page);
+    await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible();
+  });
+
+  /** The start number each clip command named, in order. */
+  const numbers = async (page: Page, what: "clip_start" | "clip_cancel") =>
+    (await asked(page, what)).map((line) => (JSON.parse(line.slice(what.length + 1)) as { start: number }).start);
+
+  test("a cancel names the start it calls off, so a later start is never its (#920)", async ({ page }) => {
+    await open(page, "room=r-general&holdmic");
+    await page.getByRole("button", { name: "Record a voice message" }).click();
+    await panel(page).getByRole("button", { name: "Record" }).click();
+    await escape(page);
+    await page.getByRole("button", { name: "Record a voice message" }).click();
+    await panel(page).getByRole("button", { name: "Record" }).click();
+    await opens(page);
+    await expect.poll(() => starts(page)).toBe(2);
+    const [first, second] = await numbers(page, "clip_start");
+    expect(first).not.toEqual(second);
+    expect(await numbers(page, "clip_cancel")).toEqual([first]);
+    await opens(page);
+    await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible();
+  });
+
+  test("a start waiting for the last cancel is called off by its own number (#920)", async ({ page }) => {
+    await open(page, "room=r-general&holdmic&holdcancel");
+    await page.getByRole("button", { name: "Record a voice message" }).click();
+    await panel(page).getByRole("button", { name: "Record" }).click();
+    await expect(opening(page)).toBeVisible();
+    await escape(page);
+    // The first's cancel isn't answered yet, so the next start waits for it,
+    // and is called off while it waits.
+    await page.getByRole("button", { name: "Record a voice message" }).click();
+    await panel(page).getByRole("button", { name: "Record" }).click();
+    await escape(page);
+    await expect.poll(() => asked(page, "clip_cancel")).toHaveLength(2);
+    await page.evaluate(() => window.parity?.clip.cancelled());
+    // The first's microphone opens (it's refused). The second's cancel
+    // named its ticket, and the second, called off while it waited, is
+    // never sent at all.
+    await opens(page);
+    const tickets = (await asked(page, "clip_ticket")).map((line) => Number(line.slice("clip_ticket:".length)));
+    expect(tickets).toHaveLength(2);
+    expect(await numbers(page, "clip_cancel")).toEqual(tickets);
+    expect(await numbers(page, "clip_start")).toEqual([tickets[0]]);
+    await page.evaluate(() => window.parity?.clip.cancelled());
+    // And the next Record starts.
+    await page.getByRole("button", { name: "Record a voice message" }).click();
+    await panel(page).getByRole("button", { name: "Record" }).click();
+    await expect.poll(() => starts(page)).toBe(2);
+    await opens(page);
+    await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible();
+  });
+
+  test("the window going while the microphone opens calls it off (#920)", async ({ page }) => {
+    await open(page, "room=r-general&holdmic");
+    await page.getByRole("button", { name: "Record a voice message" }).click();
+    await panel(page).getByRole("button", { name: "Record" }).click();
+    await expect(opening(page)).toBeVisible();
+    await page.evaluate(() => window.parity?.unmount());
+    await expect.poll(() => asked(page, "clip_cancel")).toHaveLength(1);
+    // The microphone opens after: the shell throws it away, and nothing more is asked.
+    await opens(page);
+    expect(await asked(page, "clip_cancel")).toHaveLength(1);
+    expect(await asked(page, "clip_stop")).toEqual([]);
   });
 
   test("it stops by itself at five minutes, or when the microphone goes, and keeps what it has", async ({ page }) => {

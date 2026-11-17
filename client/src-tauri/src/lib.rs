@@ -477,6 +477,8 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
             if matches!(payload.event(), tauri::webview::PageLoadEvent::Started) {
                 screen_shell::forget(webview.app_handle(), webview.label());
                 screen_sound::forget(webview.app_handle(), webview.label());
+                // And a voice message, with every start the last page sent (#920).
+                clip::forget(webview.app_handle(), webview.label());
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -523,6 +525,7 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
             clip::clip_start,
             clip::clip_stop,
             clip::clip_cancel,
+            clip::clip_ticket,
             mic_test::mic_test_start,
             mic_test::mic_test_stop,
             screen_shell::screen_share_available,

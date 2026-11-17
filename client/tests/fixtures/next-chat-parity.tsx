@@ -34,7 +34,13 @@
  * `clip_cancel`) hands back `next/voice-clip.bin`, one second of a tone that
  * the real recorder made (src-tauri/src/clip.rs). `window.parity.clip` acts
  * as the recorder: how loud you are, stopping by itself, and what it hands
- * back. `?nomic` has no microphone to record from.
+ * back. `?nomic` has no microphone to record from. With `?holdmic` each
+ * `clip_start` waits, the microphone opening, until `window.parity.clip.opens()`;
+ * a `clip_cancel` meanwhile calls it off, and it then rejects as the shell
+ * does (#913, #920): up to the start a cancel names, as clip.rs keeps it.
+ * With `?holdcancel` a cancel's answer waits for `window.parity.clip.cancelled()`.
+ * `window.parity.unmount()` takes the window's page away,
+ * as a docked chat folding does.
  *
  * `window.parity.holdReads()` makes every history read from then on wait for
  * `window.parity.answerReads(…)`, so a test decides the order two reads come
@@ -120,19 +126,61 @@ const desktop = fakeDesktop({
   },
   commands: {
     "plugin:opener|open_url": (args) => desktop.note(`open:${String(args.url)}`),
-    clip_start: (args) => {
+    clip_start: async (args) => {
       desktop.note(`clip_start:${JSON.stringify(args)}`);
       // As the shell says it when the system has no microphone.
       if (query.has("nomic")) throw "no input device available";
+      // As the shell does (clip.rs): a start at or below what this window
+      // called off is refused, and one recording is booked at a time.
+      const start = Number(args.start);
+      if (start <= calledOffUpTo) throw "The voice message was called off while the microphone opened.";
+      if (booked !== null) throw "A voice message is already being recorded.";
+      booked = start;
+      if (query.has("holdmic")) {
+        let heard = () => undefined as void;
+        const held = { start, calledOff: false, open: () => undefined as void, heard: new Promise<void>((done) => (heard = done)) };
+        await new Promise<void>((open) => {
+          held.open = open;
+          heldStarts.push(held);
+        });
+        // The page hears this answer first; then the test is told.
+        setTimeout(heard, 0);
+        // As the shell does: one called off meanwhile is thrown away once
+        // its microphone opens (#913, #920).
+        if (held.calledOff) {
+          if (booked === start) booked = null;
+          throw "The voice message was called off while the microphone opened.";
+        }
+      }
       return null;
     },
-    clip_stop: async () => {
+    clip_ticket: () => {
+      tickets += 1;
+      desktop.note(`clip_ticket:${tickets}`);
+      return tickets;
+    },
+    clip_stop: async (args) => {
       desktop.note("clip_stop");
+      // As clip.rs: only the start it names (#920).
+      if (booked === null || Number(args.start) !== booked) throw "Nothing is being recorded.";
+      // One still opening is called off and keeps its place.
+      const opening = heldStarts.find((held) => held.start === booked);
+      if (opening) opening.calledOff = true;
+      else booked = null;
       await recordingLoaded;
       return (recorded ?? new Uint8Array(2)).slice().buffer;
     },
-    clip_cancel: () => {
-      desktop.note("clip_cancel");
+    clip_cancel: async (args) => {
+      desktop.note(`clip_cancel:${JSON.stringify(args)}`);
+      // Up to the start it names, and no later one, as the shell does.
+      calledOffUpTo = Math.max(calledOffUpTo, Number(args.start));
+      // A start still opening keeps its place until it opens, as clip.rs does.
+      if (booked === Number(args.start) && !heldStarts.some((held) => held.start === booked)) booked = null;
+      // Only the start it names is taken; one at or below the mark that
+      // hasn't come yet is refused when it does (above).
+      for (const held of heldStarts) if (held.start === Number(args.start)) held.calledOff = true;
+      // With `?holdcancel` its answer waits for `window.parity.clip.cancelled()`.
+      if (query.has("holdcancel")) await new Promise<void>((answer) => heldCancels.push(answer));
       return null;
     },
     dropped_files: () => {
@@ -224,6 +272,16 @@ const desktop = fakeDesktop({
   },
 });
 
+// Voice message starts waiting for their microphone (`?holdmic`), oldest first.
+const heldStarts: { start: number; calledOff: boolean; open: () => void; heard: Promise<void> }[] = [];
+// The highest start this window called off, and the one booked, as clip.rs keeps them.
+let calledOffUpTo = 0;
+let booked: number | null = null;
+// The last start number handed out, as clip.rs's `clip_ticket`.
+let tickets = 0;
+// Cancels whose answers are held (`?holdcancel`).
+const heldCancels: Array<() => void> = [];
+
 // History reads being held for the test (`holdReads`): each is asked of the
 // server at once, so it shows in `data-did`, and answered when the test says.
 let holdingReads = false;
@@ -311,7 +369,13 @@ declare global {
         lost: () => void;
         /** What it hands back when stopped, as `clip_stop` answers: the lookahead, then each packet by its length. */
         hands: (bytes: number[]) => void;
+        /** With `?holdmic`: the oldest start's microphone opens; settles once the page has heard it. */
+        opens: () => Promise<void>;
+        /** With `?holdcancel`: every cancel held so far is answered. */
+        cancelled: () => void;
       };
+      /** The window's page goes, as a docked chat folding takes it away. */
+      unmount: () => void;
       /** A drop the Linux shell took (#673), landing at `at` in the page's pixels. */
       shellDrop: (dropped: { name: string; bytes?: number[]; problem?: "folder" | "too_big" | "unreadable" }[], at: { x: number; y: number }) => void;
       /** From now on, every history read waits to be answered. */
@@ -346,7 +410,16 @@ window.parity = {
     hands: (bytes) => {
       recorded = Uint8Array.from(bytes);
     },
+    cancelled: () => {
+      for (const answer of heldCancels.splice(0)) answer();
+    },
+    opens: () => {
+      const held = heldStarts.shift();
+      held?.open();
+      return held?.heard ?? Promise.resolve();
+    },
   },
+  unmount: () => page.unmount(),
   shellDrop: (dropped, at) => {
     shellDropped = dropped;
     desktop.deliver("tauri://drag-drop", { paths: dropped.map((one) => `/home/sam/${one.name}`), position: at });
@@ -371,7 +444,8 @@ takeDropsFromTheShell(window, hearShellDrops, (command, args) => invoke(command,
 
 const root = document.getElementById("root");
 if (!root) throw new Error("missing #root");
-createRoot(root).render(
+const page = createRoot(root);
+page.render(
   <StrictMode>
     <ChatWindow />
   </StrictMode>,

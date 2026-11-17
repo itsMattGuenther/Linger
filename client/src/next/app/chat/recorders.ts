@@ -65,6 +65,34 @@ const START_WAIT_MS = 3_000;
 const LEVEL_EVERY_MS = 40;
 
 /**
+ * Every start, cancel and stop the page has asked of the shell, settled
+ * either way: a start goes once they're done, so the shell hears them in
+ * order, a start never meets the one before it still booked, and one
+ * microphone opens at a time (#920). The page's,
+ * not one recorder's, so a chat that unfolds again waits for the cancel its
+ * last self sent. Holds no answers, so no stopped clip is kept alive. A
+ * computer needs no tap to start its sound, so waiting costs nothing.
+ */
+let shellSettling: Promise<void> = Promise.resolve();
+/** The page's last ticket asked: the next is asked after it, so later starts get higher numbers (#920). */
+let shellTicket: Promise<unknown> = Promise.resolve();
+const settled = (asked: Promise<unknown>) => {
+  const done = asked.then(
+    () => undefined,
+    () => undefined,
+  );
+  shellSettling = shellSettling.then(() => done);
+};
+
+/**
+ * How long a start waits for an earlier start, cancel or stop: one that
+ * hangs mustn't hold every later Record (#920). A little longer than the
+ * shell gives a microphone to open (`LONGEST_OPEN` in clip.rs), after which
+ * it has given up that start's place.
+ */
+const LONGEST_OPEN_WAIT_MS = 35_000;
+
+/**
  * The desktop shell's recorder (src-tauri/src/clip.rs), through its commands
  * and events. `input` is the microphone Settings picked, by name, or null for
  * the computer's default, read as each recording starts.
@@ -80,12 +108,45 @@ export function shellRecorder(events: RecorderEvents, input: () => string | null
   void bus.listen<number>("clip:level", (level) => events.level(level)).then(hold);
   void bus.listen("clip:full", () => events.ended("full")).then(hold);
   void bus.listen("clip:lost", () => events.ended("lost")).then(hold);
+  /** The number the current start is sent with, once the shell has handed it out. */
+  let current: Promise<number> = Promise.resolve(0);
+  /** Tells the current start it's been called off, so it isn't sent at all. */
+  let callOff = () => undefined as void;
   return {
     start: async () => {
-      await invoke("clip_start", { input: input() });
+      // The shell hands each start its number, above every one before, this
+      // page's or an earlier page's. Asked now, before anything is waited
+      // for: a cancel while it waits waits for this number and names it, and
+      // the shell calls off that start and no later one (#920).
+      const numbered = shellTicket.then(() => invoke<number>("clip_ticket"));
+      shellTicket = within(numbered, LONGEST_OPEN_WAIT_MS);
+      current = numbered;
+      let off = false;
+      callOff = () => {
+        off = true;
+      };
+      const start = await numbered;
+      await shellSettling;
+      // Called off while it waited: its cancel has gone, and the shell would
+      // only refuse it, so it isn't sent, and nothing waits behind it.
+      if (off) throw new Error(SHELL_CALLED_OFF);
+      // The next start waits for this one too, until its microphone has
+      // opened or it's refused, so one microphone opens at a time.
+      const sending = invoke("clip_start", { input: input(), start });
+      settled(within(sending, LONGEST_OPEN_WAIT_MS));
+      await sending;
     },
-    stop: async () => readClip(new Uint8Array(await invoke<ArrayBuffer>("clip_stop"))),
-    cancel: () => void invoke("clip_cancel").catch(() => undefined),
+    stop: async () => {
+      // Names its start, as a cancel does, so a stop from before a reload
+      // never takes the new page's recording (#920).
+      const stopping = current.then((start) => invoke<ArrayBuffer>("clip_stop", { start }));
+      settled(within(stopping, LONGEST_OPEN_WAIT_MS));
+      return readClip(new Uint8Array(await stopping));
+    },
+    cancel: () => {
+      callOff();
+      settled(within(current.then((start) => invoke("clip_cancel", { start })), LONGEST_OPEN_WAIT_MS));
+    },
     dispose: () => {
       gone = true;
       for (const stop of stops) stop();
@@ -182,11 +243,21 @@ export function pageRecorder(events: RecorderEvents): Recorder {
   let context: AudioContext | null = null;
   let encoder: AudioEncoder | null = null;
   let reading: Promise<void> | null = null;
-  let packets: Uint8Array[] = [];
-  let preSkip = USUAL_PRE_SKIP;
+  /**
+   * The start under way's recording. Each start has its own, and its
+   * encoder writes only into it, so a stop finishing one never reads, and
+   * never loses packets to, the next (#920).
+   */
+  let clip: Recording = { preSkip: USUAL_PRE_SKIP, packets: [] };
   let stopped = false;
   let loudest = 0;
   let heardAt = 0;
+  /**
+   * Which start is the current one. Cancelling moves it on, so a start
+   * still waiting for the phone's microphone finds it isn't, and lets go of
+   * the microphone it's given without touching a later start's (#920).
+   */
+  let attempt = 0;
 
   const release = () => {
     stopped = true;
@@ -199,20 +270,23 @@ export function pageRecorder(events: RecorderEvents): Recorder {
   /** One stretch of sound, as one channel: encoded, and heard for the lines. `timestamp` is in microseconds. */
   const encode = (samples: Float32Array<ArrayBuffer>, rate: number, timestamp: number) => {
     if (encoder === null) {
+      // Made for the start under way: it writes into that start's
+      // recording, and speaks only while that start is the current one (#920).
+      const into = clip;
       encoder = new AudioEncoder({
         output: (chunk, meta) => {
           const found = preSkipOf(meta?.decoderConfig?.description);
-          if (found !== null) preSkip = found;
+          if (found !== null) into.preSkip = found;
           const packet = new Uint8Array(chunk.byteLength);
           chunk.copyTo(packet);
-          packets.push(packet);
-          if (packets.length === LONGEST_PACKETS && !stopped) {
+          into.packets.push(packet);
+          if (into.packets.length === LONGEST_PACKETS && !stopped && into === clip) {
             release();
             events.ended("full");
           }
         },
         error: () => {
-          if (!stopped) events.ended("lost");
+          if (!stopped && into === clip) events.ended("lost");
         },
       });
       encoder.configure({ codec: "opus", sampleRate: rate, numberOfChannels: 1, bitrate: BITS_PER_SECOND, opus: { frameDuration: 20_000 } });
@@ -230,16 +304,17 @@ export function pageRecorder(events: RecorderEvents): Recorder {
   };
 
   // Chromium's way: the track processor's stream of the microphone's sound.
-  const read = async (reader: ReadableStreamDefaultReader<AudioData>) => {
+  // `mine` is the start it reads for: once another has begun, it says nothing (#920).
+  const read = async (reader: ReadableStreamDefaultReader<AudioData>, mine: number) => {
     for (;;) {
       const next = await reader.read().catch(() => ({ done: true, value: undefined }) as const);
       if (next.done || next.value === undefined) {
         // The microphone went away (unplugged, or taken), not stopped by us.
-        if (!stopped) events.ended("lost");
+        if (!stopped && attempt === mine) events.ended("lost");
         return;
       }
       const data = next.value;
-      if (stopped) {
+      if (stopped || attempt !== mine) {
         data.close();
         continue;
       }
@@ -252,12 +327,12 @@ export function pageRecorder(events: RecorderEvents): Recorder {
 
   // WebKit's way (#687): the worklet's 20 ms at a time, timed by how much
   // has come, from the microphone's sound in an audio graph of its own.
-  const listen = async (microphone: MediaStream, track: MediaStreamTrack, sound: AudioContext, waking: Promise<void>) => {
+  const listen = async (microphone: MediaStream, track: MediaStreamTrack, sound: AudioContext, waking: Promise<void>, mine: number) => {
     await sound.audioWorklet.addModule(MIC_WORKLET);
     const node = new AudioWorkletNode(sound, WORKLET_NAME);
     let frames = 0;
     node.port.onmessage = (event: MessageEvent<unknown>) => {
-      if (stopped || !(event.data instanceof Float32Array)) return;
+      if (stopped || attempt !== mine || !(event.data instanceof Float32Array)) return;
       // Copied, as the encoder takes only sound in a buffer of its own.
       const samples = new Float32Array(event.data);
       encode(samples, sound.sampleRate, Math.round((frames / sound.sampleRate) * 1_000_000));
@@ -268,7 +343,7 @@ export function pageRecorder(events: RecorderEvents): Recorder {
     // goes there too. It sends nothing on, so nothing is heard.
     node.connect(sound.destination);
     track.addEventListener("ended", () => {
-      if (!stopped) events.ended("lost");
+      if (!stopped && attempt === mine) events.ended("lost");
     });
     // Asked to start in the tap; asked again now the microphone is open,
     // which some engines wait for. One that still won't would record
@@ -277,11 +352,25 @@ export function pageRecorder(events: RecorderEvents): Recorder {
     if (!started || sound.state !== "running") throw new Error("the microphone wouldn't start");
   };
 
+  /** Stop and throw away whatever this start had, and stop any start still waiting. */
+  function cancel() {
+    attempt += 1;
+    release();
+    const held = encoder as AudioEncoder | null;
+    if (held !== null && held.state !== "closed") held.close();
+    encoder = null;
+    clip = { preSkip: USUAL_PRE_SKIP, packets: [] };
+  }
+
   return {
     start: async () => {
-      packets = [];
-      preSkip = USUAL_PRE_SKIP;
+      attempt += 1;
+      const mine = attempt;
+      clip = { preSkip: USUAL_PRE_SKIP, packets: [] };
       stopped = false;
+      // One a failed start left open is closed, not dropped.
+      const left = encoder as AudioEncoder | null;
+      if (left !== null && left.state !== "closed") left.close();
       encoder = null;
       const Processor = trackProcessor();
       // Made and started now, in the tap that pressed Record, before
@@ -290,48 +379,75 @@ export function pageRecorder(events: RecorderEvents): Recorder {
       const sound = Processor === null ? new AudioContext({ sampleRate: WORKLET_RATE }) : null;
       const waking = sound?.resume() ?? Promise.resolve();
       context = sound;
+      // Called off while it waited: what this start was given is let go of
+      // here, and what's current (a later start's) is left alone.
+      const calledOff = (given: MediaStream | null) => {
+        for (const track of given?.getTracks() ?? []) track.stop();
+        void sound?.close().catch(() => undefined);
+        return new Error(CALLED_OFF);
+      };
+      let given: MediaStream;
       try {
         // A phone's own clean-up for a voice: its echo cancelling, noise
         // suppression and level, which a speakerphone mic needs.
-        stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+        given = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
       } catch (error: unknown) {
+        if (attempt !== mine) throw calledOff(null);
         release();
         throw new Error(inWords(error));
       }
+      if (attempt !== mine) throw calledOff(given);
+      stream = given;
       const [track] = stream.getAudioTracks();
       if (!track) {
         release();
         throw new Error("no input device available");
       }
-      if (Processor !== null) reading = read(new Processor({ track }).readable.getReader());
+      if (Processor !== null) reading = read(new Processor({ track }).readable.getReader(), mine);
       else if (sound !== null) {
         try {
-          await listen(stream, track, sound, waking);
+          await listen(stream, track, sound, waking, mine);
         } catch (error: unknown) {
+          if (attempt !== mine) throw calledOff(given);
           release();
           throw new Error(inWords(error));
         }
+        if (attempt !== mine) throw calledOff(given);
       }
     },
     stop: async () => {
-      release();
-      await reading;
-      reading = null;
+      // This start's own reader, encoder and recording, taken before
+      // anything is waited for: a start made meanwhile has its own (#920).
+      const kept = clip;
       const held = encoder as AudioEncoder | null;
+      // Out of the recorder's hands at once, so a start meanwhile can't
+      // close it while it finishes.
+      encoder = null;
+      const ending = reading;
+      release();
+      await ending;
+      if (reading === ending) reading = null;
       if (held !== null && held.state === "configured") await held.flush().catch(() => undefined);
-      held?.close();
-      encoder = null;
-      return { preSkip, packets };
-    },
-    cancel: () => {
-      release();
-      const held = encoder as AudioEncoder | null;
+      // Closed already, after an encoder error meanwhile.
       if (held !== null && held.state !== "closed") held.close();
-      encoder = null;
-      packets = [];
+      return kept;
     },
+    cancel,
+    // Lets go of the microphone, stops any start still waiting, and closes
+    // an encoder a failed start left. A stop under way took its own encoder
+    // and recording out of the recorder, and finishes with them.
     dispose: () => {
+      attempt += 1;
       release();
+      const left = encoder as AudioEncoder | null;
+      if (left !== null && left.state !== "closed") left.close();
+      encoder = null;
     },
   };
 }
+
+/** What a shell start called off before it was sent rejects with; nobody shows it. */
+const SHELL_CALLED_OFF = "The voice message was called off before it started.";
+
+/** What a start called off while the microphone opened rejects with; nobody shows it. */
+const CALLED_OFF = "The voice message was called off while the microphone opened.";

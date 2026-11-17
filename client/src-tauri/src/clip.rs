@@ -13,6 +13,7 @@
 //! One recording at a time, in the window that started it. Closing that
 //! window throws it away (`forget`).
 
+use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use tauri::ipc::Response;
@@ -43,12 +44,27 @@ struct Books {
     /// later one.
     next: u64,
     recording: Option<Recording>,
+    /// For each window, the highest start its page has called off (#920):
+    /// a start at or below it is refused when it comes, whatever order the
+    /// commands were handled in.
+    called_off: HashMap<String, u64>,
+    /// For each window, the last start number handed out (`clip_ticket`).
+    /// The shell numbers every start, so a later page's are above an
+    /// earlier page's, and a reload or close calls off every one handed out
+    /// until then: told apart by the shell's own count, never a clock (#920).
+    tickets: HashMap<String, u64>,
 }
 
 struct Recording {
     id: u64,
     /// The window that started it, and the only one told about it.
     window: String,
+    /// The page's number for this start, which its cancel names (#920).
+    start: u64,
+    /// Called off while its microphone was still opening: it keeps its
+    /// place on the books until the microphone has opened (or failed), so a
+    /// next start never opens a second microphone beside it (#920).
+    called_off: bool,
     /// There once its microphone is open. Before that the recording is only
     /// a name on the books.
     started: Option<Started>,
@@ -67,13 +83,98 @@ impl Started {
     }
 }
 
+/// What calling off a recording did (#920).
+enum CalledOff {
+    /// Still opening its microphone: marked, keeping its place until it
+    /// opens or fails, and thrown away then.
+    Marked,
+    /// Under way: taken off the books, to stop or throw away.
+    Taken(Started),
+    /// Nothing on the books that it names.
+    Nothing,
+}
+
+#[cfg(test)]
+impl CalledOff {
+    /// Whether a recording under way was taken.
+    fn took(&self) -> bool {
+        matches!(self, CalledOff::Taken(_))
+    }
+}
+
+impl Books {
+    /// Take the recording on the books if `wanted` says it's the one.
+    fn take_if(&mut self, wanted: impl FnOnce(&Recording) -> bool) -> Option<Recording> {
+        if self.recording.as_ref().is_some_and(wanted) {
+            self.recording.take()
+        } else {
+            None
+        }
+    }
+
+    /// Raise `window`'s called-off mark to `start`, never lower it.
+    fn call_off_up_to(&mut self, window: &str, start: u64) {
+        // Nothing handed out to call off, as for a window that never records.
+        if start == 0 {
+            return;
+        }
+        match self.called_off.get_mut(window) {
+            Some(up_to) => *up_to = (*up_to).max(start),
+            None => {
+                self.called_off.insert(window.to_owned(), start);
+            }
+        }
+    }
+
+    /// Call off the recording `wanted` picks: one still opening is marked,
+    /// keeping its place until its microphone opens or fails, so no second
+    /// microphone opens beside it; one under way is taken (#920).
+    fn call_off_or_take(&mut self, wanted: impl Fn(&Recording) -> bool) -> CalledOff {
+        match self.recording.as_mut() {
+            Some(recording) if wanted(recording) && recording.started.is_none() => {
+                recording.called_off = true;
+                CalledOff::Marked
+            }
+            // Taken only when under way: one still opening was marked above.
+            _ => match self.take_if(wanted).and_then(|recording| recording.started) {
+                Some(started) => CalledOff::Taken(started),
+                None => CalledOff::Nothing,
+            },
+        }
+    }
+
+    /// Whether the shell handed `window` the number `start` (`clip_ticket`).
+    fn handed_out(&self, window: &str, start: u64) -> bool {
+        start != 0 && start <= self.tickets.get(window).copied().unwrap_or(0)
+    }
+
+    /// Hand `window` its next start number.
+    fn ticket(&mut self, window: &str) -> u64 {
+        let last = self.tickets.entry(window.to_owned()).or_insert(0);
+        *last += 1;
+        *last
+    }
+}
+
 impl Clips {
     /// Put a recording on the books for `window`, before anything is waited
     /// for: opening a microphone takes a moment, and a window closed in that
     /// moment has to find its recording here to take it away (`forget`,
     /// #913). Refused while another is being recorded, or opened.
-    fn begin(&self, window: &str) -> Result<u64, &'static str> {
+    /// A start its window called off before it got here is refused.
+    fn begin(&self, window: &str, start: u64) -> Result<u64, &'static str> {
         let mut books = self.lock();
+        // Only a number the shell handed this window (`clip_ticket`).
+        if !books.handed_out(window, start) {
+            return Err(UNKNOWN_START);
+        }
+        if books
+            .called_off
+            .get(window)
+            .is_some_and(|&up_to| start <= up_to)
+        {
+            return Err(CALLED_OFF);
+        }
         if books.recording.is_some() {
             return Err(ALREADY);
         }
@@ -82,24 +183,61 @@ impl Clips {
         books.recording = Some(Recording {
             id,
             window: window.to_owned(),
+            start,
+            called_off: false,
             started: None,
         });
         Ok(id)
     }
 
+    /// Call off `window`'s start numbered `start`: taken off the books if
+    /// it's there, and refused when it comes if it hasn't yet, with every
+    /// earlier one of the window's. Only that start is taken: an earlier
+    /// recording still being stopped is left to its Stop, and a later one
+    /// is never touched (#920).
+    fn call_off(&self, window: &str, start: u64) -> CalledOff {
+        let mut books = self.lock();
+        // A number the window was never handed counts for nothing: no mark
+        // that would refuse every start to come, and no recording taken.
+        if !books.handed_out(window, start) {
+            return CalledOff::Nothing;
+        }
+        books.call_off_up_to(window, start);
+        books.call_off_or_take(|recording| recording.window == window && recording.start == start)
+    }
+
+    /// Stop `window`'s start numbered `start`: the recording under way
+    /// handed over to be stopped, one still opening called off. Named, as a
+    /// cancel is, so a stop from a page since reloaded never takes the new
+    /// page's recording, nor one window another's (#920).
+    fn stop(&self, window: &str, start: u64) -> CalledOff {
+        self.call_off(window, start)
+    }
+
+    /// A window has gone, or its page is loaded afresh: its recording taken,
+    /// in one go with every start number handed out to it so far called
+    /// off, so one heard late is refused rather than recording for nobody
+    /// (#920). The next page's numbers are handed out above them.
+    fn forget_window(&self, window: &str) -> CalledOff {
+        let mut books = self.lock();
+        let last = books.tickets.get(window).copied().unwrap_or(0);
+        books.call_off_up_to(window, last);
+        books.call_off_or_take(|recording| recording.window == window)
+    }
+
     /// Recording `id` has its microphone open and is under way. When it was
-    /// taken off the books meanwhile (its window closed, or it was stopped),
-    /// it's thrown away here instead, and that's said.
+    /// called off meanwhile (its window closed, a cancel, a stop) or taken
+    /// off the books, it's thrown away here instead, and that's said.
     fn started(&self, id: u64, started: Started) -> bool {
         let mut books = self.lock();
-        if let Some(recording) = books
-            .recording
-            .as_mut()
-            .filter(|recording| recording.id == id && recording.started.is_none())
-        {
+        if let Some(recording) = books.recording.as_mut().filter(|recording| {
+            recording.id == id && recording.started.is_none() && !recording.called_off
+        }) {
             recording.started = Some(started);
             return true;
         }
+        // Called off while it opened: its place is given up now.
+        books.take_if(|recording| recording.id == id);
         started.discard();
         false
     }
@@ -124,17 +262,9 @@ impl Clips {
     }
 
     /// Take the recording `window` started, if that's the one on the books.
+    #[cfg(test)]
     fn take_from(&self, window: &str) -> Option<Recording> {
-        let mut books = self.lock();
-        if books
-            .recording
-            .as_ref()
-            .is_some_and(|recording| recording.window == window)
-        {
-            books.recording.take()
-        } else {
-            None
-        }
+        self.lock().take_if(|recording| recording.window == window)
     }
 
     fn lock(&self) -> MutexGuard<'_, Books> {
@@ -221,15 +351,17 @@ pub async fn record(
 }
 
 /// Start recording a voice message (#401) from the chosen microphone, or the
-/// default one for `None`. Refused while another is being recorded.
+/// default one for `None`. Refused while another is being recorded, and
+/// when its window called it off first (#920).
 #[tauri::command]
 pub async fn clip_start(
     app: AppHandle,
     window: Window,
     input: Option<String>,
+    start: u64,
 ) -> Result<(), String> {
     let label = window.label().to_string();
-    let id = app.state::<Clips>().begin(&label)?;
+    let id = app.state::<Clips>().begin(&label, start)?;
     // Off the books again however this ends before it's under way: an error,
     // or this command being dropped while it waits.
     let mut booked = Booked {
@@ -237,13 +369,13 @@ pub async fn clip_start(
         id,
         under_way: false,
     };
-    let opened = tokio::task::spawn_blocking(move || {
+    // A microphone that never opens (a stuck driver) gives up its place on
+    // the books after a while, so it can't hold every later start (#920);
+    // one that opens after that is closed unused.
+    let opening = tokio::task::spawn_blocking(move || {
         crate::voice::device::Microphone::open(input.as_deref())
-    })
-    .await
-    .map_err(|error| error.to_string())
-    .and_then(|opened| opened.map_err(|error| error.to_string()));
-    let microphone = opened?;
+    });
+    let microphone = opened_within(LONGEST_OPEN, opening).await?;
     let (stop, stopped) = oneshot::channel();
     let heard = (app.clone(), label.clone());
     let told = (app.clone(), label.clone());
@@ -290,52 +422,88 @@ impl Drop for Booked {
 }
 
 const ALREADY: &str = "A voice message is already being recorded.";
+const UNKNOWN_START: &str = "That voice message wasn't given a number to start with.";
+/// How long a microphone has to open for a voice message (#920). The page
+/// waits a little longer than this for an earlier start (`recorders.ts`).
+const LONGEST_OPEN: std::time::Duration = std::time::Duration::from_secs(30);
+/// Worded as the page's rules read an open that failed (`voiceStartProblem`).
+const SLOW_OPEN: &str = "the microphone wouldn't open in time";
+
+/// A microphone's opening, `limit` at most: past it, the start gives up
+/// (and with it its place on the books) rather than wait for ever (#920).
+async fn opened_within<T, E: ToString>(
+    limit: std::time::Duration,
+    opening: JoinHandle<Result<T, E>>,
+) -> Result<T, String> {
+    tokio::time::timeout(limit, opening)
+        .await
+        .map_err(|_| SLOW_OPEN.to_string())
+        .and_then(|joined| joined.map_err(|error| error.to_string()))
+        .and_then(|opened| opened.map_err(|error| error.to_string()))
+}
 const CALLED_OFF: &str = "The voice message was called off while the microphone opened.";
 
 /// Stop recording and hand the clip back (`Clip::to_bytes`). One that already
 /// stopped by itself (full, or the microphone gone) is handed back the same
 /// way.
 #[tauri::command]
-pub async fn clip_stop(app: AppHandle, window: Window) -> Result<Response, String> {
-    // This window's own: one window never stops another's. One still opening
-    // its microphone is taken off the books, and `clip_start` throws it away
-    // once the microphone opens.
-    let recording = app.state::<Clips>().take_from(window.label());
-    let started = match recording {
-        None => return Err("Nothing is being recorded.".into()),
-        Some(Recording { started: None, .. }) => return Err(CALLED_OFF.into()),
-        Some(Recording {
-            started: Some(started),
-            ..
-        }) => started,
+pub async fn clip_stop(app: AppHandle, window: Window, start: u64) -> Result<Response, String> {
+    // This window's own, and the start it names: one window never stops
+    // another's, and a stop from before a reload never takes the new page's
+    // recording. One still opening its microphone is called off, keeping its
+    // place, and `clip_start` throws it away once the microphone opens (#920).
+    // The books' lock is let go of in `stop`, before anything is waited for.
+    let started = match app.state::<Clips>().stop(window.label(), start) {
+        CalledOff::Taken(started) => started,
+        // Still opening: called off, keeping its place until it opens.
+        CalledOff::Marked => return Err(CALLED_OFF.into()),
+        CalledOff::Nothing => return Err("Nothing is being recorded.".into()),
     };
     let _ = started.stop.send(());
     let clip = started.done.await.map_err(|error| error.to_string())??;
     Ok(Response::new(clip.to_bytes()))
 }
 
-/// Stop recording and throw it away.
+/// Stop recording and throw it away: the start the page numbered `start`,
+/// and no other (#920).
 #[tauri::command]
-pub async fn clip_cancel(app: AppHandle, window: Window) {
-    let recording = app.state::<Clips>().take_from(window.label());
-    if let Some(started) = recording.and_then(|recording| recording.started) {
+pub async fn clip_cancel(app: AppHandle, window: Window, start: u64) {
+    if let CalledOff::Taken(started) = app.state::<Clips>().call_off(window.label(), start) {
         started.discard();
     }
 }
 
-/// A window has gone: a recording it started goes with it, unheard.
+/// A window has gone, or its page is loaded afresh (`lib.rs`): a recording
+/// it started goes with it, unheard, and every start it sent until now is
+/// called off, so one heard late never records for nobody (#920).
 ///
-/// One whose microphone is still opening is taken off the books, and
-/// `clip_start` throws it away once the microphone opens (#913).
+/// One whose microphone is still opening is called off and keeps its place
+/// until it opens, and `clip_start` throws it away then (#913, #920).
 pub fn forget(app: &AppHandle, label: &str) {
-    let recording = app.state::<Clips>().take_from(label);
-    if let Some(started) = recording.and_then(|recording| recording.started) {
+    if let CalledOff::Taken(started) = app.state::<Clips>().forget_window(label) {
         started.discard();
     }
+}
+
+/// The number for this window's next voice message start (#920): above
+/// every number handed out before, to this page or an earlier one. Off the
+/// main thread, as the start it numbers is.
+#[tauri::command]
+pub async fn clip_ticket(app: AppHandle, window: Window) -> u64 {
+    app.state::<Clips>().lock().ticket(window.label())
 }
 
 #[cfg(test)]
 mod tests {
+    /// Hand `window` tickets until its last is at least `up_to`, as pages
+    /// ask for them before starting.
+    fn handed(clips: &Clips, window: &str, up_to: u64) {
+        let mut books = clips.lock();
+        while books.tickets.get(window).copied().unwrap_or(0) < up_to {
+            books.ticket(window);
+        }
+    }
+
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
 
@@ -507,14 +675,20 @@ mod tests {
     #[tokio::test]
     async fn a_window_closed_while_the_microphone_opens_takes_its_recording_with_it() {
         let clips = Clips::default();
-        let id = clips.begin("main").expect("the first recording");
+        handed(&clips, "main", 20);
+        handed(&clips, "chat", 20);
+        let id = clips.begin("main", 1).expect("the first recording");
         // Another window can't start one while this microphone opens, and
         // its closing takes nothing that isn't its own.
-        assert_eq!(clips.begin("chat").err(), Some(ALREADY));
-        assert!(clips.take_from("chat").is_none());
-        assert!(
-            clips.take_from("main").is_some(),
-            "the window's closing found nothing"
+        assert_eq!(clips.begin("chat", 5).err(), Some(ALREADY));
+        assert!(!clips.forget_window("chat").took());
+        // Marked, keeping its place until its microphone opens (#920).
+        assert!(!clips.forget_window("main").took());
+        let fresh = clips.lock().ticket("chat");
+        assert_eq!(
+            clips.begin("chat", fresh).err(),
+            Some(ALREADY),
+            "a second microphone opened beside the first"
         );
         // The microphone is open now, and too late: what would have recorded
         // is stopped, not started.
@@ -530,8 +704,10 @@ mod tests {
         assert!(!clips.started(id, Started { stop, done }));
         let ended = tokio::time::timeout(std::time::Duration::from_secs(5), gone).await;
         assert!(matches!(ended, Ok(Err(_))), "it recorded anyway");
-        // And the next voice message starts, as if nothing had happened.
-        assert!(clips.begin("main").is_ok());
+        // And the next voice message starts, as if nothing had happened,
+        // counted from the window's new base as its page would (#920).
+        let next = clips.lock().ticket("main");
+        assert!(clips.begin("main", next).is_ok());
     }
 
     /// A microphone that won't open leaves nothing on the books, and an
@@ -539,14 +715,16 @@ mod tests {
     #[tokio::test]
     async fn each_recording_ends_only_itself() {
         let clips = Clips::default();
-        let first = clips.begin("main").expect("the first recording");
+        handed(&clips, "main", 20);
+        handed(&clips, "chat", 20);
+        let first = clips.begin("main", 3).expect("the first recording");
         clips.failed(first);
         let second = clips
-            .begin("main")
+            .begin("main", 6)
             .expect("free again after a failed microphone");
         clips.failed(first);
         assert_eq!(
-            clips.begin("main").err(),
+            clips.begin("chat", 4).err(),
             Some(ALREADY),
             "the first's failure ended the second"
         );
@@ -561,5 +739,222 @@ mod tests {
         assert!(clips
             .take()
             .is_some_and(|recording| recording.started.is_some()));
+    }
+    /// A cancel handled before its start refuses that start, and every
+    /// earlier one of its window's; other windows' go ahead (#920).
+    #[test]
+    fn a_cancel_before_its_start_refuses_it() {
+        let clips = Clips::default();
+        handed(&clips, "main", 20);
+        handed(&clips, "chat", 20);
+        assert!(!clips.call_off("main", 7).took());
+        assert_eq!(clips.begin("main", 7).err(), Some(CALLED_OFF));
+        assert_eq!(clips.begin("main", 3).err(), Some(CALLED_OFF));
+        assert!(clips.begin("chat", 7).is_ok());
+        assert!(clips.take_from("chat").is_some());
+        assert!(clips.begin("main", 8).is_ok());
+    }
+
+    /// A cancel takes only starts up to the one it names: an earlier start's
+    /// cancel, arriving late, leaves a later recording alone (#920).
+    #[tokio::test]
+    async fn a_late_cancel_never_takes_a_later_start() {
+        let clips = Clips::default();
+        handed(&clips, "main", 20);
+        handed(&clips, "chat", 20);
+        let first = clips.begin("main", 1).expect("the first");
+        assert!(
+            !clips.call_off("main", 1).took(),
+            "taken while still opening"
+        );
+        let (stop, _stopped) = oneshot::channel();
+        let done = tokio::spawn(async { Ok(Clip::default()) });
+        assert!(!clips.started(first, Started { stop, done }));
+        clips.begin("main", 2).expect("the second");
+        assert!(!clips.call_off("main", 1).took());
+        assert!(
+            clips.take().is_some_and(|recording| recording.start == 2),
+            "the second was taken by the first's cancel"
+        );
+    }
+
+    /// One recording at a time: a later start of the same window's waits
+    /// for the earlier recording to be called off, rather than replacing it
+    /// (the page sends a start only once its last cancel or stop is done).
+    #[tokio::test]
+    async fn a_later_start_waits_for_the_earlier_to_be_called_off() {
+        let clips = Clips::default();
+        handed(&clips, "main", 20);
+        handed(&clips, "chat", 20);
+        let first = clips.begin("main", 1).expect("the first");
+        let (stop, _stopped) = oneshot::channel();
+        let done = tokio::spawn(async { Ok(Clip::default()) });
+        assert!(clips.started(first, Started { stop, done }));
+        assert_eq!(clips.begin("main", 2).err(), Some(ALREADY));
+        assert!(
+            clips.call_off("main", 1).took(),
+            "a cancel didn't take the recording under way"
+        );
+        assert!(clips.begin("main", 2).is_ok());
+    }
+
+    /// A window that goes, or whose page loads afresh, calls off every start
+    /// number handed out to it so far: one heard late is refused, and the
+    /// next page's, handed out above them, go ahead (#920).
+    #[tokio::test]
+    async fn a_page_loaded_afresh_calls_off_every_start_its_last_page_was_handed() {
+        let clips = Clips::default();
+        handed(&clips, "main", 20);
+        handed(&clips, "chat", 20);
+        let first = clips.lock().ticket("main");
+        let late = clips.lock().ticket("main");
+        let id = clips.begin("main", first).expect("a start");
+        // Still opening: it keeps its place until its microphone opens.
+        assert!(!clips.forget_window("main").took());
+        assert_eq!(
+            clips.begin("main", late).err(),
+            Some(CALLED_OFF),
+            "the last page's start went ahead"
+        );
+        let (stop, _stopped) = oneshot::channel();
+        let done = tokio::spawn(async { Ok(Clip::default()) });
+        assert!(
+            !clips.started(id, Started { stop, done }),
+            "it recorded for a page that's gone"
+        );
+        let next = clips.lock().ticket("main");
+        assert!(next > late);
+        assert!(clips.begin("main", next).is_ok());
+        // Another window's numbers are its own.
+        assert_eq!(clips.lock().ticket("chat"), 21);
+    }
+
+    /// A start called off while its microphone opens keeps its place until
+    /// the microphone has opened, so the next start never opens a second
+    /// microphone beside it; then it's thrown away and the next goes (#920).
+    #[tokio::test]
+    async fn a_start_called_off_while_opening_keeps_its_place_until_it_opens() {
+        let clips = Clips::default();
+        handed(&clips, "main", 20);
+        handed(&clips, "chat", 20);
+        let first = clips.begin("main", 1).expect("the first");
+        assert!(!clips.call_off("main", 1).took());
+        assert_eq!(
+            clips.begin("main", 2).err(),
+            Some(ALREADY),
+            "a second microphone opened beside the first"
+        );
+        let (stop, _stopped) = oneshot::channel();
+        let done = tokio::spawn(async { Ok(Clip::default()) });
+        assert!(
+            !clips.started(first, Started { stop, done }),
+            "it went ahead after its cancel"
+        );
+        assert!(clips.begin("main", 3).is_ok());
+    }
+
+    /// A cancel takes only its own start: an earlier recording still being
+    /// stopped is left to its Stop (#920).
+    #[tokio::test]
+    async fn a_cancel_takes_only_its_own_start() {
+        let clips = Clips::default();
+        handed(&clips, "main", 20);
+        handed(&clips, "chat", 20);
+        let first = clips.begin("main", 1).expect("the first");
+        let (stop, _stopped) = oneshot::channel();
+        let done = tokio::spawn(async { Ok(Clip::default()) });
+        assert!(clips.started(first, Started { stop, done }));
+        assert!(
+            !clips.call_off("main", 2).took(),
+            "a later start's cancel took the first"
+        );
+        assert!(clips
+            .take_from("main")
+            .is_some_and(|recording| recording.start == 1));
+    }
+
+    /// A later start never replaces a recording already under way: only
+    /// its own Stop or cancel ends that, so a stop and a start handled out
+    /// of order lose nothing (#920).
+    #[tokio::test]
+    async fn a_later_start_never_replaces_a_recording_under_way() {
+        let clips = Clips::default();
+        handed(&clips, "main", 20);
+        handed(&clips, "chat", 20);
+        let first = clips.begin("main", 1).expect("the first");
+        let (stop, _stopped) = oneshot::channel();
+        let done = tokio::spawn(async { Ok(Clip::default()) });
+        assert!(clips.started(first, Started { stop, done }));
+        assert_eq!(clips.begin("main", 2).err(), Some(ALREADY));
+        assert!(clips
+            .take_from("main")
+            .is_some_and(|recording| recording.start == 1));
+    }
+
+    /// A microphone that never opens gives up after the limit, rather than
+    /// holding the start, and its place, for ever (#920); one that opens in
+    /// time, or fails, says so.
+    #[tokio::test]
+    async fn a_microphone_that_never_opens_gives_up_after_the_limit() {
+        let limit = std::time::Duration::from_millis(20);
+        let stuck = tokio::spawn(std::future::pending::<Result<(), String>>());
+        assert_eq!(
+            opened_within(limit, stuck).await.err().as_deref(),
+            Some(SLOW_OPEN)
+        );
+        let opens = tokio::spawn(async { Ok::<_, String>(7) });
+        assert_eq!(opened_within(limit, opens).await, Ok(7));
+        let fails = tokio::spawn(async { Err::<(), _>("busy") });
+        assert_eq!(
+            opened_within(limit, fails).await.err().as_deref(),
+            Some("busy")
+        );
+    }
+
+    /// A number the shell never handed out is refused, and a cancel can't
+    /// set a mark above the window's last ticket, which would refuse every
+    /// start to come (#920).
+    #[test]
+    fn numbers_the_shell_never_handed_out_count_for_nothing() {
+        let clips = Clips::default();
+        handed(&clips, "main", 3);
+        assert_eq!(clips.begin("main", 4).err(), Some(UNKNOWN_START));
+        assert_eq!(clips.begin("main", 0).err(), Some(UNKNOWN_START));
+        assert!(!clips.call_off("main", 1_000_000).took());
+        let next = clips.lock().ticket("main");
+        assert!(
+            clips.begin("main", next).is_ok(),
+            "a wrong cancel refused every start to come"
+        );
+    }
+
+    /// A stop names its start, as a cancel does: one from a page since
+    /// reloaded never takes the new page's recording, and one window never
+    /// stops another's (#920).
+    #[tokio::test]
+    async fn a_stop_takes_only_the_start_it_names() {
+        let clips = Clips::default();
+        handed(&clips, "main", 1);
+        let old = clips.begin("main", 1).expect("the old page's start");
+        let (stop, _old_stopped) = oneshot::channel();
+        let done = tokio::spawn(async { Ok(Clip::default()) });
+        assert!(clips.started(old, Started { stop, done }));
+        // The page is loaded afresh: its recording goes, and the new page starts.
+        assert!(clips.forget_window("main").took());
+        let fresh = clips.lock().ticket("main");
+        let new = clips.begin("main", fresh).expect("the new page's start");
+        let (stop, _new_stopped) = oneshot::channel();
+        let done = tokio::spawn(async { Ok(Clip::default()) });
+        assert!(clips.started(new, Started { stop, done }));
+        // The old page's stop, heard late, names its own start: nothing.
+        assert!(
+            matches!(clips.stop("main", 1), CalledOff::Nothing),
+            "a stop from before the reload took the new page's recording"
+        );
+        // Another window's stop with the same number: nothing.
+        handed(&clips, "chat", fresh);
+        assert!(matches!(clips.stop("chat", fresh), CalledOff::Nothing));
+        // The new page's own stop takes it.
+        assert!(clips.stop("main", fresh).took());
     }
 }

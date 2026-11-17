@@ -207,6 +207,9 @@ export function voiceStartProblem(problem: string, windows: boolean, asked: Voic
     return { line: `${windows ? "Windows'" : "The"} default ${device} wouldn't open.`, fix: PICK_A_DEVICE };
   }
   if (/desktop app/i.test(problem)) return only("Voice only works in the desktop app.");
+  // One voice message at a time: one is under way, in another window or
+  // from before this window's reload (#920). Said as it is, not as a fault.
+  if (/already being recorded/i.test(problem)) return only("A voice message is already under way.");
   if (/the old way/i.test(problem)) return only("This server needs an update for voice. Ask its host.");
   return only("Something went wrong. Try again.");
 }

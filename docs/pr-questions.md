@@ -130,9 +130,9 @@ Gaps: Tests written from the case in mind, not from the ways things fail
 Stopped or overtaken while it waits, still under way when somebody looks,
 part of it failing, and a network that refuses, drops, cuts off half way or
 never answers. A share turned down while its files were read was sent anyway
-(#792), a log named a request only once it ended (#849), and a failed
-choice said nothing (#894). The cases are in `docs/testing-strategy.md`, "What
-reviews have taught".
+(#792), and a failed choice said nothing (#894). An order no screen reaches
+is tested by driving that part alone (#923). The cases are in
+`docs/testing-strategy.md`, "What reviews have taught".
 
 ### Is each screen tried at its limits?
 

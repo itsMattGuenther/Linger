@@ -118,12 +118,19 @@ describe("voiceStartProblem (#261)", () => {
     ["the microphone wouldn't open: The requested device is temporarily busy.", false, "The microphone is in use by another app."],
     ["the speakers wouldn't open: The requested device is temporarily busy.", false, "The speakers are in use by another app."],
     ["Voice only works in the desktop app.", false, "Voice only works in the desktop app."],
+    ["A voice message is already being recorded.", false, "A voice message is already under way."],
     ["Not connected yet.", false, "Something went wrong. Try again."],
   ])("%s (windows: %s)", (problem, windows, line) => {
     // These don't depend on which device was asked for, and name no fix of their own (#273).
     for (const asked of [byDefault, byName]) {
       expect(voiceStartProblem(problem, windows, asked)).toEqual({ line, fix: null });
     }
+  });
+
+  // A microphone that took too long to open (clip.rs, #920) reads as one
+  // that wouldn't open, with the same advice.
+  it("a microphone that wouldn't open in time", () => {
+    expect(voiceStartProblem("the microphone wouldn't open in time", false, byDefault)).toEqual({ line: "The default microphone wouldn't open.", fix: PICK_A_DEVICE });
   });
 
   // What fixes a device that won't open depends on which one was asked for (#273).

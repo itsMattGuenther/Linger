@@ -430,6 +430,39 @@ on a world that has changed.
 
 ## Tests written from the case in mind, not from the ways things fail
 
+- **#919 (3 catches): the chat panel's first fix for a start still opening
+  made things worse.** Folding the docked chat cancelled through a recorder
+  already let go of, an earlier start's late answer cleared a newer one,
+  and on a phone a microphone given after Discard stayed open. Caught by
+  Greptile, and reverted there. *Missed because* the change came from a
+  fresh review's finding, late, with no test: nothing could hold a
+  microphone opening. *Changed:* in #920 each start is its own object and
+  only the current one's answer counts; the recorder's own clean-up calls
+  off what's starting before it goes; the shell hands each start its number
+  (`clip_ticket`) and keeps per window the highest called off, refusing any
+  start at or below it, a reload or close calling off every number handed
+  out until then, so nothing compares clocks and a late cancel can't take a
+  later recording; on a computer a start waits for every
+  cancel, stop and start before it, so the shell hears them in order and
+  opens one microphone at a time; every phone start stays
+  in the tap (#687); and the phone's recorder lets go of a microphone given
+  late. The parity fixture holds a start until a test opens it
+  (`?holdmic`, and `?holdcancel` to hold a cancel's answer) and can take the page away (`unmount`); a browser test of each
+  case fails without the fix.
+- **#923: the phone recorder's own fix for a start while the last stop
+  finishes had no test.** Each start got its own recording, which its
+  encoder writes into, so a stop still flushing hands back its own sound,
+  but nothing held a flush while another start recorded. Caught by
+  Greptile. *Missed because* the phone's panel can't reach that order
+  (another room takes the conversation away, which calls a recording off),
+  so the tests went through the panel and never got there, and the change
+  came from a fresh review's finding, checked by reading. *Changed:*
+  `tests/fixtures/page-recorder.ts` drives the recorder on its own, and a
+  browser test holds the encoder's flush while a second recording runs; it
+  fails when a stop hands back the current recording. The question on going
+  wrong partway now says to drive a part on its own when no screen reaches
+  the order.
+
 - **#918 (2 catches): the review gate took a flag's value for a flag, and
   missed `--auto` after a body.** A body saying `--repo=other/project` read
   as another repository, so the change went unreviewed; `-Hother` wasn't
