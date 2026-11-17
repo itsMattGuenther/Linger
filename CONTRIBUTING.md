@@ -94,6 +94,8 @@ The repo is arranged so a session reads little and misses nothing:
   commits, with those questions, and stops `gh pr create` once if it finds
   something, handing you the findings. Fix what's real; the same commit
   passes the second time. It takes a few minutes of your own Claude usage.
+  Run the command plainly, as `AGENTS.md` says (no background, a body in
+  `--body-file`); the gate stops what it can't read.
   With another tool, run `node scripts/review-gate.mjs` before opening, or
   your tool's own review in a fresh session. `AGENTS.md` has the details.
 - Changes to `SPEC.md`, `ARCHITECTURE.md`, `PROTOCOL.md`, or `AGENTS.md` need

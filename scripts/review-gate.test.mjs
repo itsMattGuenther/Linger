@@ -161,6 +161,9 @@ test("reads which pull request, folder and branch a command is about", () => {
     // A body read from a file, and the merge's output logged with tee.
     ["merge", 'gh pr merge 925 --squash --body "$(<msg.md)"', { selector: "925" }],
     ["merge", "gh pr merge 925 --squash --admin 2>&1 | tee /tmp/merge.log", { selector: "925" }],
+    // An email address in a default is one word; a loop that only reads after a pipe.
+    ["merge", 'gh pr merge 5 --author-email "${EMAIL:-me@example.com}"', { selector: "5" }],
+    ["merge", "gh pr merge 5 | for l in x; do :; done", { selector: "5" }],
     ["ready", "gh pr ready", { selector: null }],
     ["ready", "gh pr ready 12", { selector: "12" }],
   ];
@@ -441,6 +444,12 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     ["ready", "gh pr ready 5 &"],
     // Exotic syntax noted where the reader reads it, apostrophes in double quotes or not.
     ["merge", "echo \"it's\"; x=${u:-gh pr merge 5}; $x; echo \"it's\""],
+    // A variable that may be several words stands for more than one of the three.
+    ["merge", 'X="gh pr"; $X merge 5'],
+    // An array element isn't passed to gh, so its repository can't be read.
+    ["merge", "GH_REPO[0]=someone/else gh pr merge 5"],
+    // tee into .git writes a ref.
+    ["merge", 'gh pr merge 5 --body "$(echo x | tee .git/refs/heads/feat)"'],
     // Text bash would refuse, that might be the command.
     ["merge", 'gh pr merge 5 "oops'],
   ];

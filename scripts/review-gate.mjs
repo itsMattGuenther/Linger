@@ -406,7 +406,8 @@ function readExpansion(reader, word, quoted) {
         reader.at += 1;
       }
     }
-    unknown(source.slice(bodyStart, reader.at - 1).includes("@"));
+    // Several words only for `[@]`, `$@` and `!prefix@`: `${x:-me@example.com}` is one.
+    unknown(/^@|\[@\]|^![A-Za-z_]\w*@$/.test(source.slice(bodyStart, reader.at - 1)));
     return true;
   }
   if (next !== undefined && /[A-Za-z0-9_@*#?$!-]/.test(next)) {
@@ -540,7 +541,6 @@ const listed = new WeakMap();
  * (`NAME=value` in front), its redirections, the compound-command words led
  * in with (`do`, `if`, `!`), and the operator after it.
  */
-
 function commandsOf(tokens) {
   if (listed.has(tokens)) return listed.get(tokens);
   const commands = [];
@@ -639,8 +639,11 @@ function readsOnly(command) {
   const [word] = command.words;
   if (command.words.length === 1 && word.known && !word.quoted && CLOSERS.includes(word.text)) return !command.redirects.some(writesFile);
   if (word.known && ["read", "wait"].includes(word.text) && command.words.every((each) => each.known)) return !command.redirects.some(writesFile);
+  // Loop syntax runs no program: its words are a list (`for f in a b`).
+  if (word.known && !word.quoted && ["for", "select", "case"].includes(word.text)) return !command.redirects.some(writesFile);
+  // Into .git, a file is a branch, a ref or a hook.
+  if (command.words.some((each) => /(?:^|\/)\.git(?:\/|$)/.test(each.text))) return false;
   const known = programOf(command);
-  if (known?.program === "tee" && !command.redirects.some(writesFile)) return command.words.every((word) => word.known);
   if (!known || command.redirects.some(writesFile)) return false;
   const { name, program, first, second } = known;
   // Writing no file, these change nothing (printf -v sets only a shell variable).
@@ -672,15 +675,20 @@ function classify(command, action) {
   // At least one of the three is the word itself: `cp "$a" "$b" "$c"` isn't
   // a merge, while `$G pr merge` and `gh pr $X` may be.
   let named = false;
+  // After a word that may be several (`$X` unquoted), a later one may be
+  // any of the rest: `X="gh pr"; $X merge 5`.
+  let several = false;
   for (let at = 0; at < words.length && stage < 3; at += 1) {
     const word = words[at];
     // For gh, anywhere (`sudo $G pr …`); for pr and the action, right after the one before.
-    const standsIn = !word.known && (stage === 0 || at === last + 1);
+    const standsIn = !word.known && (stage === 0 || at === last + 1 || several);
+    const skip = several && word.known ? [1, 2].find((later) => later > stage && wanted[later](word)) : undefined;
     const is = word.known && wanted[stage](word);
-    if (is || standsIn) {
-      named ||= is;
-      stage += 1;
+    if (is || skip !== undefined || standsIn) {
+      named ||= is || skip !== undefined;
+      stage = skip !== undefined ? skip + 1 : stage + 1;
       last = at;
+      if (!word.known && !word.single) several = true;
     }
   }
   return stage === 3 && named ? "maybe" : null;
@@ -826,11 +834,6 @@ export function unquote(word) {
 
 const stop = (why) => ({ fail: why });
 
-/**
- * Whether `words` come in this order in `text`, each a word of its own: the
- * gate's answer when the shell's own reading fails (an unclosed quote), so
- * a command bash would refuse anyway still can't slip through.
- */
 /** The pattern inOrder finds a word by, compiled once per word. */
 const patterns = new Map();
 function patternFor(word) {
@@ -842,6 +845,11 @@ function patternFor(word) {
   return patterns.get(word);
 }
 
+/**
+ * Whether `words` come in this order in `text`, each a word of its own:
+ * the text check for what programs may run, main's rule for exotic syntax,
+ * and the answer when the reader can't read a command at all.
+ */
 function inOrder(text, words) {
   // A line continued is one line, and quotes and escapes come out, as the
   // shell would: `g''h` is gh.
@@ -865,16 +873,14 @@ function inOrder(text, words) {
   return true;
 }
 
-/**
- * Syntax where the reader's quoting could part from bash's: here the gate
- * also keeps main's rule, gh, pr and the action as words in order in the
- * text (`inOrder`), so it is never less strict than main was (#925). Ordinary commands
- * (quotes, $(…), here-documents, pipes) don't need it.
- */
 /** Keywords whose commands the reader can't follow as bash does. */
 const EXOTIC_WORDS = new Set(["eval", "exec", "case", "coproc", "function"]);
 
 /**
+ * Syntax where the reader's quoting could part from bash's: there the gate
+ * also keeps main's rule, gh, pr and the action as words in order in the
+ * text (`inOrder`), so it's never less strict than main was (#925).
+ * Ordinary commands (quotes, $(…), here-documents, pipes) don't need it.
  * Whether a command has exotic syntax: what the reader noted reading it
  * (`${…}`, `$'…'`, backticks, arithmetic, `<(…)`, `$"…"`), or a keyword as
  * an unquoted command word (`--subject "the empty case"` is text).
@@ -1020,8 +1026,11 @@ function readTokensOf(command, action) {
   for (const setting of target.settings) {
     const eq = setting.text.indexOf("=");
     const [, name, appends] = /^([A-Za-z_]\w*)(?:\[[^\]]*\])?(\+?)$/.exec(setting.text.slice(0, eq)) ?? [];
-    // Added to (`+=`), it's whatever was there before too.
-    env[name] = setting.known && !appends ? setting.text.slice(eq + 1) : UNKNOWN;
+    // Added to (`+=`), it's whatever was there before too; an array's
+    // element (`GH_REPO[0]=`) isn't passed to gh at all, so which one gh
+    // uses can't be read.
+    const subscripted = setting.text.slice(0, eq).includes("[");
+    env[name] = setting.known && !appends && !subscripted ? setting.text.slice(eq + 1) : UNKNOWN;
   }
 
   // Its own words after `gh pr <action>`, as gh gets them. One that may be
@@ -1402,7 +1411,7 @@ export function hook(action, input) {
   if (read.fail) {
     return {
       code: 2,
-      message: `Stopped before review: ${read.fail}. A fresh review runs before a pull request ${VERB[action]} (#917, AGENTS.md), and the gate stops a command it can't read rather than guess. Run it as a command of its own: \`gh pr ${action}${action === "create" ? "" : " <number>"} …\`, with only \`cd <folder> &&\`${action === "create" ? " or \`git push … &&\`" : ""} in front${action === "create" ? "" : "; push first, on its own"}.`,
+      message: `Stopped before review: ${read.fail}. A fresh review runs before a pull request ${VERB[action]} (#917, AGENTS.md), and the gate stops a command it can't read rather than guess. Run it as a command of its own: \`gh pr ${action}${action === "merge" ? " <number>" : ""} …\`, with only \`cd <folder> &&\`${action === "create" ? " or \`git push … &&\`" : ""} in front${action === "create" ? "" : "; push first, on its own"}.`,
     };
   }
   let found;
