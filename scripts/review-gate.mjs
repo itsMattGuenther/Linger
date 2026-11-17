@@ -179,6 +179,13 @@ function readTokens(reader, closer) {
   }
 }
 
+/** Whether a line ends in a backslash that isn't itself escaped: an odd number of them. */
+function continues(line) {
+  let count = 0;
+  while (count < line.length && line[line.length - 1 - count] === "\\") count += 1;
+  return count % 2 === 1;
+}
+
 /** The bodies of the here-documents opened on the line just ended: data, not commands. */
 function readHeredocs(reader, heredocs) {
   const { source } = reader;
@@ -192,10 +199,22 @@ function readHeredocs(reader, heredocs) {
       reader.at = newline < 0 ? source.length : newline + 1;
       // Unquoted, a line ending in a backslash goes on into the next, and
       // bash compares the joined line with the end word: `EO\` then `F` ends it.
-      while (!heredoc.quoted && /(?:^|[^\\])(?:\\\\)*\\$/.test(line) && reader.at < source.length) {
-        const next = source.indexOf("\n", reader.at);
-        line = line.slice(0, -1) + source.slice(reader.at, next < 0 ? source.length : next);
-        reader.at = next < 0 ? source.length : next + 1;
+      // Each piece is looked at once, and joined at the end, so a body of
+      // many continued lines costs its length, not its length squared.
+      // Only a backslash a line break follows goes on.
+      if (!heredoc.quoted && newline >= 0 && continues(line)) {
+        const pieces = [line.slice(0, -1)];
+        while (reader.at < source.length) {
+          const next = source.indexOf("\n", reader.at);
+          const piece = source.slice(reader.at, next < 0 ? source.length : next);
+          reader.at = next < 0 ? source.length : next + 1;
+          if (next < 0 || !continues(piece)) {
+            pieces.push(piece);
+            break;
+          }
+          pieces.push(piece.slice(0, -1));
+        }
+        line = pieces.join("");
       }
       if ((heredoc.tabs ? line.replace(/^\t+/, "") : line) === heredoc.end) break;
       body.push(line);

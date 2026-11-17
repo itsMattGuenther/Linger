@@ -483,7 +483,7 @@ test("a long command it can't place comes back, rather than running on", () => {
   // stopped and fails here rather than holding up every test after it. The
   // limit is far past the milliseconds it takes, so a busy machine can't fail it.
   const script = `import { readCommand } from ${JSON.stringify(new URL("./review-gate.mjs", import.meta.url).href)};
-const longs = ["gh " + "=>".repeat(20_000) + " x", "gh pr " + "2>".repeat(20_000) + " x", ">|A= ".repeat(20_000) + "x", ">&A= ".repeat(20_000) + "x", "$((".repeat(20_000), "$(".repeat(20_000), "((".repeat(20_000) + " x", "(".repeat(50_000) + "x" + " )".repeat(50_000), ("$((1))" + String.fromCharCode(96) + "$((1))" + String.fromCharCode(96) + " ").repeat(20_000), ("g" + "h pr ").repeat(20_000) + String.fromCharCode(39), "echo " + "$(x ".repeat(3_000) + ")".repeat(3_000)];
+const longs = ["gh " + "=>".repeat(20_000) + " x", "gh pr " + "2>".repeat(20_000) + " x", ">|A= ".repeat(20_000) + "x", ">&A= ".repeat(20_000) + "x", "$((".repeat(20_000), "$(".repeat(20_000), "((".repeat(20_000) + " x", "(".repeat(50_000) + "x" + " )".repeat(50_000), ("$((1))" + String.fromCharCode(96) + "$((1))" + String.fromCharCode(96) + " ").repeat(20_000), ("g" + "h pr ").repeat(20_000) + String.fromCharCode(39), "echo " + "$(x ".repeat(3_000) + ")".repeat(3_000), "cat <<EOF" + String.fromCharCode(10) + ("x".repeat(79) + String.fromCharCode(92, 10)).repeat(50_000) + "EOF"];
 for (const long of longs) if (readCommand(long, "merge") !== null) process.exit(2);`;
   const run = spawnSync(process.execPath, ["--input-type=module"], { input: script, timeout: 60_000 });
   assert.equal(run.status, 0, run.signal ? `still running after a minute (${run.signal})` : String(run.error ?? run.stderr));
