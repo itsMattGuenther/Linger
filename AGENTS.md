@@ -156,7 +156,7 @@ pass.
   the phone app does**, and it touches files both apps build: the page, or
   the shared parts of the shell. The iPhone runs are then left out
   (`gh pr create --label desktop-only`; added later, it counts from the next
-  push). Use it for work on what only the desktop app has: voice in the
+  push, or from marking a draft ready). Use it for work on what only the desktop app has: voice in the
   shell, the tray, the windows, updates, the Settings rows a phone doesn't
   show. Don't use it for anything a phone shows or runs: the list, a
   conversation, the message box, sign-in, servers, notifications, the share
