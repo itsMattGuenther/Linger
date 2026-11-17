@@ -159,6 +159,22 @@ test(`Escape while the phone's microphone opens (${way}): the microphone that co
 });
 }
 
+test("Escape, then Record again before the first microphone comes: the first is let go of, the second records (#920)", async ({ page }) => {
+  const { give, live } = await holdMicrophone(page);
+  await inGeneral(page);
+  await page.getByRole("button", { name: "Record a voice message" }).click();
+  await panel(page).getByRole("button", { name: "Record" }).click();
+  await panel(page).dispatchEvent("keydown", { key: "Escape" });
+  await page.getByRole("button", { name: "Record a voice message" }).click();
+  await panel(page).getByRole("button", { name: "Record" }).click();
+  // The first's microphone comes late: let go of at once, the second untouched.
+  await give();
+  await expect.poll(() => live(0)).toEqual(["ended"]);
+  await give();
+  await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible();
+  expect(await live(1)).toEqual(["live"]);
+});
+
 test("another room opened while the phone's microphone opens calls it off, and the microphone given later is let go of (#920)", async ({ page }) => {
   const { give, live } = await holdMicrophone(page);
   await inGeneral(page);

@@ -80,12 +80,17 @@ export function shellRecorder(events: RecorderEvents, input: () => string | null
   void bus.listen<number>("clip:level", (level) => events.level(level)).then(hold);
   void bus.listen("clip:full", () => events.ended("full")).then(hold);
   void bus.listen("clip:lost", () => events.ended("lost")).then(hold);
+  // Each start's own number, which its cancel names, so the shell calls off
+  // that start and no later one, whichever it hears first (#920). Random,
+  // so a page loaded afresh never names an earlier page's start.
+  let current = 0;
   return {
     start: async () => {
-      await invoke("clip_start", { input: input() });
+      current = crypto.getRandomValues(new Uint32Array(1))[0] ?? 0;
+      await invoke("clip_start", { input: input(), start: current });
     },
     stop: async () => readClip(new Uint8Array(await invoke<ArrayBuffer>("clip_stop"))),
-    cancel: () => void invoke("clip_cancel").catch(() => undefined),
+    cancel: () => void invoke("clip_cancel", { start: current }).catch(() => undefined),
     dispose: () => {
       gone = true;
       for (const stop of stops) stop();
@@ -358,6 +363,9 @@ export function pageRecorder(events: RecorderEvents): Recorder {
     dispose: () => {
       attempt += 1;
       release();
+      const held = encoder as AudioEncoder | null;
+      if (held !== null && held.state !== "closed") held.close();
+      encoder = null;
     },
   };
 }

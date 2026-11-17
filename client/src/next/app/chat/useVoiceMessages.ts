@@ -169,13 +169,9 @@ export function useVoiceMessages(
     const mine = { conversation };
     startingIn.current = mine;
     const devices = loadVoicePrefs().devices;
-    // The recorder this start uses, kept: if it's called off and starts
-    // anyway, it's stopped through this one, even once the page has let the
-    // recorder go (#920).
-    const using = recorder.current;
     // Now, in the tap that pressed Record: an iPhone starts a page's sound
     // only from a tap (#687).
-    const starting = using?.start() ?? Promise.reject(new Error("no input device available"));
+    const starting = recorder.current?.start() ?? Promise.reject(new Error("no input device available"));
     // Only this start's answer counts, and only while it's still the one
     // starting: called off meanwhile, its answer is nobody's (#920).
     const stillThisOne = () => {
@@ -185,14 +181,9 @@ export function useVoiceMessages(
     };
     starting.then(
       () => {
-        // Called off, and it started anyway (the shell heard the cancel
-        // before the start booked, so the start kept the shell's one place
-        // and a Record meanwhile was told so): stopped now, through the
-        // recorder it used, even once the page has let that go.
-        if (!stillThisOne()) {
-          using?.cancel();
-          return;
-        }
+        // Called off meanwhile: its cancel named it, so the recorder has
+        // thrown it away whichever came first (clip.rs, #920).
+        if (!stillThisOne()) return;
         recordingIn.current = conversation;
         put(conversation, { kind: "recording", since: Date.now(), levels: [] });
       },

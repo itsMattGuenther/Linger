@@ -1751,7 +1751,8 @@ test.describe("voice messages (#401)", () => {
     expect(await asked(page, "clip_start")).toEqual([]);
     await panel(page).getByRole("button", { name: "Record" }).click();
     await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible();
-    expect(await asked(page, "clip_start")).toEqual([`clip_start:${JSON.stringify({ input: null })}`]);
+    const [started] = await asked(page, "clip_start");
+    expect(JSON.parse(started?.slice("clip_start:".length) ?? "{}")).toMatchObject({ input: null, start: expect.any(Number) });
 
     // The lines move with your voice: the newest on the right.
     const newest = panel(page).locator(".nx-voicemsg-lines i").last();
@@ -1870,8 +1871,12 @@ test.describe("voice messages (#401)", () => {
     await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible();
   });
 
+  /** The start number each clip command named, in order. */
+  const numbers = async (page: Page, what: "clip_start" | "clip_cancel") =>
+    (await asked(page, what)).map((line) => (JSON.parse(line.slice(what.length + 1)) as { start: number }).start);
+
   for (const how of ["Escape", "the window going"] as const) {
-    test(`called off by ${how}, and started anyway, it's stopped as soon as it starts (#920)`, async ({ page }) => {
+    test(`called off by ${how} before the shell heard the start, it's refused when it comes (#920)`, async ({ page }) => {
       await open(page, "room=r-general&holdmic&cancelfirst");
       await page.getByRole("button", { name: "Record a voice message" }).click();
       await panel(page).getByRole("button", { name: "Record" }).click();
@@ -1879,21 +1884,36 @@ test.describe("voice messages (#401)", () => {
       if (how === "Escape") await escape(page);
       else await page.evaluate(() => window.parity?.unmount());
       await expect.poll(() => asked(page, "clip_cancel")).toHaveLength(1);
-      // The shell heard that cancel first, and starts it anyway: the page
-      // stops it as soon as it hears, through the recorder it started with.
+      // The cancel names that start, and the shell refuses it when it
+      // comes: nothing records, and nothing more is asked.
+      expect(await numbers(page, "clip_cancel")).toEqual(await numbers(page, "clip_start"));
       await opens(page);
-      await expect.poll(() => asked(page, "clip_cancel")).toHaveLength(2);
+      expect(await asked(page, "clip_cancel")).toHaveLength(1);
       if (how === "Escape") {
         await expect(panel(page)).toHaveCount(0);
-        // With it stopped, the next Record starts.
         await page.getByRole("button", { name: "Record a voice message" }).click();
         await panel(page).getByRole("button", { name: "Record" }).click();
-        await expect.poll(() => starts(page)).toBe(2);
         await opens(page);
         await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible();
       }
     });
   }
+
+  test("a cancel names the start it calls off, so a later start is never its (#920)", async ({ page }) => {
+    await open(page, "room=r-general&holdmic");
+    await page.getByRole("button", { name: "Record a voice message" }).click();
+    await panel(page).getByRole("button", { name: "Record" }).click();
+    await escape(page);
+    await page.getByRole("button", { name: "Record a voice message" }).click();
+    await panel(page).getByRole("button", { name: "Record" }).click();
+    await expect.poll(() => starts(page)).toBe(2);
+    const [first, second] = await numbers(page, "clip_start");
+    expect(first).not.toEqual(second);
+    expect(await numbers(page, "clip_cancel")).toEqual([first]);
+    await opens(page);
+    await opens(page);
+    await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible();
+  });
 
   test("Record with nothing before it starts in the tap itself, as an iPhone needs (#687, #920)", async ({ page }) => {
     await open(page, "room=r-general&holdmic");
