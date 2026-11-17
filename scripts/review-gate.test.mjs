@@ -744,11 +744,17 @@ test("after a review, a new commit is reviewed for what it adds; the whole chang
     assert.match(call.args.at(-1), new RegExp(`\\(${box.main}\\.\\.\\.${box.head}\\) was reviewed already`), "told what was reviewed before");
     assert.match(call.args.at(-1), /what those changes do to code they didn't change/, "and to look at what the new commits affect");
 
+    // A record that can't be read is passed over for the next one back.
+    writeFileSync(join(box.repo, ".git/linger-review", recordName(second, "main")), "not json");
+    const third = box.commit(box.repo, "client/src/thing.ts", "export const one = 5;\n");
+    assert.equal(box.gate("create", "gh pr create -t t").code, 2);
+    assert.equal(box.calls().at(-1).args[1], `/code-review high ${box.head}...${third}`);
+
     // Docs added since the last review aren't reviewed.
     box.commit(box.repo, "docs/notes.md", "notes\n");
     const docs = box.gate("create", "gh pr create -t t");
     assert.equal(docs.code, 0, docs.stderr);
-    assert.equal(box.calls().length, 2, "a docs-only commit since isn't reviewed");
+    assert.equal(box.calls().length, 3, "a docs-only commit since isn't reviewed");
 
     // The base moves and the branch takes it in: no earlier review saw that.
     box.run(box.repo, "checkout", "--quiet", "main");

@@ -172,8 +172,9 @@ pass.
   the questions for them. Nobody starts it, and it takes a few minutes.
   Each commit is reviewed once. With findings, the command stops and they
   come back to you: fix what's real and run it again, and a new commit gets
-  a review of what it adds since the last one (the whole change again after
-  a rebase, an amend or taking in main, #933: fix with a new commit). The
+  a review of what it adds since the newest reviewed commit it still holds
+  (the whole change when a rebase or amend left none, or it took in main,
+  #933: fix with a new commit). The
   same commit passes the second time, so a finding you judge wrong doesn't
   hold you up; say why in the pull request, and say in its Tests section
   what the review found and what you did. Docs-only changes aren't

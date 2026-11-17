@@ -17,8 +17,8 @@
 // Each commit is reviewed once. With findings, the hook stops the command and
 // hands them to the agent, and the same commit passes the next time: the agent
 // fixes what's real and answers what isn't. A new commit gets a review of what
-// it adds since the last review; the whole change again only when the branch
-// was rebased or took in its base branch (#933). Docs-only changes aren't
+// it adds since the newest reviewed commit it still holds; the whole change
+// when it holds none, or took in its base branch (#933). Docs-only changes aren't
 // reviewed. A command the gate can't read is stopped, never guessed at, with
 // the plain form to use instead.
 //
@@ -1321,18 +1321,18 @@ function saveMarker(path, record) {
 }
 
 /**
- * The newest earlier review this change builds on: the change's own
- * commits, newest first, until one has a record for the same base branch,
- * made from the same point on it, at this level or a stricter one. Null
- * when there's none, or when the branch was rebased, amended or took in its
- * base branch since: that's a change no earlier review saw.
+ * The newest earlier review this change builds on: the change's own line of
+ * commits (not a branch merged into it), newest first, until one has a
+ * record for the same base branch, made from the same point on it, at this
+ * level or a stricter one, and not past keeping. Null when there's none: a
+ * rebase or an amend that left no reviewed commit, or a branch that took in
+ * its base since, which no earlier review saw.
  */
 function lastReviewed(top, records, { baseName, base, head, level }) {
   // Only this change's commits are looked up, so the records kept for every
   // other branch are never read.
-  const mine = (tryGit(top, ["rev-list", "--topo-order", head, `^${base}`]) ?? "").split("\n").filter(Boolean);
+  const mine = (tryGit(top, ["rev-list", "--first-parent", head, `^${base}`]) ?? "").split("\n").filter(Boolean);
   for (const commit of mine) {
-    if (commit === head) continue;
     const path = join(records, recordName(commit, baseName));
     let record;
     try {
@@ -1463,7 +1463,9 @@ export function review(found, { level = DEFAULT_LEVEL } = {}) {
     clearStale(found.top, dirname(marker));
     copy = mkdtempSync(join(tmpdir(), WORKTREE_PREFIX));
     git(found.top, ["worktree", "add", "--quiet", "--detach", copy, found.head]);
-    const text = runReviewer(copy, { level, base, head: found.head, since, questions: questionsFor(copy, from) });
+    // The whole change's questions: the reviewer is asked what new commits
+    // do to the code they didn't change, too.
+    const text = runReviewer(copy, { level, base, head: found.head, since, questions: questionsFor(copy, base) });
     const said = verdict(text);
     saveMarker(marker, { head: found.head, base, since, level, verdict: said, at: new Date().toISOString(), text });
     return { ran: true, verdict: said, text, head: found.head, base, since };
