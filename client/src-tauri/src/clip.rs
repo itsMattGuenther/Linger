@@ -95,6 +95,10 @@ impl Books {
 
     /// Raise `window`'s called-off mark to `start`, never lower it.
     fn call_off_up_to(&mut self, window: &str, start: u64) {
+        // Nothing handed out to call off, as for a window that never records.
+        if start == 0 {
+            return;
+        }
         match self.called_off.get_mut(window) {
             Some(up_to) => *up_to = (*up_to).max(start),
             None => {

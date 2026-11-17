@@ -156,6 +156,7 @@ const desktop = fakeDesktop({
     },
     clip_ticket: () => {
       tickets += 1;
+      desktop.note(`clip_ticket:${tickets}`);
       return tickets;
     },
     clip_stop: async () => {

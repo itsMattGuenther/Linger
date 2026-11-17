@@ -110,6 +110,8 @@ export function shellRecorder(events: RecorderEvents, input: () => string | null
   void bus.listen("clip:lost", () => events.ended("lost")).then(hold);
   /** The number the current start is sent with, once the shell has handed it out. */
   let current: Promise<number> = Promise.resolve(0);
+  /** Tells the current start it's been called off, so it isn't sent at all. */
+  let callOff = () => undefined as void;
   return {
     start: async () => {
       // The shell hands each start its number, above every one before, this
@@ -117,10 +119,17 @@ export function shellRecorder(events: RecorderEvents, input: () => string | null
       // for: a cancel while it waits waits for this number and names it, and
       // the shell calls off that start and no later one (#920).
       const numbered = shellTicket.then(() => invoke<number>("clip_ticket"));
-      shellTicket = numbered.catch(() => undefined);
+      shellTicket = within(numbered, LONGEST_OPEN_WAIT_MS);
       current = numbered;
+      let off = false;
+      callOff = () => {
+        off = true;
+      };
       const start = await numbered;
       await shellSettling;
+      // Called off while it waited: its cancel has gone, and the shell would
+      // only refuse it, so it isn't sent, and nothing waits behind it.
+      if (off) throw new Error(SHELL_CALLED_OFF);
       // The next start waits for this one too, until its microphone has
       // opened or it's refused, so one microphone opens at a time.
       const sending = invoke("clip_start", { input: input(), start });
@@ -133,6 +142,7 @@ export function shellRecorder(events: RecorderEvents, input: () => string | null
       return readClip(new Uint8Array(await stopping));
     },
     cancel: () => {
+      callOff();
       settled(within(current.then((start) => invoke("clip_cancel", { start })), LONGEST_OPEN_WAIT_MS));
     },
     dispose: () => {
@@ -433,6 +443,9 @@ export function pageRecorder(events: RecorderEvents): Recorder {
     },
   };
 }
+
+/** What a shell start called off before it was sent rejects with; nobody shows it. */
+const SHELL_CALLED_OFF = "The voice message was called off before it started.";
 
 /** What a start called off while the microphone opened rejects with; nobody shows it. */
 const CALLED_OFF = "The voice message was called off while the microphone opened.";

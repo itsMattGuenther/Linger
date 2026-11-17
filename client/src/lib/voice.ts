@@ -207,8 +207,9 @@ export function voiceStartProblem(problem: string, windows: boolean, asked: Voic
     return { line: `${windows ? "Windows'" : "The"} default ${device} wouldn't open.`, fix: PICK_A_DEVICE };
   }
   if (/desktop app/i.test(problem)) return only("Voice only works in the desktop app.");
-  // A voice message still finishing elsewhere: a moment, not a fault (#920).
-  if (/already being recorded/i.test(problem)) return only("Another voice message is still finishing. Try again in a moment.");
+  // One voice message at a time: another window has one under way, or still
+  // finishing (#920). Said as it is, not as a fault.
+  if (/already being recorded/i.test(problem)) return only("A voice message is being recorded in another window.");
   if (/the old way/i.test(problem)) return only("This server needs an update for voice. Ask its host.");
   return only("Something went wrong. Try again.");
 }

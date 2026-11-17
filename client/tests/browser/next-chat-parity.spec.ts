@@ -1905,17 +1905,19 @@ test.describe("voice messages (#401)", () => {
     await escape(page);
     await expect.poll(() => asked(page, "clip_cancel")).toHaveLength(2);
     await page.evaluate(() => window.parity?.clip.cancelled());
-    // The first's microphone opens (it's refused), and only then is the
-    // second sent: refused too, its cancel having named it.
+    // The first's microphone opens (it's refused). The second's cancel
+    // named its ticket, and the second, called off while it waited, is
+    // never sent at all.
     await opens(page);
-    await expect.poll(() => starts(page)).toBe(2);
-    const [first, second] = await numbers(page, "clip_start");
-    expect(await numbers(page, "clip_cancel")).toEqual([first, second]);
+    const tickets = (await asked(page, "clip_ticket")).map((line) => Number(line.slice("clip_ticket:".length)));
+    expect(tickets).toHaveLength(2);
+    expect(await numbers(page, "clip_cancel")).toEqual(tickets);
+    expect(await numbers(page, "clip_start")).toEqual([tickets[0]]);
     await page.evaluate(() => window.parity?.clip.cancelled());
     // And the next Record starts.
     await page.getByRole("button", { name: "Record a voice message" }).click();
     await panel(page).getByRole("button", { name: "Record" }).click();
-    await expect.poll(() => starts(page)).toBe(3);
+    await expect.poll(() => starts(page)).toBe(2);
     await opens(page);
     await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible();
   });
