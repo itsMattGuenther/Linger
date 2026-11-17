@@ -723,8 +723,49 @@ test("findings stop the pull request once and are handed over; the same commit t
     assert.equal(fixed.code, 0, fixed.stderr);
     assert.match(JSON.parse(fixed.stdout).systemMessage, /found nothing/);
     assert.equal(box.calls().length, 2, "a new commit gets a new review");
-    assert.equal(box.calls()[1].args[1], `/code-review high ${box.main}...${next}`);
+    assert.equal(box.calls()[1].args[1], `/code-review high ${box.head}...${next}`, "of what it adds");
     assert.equal(JSON.parse(readFileSync(join(box.repo, ".git/linger-review", recordName(next, "main")), "utf8")).verdict, "clean");
+  } finally {
+    box.done();
+  }
+});
+
+test("after a review, a new commit is reviewed for what it adds; the whole change again once rebased or after taking in its base", () => {
+  const box = sandbox();
+  try {
+    assert.equal(box.gate("create", "gh pr create -t t").code, 2);
+    // A record that can't be read, or names a commit that isn't here, is passed over.
+    writeFileSync(join(box.repo, ".git/linger-review", recordName("a".repeat(40), "main")), "not json");
+    writeFileSync(join(box.repo, ".git/linger-review", recordName("b".repeat(40), "main")), JSON.stringify({ head: "b".repeat(40), base: box.main }));
+    const second = box.commit(box.repo, "client/src/thing.ts", "export const one = 2;\n");
+    assert.equal(box.gate("create", "gh pr create -t t").code, 2);
+    let call = box.calls().at(-1);
+    assert.equal(call.args[1], `/code-review high ${box.head}...${second}`);
+    assert.match(call.args.at(-1), new RegExp(`\\(${box.main}\\.\\.\\.${box.head}\\) was reviewed already`), "told what was reviewed before");
+
+    // Docs added since the last review aren't reviewed.
+    box.commit(box.repo, "docs/notes.md", "notes\n");
+    const docs = box.gate("create", "gh pr create -t t");
+    assert.equal(docs.code, 0, docs.stderr);
+    assert.equal(box.calls().length, 2, "a docs-only commit since isn't reviewed");
+
+    // The base moves and the branch takes it in: no earlier review saw that.
+    box.run(box.repo, "checkout", "--quiet", "main");
+    const moved = box.commit(box.repo, "README.md", "readme two\n");
+    box.run(box.repo, "push", "--quiet", "origin", "main");
+    box.run(box.repo, "checkout", "--quiet", "feat/x");
+    box.run(box.repo, "merge", "--quiet", "--no-edit", "main");
+    const merged = box.run(box.repo, "rev-parse", "HEAD");
+    assert.equal(box.gate("create", "gh pr create -t t").code, 2);
+    call = box.calls().at(-1);
+    assert.equal(call.args[1], `/code-review high ${moved}...${merged}`, "the whole change again");
+    assert.doesNotMatch(call.args.at(-1), /was reviewed already/);
+
+    // Rebased: the reviewed commits aren't in it any more.
+    box.run(box.repo, "reset", "--quiet", "--hard", "main");
+    const redone = box.commit(box.repo, "client/src/thing.ts", "export const one = 3;\n");
+    assert.equal(box.gate("create", "gh pr create -t t").code, 2);
+    assert.equal(box.calls().at(-1).args[1], `/code-review high ${moved}...${redone}`, "the whole change again");
   } finally {
     box.done();
   }
@@ -950,7 +991,10 @@ test("from a fork, the pull request's base is upstream's, and naming upstream is
     assert.equal(box.calls()[0].args[1], `/code-review high ${newer}...${head}`, "only the branch's own commit");
     box.commit(box.repo, "client/src/mine.ts", "mine again\n");
     assert.equal(box.gate("create", "gh pr create -t t").code, 2, "with none named, upstream");
-    assert.match(box.calls()[1].args[1], new RegExp(`^/code-review high ${newer}\\.\\.\\.`));
+    // Upstream stays the base: the later commit is reviewed for what it adds
+    // to the change from upstream's main, which was reviewed before.
+    assert.equal(box.calls()[1].args[1], `/code-review high ${head}...${box.run(box.repo, "rev-parse", "HEAD")}`);
+    assert.match(box.calls()[1].args.at(-1), new RegExp(`\\(${newer}\\.\\.\\.${head}\\) was reviewed already`));
   } finally {
     box.done();
   }
