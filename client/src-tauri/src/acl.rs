@@ -293,6 +293,33 @@ fn only_the_chat_windows_and_the_list_window_record_a_voice_message() {
 }
 
 #[test]
+fn only_settings_and_the_list_window_test_the_microphone() {
+    // The microphone test (#907) lives in Settings → Sound & Voice and
+    // nowhere else; the list window may call every command there is. It is
+    // the one way Settings opens a microphone, and it hands the page no
+    // sound (`mic_test.rs`): the recorder that does (`clip_*`) stays out of
+    // Settings, which the test above holds.
+    let mut holders = BTreeSet::new();
+    for (file, windows, commands) in granted() {
+        let has: Vec<bool> = ["mic_test_start", "mic_test_stop"]
+            .iter()
+            .map(|command| commands.contains(*command))
+            .collect();
+        assert!(
+            has.iter().all(|one| *one == has[0]),
+            "{file} grants half of the microphone test"
+        );
+        if has[0] {
+            holders.extend(windows);
+        }
+    }
+    assert_eq!(
+        holders,
+        BTreeSet::from(["main".to_string(), "settings".to_string()])
+    );
+}
+
+#[test]
 fn only_the_chat_windows_and_the_list_window_share_or_watch_a_screen() {
     // A screen is shared and watched from voice (#360), which only those
     // windows show: Settings, Search and Media never get the desktop's

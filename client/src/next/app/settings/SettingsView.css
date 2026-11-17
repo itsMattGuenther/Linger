@@ -455,6 +455,42 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The microphone test (#907): its row, and under it, while there's
+   something to say, the lines that move with your voice and a line of
+   words. One block, so what's said stays with the row it's about, and the
+   row after it keeps the rule every row has above it. */
+.nx-set-mictest-block {
+  display: flex;
+  flex-direction: column;
+}
+
+.nx-set-mictest-block + .k-setting {
+  border-top: 1px solid var(--hairline);
+}
+
+.nx-set-mictest {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--control-sm);
+  padding-bottom: var(--space-2-5);
+}
+
+.nx-set-mictest-lines {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-0-5);
+  height: var(--control-sm);
+}
+
+.nx-set-mictest-lines i {
+  flex: none;
+  width: var(--space-0-5);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
 .nx-set-key {
   display: inline-grid;
   place-items: center;

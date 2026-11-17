@@ -21,6 +21,8 @@ pub mod cue;
 pub mod deep_link;
 #[cfg(target_os = "linux")]
 pub mod desktop_entry;
+#[cfg(desktop)]
+mod mic_test;
 // On the phone too: the share inbox (#785) describes files the way a drop does.
 mod dropped;
 pub mod gateway;
@@ -450,6 +452,7 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
         .manage(voice_commands::VoiceEngines::default())
         .manage(std::sync::Arc::new(sounds::Sounds::default()))
         .manage(clip::Clips::default())
+        .manage(mic_test::MicTests::default())
         .manage(screen_shell::ScreenShares::default())
         .manage(screen_sound::ScreenSounds::default())
         .manage(talk_key::TalkKeyWatch::default())
@@ -520,6 +523,8 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
             clip::clip_start,
             clip::clip_stop,
             clip::clip_cancel,
+            mic_test::mic_test_start,
+            mic_test::mic_test_stop,
             screen_shell::screen_share_available,
             screen_shell::screen_watch_available,
             screen_shell::screen_share_start,

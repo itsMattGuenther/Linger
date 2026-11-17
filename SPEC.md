@@ -1065,6 +1065,23 @@ one: not the forty-odd names the layer under it has for the same few devices. "S
 default" stays the system's default: change it in the desktop's settings in the middle
 of a call, and the call moves to it.
 
+**You can hear yourself as the others do** (#907). Nothing has to be set up, since the
+levelling adapts by itself, but nobody in a call can hear what they sound like at the
+other end, or tell whether "you're very quiet" is at theirs. Settings → Sound & Voice
+has **Test your microphone**: press Test, talk for a few seconds (eight at most, or
+press Stop), and Linger plays it back once, through the same clean-up a call uses, on
+the Speakers picked there. While it listens, lines move with your voice. Afterwards it
+says in a sentence what it heard and what to do: nothing (the wrong microphone is
+picked, or it's muted), very little (move closer, turn it up in the computer's sound
+settings, or turn on Even out my volume), or simply that this is how you sound. When the
+Microphone picked wouldn't open and the system default stood in for it, as in a call, it
+says that first. The recording is never sent anywhere and never kept: the desktop app
+listens and plays it back itself and then drops it, and the Settings window is told only
+how loud it is and that one word. It isn't offered in a call, where what it played would
+go back into the room; it says to leave voice first. Joining voice while a test is under
+way ends the test at once, and so does closing Settings. Desktop only: the phone app has
+no test.
+
 **Leaving is leaving.** Closing the app, losing the network, or joining voice somewhere
 else all end it, and the people you were talking to see you go. You are in voice in at
 most one room at a time, for the same reason you are in one room at a time.

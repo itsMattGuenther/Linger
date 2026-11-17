@@ -35,6 +35,15 @@ pub fn rms(samples: &[i16]) -> f32 {
     mean
 }
 
+/// How loud a frame is, from 0 to 1, as the ear hears it rather than as the
+/// samples measure it: the square root lifts a quiet voice off the floor.
+/// For a line that moves with a voice (a voice message being recorded, the
+/// microphone test).
+#[must_use]
+pub fn loudness(frame: &[i16]) -> f32 {
+    (rms(frame) / f32::from(i16::MAX)).sqrt().min(1.0)
+}
+
 /// How loud a frame is, as the audio level each voice packet carries (RFC
 /// 6464): decibels below the loudest a sample can be, 0 the loudest and 127
 /// silence. The forwarding server passes on a room's six loudest voices by it
@@ -92,6 +101,16 @@ impl Gate {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn loudness_runs_from_silence_to_the_loudest_there_is() {
+        assert_eq!(loudness(&[0; 960]), 0.0);
+        assert!((loudness(&[i16::MAX; 960]) - 1.0).abs() < 1e-6);
+        // A quiet voice, 40 dB down, is a tenth of the way up, not a
+        // hundredth: that's the square root.
+        let quiet = loudness(&[328; 960]);
+        assert!((0.09..0.11).contains(&quiet), "{quiet}");
+    }
 
     #[test]
     fn silence_has_no_level_and_a_tone_does() {

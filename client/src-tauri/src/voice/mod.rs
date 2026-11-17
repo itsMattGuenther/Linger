@@ -241,6 +241,11 @@ impl<S: Signaller, W: Watcher> Engine<S, W> {
         self.push_to_talk_closed.load(Ordering::Relaxed)
     }
 
+    /// Whether there's a call: its microphone and speakers are open.
+    pub async fn in_call(&self) -> bool {
+        self.inner.lock().await.devices.is_some()
+    }
+
     /// One of Linger's own sounds, into the call's own speakers, over the
     /// voices (#250). Answers whether there was a call to play it in.
     pub async fn cue(&self, samples: &[i16]) -> bool {

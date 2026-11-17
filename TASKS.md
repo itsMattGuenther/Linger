@@ -1115,16 +1115,23 @@ out loud.
   to the canceller before each microphone frame, for a call's microphone
   and speakers; with headphones it lets the voice through after a few
   seconds (`NO_ECHO_BY`).
-  **Left:** a microphone test that plays you back as others hear you (#907);
-  and the real check, which no test here can be: a call with Matt and a few
-  friends on Windows and Linux at the next release, with the switches on
-  and off, and one of them on speakers.
+  **The microphone test** (#907) is built too: Settings → Sound & Voice,
+  Test your microphone (`mic_test.rs`, `core/micTest.ts`). The shell
+  listens for up to eight seconds through the same clean-up, plays it back
+  on the Speakers picked, and says what it heard; the page never gets the
+  sound. Not offered in a call.
+  **Left:** the real check, which no test here can be: a call with Matt and
+  a few friends on Windows and Linux at the next release, with the switches
+  on and off, and one of them on speakers; and the microphone test tried on
+  both, with a microphone muted and with one turned right down.
   *Release notes, 0.5.5:* people on the desktop app are no longer too quiet:
   it brings each microphone to a normal speaking level and takes out
   background noise, as the phone app's does, and somebody on speakers no
   longer sends your voice back to you, with a switch for each in Settings →
   Sound & Voice. Everybody you talk with needs 0.5.5 for you to hear the
-  difference in them.
+  difference in them. And Settings → Sound & Voice can test your
+  microphone: talk for a few seconds and hear it back the way the others
+  hear you.
 
 - ⏳ **#905 · Linux: the desktop's own microphones and speakers** — effort:
   **treacherous** — Matt, 2026-11-16. Settings listed ALSA's names: 43

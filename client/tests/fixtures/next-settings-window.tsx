@@ -72,6 +72,17 @@ let rules: NotifyRule[] = [];
 const startup = query.get("autostart");
 let startsAtSignIn = startup === "on";
 
+/**
+ * The shell's microphone test stops listening: what it heard, then "done"
+ * once it has played. `busy`: the microphone picked wouldn't open, and what
+ * it heard nothing from was the default standing in.
+ */
+const micTestOver = (how: string) => {
+  desktop.deliver("mictest:heard", how === "busy" ? { heard: "nothing", stood_in: true } : { heard: how, stood_in: false });
+  const heard = how === "busy" ? "nothing" : how;
+  window.setTimeout(() => desktop.deliver("mictest:done", null), heard === "nothing" ? 10 : query.has("long") ? 2500 : 400);
+};
+
 const desktop = fakeDesktop({
   label: "settings",
   query,
@@ -111,6 +122,51 @@ const desktop = fakeDesktop({
     },
     "plugin:opener|open_url": (args) => desktop.note(`open:${String(args.url)}`),
     voice_devices: () => ({ inputs: ["Built-in microphone"], outputs: ["Headphones"], default_input: "Built-in microphone", default_output: "Headphones" }),
+    // The microphone test (#907). `?mictest` says how it goes: `voice`,
+    // `quiet` or `nothing` is what the shell heard; `busy`, nothing, from the
+    // default standing in for a microphone that wouldn't open; `invoice`,
+    // that Linger is in voice; `nomic`, that no microphone opened. The shell's part is
+    // played out in a moment: levels, then the verdict, then "done" (at once
+    // for nothing, which isn't played back).
+    mic_test_start: (args) => {
+      desktop.note(`mictest:start:${String(args.input)}:${String(args.output)}`);
+      const how = query.get("mictest") ?? "voice";
+      if (how === "invoice") throw "You're in voice. Leave it to test your microphone: the test plays out loud, and the room would hear it.";
+      if (how === "nomic") throw "no input device";
+      // `joined`: voice was joined while it listened, so nothing is played.
+      // `nospeakers`: it listened, and the speakers wouldn't open.
+      if (how === "joined" || how === "nospeakers") {
+        const why =
+          how === "joined"
+            ? "You're in voice. Leave it to test your microphone: the test plays out loud, and the room would hear it."
+            : "Linger heard you, but couldn't play it back: the speakers wouldn't open. Check the Speakers picked above.";
+        window.setTimeout(() => {
+          desktop.deliver("mictest:cut", why);
+          desktop.deliver("mictest:done", null);
+        }, 200);
+        return null;
+      }
+      for (const [at, level] of [0.2, 0.7, 0.4].entries()) window.setTimeout(() => desktop.deliver("mictest:level", level), 40 + at * 40);
+      // `joinedplaying`: voice is joined once it's playing back, which cuts it off.
+      if (how === "joinedplaying") {
+        window.setTimeout(() => {
+          desktop.deliver("mictest:heard", { heard: "voice", stood_in: false });
+          window.setTimeout(() => {
+            desktop.deliver("mictest:cut", "You're in voice. Leave it to test your microphone: the test plays out loud, and the room would hear it.");
+            desktop.deliver("mictest:done", null);
+          }, 150);
+        }, 200);
+        return null;
+      }
+      // `?mictest=...&hold`: it listens until Stop is pressed.
+      if (!query.has("hold")) window.setTimeout(() => micTestOver(how), 400);
+      return null;
+    },
+    mic_test_stop: () => {
+      desktop.note("mictest:stop");
+      micTestOver(query.get("mictest") ?? "voice");
+      return null;
+    },
   },
   routes: (method, path, url, body) => {
     // The other servers answer from the shared fake: their names, and nothing else.

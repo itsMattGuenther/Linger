@@ -1115,6 +1115,16 @@ for (const [width, height] of [
       }
     });
 
+    test("the microphone test fits at each of its moments, and nothing is cut off (#907)", async ({ page }) => {
+      for (const moment of ["opening", "listening", "playing", "nothing", "stoodin", "refused"]) {
+        await open(page, `?section=sound&mictest=${moment}`);
+        await expect(page.locator(".nx-set-mictest")).toBeVisible();
+        expect(await misSized(page), moment).toEqual([]);
+        expect(await clipped(page), moment).toEqual([]);
+        expect(await page.locator(".nx-set-main").evaluate((node) => node.scrollWidth <= node.clientWidth + 1), moment).toBe(true);
+      }
+    });
+
     test("a server behind the newest release: its note and both buttons fit, and nothing is cut off (#314)", async ({ page }) => {
       await open(page, "?section=server&server=behind");
       await expect(page.getByRole("button", { name: "How to update" })).toBeVisible();

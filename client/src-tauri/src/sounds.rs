@@ -17,6 +17,7 @@
 //! A picked device that isn't there, or won't open, falls back to the
 //! default, as it does for voice (`device.rs`).
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -34,11 +35,20 @@ pub use crate::cue::{checked, MAX_PEAK, MAX_SAMPLES};
 /// tests.
 pub trait Output: Send + Sync + 'static {
     fn cue(&self, samples: &[i16]);
+
+    /// A recording, played whole however long it is. A sound is held to a
+    /// few seconds (`Speaker::cue`), and the microphone test's recording
+    /// runs to eight (`mic_test.rs`).
+    fn recording(&self, samples: &[i16]);
 }
 
 impl Output for Speaker {
     fn cue(&self, samples: &[i16]) {
         Speaker::cue(self, samples);
+    }
+
+    fn recording(&self, samples: &[i16]) {
+        Speaker::recording(self, samples);
     }
 }
 
@@ -82,6 +92,41 @@ impl Sounds {
     /// is closed and one opened for this one: switching it in place would
     /// drop this very sound, since a reopened stream starts empty.
     pub fn play(&self, samples: &[i16], output: Option<&str>) -> Result<(), DeviceError> {
+        self.give(output, |speaker| speaker.cue(samples))
+    }
+
+    /// Play a recording on `output`, whole: [`Sounds::play`], for what's
+    /// longer than a sound is let be (`Output::recording`). Unless it has
+    /// been `called_off` by the time the speaker is open, which is when it
+    /// answers false: opening takes a moment, and in that moment whoever
+    /// asked can stop wanting it (the microphone test's window closed, or
+    /// voice was joined, `mic_test.rs`).
+    pub fn play_recording(
+        &self,
+        samples: &[i16],
+        output: Option<&str>,
+        called_off: &AtomicBool,
+    ) -> Result<bool, DeviceError> {
+        let played = AtomicBool::new(false);
+        self.give(output, |speaker| {
+            if !called_off.load(Ordering::SeqCst) {
+                speaker.recording(samples);
+                played.store(true, Ordering::SeqCst);
+            }
+        })?;
+        Ok(played.into_inner())
+    }
+
+    /// Stop whatever is playing, now, by closing the speaker: for a
+    /// recording nobody wants the rest of. The next sound opens it again.
+    pub fn stop(&self) {
+        *lock(&self.held) = None;
+    }
+
+    /// Hand something to the speaker for `output`, opening it if it isn't.
+    /// The speaker is held from the opening to the handing over, so `stop`
+    /// comes before both or after both.
+    fn give(&self, output: Option<&str>, play: impl Fn(&dyn Output)) -> Result<(), DeviceError> {
         let mut held = lock(&self.held);
         if held
             .as_ref()
@@ -92,12 +137,12 @@ impl Sounds {
         let now = Instant::now();
         match held.as_mut() {
             Some(held) => {
-                held.output.cue(samples);
+                play(held.output.as_ref());
                 held.last = now;
             }
             None => {
                 let opened = (self.open)(output)?;
-                opened.cue(samples);
+                play(opened.as_ref());
                 *held = Some(Held {
                     output: opened,
                     name: output.map(str::to_owned),
@@ -139,13 +184,18 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 mod tests {
     use super::*;
 
-    /// A stand-in speaker that remembers what it played.
+    /// A stand-in speaker that remembers what it played: the sounds, and
+    /// the recordings handed to it whole.
     #[derive(Default)]
-    struct Heard(Mutex<Vec<Vec<i16>>>);
+    struct Heard(Mutex<Vec<Vec<i16>>>, Mutex<Vec<Vec<i16>>>);
 
     impl Output for Heard {
         fn cue(&self, samples: &[i16]) {
             self.0.lock().unwrap().push(samples.to_vec());
+        }
+
+        fn recording(&self, samples: &[i16]) {
+            self.1.lock().unwrap().push(samples.to_vec());
         }
     }
 
@@ -175,6 +225,68 @@ mod tests {
         assert_eq!(opened.len(), 1);
         assert_eq!(opened[0].0.as_deref(), Some("Headphones"));
         assert_eq!(*opened[0].1 .0.lock().unwrap(), vec![vec![1, 2, 3]]);
+    }
+
+    /// A recording goes to the speaker as a recording, to be played whole,
+    /// and never as a sound, which is cut at four seconds (#912's review).
+    #[test]
+    fn a_recording_is_handed_over_whole_not_as_a_sound() {
+        let (sounds, opened) = rig();
+        let recording = vec![7; 8 * 48_000];
+        let wanted = AtomicBool::new(false);
+        assert!(sounds
+            .play_recording(&recording, Some("Headphones"), &wanted)
+            .unwrap());
+        // On the speaker a sound just opened, too.
+        sounds.play(&[1], Some("Headphones")).unwrap();
+        assert!(sounds
+            .play_recording(&[2, 3], Some("Headphones"), &wanted)
+            .unwrap());
+        let opened = opened.lock().unwrap();
+        assert_eq!(opened.len(), 1);
+        assert_eq!(*opened[0].1 .0.lock().unwrap(), vec![vec![1]]);
+        assert_eq!(*opened[0].1 .1.lock().unwrap(), vec![recording, vec![2, 3]]);
+    }
+
+    /// A recording called off while its speaker was opening isn't played
+    /// (#912's review): the microphone test's window closed, or voice was
+    /// joined, in the moment the opening takes.
+    #[test]
+    fn a_recording_called_off_while_the_speaker_opened_isnt_played() {
+        let called_off = Arc::new(AtomicBool::new(false));
+        let during = Arc::clone(&called_off);
+        let handed: Arc<Mutex<Option<Arc<Heard>>>> = Arc::default();
+        let kept = Arc::clone(&handed);
+        let sounds = Sounds::with_opener(Box::new(move |_| {
+            // Called off while this opens.
+            during.store(true, Ordering::SeqCst);
+            let heard = Arc::new(Heard::default());
+            *kept.lock().unwrap() = Some(Arc::clone(&heard));
+            Ok(heard as Arc<dyn Output>)
+        }));
+        assert!(!sounds
+            .play_recording(&[1, 2, 3], None, &called_off)
+            .unwrap());
+        let heard = handed.lock().unwrap().clone().expect("the speaker opened");
+        assert!(heard.1.lock().unwrap().is_empty(), "it was played anyway");
+        // Called off before it's asked for at all, on a speaker already open.
+        assert!(!sounds.play_recording(&[4], None, &called_off).unwrap());
+        assert!(heard.1.lock().unwrap().is_empty());
+    }
+
+    /// Stopping closes the speaker, which is what ends a recording part way
+    /// through; the next sound opens one again.
+    #[test]
+    fn stopping_closes_the_speaker_and_the_next_sound_opens_it_again() {
+        let (sounds, opened) = rig();
+        let wanted = AtomicBool::new(false);
+        assert!(sounds.play_recording(&[1, 2, 3], None, &wanted).unwrap());
+        assert!(sounds.is_open());
+        sounds.stop();
+        assert!(!sounds.is_open());
+        sounds.stop();
+        sounds.play(&[9], None).unwrap();
+        assert_eq!(opened.lock().unwrap().len(), 2);
     }
 
     #[test]

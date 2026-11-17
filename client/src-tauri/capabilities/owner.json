@@ -50,6 +50,8 @@
     "allow-clip-start",
     "allow-clip-stop",
     "allow-clip-cancel",
+    "allow-mic-test-start",
+    "allow-mic-test-stop",
     "allow-screen-share-available",
     "allow-screen-watch-available",
     "allow-screen-share-start",

@@ -195,6 +195,35 @@ to be right for every shape that window takes.
 
 ## Checked when asked, not when it happens
 
+- **#912: a microphone test could still play into a room, or to a window
+  that had gone.** Greptile's third look, after the first fixes. Whether to
+  play was checked after the listening, and then the speakers were opened
+  on another thread, which takes a moment: a room joined in that moment
+  heard the test. And stopping a test stopped its task but not that
+  thread, which went on to play, with nothing left to close the speaker
+  afterwards. *Missed because* each fix checked a little later than the
+  last, and a check before something slow is still a check before it; and
+  I took stopping a task to stop what it had started elsewhere. *Changed:*
+  it's the event that ends the test, not a check that tries to see it
+  coming: joining voice calls a test off (`mic_test::voice_joined`), as
+  closing its window does. Calling off sets a flag the speaker-opening
+  thread reads before it plays, and closes the speaker to stop what's
+  playing. The opening, playing and closing are a task of their own, so
+  the speaker is closed whoever is stopped. Tests: called off while the
+  speaker opened, called off whatever it's doing, and the page cut off
+  while it played.
+
+- **#912: a microphone test outlived the window that started it.** Closing
+  a window takes its test with it, but the test was written down only once
+  its microphone had opened, which takes a moment: a window closed in that
+  moment found nothing to take, and the test then listened and played to
+  nobody. Caught by Greptile. *Missed because* I followed the voice message
+  recorder, which has the same gap (#913), and tested closing a window only
+  with a test already running. *Changed:* a test is on the books before
+  anything is waited for (`MicTests::begin`), and is checked for still
+  being wanted once the microphone is open, with a test for a window gone
+  in between.
+
 A check that guards an action passes when the action is asked for, then
 something slow runs (a request, a download, a prompt), and the action happens
 on a world that has changed.
@@ -325,6 +354,20 @@ on a world that has changed.
 
 ## A rule nothing checks
 
+- **#912: stopping a microphone test could hold up whoever asked.**
+  Calling a test off closed the sounds' speaker there and then, from a
+  window's own events and from a command on the runtime. Closing waits for
+  the lock the speaker is opened under, so in the moment a device takes to
+  open, the window's thread or a runtime thread stood still for it. Caught
+  by Greptile. *Missed because* I'd checked that opening the microphone
+  and the speakers were off the runtime and never asked what the stopping
+  waits for; nothing checks the rule. *Changed:* the flag is set where it's
+  asked, which waits for nothing, and the closing is on a thread for work
+  that waits (`stop_playing`); joining voice waits for it, off the runtime,
+  before its own devices open. A test holds the asker to coming straight
+  back with a speaker that's slow to open, and fails, not hangs, against
+  the version that waited.
+
 - **#794: the update files blocked the async workers.** AGENTS.md says never
   block the reactor, and `updates.rs` read and wrote tens of megabytes with
   `std::fs` inside async commands. *Missed because* no check reads that
@@ -354,6 +397,23 @@ on a world that has changed.
   question for written rules now names this one.
 
 ## Tests written from the case in mind, not from the ways things fail
+
+- **#912: the microphone test played half of a long recording, listened
+  past its limit, and blamed the wrong microphone.** Three of Greptile's
+  four on it. The recording went to the speakers as one of Linger's sounds,
+  which are cut at four seconds, so an eight-second test played its first
+  four. The limit counted frames, and an unplugged microphone gives none
+  for the twenty seconds its worker tries to get it back, so "Listening"
+  could last that long. And a microphone that's listed but won't open is
+  stood in for by the default, as in a call (#398), so the test could hear
+  nothing from the default and tell somebody to unmute their headset.
+  *Missed because* each test fed it the easy case: a stand-in speaker with
+  no ceiling, a stand-in microphone faster than a clock, and a microphone
+  that opened. *Changed:* a recording has its own way to the speakers,
+  played whole (`Speaker::recording`), tested through the real queue and
+  through `Sounds`; the listening ends by the clock as well as by the
+  count, tested with a microphone that never answers; and what's said
+  carries whether the default stood in (`Said`), which Settings says first.
 
 - **#910: a stream on the default in place of a device that's gone didn't
   follow the default.** "System default" follows the desktop's default when
