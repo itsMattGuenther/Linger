@@ -20,7 +20,9 @@ test("reads which pull request, folder and branch a command is about", () => {
   const table = [
     ["create", 'gh pr create --title "a b" --body-file x', { dirs: [], base: null }],
     ["create", "cd /x/y && gh pr create --title t", { dirs: ["/x/y"] }],
-    ["create", 'cd "/x/a b"; cd sub && gh pr create', { dirs: ["/x/a b", "sub"] }],
+    ["create", 'cd "/x/a b" && cd sub && gh pr create', { dirs: ["/x/a b", "sub"] }],
+    // A line ended by && carries on to the next.
+    ["create", "cd x &&\ngh pr create", { dirs: ["x"] }],
     ["create", "cd ~/p && git push -u origin HEAD && gh pr create -t x", { dirs: ["~/p"] }],
     ["create", "git push && gh pr create", { dirs: [] }],
     ["create", "gh pr create -B release -t x", { base: "release" }],
@@ -88,6 +90,42 @@ test("reads which pull request, folder and branch a command is about", () => {
     ["merge", "gh pr merge 5 && gh pr checkout 6 && git merge main", { selector: "5" }],
     ["create", "gh pr create -t x > out.txt", { base: null }],
     ["create", "gh pr create -t x -B release 2>&1", { base: "release" }],
+    // Read as bash reads them (#925): each was stopped while the gate read text.
+    ["create", "X=$(pwd) gh pr create", { base: null }],
+    ["create", "/usr/bin/gh pr create", { base: null }],
+    ["merge", "\"gh\" pr merge 5", { selector: "5" }],
+    ["merge", "g''h pr merge 5", { selector: "5" }],
+    ["merge", "gh pr merge 5 > $(mktemp)", { selector: "5" }],
+    ["merge", 'gh pr merge 5 2>"$LOG"', { selector: "5" }],
+    ["create", 'gh pr create -t x --repo 2>"$LOG" o/r', { repo: "o/r" }],
+    ["create", 'gh pr create -t x -B 2>"$LOG" release', { base: "release" }],
+    ["merge", 'gh pr 2>"$X y" merge 5', { selector: "5" }],
+    ["merge", "gh pr \\\n        merge 5", { selector: "5" }],
+    ["merge", "gh pr merge 5 --body-file - <<'EOF'\nwords\nEOF", { selector: "5" }],
+    ["merge", 'gh 2> "$L" pr merge 5', { selector: "5" }],
+    ["merge", "gh pr 2>a\\ b merge 5", { selector: "5" }],
+    // After a body it can't read, its flags are still its own words.
+    ["create", 'gh pr create -b "$(cat x)" \\\n-B release', { base: "release" }],
+    ["create", 'gh pr create -b "$(cat x)" "-R" o/r', { repo: "o/r" }],
+    ["create", "gh pr create -b \"$(cat x)\" --ba''se release", { base: "release" }],
+    ["create", 'gh pr create -b "$(cat x)" -""B release', { base: "release" }],
+    ["create", 'gh pr create -b "$(cat x)" -dB release', { base: "release" }],
+    ["merge", 'gh pr merge 912 --body "$(cat x)" -R o/r', { selector: "912", repo: "o/r" }],
+    ["merge", 'gh pr merge 912 -R o/r --body "$(cat x)"', { selector: "912", repo: "o/r" }],
+    ["create", "gh pr create --title t --body \"$(cat <<'EOF'\nwords\nEOF\n)\" --base release", { base: "release" }],
+    // A flag's name inside a body is the body's.
+    ["create", "gh pr create -B main --title t --body \"$(cat <<'EOF'\nuse grep -R here\nEOF\n)\"", { base: "main", repo: null }],
+    ["merge", 'gh pr merge --squash --body "$(cat x)"', { selector: null }],
+    // A flag that takes no value, given one, as pflag reads it.
+    ["merge", "gh pr merge 5 --help=false --admin", { selector: "5" }],
+    ["merge", "gh pr merge 5 -h=false", { selector: "5" }],
+    ["ready", "gh pr ready 7 --undo=false", { selector: "7" }],
+    ["merge", "gh pr merge 5 --auto=false", { selector: "5" }],
+    // A short flag's value after =, as pflag reads it.
+    ["create", "gh pr create -B=release", { base: "release" }],
+    ["merge", "gh pr merge 5 -R=o/r", { selector: "5", repo: "o/r" }],
+    // ANSI-C quoting is quoting.
+    ["create", "gh pr create --$'base' release", { base: "release" }],
     ["ready", "gh pr ready", { selector: null }],
     ["ready", "gh pr ready 12", { selector: "12" }],
   ];
@@ -112,56 +150,23 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     ["create", "cd x || gh pr create"],
     ["create", "(cd x && gh pr create)"],
     ["create", "$(echo) gh pr create"],
-    ["create", "X=$(pwd) gh pr create"],
-    ["create", "/usr/bin/gh pr create"],
     ["create", "command gh pr create"],
-    ["create", "echo gh pr create"],
-    ["merge", "\"gh\" pr merge 5"],
     ["merge", "gh pr merge --squash 912"],
-    // A redirection whose target it can't read is still a word it can't read.
-    ["merge", "gh pr merge 5 > $(mktemp)"],
-    ["merge", 'gh pr merge 5 2>"$LOG"'],
-    // Its digits are never a word, so never a flag's value (#924).
-    ["create", 'gh pr create -t x --repo 2>"$LOG" o/r'],
-    ["create", 'gh pr create -t x -B 2>"$LOG" release'],
     ["merge", "cd 2>/dev/null && gh pr merge 5"],
     // &> is a redirection, not the command's end, so what follows is read.
     ["merge", 'gh pr merge 5 &>"$LOG" --auto'],
     ["merge", "gh pr merge 5 &>log.txt --auto"],
     // Between gh's words: read, so --auto is seen; or not read, and stopped.
     ["merge", "gh pr 2>/dev/null merge 5 --auto"],
-    ["merge", 'gh pr 2>"$X y" merge 5'],
-    ["merge", "gh pr \\\n        merge 5"],
-    ["merge", "gh pr merge 5 --body-file - <<'EOF'\nwords\nEOF"],
     // A target it can't read after a blank, or with a blank escaped in it.
     ["merge", "gh pr 2> $LOG merge 5 --auto"],
-    ["merge", 'gh 2> "$L" pr merge 5'],
-    ["merge", "gh pr 2>a\\ b merge 5"],
-    // The & of &> doesn't start a command: gh here is true's word, and the
-    // words in order are enough to stop it.
-    ["merge", "true &>/dev/null gh pr merge 5"],
-    // A flag that matters, after a body it can't read and a line continued, or quoted.
-    ["create", 'gh pr create -b "$(cat x)" \\\n-B release'],
-    ["create", 'gh pr create -b "$(cat x)" "-R" o/r'],
-    ["create", "gh pr create -b \"$(cat x)\" --ba''se release"],
-    ["create", 'gh pr create -b "$(cat x)" -""B release'],
-    ["create", 'gh pr create -b "$(cat x)" -dB release'],
     ["create", "gh pr create -t x -dH other"],
-    // Claude Code fired the hook from its own reading, so the words in order
-    // are enough: the gate can't tell this from a merge it can't read.
-    ["merge", "gh pr create --title merge"],
-    ["merge", 'gh pr merge 912 --body "$(cat x)" -R o/r'],
-    ["merge", 'gh pr merge 912 -R o/r --body "$(cat x)"'],
     ["merge", 'gh pr merge 5 --body "$(cat message.txt)" --auto --squash'],
     ["create", "gh pr create -Hother"],
     ["create", "gh pr create -t x -Hother"],
     ["merge", "gh pr merge https://github.com/o/r/pull/9 -R a/b"],
-    ["create", "gh pr create --title t --body \"$(cat <<'EOF'\nwords\nEOF\n)\" --base release"],
     ["create", 'gh pr create --body "$(cat x)" -H other'],
-    // After a body it can't read, a flag's name might be the body's or the command's.
-    ["create", "gh pr create -B main --title t --body \"$(cat <<'EOF'\nuse grep -R here\nEOF\n)\""],
     ["merge", 'gh pr merge --subject "a b" 912'],
-    ["merge", 'gh pr merge --squash --body "$(cat x)"'],
     ["merge", "gh pr merge $N"],
     ["merge", "gh pr merge 1 && gh pr merge 2"],
     ["merge", "gh pr merge 5 -R a/b --repo c/d"],
@@ -172,6 +177,38 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     ["merge", "git push && gh pr merge 5 --squash"],
     ["ready", "git push origin feat/x && gh pr ready 5"],
     ["merge", "gh pr merge 5 --auto --squash"],
+    ["merge", "gh pr merge 5 --auto=true"],
+    // After a step, only &&: a failed cd with ; leaves gh in the first folder.
+    ["create", "cd x; gh pr create"],
+    ["create", "cd x\ngh pr create"],
+    // A word it can't follow where gh, pr or the action stands (#925).
+    ["merge", "$G pr merge 5"],
+    ["merge", "gh $P merge 5"],
+    ["merge", "gh pr $X 5"],
+    // Inside a program that runs other commands.
+    ["merge", "xargs gh pr merge"],
+    ["merge", "bash -c 'gh pr merge 5'"],
+    ["create", "env GH_REPO=x gh pr create"],
+    ["merge", "timeout 60 gh pr merge 5"],
+    // Inside a substitution, or an unquoted here-document's.
+    ["merge", "echo $(gh pr merge 5)"],
+    ["merge", 'gh pr view "$(gh pr merge 5)"'],
+    ["merge", "cat <<EOF\n$(gh pr merge 5)\nEOF"],
+    ["merge", "echo `gh pr merge 5`"],
+    // A second copy, however it's spelled.
+    ["merge", "gh pr merge 5; gh pr merge 6"],
+    ["merge", 'gh pr merge 5 && "gh" pr merge 6'],
+    ["merge", "gh pr merge 5; g''h pr merge 6"],
+    ["merge", 'gh pr merge 5 >/dev/null; gh 2>"$L" pr merge 6 --auto'],
+    // Inside a compound command.
+    ["merge", "if gh pr merge 5; then echo ok; fi"],
+    // A value it can't read, or a word that may be several.
+    ["merge", 'gh pr merge "$N"'],
+    ["merge", "gh pr merge 5 $FLAGS"],
+    ["create", 'gh pr create --base "$B"'],
+    ["create", "GH_REPO=$R gh pr create"],
+    // Text bash would refuse, that might be the command.
+    ["merge", 'gh pr merge 5 "oops'],
   ];
   for (const [action, command] of table) {
     const read = readCommand(command, action);
@@ -198,6 +235,19 @@ test("a command that isn't one leaves the gate out", () => {
     ["create", "gh pr create --help"],
     ["merge", "gh pr merge -h"],
     ["ready", "gh pr view --json isDraft"],
+    // Words, not text (#925): these only name the command, or run another gh pr.
+    ["create", "echo gh pr create"],
+    ["merge", "true &>/dev/null gh pr merge 5"],
+    ["merge", "gh pr create --title merge"],
+    ["merge", "for pr in 919 921; do gh pr view $pr --json state --jq '\"merged\"'; done"],
+    ["merge", 'git commit -m "fix: gh pr merge 5 later"'],
+    ["create", "node - <<'JS'\n['create', 'gh pr create -t x']\nJS"],
+    ["merge", "cat <<'EOF'\n$(gh pr merge 5)\nEOF"],
+    // A here-document body is data, a line in it that reads like the command included.
+    ["merge", "cat <<'EOF'\ngh pr merge 5\nEOF"],
+    ["merge", "cat <<EOF\ngh pr merge 5\nEOF"],
+    ["merge", "cat <<-EOF\n\tgh pr merge 5\n\tEOF"],
+    ["merge", "gh pr view 5 --json title,mergedAt && echo merge"],
     // gh2 isn't gh: digits glued to > belong to the word before.
     ["merge", "gh2>a pr merge 5"],
     ["ready", "gh pr ready 12 --undo"],
@@ -226,6 +276,9 @@ test("words come out as the shell hands them over", () => {
   assert.equal(unquote(`'a "b"'`), 'a "b"');
   assert.equal(unquote(`a"b c"'d'`), "ab cd");
   assert.equal(unquote(`"a\\"b"`), 'a"b');
+  assert.equal(unquote("$'a\\tb'"), "a\tb");
+  assert.equal(unquote("a\\ b"), "a b");
+  assert.equal(unquote("a\\\nb"), "ab");
 });
 
 test("the reviewer's verdict is its last line, and no verdict is findings", () => {

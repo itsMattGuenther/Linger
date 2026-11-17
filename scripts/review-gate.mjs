@@ -52,43 +52,427 @@ export const REVIEWER_TOOLS = [
   "Bash(git merge-base:*)", "Bash(git rev-parse:*)", "Bash(git status:*)",
 ];
 
-// A shell word the gate can read: plain characters and quoted pieces, with no
-// variable, substitution, glob or redirection in it. Anything else isn't
-// matched, so a command that needs one where the gate looks is stopped.
-const PIECE = String.raw`(?:"(?:[^"\\$\x60]|\\[\\"$\x60])*"|'[^']*'|[^\s;&|<>()"'$\x60\\*?\[\]{}#])`;
-const WORD = `(?:${PIECE}+)`;
-const ASSIGN = String.raw`[A-Za-z_]\w*=(?:${WORD})?`;
-// What ends one command: ; | ) a newline, or an & that doesn't start `&>`.
-const SEPARATOR = String.raw`[;|)\n]|&(?!>)`;
-// Where a word ends, as in the shell: a blank, a separator, the end, or a
-// redirection glued to it (`--squash>out`, `x&>log`).
-const AFTER = String.raw`(?=$|[ \t<>&]|${SEPARATOR})`;
-// A redirection, operators longest first, and what it reads or writes: the
-// shell's, not one of gh's words (#924). One whose target the gate can't read
-// (a substitution, a variable) doesn't match, so the command is stopped.
-const REDIR = String.raw`(?:\d*(?:>>|>&|>\||>|<<<|<&|<>|<)|&>>|&>)[ \t]*${WORD}${AFTER}`;
-// Where a redirection starts, read or not, so its digits (`2>`) are never a word.
-const NOT_REDIR = String.raw`(?!\d*[<>])`;
-// Where a command starts: the start, or after ; newline ( or a | or & that
-// isn't part of a redirection (`>|`, `>&`, `<&`, `&>`).
-const START = String.raw`(^|[;\n(]|(?<![<>])\||(?<![<>])&(?!>))[ \t]*`;
-// Before gh, among the settings, and between gh, pr and the action, the shell
-// allows redirections too (`2>/dev/null gh pr 2>&1 merge 5`), glued together or
-// not; they're passed over. A redirection's target that looks like a setting
-// (`>GH_REPO=o/r` writes a file of that name) is never one: FRONT says which.
-const FRONT = String.raw`(?:(${ASSIGN})[ \t]+|${REDIR}[ \t]*)`;
-const GAP = String.raw`(?:(?:[ \t]+|(?=[<>&]))${REDIR})*[ \t]+`;
-const GH = (action) => new RegExp(`${START}((?:${FRONT})*)gh${GAP}pr${GAP}${action}${AFTER}`, "g");
-// What may come before the command on its line: changes of folder and a push.
-// Either may have redirections (`2>/dev/null`), and their digits are never its words.
-const STEP = new RegExp(String.raw`^\s*(?:cd(?:[ \t]+${REDIR})*[ \t]+${NOT_REDIR}(${WORD})${AFTER}(?:[ \t]*${REDIR})*|git[ \t]+push${AFTER}(?:[ \t]*${REDIR}|[ \t]+${NOT_REDIR}${WORD}${AFTER})*)[ \t]*(?:&&|;|\n)`);
-// What's in front of gh, one setting or redirection at a time, as GH matched it.
-const IN_FRONT = new RegExp(FRONT, "y");
-const TOKEN = new RegExp(String.raw`^[ \t]*${NOT_REDIR}(${WORD})${AFTER}`);
-// Where the command ends: a separator, the end, or a comment (a # that starts a word).
-// `&>` is a redirection, not an end.
-const END = new RegExp(String.raw`^(?:[ \t]*(?:$|${SEPARATOR})|[ \t]+#)`);
-const REDIRECT = new RegExp(String.raw`^[ \t]*${REDIR}`);
+// The command is read as bash reads it (#925): one pass over its text, left
+// to right, that knows quotes, escapes, line continuations, comments,
+// operators, redirections and here-documents, and opens each substitution
+// (`$(…)`, backticks, `<(…)`) to read the commands inside it. Each word comes
+// out as the program it's handed to sees it, with whether the gate can know
+// it: a variable, a substitution or a glob it can't follow is marked, never
+// guessed. Regular expressions modelling the shell missed a new spelling in
+// every review of #924; a reader that tracks quotes can't.
+
+/** Stands where a word has something the gate can't follow; no argument can hold it. */
+const UNKNOWN = "\u0000";
+/** What ends an unquoted word. */
+const METACHARS = new Set([" ", "\t", "\n", ";", "&", "|", "(", ")", "<", ">"]);
+/** Redirection operators, longest first, so `>>` is never read as `>` twice. */
+const REDIRECTIONS = ["<<<", "<<-", "&>>", "<<", "<>", "<&", ">>", ">&", ">|", "&>", "<", ">"];
+/** Control operators, longest first. `&&` is checked before `&>`. */
+const OPERATORS = ["&&", "||", ";;", "|&", ";", "|", "&", "(", ")", "\n"];
+/** Words that open or continue a compound command, before the command they lead to. */
+const LEADING = new Set(["!", "{", "do", "then", "else", "elif", "if", "while", "until", "time", "coproc"]);
+/** Words that make a whole command something other than one that runs a program. */
+const NOT_A_COMMAND = new Set(["for", "select", "case", "in", "esac", "done", "fi", "}", "function", "[[", "]]"]);
+/** Commands that run the command in their arguments. */
+const WRAPPERS = new Set(["command", "builtin", "exec", "env", "sudo", "doas", "nohup", "nice", "ionice", "timeout", "stdbuf", "setsid", "xargs", "parallel", "watch", "unbuffer", "chronic", "eval", "source", ".", "bash", "sh", "zsh", "dash", "ksh", "fish", "ssh", "script", "flock", "caffeinate", "systemd-run", "npx", "pnpm", "yarn"]);
+/** ANSI-C escapes in `$'…'`. */
+const C_ESCAPES = { n: "\n", t: "\t", r: "\r", a: "\x07", b: "\b", e: "\x1b", E: "\x1b", f: "\f", v: "\v", "\\": "\\", "'": "'", '"': '"', "?": "?" };
+
+class Unreadable extends Error {}
+
+/**
+ * A command's tokens: words (`{ word }`), operators (`{ op }`) and
+ * redirections (`{ redirect, target }`). A word is `{ text, known, single,
+ * inner }`: `text` as the program sees it, with UNKNOWN where the gate can't
+ * follow it; `known` when it has nothing it can't follow; `single` when it
+ * is one argument whatever it holds (an expansion only inside double quotes,
+ * and no glob or brace); `inner` the commands of the substitutions in it,
+ * each a token list of its own. Throws Unreadable on text bash would refuse
+ * (an unclosed quote or substitution, a redirection with no target).
+ */
+export function tokenize(source) {
+  return readTokens({ source, at: 0 }, null);
+}
+
+function readTokens(reader, closer) {
+  const { source } = reader;
+  const tokens = [];
+  const heredocs = [];
+  let depth = 0;
+  for (;;) {
+    while (source[reader.at] === " " || source[reader.at] === "\t" || (source[reader.at] === "\\" && source[reader.at + 1] === "\n")) {
+      reader.at += source[reader.at] === "\\" ? 2 : 1;
+    }
+    if (reader.at >= source.length) {
+      if (closer) throw new Unreadable("a substitution isn't closed");
+      readHeredocs(reader, heredocs);
+      return tokens;
+    }
+    if (source[reader.at] === "#") {
+      while (reader.at < source.length && source[reader.at] !== "\n") reader.at += 1;
+      continue;
+    }
+    // `<(…)` and `>(…)`: a process substitution, a word of its own.
+    if (source.startsWith("<(", reader.at) || source.startsWith(">(", reader.at)) {
+      tokens.push({ word: readWord(reader) });
+      continue;
+    }
+    // A redirection: an all-digit word glued to < or > names the stream.
+    const stream = /^\d+(?=[<>])/.exec(source.slice(reader.at, reader.at + 12));
+    const opAt = reader.at + (stream ? stream[0].length : 0);
+    const redirect = source.startsWith("&&", reader.at) ? undefined : REDIRECTIONS.find((op) => source.startsWith(op, opAt));
+    if (redirect) {
+      reader.at = opAt + redirect.length;
+      while (source[reader.at] === " " || source[reader.at] === "\t") reader.at += 1;
+      if (reader.at >= source.length || METACHARS.has(source[reader.at])) throw new Unreadable(`\`${redirect}\` has nothing to read or write`);
+      const target = readWord(reader);
+      const token = { redirect, target };
+      tokens.push(token);
+      // A here-document's end is its word with quotes taken off, never expanded.
+      if (redirect === "<<" || redirect === "<<-") heredocs.push({ end: target.raw.replace(/["'\\]/g, ""), quoted: /["'\\]/.test(target.raw), tabs: redirect === "<<-", token });
+      continue;
+    }
+    const op = OPERATORS.find((candidate) => source.startsWith(candidate, reader.at));
+    if (op) {
+      reader.at += op.length;
+      if (op === ")" && closer === ")" && depth === 0) {
+        readHeredocs(reader, heredocs);
+        return tokens;
+      }
+      if (op === "(") depth += 1;
+      if (op === ")") depth = Math.max(0, depth - 1);
+      tokens.push({ op });
+      if (op === "\n") readHeredocs(reader, heredocs);
+      continue;
+    }
+    tokens.push({ word: readWord(reader) });
+  }
+}
+
+/** The bodies of the here-documents opened on the line just ended: data, not commands. */
+function readHeredocs(reader, heredocs) {
+  const { source } = reader;
+  for (const heredoc of heredocs.splice(0)) {
+    const body = [];
+    for (;;) {
+      if (reader.at >= source.length) break;
+      const newline = source.indexOf("\n", reader.at);
+      const line = source.slice(reader.at, newline < 0 ? source.length : newline);
+      reader.at = newline < 0 ? source.length : newline + 1;
+      if ((heredoc.tabs ? line.replace(/^\t+/, "") : line) === heredoc.end) break;
+      body.push(line);
+    }
+    // Unquoted, its body is expanded: a substitution in it runs.
+    if (!heredoc.quoted) heredoc.token.target.inner.push(...substitutionsIn(body.join("\n")));
+  }
+}
+
+/** The commands of the substitutions in text read as a double-quoted string. */
+function substitutionsIn(text) {
+  const reader = { source: `"${text.replace(/"/g, "\\\"")}"`, at: 0 };
+  try {
+    return readWord(reader).inner;
+  } catch {
+    return [[{ word: { text: UNKNOWN, known: false, single: false, quoted: false, inner: [], raw: "" } }]];
+  }
+}
+
+/** One word, from where it starts to the first unquoted metacharacter. */
+function readWord(reader) {
+  const { source } = reader;
+  const word = { text: "", known: true, single: true, quoted: false, inner: [] };
+  const unknown = (single) => {
+    word.text += UNKNOWN;
+    word.known = false;
+    if (!single) word.single = false;
+  };
+  const start = reader.at;
+  while (reader.at < source.length) {
+    const char = source[reader.at];
+    if (METACHARS.has(char)) {
+      // `<(…)` and `>(…)` at the start of a word: a process substitution.
+      if ((char === "<" || char === ">") && reader.at === start && source[reader.at + 1] === "(") {
+        reader.at += 2;
+        word.inner.push(readTokens(reader, ")"));
+        unknown(true);
+        continue;
+      }
+      break;
+    }
+    if (char === "\\") {
+      if (source[reader.at + 1] === "\n") reader.at += 2;
+      else {
+        if (reader.at + 1 >= source.length) throw new Unreadable("a `\\` escapes nothing");
+        word.text += source[reader.at + 1];
+        word.quoted = true;
+        reader.at += 2;
+      }
+      continue;
+    }
+    if (char === "'") {
+      const end = source.indexOf("'", reader.at + 1);
+      if (end < 0) throw new Unreadable("a `'` isn't closed");
+      word.text += source.slice(reader.at + 1, end);
+      word.quoted = true;
+      reader.at = end + 1;
+      continue;
+    }
+    if (char === '"') {
+      reader.at += 1;
+      word.quoted = true;
+      for (;;) {
+        if (reader.at >= source.length) throw new Unreadable('a `"` isn\'t closed');
+        const inside = source[reader.at];
+        if (inside === '"') {
+          reader.at += 1;
+          break;
+        }
+        if (inside === "\\") {
+          const next = source[reader.at + 1];
+          if (next === "\n") reader.at += 2;
+          else if (next === "$" || next === "`" || next === '"' || next === "\\") {
+            word.text += next;
+            reader.at += 2;
+          } else {
+            word.text += "\\";
+            reader.at += 1;
+          }
+          continue;
+        }
+        if (inside === "$" || inside === "`") {
+          if (readExpansion(reader, word, true)) continue;
+        }
+        word.text += inside;
+        reader.at += 1;
+      }
+      continue;
+    }
+    if (char === "$" && source[reader.at + 1] === "'") {
+      reader.at += 2;
+      word.quoted = true;
+      word.text += readAnsiC(reader);
+      continue;
+    }
+    if (char === "$" && source[reader.at + 1] === '"') {
+      // A string for translation: read as a double-quoted one.
+      reader.at += 1;
+      continue;
+    }
+    if (char === "$" || char === "`") {
+      if (readExpansion(reader, word, false)) continue;
+    }
+    // Globs and braces expand to file names or several words.
+    if (char === "*" || char === "?" || char === "[" || ((char === "{" || char === "}") && !(reader.at === start && METACHARS_OR_END(source, reader.at + 1)))) {
+      word.text += char;
+      word.known = false;
+      word.single = false;
+      reader.at += 1;
+      continue;
+    }
+    word.text += char;
+    reader.at += 1;
+  }
+  word.raw = source.slice(start, reader.at);
+  return word;
+}
+
+const METACHARS_OR_END = (source, at) => at >= source.length || METACHARS.has(source[at]);
+
+/**
+ * A `$` or backtick expansion at the reader: substitutions are read for
+ * the commands in them. False when the `$` is only a `$`.
+ */
+function readExpansion(reader, word, quoted) {
+  const { source } = reader;
+  const char = source[reader.at];
+  const unknown = () => {
+    word.text += UNKNOWN;
+    word.known = false;
+    if (!quoted) word.single = false;
+  };
+  if (char === "`") {
+    let end = reader.at + 1;
+    let inner = "";
+    for (; end < source.length && source[end] !== "`"; end += 1) {
+      if (source[end] === "\\" && (source[end + 1] === "`" || source[end + 1] === "\\" || source[end + 1] === "$")) end += 1;
+      inner += source[end];
+    }
+    if (end >= source.length) throw new Unreadable("a backtick isn't closed");
+    reader.at = end + 1;
+    word.inner.push(tokenize(inner));
+    unknown();
+    return true;
+  }
+  const next = source[reader.at + 1];
+  if (next === "(" && source[reader.at + 2] === "(") {
+    // Arithmetic: a number, read for the commands it could hold all the same.
+    let depth = 0;
+    let end = reader.at + 1;
+    for (; end < source.length; end += 1) {
+      if (source[end] === "(") depth += 1;
+      else if (source[end] === ")" && --depth === 0) break;
+    }
+    if (end >= source.length) throw new Unreadable("an arithmetic expansion isn't closed");
+    const body = source.slice(reader.at + 3, end - 1);
+    if (/\$\(|`/.test(body)) word.inner.push(...substitutionsIn(body));
+    reader.at = end + 1;
+    unknown();
+    return true;
+  }
+  if (next === "(") {
+    reader.at += 2;
+    word.inner.push(readTokens(reader, ")"));
+    unknown();
+    return true;
+  }
+  if (next === "{") {
+    let depth = 0;
+    let end = reader.at + 1;
+    for (; end < source.length; end += 1) {
+      const at = source[end];
+      if (at === "\\") end += 1;
+      else if (at === "'" && !quoted) end = source.indexOf("'", end + 1) < 0 ? source.length : source.indexOf("'", end + 1);
+      else if (at === "{") depth += 1;
+      else if (at === "}" && --depth === 0) break;
+    }
+    if (end >= source.length) throw new Unreadable("a `${` isn't closed");
+    const body = source.slice(reader.at + 2, end);
+    if (/\$\(|`/.test(body)) word.inner.push(...substitutionsIn(body));
+    reader.at = end + 1;
+    unknown();
+    return true;
+  }
+  if (next !== undefined && /[A-Za-z0-9_@*#?$!-]/.test(next)) {
+    reader.at += 2;
+    if (/[A-Za-z_]/.test(next)) while (reader.at < source.length && /\w/.test(source[reader.at])) reader.at += 1;
+    unknown();
+    return true;
+  }
+  return false;
+}
+
+/** The text of `$'…'`, its escapes undone, the reader past its closing quote. */
+function readAnsiC(reader) {
+  const { source } = reader;
+  let text = "";
+  for (;;) {
+    if (reader.at >= source.length) throw new Unreadable("a `$'` isn't closed");
+    const char = source[reader.at];
+    if (char === "'") {
+      reader.at += 1;
+      return text;
+    }
+    if (char !== "\\") {
+      text += char;
+      reader.at += 1;
+      continue;
+    }
+    const next = source[reader.at + 1];
+    if (next in C_ESCAPES) {
+      text += C_ESCAPES[next];
+      reader.at += 2;
+    } else if (next === "x") {
+      const hex = /^[0-9a-fA-F]{1,2}/.exec(source.slice(reader.at + 2));
+      text += hex ? String.fromCharCode(parseInt(hex[0], 16)) : "\\x";
+      reader.at += 2 + (hex ? hex[0].length : 0);
+    } else if (/[0-7]/.test(next ?? "")) {
+      const octal = /^[0-7]{1,3}/.exec(source.slice(reader.at + 1))[0];
+      text += String.fromCharCode(parseInt(octal, 8));
+      reader.at += 1 + octal.length;
+    } else {
+      text += "\\" + (next ?? "");
+      reader.at += 2;
+    }
+  }
+}
+
+/**
+ * The simple commands in a token list, each with its words, its settings
+ * (`NAME=value` in front), its redirections, the compound-command words led
+ * in with (`do`, `if`, `!`), and the operator after it.
+ */
+function commandsOf(tokens) {
+  const commands = [];
+  let current = { words: [], settings: [], redirects: [], leading: [], after: null };
+  const close = (op) => {
+    current.after = op;
+    commands.push(current);
+    current = { words: [], settings: [], redirects: [], leading: [], after: null };
+  };
+  const empty = () => !current.words.length && !current.settings.length && !current.redirects.length && !current.leading.length;
+  for (const token of tokens) {
+    // A new line after `&&`, `||` or `|` carries the command on.
+    if ("op" in token && token.op === "\n" && empty() && ["&&", "||", "|", "|&"].includes(commands[commands.length - 1]?.after)) continue;
+    if ("op" in token) close(token.op);
+    else if ("redirect" in token) current.redirects.push(token);
+    else {
+      const { word } = token;
+      if (!current.words.length && word.known && LEADING.has(word.text) && !word.quoted) current.leading.push(word.text);
+      else if (!current.words.length && /^[A-Za-z_]\w*=/.test(word.raw)) current.settings.push(word);
+      else current.words.push(word);
+    }
+  }
+  close(null);
+  return commands;
+}
+
+/** Whether a word is gh itself: `gh`, or a path to it. */
+const isGh = (word) => word.known && (word.text === "gh" || word.text.endsWith("/gh"));
+
+/**
+ * Whether a simple command runs `gh pr <action>`: "exact" when its own
+ * words say so and the gate can read them; "maybe" when a word it can't
+ * read could make it one, or a program that runs other commands has the
+ * three among its arguments; null when it doesn't.
+ */
+function classify(command, action) {
+  const { words } = command;
+  if (!words.length) return null;
+  const [name] = words;
+  if (name.known && NOT_A_COMMAND.has(name.text) && !name.quoted) return null;
+  if (name.known && WRAPPERS.has(name.text)) {
+    const text = words.slice(1).map((word) => word.text).join(" ");
+    return /(?:^|[^\w-])gh\s+pr\s/.test(` ${text} `) && new RegExp(String.raw`\bpr\s+${action}\b`).test(text) ? "maybe" : null;
+  }
+  const expected = ["pr", action];
+  let from = 1;
+  let unsure = false;
+  if (!isGh(name)) {
+    if (name.known) return null;
+    unsure = true;
+    // Several words, or none: what follows may be gh's own.
+    if (!name.single) {
+      const texts = words.map((word) => word.text);
+      const pr = texts.indexOf("pr");
+      return pr >= 0 && texts.slice(pr + 1).includes(action) ? "maybe" : null;
+    }
+  }
+  for (const wanted of expected) {
+    const word = words[from];
+    if (!word) return null;
+    if (word.known) {
+      if (word.text !== wanted) return null;
+    } else {
+      unsure = true;
+      if (!word.single) return "maybe";
+    }
+    from += 1;
+  }
+  return unsure ? "maybe" : "exact";
+}
+
+/** Every simple command in a token list and in the substitutions inside it, with how deep it sits. */
+function* everyCommand(commands, nested = false) {
+  for (const command of commands) {
+    yield { command, nested };
+    for (const word of [...command.words, ...command.settings, ...command.redirects.map((token) => token.target)]) {
+      for (const inner of word.inner) yield* everyCommand(commandsOf(inner), true);
+    }
+  }
+}
+
+/** Whether pflag reads a boolean flag's values as on: bare, or a true value. */
+const isOn = (values) => (values ?? []).some((value) => value === null || ["1", "t", "T", "true", "TRUE", "True"].includes(value));
 
 /** gh's flags that take a value, for each command: the long name, and its short one if it has one. */
 const VALUED = {
@@ -99,8 +483,9 @@ const VALUED = {
 
 /**
  * A command's flags and the words that aren't flags, each flag read with its
- * value (`--x y`, `--x=y`, `-x y`, `-xy`), so a value is never taken for a
- * flag: a body that says `--repo=x` is a body. Flags by their long names.
+ * value (`--x y`, `--x=y`, `-x y`, `-xy`, `-x=y`), so a value is never taken
+ * for a flag: a body that says `--repo=x` is a body. Flags by their long
+ * names. A flag that takes no value keeps one given with `=` (`--help=false`).
  */
 export function parseWords(words, action) {
   const long = VALUED[action];
@@ -114,15 +499,20 @@ export function parseWords(words, action) {
       const eq = word.indexOf("=");
       const name = eq > 0 ? word.slice(0, eq) : word;
       if (Object.hasOwn(long, name)) add(name, eq > 0 ? word.slice(eq + 1) : (words[(i += 1)] ?? ""));
-      else add(name, null);
+      else add(name, eq > 0 ? word.slice(eq + 1) : null);
     } else if (word.startsWith("-") && word.length > 1) {
       // A group of short flags (`-dB main`), as gh reads it: each letter is
-      // a flag until one takes a value, which is the rest of the group or the
-      // next word.
+      // a flag until one takes a value, which is the rest of the group (an
+      // `=` before it dropped) or the next word.
       for (let at = 1; at < word.length; at += 1) {
         const letter = `-${word[at]}`;
+        const glued = word.slice(at + 1);
         if (short[letter]) {
-          add(short[letter], at + 1 < word.length ? word.slice(at + 1) : (words[(i += 1)] ?? ""));
+          add(short[letter], glued ? glued.replace(/^=/, "") : (words[(i += 1)] ?? ""));
+          break;
+        }
+        if (glued.startsWith("=")) {
+          add(letter, glued.slice(1));
           break;
         }
         add(letter, null);
@@ -134,37 +524,38 @@ export function parseWords(words, action) {
   return { flags, positional };
 }
 
-/** A word as the shell hands it over: quotes taken off, escapes in double quotes undone. */
+/** A word as the shell hands it over: quotes taken off, escapes undone. */
 export function unquote(word) {
-  let out = "";
-  for (const piece of word.match(new RegExp(PIECE, "g")) ?? []) {
-    if (piece.startsWith('"')) out += piece.slice(1, -1).replace(/\\([\\"$\x60])/g, "$1");
-    else if (piece.startsWith("'")) out += piece.slice(1, -1);
-    else out += piece;
-  }
-  return out;
+  return tokenize(word).find((token) => "word" in token)?.word.text ?? "";
 }
 
 const stop = (why) => ({ fail: why });
 
 /**
- * Whether `words` come in this order in `command`, each a word of its own,
- * anywhere. The gate's fallback when it can't place the command exactly:
- * Claude Code fired the hook from its own reading, so with the words there
- * in order it might be the command, however it's spelled (`command gh`, a
- * path, quotes, a redirection the gate can't read between them, a line
- * continued). One pass left to right, so no command makes it slow.
+ * Whether `words` come in this order in `text`, each a word of its own: the
+ * gate's answer when the shell's own reading fails (an unclosed quote), so
+ * a command bash would refuse anyway still can't slip through.
  */
-function inOrder(command, words) {
+function inOrder(text, words) {
   let from = 0;
   for (const word of words) {
     const found = new RegExp(String.raw`\b${word}\b`, "g");
     found.lastIndex = from;
-    const hit = found.exec(command);
+    const hit = found.exec(text);
     if (!hit) return false;
     from = hit.index + word.length;
   }
   return true;
+}
+
+/** A step before the command the gate can follow: `cd <folder>` or `git push …`. */
+function stepOf(command) {
+  const { words, settings, leading } = command;
+  if (settings.length || leading.length || !words.every((word) => word.known)) return null;
+  const texts = words.map((word) => word.text);
+  if (texts[0] === "cd") return texts.length === 2 ? { dir: texts[1] } : { dir: "" };
+  if (texts[0] === "git" && texts[1] === "push") return { push: true };
+  return null;
 }
 
 /**
@@ -176,86 +567,64 @@ function inOrder(command, words) {
  */
 export function readCommand(command, action) {
   if (!ACTIONS.includes(action)) throw new Error(`unknown action ${action}`);
-  const matches = [...command.matchAll(GH(action))];
-  if (!matches.length) {
-    // Claude Code's own reading of the command chose this hook, so the three
-    // words in order in any other form are a command the gate can't place.
-    // Without them it isn't one at all.
-    if (inOrder(command, ["gh", "pr", action])) {
-      return stop(`it couldn't find \`gh pr ${action}\` where a command starts`);
-    }
-    return null;
+  let tokens;
+  try {
+    tokens = tokenize(command);
+  } catch (error) {
+    if (!(error instanceof Unreadable)) throw error;
+    // Bash would refuse it too; if it might be the command, say so.
+    return inOrder(command, ["gh", "pr", action]) ? stop(`it can't be read as the shell would (${error.message})`) : null;
   }
-  if (matches.length > 1) return stop(`it runs \`gh pr ${action}\` more than once`);
-  const [match] = matches;
-  const [, separator, assignments = ""] = match;
-  const at = match.index + match[0].length;
+  const commands = commandsOf(tokens);
+  const found = [...everyCommand(commands)].map((entry) => ({ ...entry, kind: classify(entry.command, action) })).filter((entry) => entry.kind);
+  if (!found.length) return null;
+  if (found.some((entry) => entry.kind === "maybe")) return stop(`it might run \`gh pr ${action}\` in a form the gate can't read exactly (a word it can't follow, or inside another program)`);
+  if (found.length > 1) return stop(`it runs \`gh pr ${action}\` more than once`);
+  if (found[0].nested) return stop(`it runs \`gh pr ${action}\` inside a substitution`);
+  const target = found[0].command;
+  if (target.leading.length) return stop(`it runs \`gh pr ${action}\` inside a compound command (\`${target.leading[0]}\`)`);
 
   // Before it: only `cd <folder> &&` and `git push … &&`, so the gate knows
-  // which folder, and so which branch, the command runs in.
+  // which folder, and so which branch, the command runs in. Joined by `&&`:
+  // after `;`, a folder that isn't there leaves gh running in another.
+  const at = commands.indexOf(target);
   const dirs = [];
   let pushes = false;
-  let rest = command.slice(0, match.index) + separator;
-  for (let step = STEP.exec(rest); step; step = STEP.exec(rest)) {
-    if (step[1] === undefined) pushes = true;
-    else {
-      const dir = unquote(step[1]);
-      if (dir === "-" || dir === "") return stop("it changes folder with `cd -`");
-      dirs.push(dir);
-    }
-    rest = rest.slice(step[0].length);
+  let first = 0;
+  while (first < at && !commands[first].words.length && !commands[first].settings.length && !commands[first].redirects.length && commands[first].after === "\n") first += 1;
+  for (let index = first; index < at; index += 1) {
+    const step = stepOf(commands[index]);
+    const shown = commands[index].words.map((word) => word.text.replaceAll(UNKNOWN, "…")).join(" ");
+    if (!step) return stop(`something runs before \`gh pr ${action}\` that the gate doesn't read (\`${shown.slice(0, 60)}\`)`);
+    if (commands[index].after !== "&&") return stop(`\`${shown.slice(0, 60)}\` is followed by \`${commands[index].after === "\n" ? "a new line" : commands[index].after}\`, not \`&&\`, so gh would run whether it worked or not`);
+    if (step.push) pushes = true;
+    else if (step.dir === "-" || step.dir === "") return stop("it changes folder with `cd -`, or to the home folder");
+    else dirs.push(step.dir);
   }
-  rest = rest.replace(/[\s;&|(]+$/, "");
-  if (rest.trim()) return stop(`something runs before \`gh pr ${action}\` that the gate doesn't read (\`${rest.trim().slice(0, 60)}\`)`);
 
   const env = {};
-  // GH matched it as FRONT items, so it reads back whole, one at a time.
-  IN_FRONT.lastIndex = 0;
-  for (let item = IN_FRONT.exec(assignments); item; item = IN_FRONT.exec(assignments)) {
-    const [, assignment] = item;
-    if (assignment === undefined) continue;
-    const eq = assignment.indexOf("=");
-    env[assignment.slice(0, eq)] = unquote(assignment.slice(eq + 1));
+  for (const setting of target.settings) {
+    const eq = setting.text.indexOf("=");
+    env[setting.text.slice(0, eq)] = setting.known ? setting.text.slice(eq + 1) : UNKNOWN;
   }
 
-  // After it: the words of this one command, up to where it ends or a word
-  // the gate can't read.
-  let after = command.slice(at);
-  const words = [];
-  let readable = true;
-  for (;;) {
-    const redirection = REDIRECT.exec(after);
-    if (redirection) {
-      after = after.slice(redirection[0].length);
-      continue;
-    }
-    if (END.test(after)) break;
-    const token = TOKEN.exec(after);
-    if (!token) { readable = false; break; }
-    words.push(unquote(token[1]));
-    after = after.slice(token[0].length);
-  }
-  const { flags, positional } = parseWords(words, action);
-  if (flags.has("--help") || flags.has("-h")) return null;
+  // Its own words after `gh pr <action>`, as gh gets them. One that may be
+  // several (an unquoted variable, a glob) could be any flag; a double-quoted
+  // substitution is one, and safe as a flag's value.
+  const args = target.words.slice(3);
+  if (args.some((word) => !word.single)) return stop(`a word after \`gh pr ${action}\` may be several (an unquoted variable or glob); quote it, or the body in --body-file`);
+  const { flags, positional } = parseWords(args.map((word) => word.text), action);
+  if ([...flags.keys()].some((name) => name.includes(UNKNOWN))) return stop(`a flag after \`gh pr ${action}\` can't be read`);
+  if (isOn(flags.get("--help")) || isOn(flags.get("-h"))) return null;
   // Back to a draft takes a pull request away from review; nothing to gate.
-  if (action === "ready" && flags.has("--undo")) return null;
-
-  // The flags that change what's reviewed are read from this command's own
-  // words, never from a body's text or the next command. A merge or ready
-  // is read whole: after a word the gate can't read, `--auto` or another
-  // pull request could hide. A create may make its body with `$(…)`, but a
-  // flag that matters after it might be the command's or the body's, so it
-  // stops rather than guess.
-  if (!readable && action !== "create") return stop(`a word after \`gh pr ${action}\` can't be read; run it with plain words, the body in --body-file`);
-  // After any non-word character (a blank, a line continued), with quotes and
-  // escapes taken out as the shell does (`--ba''se`, `-""B`), and in a group
-  // of short flags (`-dB`).
-  if (!readable && /(?:^|[^\w-])-(?:-(?:repo|head|base)|[A-Za-z]*[RHB])/.test(after.replace(/["'\\]/g, ""))) {
-    return stop("`--repo`, `--head` or `--base` may come after a word it can't read; put them first, or the body in --body-file");
+  if (action === "ready" && isOn(flags.get("--undo"))) return null;
+  for (const name of ["--repo", "--base", "--head"]) {
+    if ((flags.get(name) ?? []).some((value) => value.includes(UNKNOWN))) return stop(`its \`${name}\` can't be read`);
   }
+
   const repos = new Set(flags.get("--repo") ?? []);
   if (env.GH_REPO !== undefined) repos.add(env.GH_REPO);
-  if (repos.has("") || repos.size > 1) return stop("which repository it's for can't be read");
+  if (repos.has("") || repos.has(UNKNOWN) || repos.size > 1) return stop("which repository it's for can't be read");
   const read = { action, dirs, selector: null, base: null, repo: [...repos][0] ?? null };
   if (action === "create") {
     // The gate reviews the branch the folder is on, so a pull request from
@@ -272,7 +641,9 @@ export function readCommand(command, action) {
   // gate looked at it, and --auto merges whatever is pushed later, so the
   // commit reviewed wouldn't be the commit merged.
   if (pushes) return stop(`a push before \`gh pr ${action}\` would change the pull request after the review; push first, on its own`);
-  if (action === "merge" && flags.has("--auto")) return stop("`--auto` merges commits pushed after the review");
+  if (action === "merge" && flags.has("--auto") && !(flags.get("--auto") ?? []).every((value) => value !== null && ["0", "f", "F", "false", "FALSE", "False"].includes(value))) {
+    return stop("`--auto` merges commits pushed after the review");
+  }
 
   // The pull request, if named, is the first word after the command. Named
   // anywhere else, the gate can't be sure which word it is.
@@ -280,6 +651,7 @@ export function readCommand(command, action) {
     return stop(`the pull request isn't the first word after \`gh pr ${action}\``);
   }
   read.selector = positional[0]?.word ?? null;
+  if (read.selector?.includes(UNKNOWN)) return stop(`which pull request \`gh pr ${action}\` is for can't be read`);
   // A pull request's address names its repository too.
   const named = /github\.com\/([^/\s]+\/[^/\s]+)\/pull\/\d+/i.exec(read.selector ?? "");
   if (named) {
