@@ -225,15 +225,18 @@ function readDoubleQuoted(reader, word) {
   }
 }
 
+/** Marks where a word holds something the gate can't follow, and whether it stays one argument. */
+function markUnknown(word, single) {
+  word.text += UNKNOWN;
+  word.known = false;
+  if (!single) word.single = false;
+}
+
 /** One word, from where it starts to the first unquoted metacharacter. */
 function readWord(reader) {
   const { source } = reader;
   const word = { text: "", known: true, single: true, quoted: false, inner: [] };
-  const unknown = (single) => {
-    word.text += UNKNOWN;
-    word.known = false;
-    if (!single) word.single = false;
-  };
+  const unknown = (single) => markUnknown(word, single);
   const start = reader.at;
   while (reader.at < source.length) {
     const char = source[reader.at];
@@ -307,11 +310,8 @@ const METACHARS_OR_END = (source, at) => at >= source.length || METACHARS.has(so
 function readExpansion(reader, word, quoted) {
   const { source } = reader;
   const char = source[reader.at];
-  const unknown = () => {
-    word.text += UNKNOWN;
-    word.known = false;
-    if (!quoted) word.single = false;
-  };
+  // Inside double quotes an expansion stays one argument, but for `$@` and `${a[@]}`.
+  const unknown = (several = false) => markUnknown(word, quoted && !several);
   if (char === "`") {
     let end = reader.at + 1;
     let inner = "";
@@ -360,6 +360,7 @@ function readExpansion(reader, word, quoted) {
     // Its own substitutions, quotes and braces, read in place: a `}` inside
     // a `$(…)` or a quote doesn't close it.
     reader.at += 2;
+    const bodyStart = reader.at;
     let depth = 1;
     const scratch = { text: "", known: true, single: true, quoted: true, inner: word.inner };
     while (depth > 0) {
@@ -378,10 +379,15 @@ function readExpansion(reader, word, quoted) {
         reader.at += 1;
       }
     }
-    unknown();
+    unknown(source.slice(bodyStart, reader.at - 1).includes("@"));
     return true;
   }
   if (next !== undefined && /[A-Za-z0-9_@*#?$!-]/.test(next)) {
+    if (next === "@") {
+      reader.at += 2;
+      unknown(true);
+      return true;
+    }
     reader.at += 2;
     if (/[A-Za-z_]/.test(next)) while (reader.at < source.length && /\w/.test(source[reader.at])) reader.at += 1;
     unknown();
@@ -410,7 +416,11 @@ function closing(source, open) {
 }
 
 /** Whether `$((` opens arithmetic rather than a substitution holding a subshell. */
-const closesTogether = (source, open) => closing(source, open)?.together ?? false;
+function closesTogether(source, open) {
+  const shape = closing(source, open);
+  if (!shape) throw new Unreadable("a `$((` isn't closed");
+  return shape.together;
+}
 
 /** The text of `$'…'`, its escapes undone, the reader past its closing quote. */
 function readAnsiC(reader) {
@@ -459,8 +469,12 @@ function readAnsiC(reader) {
  * (`NAME=value` in front), its redirections, the compound-command words led
  * in with (`do`, `if`, `!`), and the operator after it.
  */
+const listed = new WeakMap();
+
 function commandsOf(tokens) {
+  if (listed.has(tokens)) return listed.get(tokens);
   const commands = [];
+  listed.set(tokens, commands);
   let current = { words: [], settings: [], redirects: [], leading: [], after: null };
   const close = (op) => {
     current.after = op;
@@ -489,13 +503,19 @@ const isGh = (word) => word.known && /(?:^|\/)gh(?:\.exe)?$/.test(word.text);
 /** Whether a word could be gh: gh however it's spelled, or one the gate can't read. */
 const mayBeGh = (word) => !word.known || /(?:^|[/\\])gh(?:\.exe)?$/i.test(word.text);
 /** Programs that only read their words as data: they run nothing they're given. */
-const INERT = new Set(["echo", "printf", "true", "false", ":", "jq", "grep", "egrep", "fgrep", "rg", "wc", "head", "tail", "sort", "uniq", "cut", "tr", "ls", "cat", "test", "[", "sleep", "date", "pwd", "basename", "dirname", "realpath", "stat", "diff", "cmp", "comm", "column", "nl", "fold", "file", "which", "type", "id", "whoami", "hostname", "uname"]);
-/** git's subcommands that read their words as data (not `config`, whose aliases run). */
-const INERT_GIT = new Set(["commit", "log", "show", "diff", "status", "tag", "branch", "fetch", "pull", "push", "add", "rm", "mv", "restore", "switch", "checkout", "merge-base", "rev-parse", "rev-list", "describe", "ls-files", "ls-remote", "remote", "blame", "grep", "stash", "worktree"]);
-/** gh's commands that run what they're given. */
-const GH_RUNS = new Set(["alias", "extension", "ext", "codespace", "cs", "api"]);
-/** Redirections that write to a file. */
+const INERT = new Set(["echo", "printf", "true", "false", ":", "jq", "grep", "egrep", "fgrep", "wc", "head", "tail", "cut", "tr", "ls", "cat", "test", "[", "sleep", "date", "pwd", "basename", "dirname", "realpath", "stat", "diff", "cmp", "comm", "column", "nl", "fold", "file", "which", "type", "id", "whoami", "hostname", "uname", "mktemp"]);
+/**
+ * git's subcommands that read their words as data. Not `config` (its
+ * aliases run), nor those that take a program to run or a file to write
+ * (`fetch`/`pull`/`push`/`ls-remote` `--upload-pack`, `grep -O`, `log`/
+ * `show`/`diff` `--output`), and `push` changes a pull request anyway.
+ */
+const INERT_GIT = new Set(["commit", "status", "tag", "branch", "add", "rm", "mv", "restore", "switch", "checkout", "merge-base", "rev-parse", "rev-list", "describe", "ls-files", "remote", "blame", "stash", "worktree"]);
+/** gh's commands that read their words as data: a list of those known, as an alias or extension can be anything. */
+const GH_DATA = new Set(["pr", "issue", "run", "workflow", "release", "label", "search", "status", "browse"]);
+/** Redirections that write to a file (and `>&` to one that isn't a stream's number). */
 const WRITES = new Set([">", ">>", ">|", "&>", "&>>", "<>"]);
+const writes = (token) => WRITES.has(token.redirect) || (token.redirect === ">&" && !/^(?:\d+|-)$/.test(token.target.text));
 
 /**
  * Whether a command only reads its words as data: a program that runs
@@ -506,8 +526,8 @@ function inert(command) {
   const [name, first] = command.words;
   if (!name?.known) return false;
   const program = name.text.replace(/^.*[/\\]/, "");
-  const reads = INERT.has(program) || (program === "git" && first?.known && INERT_GIT.has(first.text)) || (isGh(name) && first?.known && !GH_RUNS.has(first.text));
-  return reads && command.redirects.every((token) => !WRITES.has(token.redirect) || token.fd === "2" || (token.target.known && token.target.text === "/dev/null"));
+  const reads = INERT.has(program) || (program === "git" && first?.known && INERT_GIT.has(first.text)) || (isGh(name) && first?.known && GH_DATA.has(first.text));
+  return reads && command.redirects.every((token) => !writes(token) || token.fd === "2" || (token.target.known && token.target.text === "/dev/null"));
 }
 
 /**
@@ -555,8 +575,19 @@ function pipelineText(pipeline, target) {
     parts.push(...command.settings.map((word) => word.text));
     if (!live || command === target) continue;
     parts.push(...command.words.map((word) => word.text), ...command.redirects.map((token) => (token.redirect === "<<<" ? token.target.text : (token.body ?? ""))));
+    // What its own substitutions produce is its input too (`rg --pre=bash x <(echo …)`).
+    for (const word of [...command.words, ...command.redirects.map((token) => token.target)]) for (const inner of word.inner) parts.push(allText(inner));
   }
   return parts.join(" ");
+}
+
+/** Every word, here-string and here-document in a token list and the substitutions in it. */
+function allText(tokens) {
+  return [...everyList(commandsOf(tokens))].flatMap(({ commands }) => commands.flatMap((command) => [
+    ...command.settings.map((word) => word.text),
+    ...command.words.map((word) => word.text),
+    ...command.redirects.map((token) => (token.redirect === "<<<" ? token.target.text : (token.body ?? ""))),
+  ])).join(" ");
 }
 
 /** A command list split into its pipelines: commands joined by `|` or `|&`. */
@@ -584,12 +615,6 @@ function* everyList(commands, nested = false) {
   }
 }
 
-/** Whether a command pushes with git, however it's written (`git -C . push`). */
-const pushesWithGit = (command) => {
-  const texts = command.words.map((word) => word.text);
-  const git = texts.findIndex((text) => text.replace(/^.*[/\\]/, "") === "git");
-  return git >= 0 && texts.slice(git + 1).includes("push");
-};
 
 /** Whether pflag reads a boolean flag's values as on: bare, or a true value. */
 const isOn = (values) => (values ?? []).some((value) => value === null || ["1", "t", "T", "true", "TRUE", "True"].includes(value));
@@ -675,6 +700,8 @@ function stepOf(command) {
   const { words, settings, leading } = command;
   if (settings.length || leading.length || !words.every((word) => word.known)) return null;
   const texts = words.map((word) => word.text);
+  // A ~ quoted, or another user's, isn't the home folder the gate would take it for.
+  if (texts[0] === "cd" && texts.length === 2 && texts[1].startsWith("~") && (words[1].quoted || /^~[^/]/.test(texts[1]))) return { tilde: true };
   if (texts[0] === "cd") return texts.length === 2 ? { dir: texts[1] } : { dir: "" };
   if (texts[0] === "git" && texts[1] === "push") return { push: true };
   return null;
@@ -723,6 +750,7 @@ export function readCommand(command, action) {
     const shown = commands[index].words.map((word) => word.text.replaceAll(UNKNOWN, "…")).join(" ");
     if (!step) return stop(`something runs before \`gh pr ${action}\` that the gate doesn't read (\`${shown.slice(0, 60)}\`)`);
     if (commands[index].after !== "&&") return stop(`\`${shown.slice(0, 60)}\` is followed by \`${commands[index].after === "\n" ? "a new line" : commands[index].after}\`, not \`&&\`, so gh would run whether it worked or not`);
+    if (step.tilde) return stop("it changes to a folder with a `~` bash won't expand as the gate would (quoted, or another user's home)");
     if (step.push) pushes = true;
     else if (step.dir === "-" || step.dir === "") return stop("it changes folder with `cd -`, or to the home folder");
     else dirs.push(step.dir);
@@ -770,11 +798,16 @@ export function readCommand(command, action) {
   // gate looked at it, and --auto merges whatever is pushed later, so the
   // commit reviewed wouldn't be the commit merged.
   if (pushes) return stop(`a push before \`gh pr ${action}\` would change the pull request after the review; push first, on its own`);
-  // Nor one that may run at the same time: anything after it, when it runs
-  // in the background or in a pipeline.
-  if (["&", "|", "|&"].includes(target.after) && [...everyList(commands.slice(at + 1))].some(({ commands: list }) => list.some(pushesWithGit))) {
-    return stop(`a push alongside \`gh pr ${action}\` could change the pull request while it's merged; push first, on its own`);
-  }
+  // Nor one that may run at the same time, or before gh inside the command's
+  // own substitutions: what runs there must only read (#932 binds the merge
+  // to the reviewed commit itself).
+  const reading = (lists) => lists.every(({ commands: list }) => list.every((command) => !command.words.length || inert(command)));
+  let alongside = [];
+  if (target.after === "&") alongside = commands.slice(at + 1);
+  else for (let index = at; index + 1 < commands.length && ["|", "|&"].includes(commands[index].after); index += 1) alongside.push(commands[index + 1]);
+  if (!reading([...everyList(alongside)])) return stop(`something runs alongside \`gh pr ${action}\` that could change the pull request while it's merged; run it on its own`);
+  const inside = [...target.words, ...target.settings, ...target.redirects.map((token) => token.target)].flatMap((word) => word.inner);
+  if (!inside.every((tokens) => reading([...everyList(commandsOf(tokens), true)]))) return stop(`a substitution in \`gh pr ${action}\` runs something that could change the pull request first; put it in a file, and the file in the command`);
   if (action === "merge" && flags.has("--auto") && !(flags.get("--auto") ?? []).every((value) => value !== null && ["0", "f", "F", "false", "FALSE", "False"].includes(value))) {
     return stop("`--auto` merges commits pushed after the review");
   }

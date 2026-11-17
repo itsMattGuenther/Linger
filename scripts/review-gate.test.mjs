@@ -132,6 +132,8 @@ test("reads which pull request, folder and branch a command is about", () => {
     ["merge", "gh pr $'\\u006derge' 5", { selector: "5" }],
     // ANSI-C quoting is quoting.
     ["create", "gh pr create --$'base' release", { base: "release" }],
+    // A pipeline ends before what follows it: a pull after it runs after the merge.
+    ["merge", "gh pr merge 5 | tail -3; git pull", { selector: "5" }],
     ["ready", "gh pr ready", { selector: null }],
     ["ready", "gh pr ready 12", { selector: "12" }],
   ];
@@ -278,6 +280,26 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     ["merge", "gh pr merge 5 & { git push; }"],
     ["merge", "gh pr merge 5 & sleep 1; git push"],
     ["merge", "gh pr merge 5 & git -C . push origin HEAD:feat/x"],
+    // What runs inside the merge's own substitutions, or alongside it, must only read.
+    ["merge", 'gh pr merge 5 --squash --body "$(git push -f origin HEAD:feat; echo)"'],
+    ["merge", 'gh pr merge 5 > "$(git push origin HEAD:feat)"'],
+    ["merge", 'X="$(git push origin HEAD:feat)" gh pr merge 5'],
+    ["merge", "gh pr merge 5 & bash -c 'git push -f origin HEAD:feat'"],
+    ["merge", "gh pr merge 5 & $G push"],
+    ["merge", "gh pr merge 5 & gh api -X PATCH repos/o/r/git/refs/heads/feat"],
+    // Programs that take a program to run, or a file to write, from their flags.
+    ["merge", "git ls-remote --upload-pack='gh pr merge 5;:' ."],
+    ["merge", "rg --pre=bash x <(echo 'gh pr merge 5')"],
+    ["merge", "echo 'gh pr merge 5' >& m.sh && bash m.sh"],
+    ["merge", "echo 'gh pr merge 5' | sort -o m.sh && bash m.sh"],
+    // A gh alias or extension may be anything.
+    ["merge", "gh x 'gh pr merge 5'"],
+    // Several words even in double quotes.
+    ["merge", 'gh pr merge 5 --body "${a[@]}"'],
+    ["merge", 'gh pr merge 5 --body "$@"'],
+    // A ~ bash wouldn't expand as the gate would.
+    ["create", 'cd "~/p" && gh pr create'],
+    ["create", "cd ~other/p && gh pr create"],
     // Text bash would refuse, that might be the command.
     ["merge", 'gh pr merge 5 "oops'],
   ];
@@ -292,7 +314,7 @@ test("a long command it can't place comes back, rather than running on", () => {
   // stopped and fails here rather than holding up every test after it. The
   // limit is far past the milliseconds it takes, so a busy machine can't fail it.
   const script = `import { readCommand } from ${JSON.stringify(new URL("./review-gate.mjs", import.meta.url).href)};
-const longs = ["gh " + "=>".repeat(20_000) + " x", "gh pr " + "2>".repeat(20_000) + " x", ">|A= ".repeat(20_000) + "x", ">&A= ".repeat(20_000) + "x"];
+const longs = ["gh " + "=>".repeat(20_000) + " x", "gh pr " + "2>".repeat(20_000) + " x", ">|A= ".repeat(20_000) + "x", ">&A= ".repeat(20_000) + "x", "$((".repeat(20_000)];
 for (const long of longs) if (readCommand(long, "merge") !== null) process.exit(2);`;
   const run = spawnSync(process.execPath, ["--input-type=module"], { input: script, timeout: 60_000 });
   assert.equal(run.status, 0, run.signal ? `still running after a minute (${run.signal})` : String(run.error ?? run.stderr));
