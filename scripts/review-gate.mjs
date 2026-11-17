@@ -552,8 +552,8 @@ function commandsOf(tokens) {
   return commands;
 }
 
-/** Whether a word is gh itself: `gh`, or a path to it. */
-const isGh = (word) => word.known && /(?:^|\/)gh(?:\.exe)?$/.test(word.text);
+/** Whether a word is gh itself: its plain name, found on the PATH. A path (`./gh`, `/usr/bin/gh`) may be any program, so it's a maybe. */
+const isGh = (word) => word.known && /^gh(?:\.exe)?$/.test(word.text);
 /** Whether a word could be gh: gh however it's spelled, or one the gate can't read. */
 const mayBeGh = (word) => !word.known || /(?:^|[/\\])gh(?:\.exe)?$/i.test(word.text);
 /** The words that close a compound command. */
@@ -590,7 +590,7 @@ function programOf(command) {
   const [name, first, second] = command.words;
   if (!name?.known) return null;
   // By its plain name, found on the PATH: `./tools/git` may be anything.
-  if (/[/\\]/.test(name.text) && !isGh(name)) return null;
+  if (/[/\\]/.test(name.text)) return null;
   return { name, program: name.text, first: first?.known ? first.text : null, second: second?.known ? second.text : null };
 }
 
@@ -770,11 +770,13 @@ export function parseWords(words, action) {
           add(short[letter], glued ? glued.replace(/^=/, "") : (words[(i += 1)] ?? ""));
           break;
         }
+        // -h is --help's short name: one flag, so the last of either wins.
+        const named = letter === "-h" ? "--help" : letter;
         if (glued.startsWith("=")) {
-          add(letter, glued.slice(1));
+          add(named, glued.slice(1));
           break;
         }
-        add(letter, null);
+        add(named, null);
       }
     } else {
       positional.push({ word, at: i });
@@ -930,7 +932,7 @@ export function readCommand(command, action) {
   if (args.some((word) => !word.single)) return stop(`a word after \`gh pr ${action}\` may be several (an unquoted variable or glob); quote it, or the body in --body-file`);
   const { flags, positional } = parseWords(args.map((word) => word.text), action);
   if ([...flags.keys()].some((name) => name.includes(UNKNOWN))) return stop(`a flag after \`gh pr ${action}\` can't be read`);
-  if (isOn(flags.get("--help")) || isOn(flags.get("-h"))) return null;
+  if (isOn(flags.get("--help"))) return null;
   // Back to a draft takes a pull request away from review; nothing to gate.
   if (action === "ready" && isOn(flags.get("--undo"))) return null;
   for (const name of ["--repo", "--base", "--head"]) {
@@ -966,7 +968,13 @@ export function readCommand(command, action) {
   const pipeline = endOf(commands, at, ["|", "|&"]);
   const alongside = commands.slice(at + 1, pipeline.last + 1);
   const list = endOf(commands, at, ["&&", "||", "|", "|&"]);
-  if (list.by === "&") alongside.push(...commands.slice(list.last + 1));
+  if (list.by === "&") {
+    // Up to a `wait`, which waits for the merge to finish.
+    for (const command of commands.slice(list.last + 1)) {
+      if (command.words[0]?.known && command.words[0].text === "wait" && !command.leading.length) break;
+      alongside.push(command);
+    }
+  }
   if (!reading([...everyList(alongside)])) return stop(`something runs alongside \`gh pr ${action}\` that could change the pull request while it's merged; run it on its own`);
   const inside = [...target.words, ...target.settings, ...target.redirects.map((token) => token.target)].flatMap((word) => word.inner);
   if (!inside.every((tokens) => reading([...everyList(commandsOf(tokens), true)]))) return stop(`a substitution in \`gh pr ${action}\` runs something that could change the pull request first; put it in a file, and the file in the command`);

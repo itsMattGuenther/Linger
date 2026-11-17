@@ -90,7 +90,6 @@ test("reads which pull request, folder and branch a command is about", () => {
     ["create", "gh pr create -t x -B release 2>&1", { base: "release" }],
     // Read as bash reads them (#925): each was stopped while the gate read text.
     ["create", "X=$(pwd) gh pr create", { base: null }],
-    ["create", "/usr/bin/gh pr create", { base: null }],
     ["merge", "\"gh\" pr merge 5", { selector: "5" }],
     ["merge", "g''h pr merge 5", { selector: "5" }],
     ["merge", "gh pr merge 5 > $(mktemp)", { selector: "5" }],
@@ -150,6 +149,8 @@ test("reads which pull request, folder and branch a command is about", () => {
     ["create", 'gh pr create -t x --body "Count: $((1+1))"', { base: null }],
     // The reviewed command's own body names the command, and its output goes to tee.
     ["create", "cd wt && gh pr create -t x --body \"$(cat <<'EOF'\nThe gate now reads gh pr create.\nEOF\n)\" 2>&1 | tee /tmp/pr.txt", { dirs: ["wt"] }],
+    // A background merge, then a wait: what follows runs after it.
+    ["merge", "gh pr merge 5 --squash &\nwait\ngit pull --ff-only", { selector: "5" }],
     ["ready", "gh pr ready", { selector: null }],
     ["ready", "gh pr ready 12", { selector: "12" }],
   ];
@@ -388,6 +389,12 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     ["merge", "git commit --allow-empty -qm 'gh pr merge 6 --admin' && git log -1 --format=%B | while read -r a b c d e; do $a $b $c $d $e; done"],
     // GH in another case, in text a shell runs.
     ["merge", "gh pr merge 5 --squash; echo 'GH pr merge 6 --admin' | bash"],
+    // gh by a path may be any program: a maybe, as on main.
+    ["create", "/usr/bin/gh pr create"],
+    ["merge", "./gh pr merge 5"],
+    ["merge", "gh pr merge 5 & ./scripts/gh pr view 5"],
+    // -h and --help are one flag: the last of either wins.
+    ["merge", "gh pr merge 5 --squash -h --help=false --auto"],
     // Text bash would refuse, that might be the command.
     ["merge", 'gh pr merge 5 "oops'],
   ];
