@@ -11,9 +11,6 @@ import { fileURLToPath } from "node:url";
 import { CHECKED, MOST, PARTS, format, heading, knownParts, listReader, parseQuestions, partsOf, questionsFor, underline, wrap }
   from "./pr-questions.mjs";
 import { WRONG, parseRecord } from "./review-catches.mjs";
-// The questions also go to the fresh review before a pull request opens or
-// merges (#917); its tests run with these, wherever these run.
-import "./review-gate.test.mjs";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const SCRIPT = fileURLToPath(new URL("./pr-questions.mjs", import.meta.url));
