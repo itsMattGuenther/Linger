@@ -65,11 +65,12 @@ const START_WAIT_MS = 3_000;
 const LEVEL_EVERY_MS = 40;
 
 /**
- * The number of the page's last shell start (#920): the clock's
- * milliseconds times 1,000, and always rising, so a page loaded afresh, or
- * a module loaded again while developing, numbers above anything an earlier
- * one sent, and a late cancel of an earlier page's can't stop a later
- * start. Exact as a JavaScript number until about the year 2255.
+ * The number of the page's last shell start (#920): milliseconds times
+ * 1,000 on the page's own steady clock (when it loaded, plus the time since,
+ * which never runs backwards), so a page loaded afresh, or a module loaded
+ * again while developing, numbers above anything an earlier one sent, and
+ * above the shell's mark from the reload. Exact as a JavaScript number
+ * until about the year 2255.
  */
 let shellStarts = 0;
 
@@ -90,16 +91,30 @@ export function shellRecorder(events: RecorderEvents, input: () => string | null
   void bus.listen("clip:full", () => events.ended("full")).then(hold);
   void bus.listen("clip:lost", () => events.ended("lost")).then(hold);
   let current = 0;
+  /**
+   * The last cancel or stop asked of the shell, settled either way: a start
+   * goes once it's done, so the shell hears them in order and a start never
+   * meets the one before it still booked (#920). A computer needs no tap
+   * to start its sound, so waiting costs nothing there.
+   */
+  let settling: Promise<unknown> = Promise.resolve();
   return {
     start: async () => {
+      await settling;
       // Each start's own number: its cancel names it, so the shell calls off
       // that start and no later one, whichever it hears first (#920).
-      shellStarts = Math.max(shellStarts + 1, Date.now() * 1000);
+      shellStarts = Math.max(shellStarts + 1, Math.floor((performance.timeOrigin + performance.now()) * 1000));
       current = shellStarts;
       await invoke("clip_start", { input: input(), start: current });
     },
-    stop: async () => readClip(new Uint8Array(await invoke<ArrayBuffer>("clip_stop"))),
-    cancel: () => void invoke("clip_cancel", { start: current }).catch(() => undefined),
+    stop: async () => {
+      const stopping = invoke<ArrayBuffer>("clip_stop");
+      settling = stopping.catch(() => undefined);
+      return readClip(new Uint8Array(await stopping));
+    },
+    cancel: () => {
+      settling = invoke("clip_cancel", { start: current }).catch(() => undefined);
+    },
     dispose: () => {
       gone = true;
       for (const stop of stops) stop();

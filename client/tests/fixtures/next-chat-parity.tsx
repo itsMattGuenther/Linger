@@ -133,7 +133,8 @@ const desktop = fakeDesktop({
       // called off is refused, and one held from before is superseded.
       const start = Number(args.start);
       if (start <= calledOffUpTo) throw "The voice message was called off while the microphone opened.";
-      for (const earlier of heldStarts) if (earlier.start < start) earlier.calledOff = true;
+      if (booked !== null) throw "A voice message is already being recorded.";
+      booked = start;
       if (query.has("holdmic")) {
         let heard = () => undefined as void;
         const held = { start, calledOff: false, open: () => undefined as void, heard: new Promise<void>((done) => (heard = done)) };
@@ -145,12 +146,16 @@ const desktop = fakeDesktop({
         setTimeout(heard, 0);
         // As the shell does: one called off meanwhile is thrown away once
         // its microphone opens (#913, #920).
-        if (held.calledOff || start <= calledOffUpTo) throw "The voice message was called off while the microphone opened.";
+        if (held.calledOff || start <= calledOffUpTo) {
+          if (booked === start) booked = null;
+          throw "The voice message was called off while the microphone opened.";
+        }
       }
       return null;
     },
     clip_stop: async () => {
       desktop.note("clip_stop");
+      booked = null;
       await recordingLoaded;
       return (recorded ?? new Uint8Array(2)).slice().buffer;
     },
@@ -158,6 +163,7 @@ const desktop = fakeDesktop({
       desktop.note(`clip_cancel:${JSON.stringify(args)}`);
       // Up to the start it names, and no later one, as the shell does.
       calledOffUpTo = Math.max(calledOffUpTo, Number(args.start));
+      if (booked !== null && booked <= calledOffUpTo) booked = null;
       for (const held of heldStarts) if (held.start <= calledOffUpTo) held.calledOff = true;
       return null;
     },
@@ -252,8 +258,9 @@ const desktop = fakeDesktop({
 
 // Voice message starts waiting for their microphone (`?holdmic`), oldest first.
 const heldStarts: { start: number; calledOff: boolean; open: () => void; heard: Promise<void> }[] = [];
-// The highest start this window called off, as clip.rs keeps it.
+// The highest start this window called off, and the one booked, as clip.rs keeps them.
 let calledOffUpTo = 0;
+let booked: number | null = null;
 
 // History reads being held for the test (`holdReads`): each is asked of the
 // server at once, so it shows in `data-did`, and answered when the test says.

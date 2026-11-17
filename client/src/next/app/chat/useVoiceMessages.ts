@@ -127,12 +127,14 @@ export function useVoiceMessages(
       // Called off and forgotten in one place, so no other clean-up's order
       // can come between them.
       if (recordingIn.current !== null || startingIn.current !== null) made.cancel();
+      // Whatever ended it, what this recorder had under way is over.
+      for (const conversation of [recordingIn.current, startingIn.current?.conversation]) if (conversation) put(conversation, { kind: "ready", problem: null });
       recordingIn.current = null;
       startingIn.current = null;
       made.dispose();
       if (recorder.current === made) recorder.current = null;
     };
-  }, [kind, finish]);
+  }, [kind, finish, put]);
 
   // Another conversation shown while recording: stop, and keep the clip where
   // it was made. One still starting has nothing to keep: it's called off.
