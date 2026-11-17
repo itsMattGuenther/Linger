@@ -69,6 +69,11 @@ pass.
 
 ## Conventions
 
+**Writing.** No em dashes in anything you write: commit messages, pull
+request and issue text, comments, docs, UI copy and chat. Use a comma, a
+colon, parentheses or a second sentence instead. Text already written isn't
+rewritten for it.
+
 **Rust**
 - Edition 2021+, `#![deny(warnings)]` in CI, `clippy::pedantic` advisory.
 - Errors: `thiserror` for library crates, `anyhow` only at binary boundaries.
@@ -416,8 +421,8 @@ the code:
   time it comes up.
 - **Lead with what it means for the reader**, then the detail. "Any database you made before
   today has to be deleted" beats "the schema change is non-backward-compatible."
-- **Don't pile up clauses.** No em-dash chains, no three-part parallel constructions, no
-  sentence that shows off. Say the thing and stop.
+- **Don't pile up clauses.** No em dashes (see *Writing*), no three-part
+  parallel constructions, no sentence that shows off. Say the thing and stop.
 - **Cut the throat-clearing.** No "worth noting", "it's worth flagging that",
   "importantly". If it matters, just say it.
 

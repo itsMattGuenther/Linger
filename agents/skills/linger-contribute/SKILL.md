@@ -124,7 +124,8 @@ commits that carry them (`scripts/lint-rules.sh`).
   first, or your tool's own review in a fresh session.
 - Explain the change the way `AGENTS.md` asks: short, plain sentences for a
   smart friend who didn't read the code. Say what was wrong, what changed, how
-  it was tested, and what still needs a real computer to confirm.
+  it was tested, and what still needs a real computer to confirm. No em
+  dashes, there or anywhere else you write.
 - Greptile reviews every pull request but a `docs/...` branch's. When it, or
   a person, finds a real problem, fix it by hand (never GitHub's "commit
   suggestion" button: that makes the bot a co-author), with a test. A
