@@ -128,6 +128,8 @@ test("reads which pull request, folder and branch a command is about", () => {
     ["merge", "X+=1 gh pr merge 5", { selector: "5" }],
     ["merge", "a[0]=1 gh pr merge 5", { selector: "5" }],
     ["merge", "gh.exe pr merge 5", { selector: "5" }],
+    // ANSI-C escapes decoded as bash does.
+    ["merge", "gh pr $'\\u006derge' 5", { selector: "5" }],
     // ANSI-C quoting is quoting.
     ["create", "gh pr create --$'base' release", { base: "release" }],
     ["ready", "gh pr ready", { selector: null }],
@@ -233,6 +235,28 @@ test("a command it might be and can't read exactly is stopped, never guessed", (
     ["merge", 'cat <<EOF\na\\" $(gh pr merge 5)\nEOF'],
     ["merge", 'echo "${x:-$(echo }; gh pr merge 5)}"'],
     ["merge", "echo $((gh pr merge 5) )"],
+    // A program that runs text behind a wrapper, or given text the gate can't read.
+    ["merge", "env bash -c 'gh pr merge 5'"],
+    ["merge", "timeout 60 sh -c 'gh pr merge 5'"],
+    ["merge", "CMD='gh pr merge 5'; eval \"$CMD\""],
+    ["merge", "CMD='gh pr merge 5'; bash -c \"$CMD\""],
+    ["merge", "bash -c 'g\"\"h pr merge 5'"],
+    // Piped into a shell from a here-document.
+    ["merge", "cat <<'EOF' | bash\ngh pr merge 5\nEOF"],
+    // Arithmetic's << is a shift, so the next line is still read.
+    ["merge", "(( x <<2 ))\ngh pr merge 5"],
+    // A compound command's word on a line of its own.
+    ["merge", "until\ngh pr merge 5\ndo sleep 60\ndone"],
+    // A process substitution as a redirection's target.
+    ["merge", "echo hi > >(g''h pr merge 5)"],
+    // A variable that may be gh, behind a wrapper.
+    ["merge", 'G=gh; env "$G" pr merge 5'],
+    ["merge", "sudo $G pr merge 5"],
+    // Added to, the repository is whatever it was too.
+    ["merge", "GH_REPO+=o/r gh pr merge 5"],
+    // A push running alongside the merge.
+    ["merge", "gh pr merge 5 & git push origin HEAD:feat/x"],
+    ["merge", "gh pr merge 5 | git push"],
     // Text bash would refuse, that might be the command.
     ["merge", 'gh pr merge 5 "oops'],
   ];

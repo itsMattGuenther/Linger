@@ -108,6 +108,16 @@ function readTokens(reader, closer) {
       while (reader.at < source.length && source[reader.at] !== "\n") reader.at += 1;
       continue;
     }
+    // `((…))` where a command starts: arithmetic, read as one word, its own
+    // `<<` a shift, not a here-document.
+    if (source.startsWith("((", reader.at) && (tokens.length === 0 || "op" in tokens[tokens.length - 1])) {
+      const end = source.indexOf("))", reader.at + 2);
+      if (end < 0) throw new Unreadable("an arithmetic command isn't closed");
+      const body = source.slice(reader.at + 2, end);
+      reader.at = end + 2;
+      tokens.push({ word: { text: UNKNOWN, known: false, single: true, quoted: false, inner: /\$\(|`/.test(body) ? substitutionsIn(body) : [], raw: "((" + body + "))" } });
+      continue;
+    }
     // `<(…)` and `>(…)`: a process substitution, a word of its own.
     if (source.startsWith("<(", reader.at) || source.startsWith(">(", reader.at)) {
       tokens.push({ word: readWord(reader) });
@@ -120,7 +130,8 @@ function readTokens(reader, closer) {
     if (redirect) {
       reader.at = opAt + redirect.length;
       while (source[reader.at] === " " || source[reader.at] === "\t") reader.at += 1;
-      if (reader.at >= source.length || METACHARS.has(source[reader.at])) throw new Unreadable(`\`${redirect}\` has nothing to read or write`);
+      const substitution = source.startsWith("<(", reader.at) || source.startsWith(">(", reader.at);
+      if (reader.at >= source.length || (METACHARS.has(source[reader.at]) && !substitution)) throw new Unreadable(`\`${redirect}\` has nothing to read or write`);
       const target = readWord(reader);
       const token = { redirect, target };
       tokens.push(token);
@@ -308,6 +319,15 @@ function readExpansion(reader, word, quoted) {
     return true;
   }
   const next = source[reader.at + 1];
+  if (next === "[") {
+    const end = source.indexOf("]", reader.at + 2);
+    if (end < 0) throw new Unreadable("a `$[` isn't closed");
+    const body = source.slice(reader.at + 2, end);
+    if (/\$\(|`/.test(body)) word.inner.push(...substitutionsIn(body));
+    reader.at = end + 1;
+    unknown();
+    return true;
+  }
   if (next === "(" && source[reader.at + 2] === "(" && closesTogether(source, reader.at + 1)) {
     // Arithmetic: a number, read for the commands it could hold all the same.
     let depth = 0;
@@ -405,6 +425,13 @@ function readAnsiC(reader) {
     if (next in C_ESCAPES) {
       text += C_ESCAPES[next];
       reader.at += 2;
+    } else if (next === "u" || next === "U") {
+      const hex = new RegExp(`^[0-9a-fA-F]{1,${next === "u" ? 4 : 8}}`).exec(source.slice(reader.at + 2));
+      text += hex ? String.fromCodePoint(Math.min(parseInt(hex[0], 16), 0x10ffff)) : "\\" + next;
+      reader.at += 2 + (hex ? hex[0].length : 0);
+    } else if (next === "c" && reader.at + 2 < source.length) {
+      text += String.fromCharCode(source.charCodeAt(reader.at + 2) & 0x1f);
+      reader.at += 3;
     } else if (next === "x") {
       const hex = /^[0-9a-fA-F]{1,2}/.exec(source.slice(reader.at + 2));
       text += hex ? String.fromCharCode(parseInt(hex[0], 16)) : "\\x";
@@ -473,8 +500,13 @@ function classify(command, action, input, raw) {
   if (!words.length) return null;
   const [name] = words;
   if (isGh(name) && words[1]?.known && words[1].text === "pr" && words[2]?.known && words[2].text === action) return "exact";
-  const program = name.known ? name.text.replace(/^.*[/\\]/, "") : "";
-  if (RUNS_TEXT.has(program) && inOrder(input, ["gh", "pr", action])) return "maybe";
+  // A program that runs text, first or behind a wrapper (`env bash -c …`),
+  // checked on the text it's given; given text it can't read, on the whole
+  // command's.
+  if (words.some((word) => word.known && RUNS_TEXT.has(word.text.replace(/^.*[/\\]/, "")))) {
+    if (inOrder(input, ["gh", "pr", action])) return "maybe";
+    if (input.includes(UNKNOWN) && inOrder(raw, ["pr", action])) return "maybe";
+  }
   // An unquoted name the gate can't read may be the whole command.
   if (!name.known && !name.single && inOrder(raw, ["pr", action])) return "maybe";
   const wanted = [mayBeGh, (word) => word.known && word.text === "pr", (word) => word.known && word.text === action];
@@ -482,8 +514,9 @@ function classify(command, action, input, raw) {
   let last = -1;
   for (let at = 0; at < words.length && stage < 3; at += 1) {
     const word = words[at];
-    const standsIn = !word.known && (stage === 0 ? at === 0 : at === last + 1);
-    if ((stage === 0 ? mayBeGh(word) && (word.known || standsIn) : wanted[stage](word)) || (stage > 0 && standsIn)) {
+    // For gh, anywhere (`sudo $G pr …`); for pr and the action, right after the one before.
+    const standsIn = !word.known && (stage === 0 || at === last + 1);
+    if (wanted[stage](word) || standsIn) {
       stage += 1;
       last = at;
     }
@@ -497,15 +530,17 @@ function classify(command, action, input, raw) {
  * here-documents, and the words of what's piped into it.
  */
 function* everyCommand(commands, nested = false) {
-  for (const [index, command] of commands.entries()) {
-    const piped = [];
-    for (let before = index - 1; before >= 0 && ["|", "|&"].includes(commands[before].after); before -= 1) piped.unshift(...commands[before].words);
-    const input = [
-      ...command.words.slice(1).map((word) => word.text),
+  // The text flowing down the pipeline so far: each command's words and its
+  // here-strings and here-documents.
+  let flowing = [];
+  for (const command of commands) {
+    const own = [
+      ...command.words.map((word) => word.text),
       ...command.redirects.map((token) => (token.redirect === "<<<" ? token.target.text : (token.body ?? ""))),
-      ...piped.map((word) => word.text),
-    ].join(" ");
+    ];
+    const input = [...own.slice(1), ...flowing].join(" ");
     yield { command, nested, input };
+    flowing = ["|", "|&"].includes(command.after) ? [...flowing, ...own] : [];
     for (const word of [...command.words, ...command.settings, ...command.redirects.map((token) => token.target)]) {
       for (const inner of word.inner) yield* everyCommand(commandsOf(inner), true);
     }
@@ -578,6 +613,8 @@ const stop = (why) => ({ fail: why });
  * a command bash would refuse anyway still can't slip through.
  */
 function inOrder(text, words) {
+  // Quotes and escapes taken out, as the shell would: `g''h` is gh.
+  text = text.replace(/["'\\]/g, "");
   let from = 0;
   for (const word of words) {
     const found = new RegExp(String.raw`\b${word}\b`, "g");
@@ -632,7 +669,7 @@ export function readCommand(command, action) {
   const dirs = [];
   let pushes = false;
   let first = 0;
-  while (first < at && !commands[first].words.length && !commands[first].settings.length && !commands[first].redirects.length && commands[first].after === "\n") first += 1;
+  while (first < at && !commands[first].words.length && !commands[first].settings.length && !commands[first].redirects.length && !commands[first].leading.length && commands[first].after === "\n") first += 1;
   for (let index = first; index < at; index += 1) {
     const step = stepOf(commands[index]);
     const shown = commands[index].words.map((word) => word.text.replaceAll(UNKNOWN, "…")).join(" ");
@@ -646,7 +683,9 @@ export function readCommand(command, action) {
   const env = {};
   for (const setting of target.settings) {
     const eq = setting.text.indexOf("=");
-    env[setting.text.slice(0, eq)] = setting.known ? setting.text.slice(eq + 1) : UNKNOWN;
+    const [, name, appends] = /^([A-Za-z_]\w*)(?:\[[^\]]*\])?(\+?)$/.exec(setting.text.slice(0, eq)) ?? [];
+    // Added to (`+=`), it's whatever was there before too.
+    env[name] = setting.known && !appends ? setting.text.slice(eq + 1) : UNKNOWN;
   }
 
   // Its own words after `gh pr <action>`, as gh gets them. One that may be
@@ -682,6 +721,11 @@ export function readCommand(command, action) {
   // gate looked at it, and --auto merges whatever is pushed later, so the
   // commit reviewed wouldn't be the commit merged.
   if (pushes) return stop(`a push before \`gh pr ${action}\` would change the pull request after the review; push first, on its own`);
+  // Nor one running at the same time, after `&` or in its pipeline.
+  for (let index = at, joined = target.after; index + 1 < commands.length && ["&", "|", "|&"].includes(joined); index += 1) {
+    joined = commands[index + 1].after;
+    if (stepOf(commands[index + 1])?.push) return stop(`a push alongside \`gh pr ${action}\` could change the pull request while it's merged; push first, on its own`);
+  }
   if (action === "merge" && flags.has("--auto") && !(flags.get("--auto") ?? []).every((value) => value !== null && ["0", "f", "F", "false", "FALSE", "False"].includes(value))) {
     return stop("`--auto` merges commits pushed after the review");
   }
