@@ -44,15 +44,20 @@ struct Books {
     /// later one.
     next: u64,
     recording: Option<Recording>,
-    /// For each window, the highest start its page has called off (#920).
-    /// The page numbers its starts from its clock, always rising, even
-    /// across a reload, so a start at or below it is refused when it comes,
-    /// whatever order the commands were handled in, and a cancel takes a
-    /// booked start at or below it. Kept for as long as Linger runs, one
-    /// number for each window it has opened, since that's what refuses a
-    /// start a closed or reloaded window sent and the shell heard late.
+    /// For each window, the highest start its page has called off (#920):
+    /// a start at or below it is refused when it comes, whatever order the
+    /// commands were handled in.
     called_off: HashMap<String, u64>,
+    /// For each window, how many times its page has been loaded afresh or
+    /// the window gone. A page numbers its starts above its epoch's base
+    /// (`clip_epoch`), so every start an earlier page sent is below a later
+    /// page's, and below the mark set when it went: told apart by the
+    /// shell's own count, never a clock (#920).
+    epochs: HashMap<String, u64>,
 }
+
+/// How far apart two epochs' numbers are: room for a page's own count.
+const EPOCH: u64 = 1 << 32;
 
 struct Recording {
     id: u64,
@@ -90,8 +95,17 @@ impl Books {
 
     /// Raise `window`'s called-off mark to `start`, never lower it.
     fn call_off_up_to(&mut self, window: &str, start: u64) {
-        let up_to = self.called_off.entry(window.to_owned()).or_insert(0);
-        *up_to = (*up_to).max(start);
+        match self.called_off.get_mut(window) {
+            Some(up_to) => *up_to = (*up_to).max(start),
+            None => {
+                self.called_off.insert(window.to_owned(), start);
+            }
+        }
+    }
+
+    /// The number `window`'s page counts its starts from.
+    fn base(&self, window: &str) -> u64 {
+        self.epochs.get(window).copied().unwrap_or(0) * EPOCH
     }
 }
 
@@ -124,23 +138,26 @@ impl Clips {
         Ok(id)
     }
 
-    /// Call off `window`'s starts up to the one numbered `start`: one on the
-    /// books is taken off, and any that hasn't come yet is refused when it
-    /// does. Never a later start, so a late cancel can't take a recording
-    /// begun after it (#920).
+    /// Call off `window`'s start numbered `start`: taken off the books if
+    /// it's there, and refused when it comes if it hasn't yet, with every
+    /// earlier one of the window's. Only that start is taken: an earlier
+    /// recording still being stopped is left to its Stop, and a later one
+    /// is never touched (#920).
     fn call_off(&self, window: &str, start: u64) -> Option<Recording> {
         let mut books = self.lock();
         books.call_off_up_to(window, start);
-        books.take_if(|recording| recording.window == window && recording.start <= start)
+        books.take_if(|recording| recording.window == window && recording.start == start)
     }
 
     /// A window has gone, or its page is loaded afresh: its recording taken,
-    /// in one go with calling off every start it sent until `now`, so one
-    /// the shell hears late is refused rather than recording for nobody
-    /// (#920). The page numbers starts from the clock, so later ones go ahead.
-    fn forget_window(&self, window: &str, now: u64) -> Option<Recording> {
+    /// in one go with a new epoch, every start the window sent before now
+    /// called off, so one heard late is refused rather than recording for
+    /// nobody (#920).
+    fn forget_window(&self, window: &str) -> Option<Recording> {
         let mut books = self.lock();
-        books.call_off_up_to(window, now);
+        let epoch = books.epochs.get(window).copied().unwrap_or(0) + 1;
+        books.epochs.insert(window.to_owned(), epoch);
+        books.call_off_up_to(window, epoch * EPOCH);
         books.take_if(|recording| recording.window == window)
     }
 
@@ -381,15 +398,17 @@ pub async fn clip_cancel(app: AppHandle, window: Window, start: u64) {
 /// One whose microphone is still opening is taken off the books, and
 /// `clip_start` throws it away once the microphone opens (#913).
 pub fn forget(app: &AppHandle, label: &str) {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |since| {
-            u64::try_from(since.as_millis()).unwrap_or(u64::MAX / 1000) * 1000
-        });
-    let recording = app.state::<Clips>().forget_window(label, now);
+    let recording = app.state::<Clips>().forget_window(label);
     if let Some(started) = recording.and_then(|recording| recording.started) {
         started.discard();
     }
+}
+
+/// The number this window's page counts its voice message starts from
+/// (#920): above every start an earlier page of the window's sent.
+#[tauri::command]
+pub fn clip_epoch(app: AppHandle, window: Window) -> u64 {
+    app.state::<Clips>().lock().base(window.label())
 }
 
 #[cfg(test)]
@@ -569,9 +588,9 @@ mod tests {
         // Another window can't start one while this microphone opens, and
         // its closing takes nothing that isn't its own.
         assert_eq!(clips.begin("chat", 5).err(), Some(ALREADY));
-        assert!(clips.forget_window("chat", 0).is_none());
+        assert!(clips.forget_window("chat").is_none());
         assert!(
-            clips.forget_window("main", 0).is_some(),
+            clips.forget_window("main").is_some(),
             "the window's closing found nothing"
         );
         // The microphone is open now, and too late: what would have recorded
@@ -588,8 +607,10 @@ mod tests {
         assert!(!clips.started(id, Started { stop, done }));
         let ended = tokio::time::timeout(std::time::Duration::from_secs(5), gone).await;
         assert!(matches!(ended, Ok(Err(_))), "it recorded anyway");
-        // And the next voice message starts, as if nothing had happened.
-        assert!(clips.begin("main", 2).is_ok());
+        // And the next voice message starts, as if nothing had happened,
+        // counted from the window's new base as its page would (#920).
+        let base = clips.lock().base("main");
+        assert!(clips.begin("main", base + 1).is_ok());
     }
 
     /// A microphone that won't open leaves nothing on the books, and an
@@ -660,20 +681,43 @@ mod tests {
         assert!(clips.begin("main", 2).is_ok());
     }
 
-    /// A window that goes, or whose page loads afresh, calls off every
-    /// start it sent until then: one heard late is refused, and the page's
-    /// later starts, numbered from the clock, go ahead.
+    /// A window that goes, or whose page loads afresh, starts a new epoch:
+    /// every start its last page sent is refused when it comes, and the new
+    /// page's, counted above the new base, go ahead (#920).
     #[test]
-    fn a_window_gone_or_reloaded_calls_off_its_earlier_starts() {
+    fn a_page_loaded_afresh_counts_above_every_start_its_last_page_sent() {
         let clips = Clips::default();
-        clips.begin("main", 6).expect("a start");
-        assert!(clips.forget_window("main", 1_000).is_some());
+        let old = clips.lock().base("main");
+        clips.begin("main", old + 6).expect("a start");
+        assert!(clips.forget_window("main").is_some());
+        let new = clips.lock().base("main");
+        assert!(new > old + 6);
         assert_eq!(
-            clips.begin("main", 999).err(),
+            clips.begin("main", old + 7).err(),
             Some(CALLED_OFF),
-            "a start sent before went ahead"
+            "the last page's start went ahead"
         );
-        assert!(clips.begin("main", 1_001).is_ok());
+        assert!(clips.begin("main", new + 1).is_ok());
+        // Another window's count is its own.
+        assert_eq!(clips.lock().base("chat"), 0);
+    }
+
+    /// A cancel takes only its own start: an earlier recording still being
+    /// stopped is left to its Stop (#920).
+    #[tokio::test]
+    async fn a_cancel_takes_only_its_own_start() {
+        let clips = Clips::default();
+        let first = clips.begin("main", 1).expect("the first");
+        let (stop, _stopped) = oneshot::channel();
+        let done = tokio::spawn(async { Ok(Clip::default()) });
+        assert!(clips.started(first, Started { stop, done }));
+        assert!(
+            clips.call_off("main", 2).is_none(),
+            "a later start's cancel took the first"
+        );
+        assert!(clips
+            .take_from("main")
+            .is_some_and(|recording| recording.start == 1));
     }
 
     /// A later start never replaces a recording already under way: only

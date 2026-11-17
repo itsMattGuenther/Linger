@@ -65,14 +65,16 @@ const START_WAIT_MS = 3_000;
 const LEVEL_EVERY_MS = 40;
 
 /**
- * The number of the page's last shell start (#920): milliseconds times
- * 1,000 on the page's own steady clock (when it loaded, plus the time since,
- * which never runs backwards), so a page loaded afresh, or a module loaded
- * again while developing, numbers above anything an earlier one sent, and
- * above the shell's mark from the reload. Exact as a JavaScript number
- * until about the year 2255.
+ * The page's own count of its shell starts (#920): milliseconds on the
+ * page's steady clock, always rising, so a module loaded again while
+ * developing keeps counting up. Sent above the window's base from the shell
+ * (`clip_epoch`), which a reload raises above everything an earlier page
+ * sent, so no two pages' starts are ever confused, and no clock is compared.
  */
 let shellStarts = 0;
+/** The window's base, asked of the shell once per page. */
+let shellBase: Promise<number> | null = null;
+const base = () => (shellBase ??= invoke<number>("clip_epoch").catch(() => 0));
 
 /**
  * The page's last cancel or stop asked of the shell, settled either way: a
@@ -83,6 +85,10 @@ let shellStarts = 0;
  * nothing there.
  */
 let shellSettling: Promise<unknown> = Promise.resolve();
+/** A start waits for every cancel and stop asked before it, not only the last. */
+const settled = (asked: Promise<unknown>) => {
+  shellSettling = Promise.all([shellSettling, asked.catch(() => undefined)]);
+};
 
 /**
  * The desktop shell's recorder (src-tauri/src/clip.rs), through its commands
@@ -106,19 +112,20 @@ export function shellRecorder(events: RecorderEvents, input: () => string | null
       // Each start's own number, taken before anything is waited for, so a
       // cancel while it waits names it; the shell calls off that start and
       // no later one, whichever it hears first (#920).
-      shellStarts = Math.max(shellStarts + 1, Math.floor((performance.timeOrigin + performance.now()) * 1000));
+      shellStarts = Math.max(shellStarts + 1, Math.floor(performance.now()));
       const mine = shellStarts;
       current = mine;
       await shellSettling;
-      await invoke("clip_start", { input: input(), start: mine });
+      await invoke("clip_start", { input: input(), start: (await base()) + mine });
     },
     stop: async () => {
       const stopping = invoke<ArrayBuffer>("clip_stop");
-      shellSettling = stopping.catch(() => undefined);
+      settled(stopping);
       return readClip(new Uint8Array(await stopping));
     },
     cancel: () => {
-      shellSettling = invoke("clip_cancel", { start: current }).catch(() => undefined);
+      const mine = current;
+      settled(base().then((from) => invoke("clip_cancel", { start: from + mine })));
     },
     dispose: () => {
       gone = true;

@@ -153,6 +153,7 @@ const desktop = fakeDesktop({
       }
       return null;
     },
+    clip_epoch: () => 0,
     clip_stop: async () => {
       desktop.note("clip_stop");
       booked = null;
@@ -163,7 +164,7 @@ const desktop = fakeDesktop({
       desktop.note(`clip_cancel:${JSON.stringify(args)}`);
       // Up to the start it names, and no later one, as the shell does.
       calledOffUpTo = Math.max(calledOffUpTo, Number(args.start));
-      if (booked !== null && booked <= calledOffUpTo) booked = null;
+      if (booked === Number(args.start)) booked = null;
       for (const held of heldStarts) if (held.start <= calledOffUpTo) held.calledOff = true;
       // With `?holdcancel` its answer waits for `window.parity.clip.cancelled()`.
       if (query.has("holdcancel")) await new Promise<void>((answer) => heldCancels.push(answer));

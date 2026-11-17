@@ -61,6 +61,8 @@ export function useVoiceMessages(
     };
   }, []);
   const recorder = useRef<Recorder | null>(null);
+  /** False once the panel has gone (the window, or a docked chat folding). */
+  const mounted = useRef(true);
   /**
    * The start under way (its microphone opening), if any: Escape, another
    * conversation or the window going call it off, and only the start that's
@@ -92,6 +94,8 @@ export function useVoiceMessages(
           put(conversation, { kind: "ready", problem: TOO_SHORT });
           return;
         }
+        // The panel went while it stopped: nothing is kept, so nothing is left to let go of.
+        if (!mounted.current) return;
         const file = new File([opusWebm(clip.packets, clip.preSkip)], VOICE_MESSAGE_NAME, { type: "audio/webm" });
         put(conversation, { kind: "kept", url: URL.createObjectURL(file), file, ms, note, sending: false, problem: null, nonce: crypto.randomUUID(), attachment: null });
       } catch {
@@ -151,12 +155,13 @@ export function useVoiceMessages(
 
   // The window going: every kept clip let go of. What was recording or
   // starting was called off with the recorder (above).
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
       for (const clip of clipsNow.current.values()) if (clip.kind === "kept") URL.revokeObjectURL(clip.url);
-    },
-    [],
-  );
+    };
+  }, []);
 
   const state = paneId === null ? null : (clips.get(paneId) ?? null);
 
