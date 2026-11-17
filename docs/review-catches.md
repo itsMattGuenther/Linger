@@ -3,9 +3,10 @@
 A reviewer's real catch is a problem our own tests and checks missed. Fixing it
 fixes that pull request; the gap that let it through is still there for the
 next one. So each catch gets a second question, **why didn't we find it?**,
-and an answer that changes the project: a test or check that would have
-caught it, code shaped so the mistake is hard to make, or a rule in the docs
-(`AGENTS.md`, "Pull requests and issues").
+and an answer that could change the project: a test or check that would have
+caught it, code shaped so the mistake is hard to make, or a rule in the docs.
+The answer is suggested in the pull request, and Matt picks which ones are
+built (`AGENTS.md`, "Pull requests and issues").
 
 This is the record: what was caught, why we missed it, and what changed.
 Greptile reviews every pull request (since 2026-10-29); a catch from a person
@@ -20,10 +21,11 @@ To add one, put it under the gap it belongs to, or start a new gap. Name the
 pull request the mistake was made in (not the issue it was reported as), the
 catch in a sentence, why we missed it, and what changed, linking the commit,
 issue or rule. One catch is one entry; an entry that holds several says how
-many after the pull request, as in `#796 (5 catches):`. Then close the gap
-with a check if one can find that kind of mistake. If none can, and no
-question in [pr-questions.md](pr-questions.md) asks about it, add one there
-(`AGENTS.md`). `node scripts/review-catches.mjs` counts the catches per pull
+many after the pull request, as in `#796 (5 catches):`. Keep it short.
+Don't build a check, question or rule for it in the same pull request:
+suggest it under *Found along the way*, and Matt picks the ones worth
+building (`AGENTS.md`, #933). A gap that isn't here yet needs a question in
+[pr-questions.md](pr-questions.md); its test checks. `node scripts/review-catches.mjs` counts the catches per pull
 request, week by week, so we can see whether they fall.
 
 ## State worked out from the history that's loaded, not all of it

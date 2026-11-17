@@ -15,7 +15,7 @@ what CI adds on top.
 | Where | When | What | How long |
 |---|---|---|---|
 | Your machine | Before every push | `scripts/check.sh`: the checks for what the branch touched | Under a second for docs; about 3 minutes for a client change with WebKit, 1½ without, more when the branch edits browser tests (each runs ten times); a Rust change also rebuilds, which is slow in a fresh copy |
-| A pull request | Every push | `ci.yml`: the same selection, plus S3 against MinIO, the relay and a real server update in Docker, the WebKit browser tests, and the browser tests the PR added or edited ten times in both engines; `package-check.yml` builds the desktop packages on Linux and Windows; `ios-simulator.yml` builds the iPhone app for the simulator on a Mac and drives it with Maestro, when the PR touches the app | About 5 minutes; the packages about 10; the iPhone about 25 |
+| A pull request | Every push | `ci.yml`: the same selection, plus S3 against MinIO, the relay and a real server update in Docker, the WebKit browser tests, and the browser tests the PR added or edited ten times in both engines; `package-check.yml` builds the desktop packages on Linux and Windows; `ios-simulator.yml` builds the iPhone app for the simulator on a Mac and drives it with Maestro, when the PR touches the app | About 10 minutes; the packages 8 to 19; the iPhone 35 to 60 (#933) |
 | A pull request that changes the iPhone app's Xcode project, the app's Rust that a phone builds, or the server (not Rust only the desktop app builds, and not one labelled `desktop-only`: "What a change sets off") | Every push | `share-window.yml`: the iPhone's share extension and notification extension build for the iPhone Simulator on GitHub's Mac, the notification extension's tests open RFC 8291's example and what the server sends and read the keys as the app's Rust writes them (#889), the app's Rust builds for the iPhone (code only an iPhone compiles is built by nothing else on a pull request, #822), and the share window's sender (`ShareSender.swift`) runs on Linux against a real server (`scripts/share-sender-test.sh`, which needs Docker and runs the same locally) | About 10 minutes |
 | `main` | Every merge | `ci.yml` for what the merge changed. A run still waiting is cancelled when a newer merge lands, since the newer run covers it | As a PR |
 | `main`, nightly | 08:23 UTC | `nightly.yml`: every CI check, the package checks, the Windows and macOS shell builds, the iPhone app in the simulator, every browser test three times with no retries, and whether a fix Linger pins has come out upstream. A failure opens an issue | About 40 minutes |
@@ -346,7 +346,7 @@ asked of every pull request before it opens, as questions
 
 ## A test that fails at random
 
-Don't just re-run it and move on. Sometimes the test is at fault: it waits a
+Don't re-run it and forget it. Sometimes the test is at fault: it waits a
 fixed time, or measures a frame that a busy machine draws late. Sometimes the
 app is: #266 looked like a flaky test and was a real race in how history
 loads, and #716, failing once in a nightly run, was a busy computer throwing
@@ -361,7 +361,11 @@ does losing audio twice, and the first recording is kept
 ([packaged audio checks](packaged-audio-checks.md#lost-audio-on-a-paused-runner-384-2026-10-02)).
 
 1. Re-run the failed job once, to be sure it is random and not your change.
-2. Open an issue the same day with the test's name, the run, and the error.
+   A failure in GitHub's machinery (a runner, the simulator, a download)
+   stops here: no issue and no investigation (#933).
+2. Write it under *Found along the way* in the pull request: the test's
+   name, the run and the error. It gets an issue when it fails a second
+   time (the nightly run opens its own).
 3. Make it fail on purpose before changing anything, by squeezing it: the
    tests, the page server and the browser on two CPUs, several copies at once.
    `taskset -c 0,1 pnpm exec playwright test <file> -g <name>

@@ -19,10 +19,12 @@ breaking any of them.
 
 ## Before writing code
 
-1. Read, in order: `SPEC.md` §2 and §6, `ARCHITECTURE.md` §10, `PROTOCOL.md` for
-   anything crossing client and server, and `TASKS.md`. The docs are the source
-   of truth: if code and docs disagree, the docs win, or the docs change first,
-   in the same commit.
+1. Read the issue, `SPEC.md` §2 and §6, and the sections of `SPEC.md`,
+   `ARCHITECTURE.md` and `PROTOCOL.md` your change touches (`PROTOCOL.md`
+   for anything crossing client and server). Open `TASKS.md` only when the
+   issue points at a task there. The docs are the source of truth: if code
+   and docs disagree, the docs win, or the docs change first, in the same
+   commit.
 2. Find the issue. If there isn't one, the `linger-report` skill drafts one; a
    fix without an issue is harder to review. An issue labelled `tracking`
    groups other work: pick one of its sub-issues, not the parent.
@@ -111,18 +113,21 @@ commits that carry them (`scripts/lint-rules.sh`).
   body in `--body-file`. If it stops
   the command with findings, fix what's real and run it again (the same
   commit passes the second time), and say in the Tests section what it found
-  and what you did. With another tool, run `node scripts/review-gate.mjs`
+  and what you did. After three rounds, only a real bug in what you changed
+  holds it up; if the same kind of finding keeps coming back, rethink the
+  design rather than patch it again. With another tool, run `node scripts/review-gate.mjs`
   first, or your tool's own review in a fresh session.
 - Explain the change the way `AGENTS.md` asks: short, plain sentences for a
   smart friend who didn't read the code. Say what was wrong, what changed, how
   it was tested, and what still needs a real computer to confirm.
 - Greptile reviews every pull request but a `docs/...` branch's. When it, or
   a person, finds a real problem, fix it by hand (never GitHub's "commit
-  suggestion" button: that makes the bot a co-author), and add a test that
-  would have caught it; a check that finds that kind of mistake beats a
-  question somebody has to answer. Say in the pull request why the tests
-  missed it; the maintainer adds the catch to `docs/review-catches.md`. If a
-  comment is wrong, reply saying why.
+  suggestion" button: that makes the bot a co-author), with a test. A
+  wider check or rule it suggests goes under *Found along the way* in the
+  pull request, not into the same change; the maintainer adds the catch to
+  `docs/review-catches.md`. If a comment is wrong, reply saying why.
+- Don't open new issues for what you notice along the way: list it under
+  *Found along the way* in the pull request.
 
 Only push and open the PR when the user says so, under their own GitHub
 account. Never merge it; the maintainer does that. Once it has merged, GitHub
