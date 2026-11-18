@@ -406,14 +406,21 @@ pub fn run() {
 }
 
 /// What the running app does with Tauri's events. A computer says goodbye to
-/// every server as it quits (`say_goodbye`). The iPhone keeps going when iOS
-/// lets go of its window's scene, and opens the window again when the scene
-/// comes back (`phone_scene.rs`, #836).
+/// every server as it quits (`say_goodbye`), unless it's restarting. The
+/// iPhone keeps going when iOS lets go of its window's scene, and opens the
+/// window again when the scene comes back (`phone_scene.rs`, #836).
 #[allow(clippy::needless_pass_by_value)]
 fn on_run_event(app: &AppHandle, event: tauri::RunEvent) {
     #[cfg(desktop)]
-    if matches!(event, tauri::RunEvent::Exit) {
-        say_goodbye(app);
+    match &event {
+        tauri::RunEvent::ExitRequested {
+            code: Some(tauri::RESTART_EXIT_CODE),
+            ..
+        } => RESTARTING.store(true, std::sync::atomic::Ordering::Relaxed),
+        tauri::RunEvent::Exit if !RESTARTING.load(std::sync::atomic::Ordering::Relaxed) => {
+            say_goodbye(app);
+        }
+        _ => {}
     }
     #[cfg(target_os = "ios")]
     phone_scene::handle(app, event);
@@ -421,27 +428,34 @@ fn on_run_event(app: &AppHandle, event: tauri::RunEvent) {
     let _ = (app, event);
 }
 
-/// The longest quitting waits for its goodbyes. One normally takes a few
-/// milliseconds: the close frame goes into the socket's buffer and the
-/// connection's task ends. This only bounds a socket that can't take it,
-/// so that Quit is never slow; that server then waits out a drop, as
-/// before.
+/// Whether this exit is a restart, into an update (`updates.rs`). A restart
+/// says no goodbye: the new copy is back in seconds, which is what the
+/// server's grace period for a drop is for, so nobody sees it go and come
+/// back (#654). An update never restarts somebody in voice (#772).
+#[cfg(desktop)]
+static RESTARTING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The longest quitting waits for its goodbyes. One normally takes a round
+/// trip: the close frame out, and the server closing its end once it has
+/// taken it. A server that never closes is let go of sooner, by the
+/// connection itself (`CLOSE_WAIT`, 750 ms); this bounds a client that
+/// was mid-dial, so that Quit is never slow. That server then waits out a
+/// drop, as before.
 #[cfg(desktop)]
 const GOODBYE_WAIT: std::time::Duration = std::time::Duration::from_secs(1);
 
-/// Tell every server goodbye before the process ends: Quit in the tray,
-/// closing the list when that quits, or restarting into an update (through
-/// `Exit`, and on Windows from the updater's last step, `updates.rs`). The
-/// process ends right after, so this waits until each server has taken its
-/// goodbye (`gateway::Handle::goodbye`), all at once.
+/// Tell every server goodbye before the process ends: Quit in the tray, or
+/// closing the list when that quits. The process ends right after `Exit`,
+/// so this waits until each server has taken its goodbye
+/// (`gateway::Handle::goodbye`), all at once.
 ///
 /// Without a goodbye the server takes a quit for a dropped connection:
 /// everybody went on seeing the person as they were for `PRESENCE_GRACE_MS`,
 /// and their voice seat stayed until the session's resume window ran out
 /// (#654). With one, they're offline at once and out of voice, as on signing
-/// out of a server. A second call finds nothing left to close.
+/// out of a server.
 #[cfg(desktop)]
-pub(crate) fn say_goodbye(app: &AppHandle) {
+fn say_goodbye(app: &AppHandle) {
     use tauri::Manager;
     let Some(connections) = app.try_state::<Connections>() else {
         return;

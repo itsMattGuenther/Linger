@@ -261,24 +261,7 @@ impl Watcher {
 
 /// Start a client against `server`, with a token that is nowhere near expiry.
 fn start(server: &FakeServer, token: &str) -> (gateway::Handle, Watcher) {
-    let (tx, rx) = mpsc::unbounded_channel();
-    let (handle, task) = gateway::client(
-        &server.base_url(),
-        Token {
-            value: token.to_string(),
-            expires_at_ms: now_ms() + 15 * 60 * 1000,
-        },
-        Recorder { tx },
-    )
-    .expect("a dialable address");
-    tokio::spawn(task);
-    (
-        handle,
-        Watcher {
-            rx,
-            seen: Vec::new(),
-        },
-    )
+    start_at(&server.base_url(), token)
 }
 
 /// Start a client against an address nothing listens on: bound, noted, and
@@ -287,11 +270,15 @@ async fn start_unreachable() -> (gateway::Handle, Watcher) {
     let server = FakeServer::bind().await;
     let base_url = server.base_url();
     drop(server);
+    start_at(&base_url, "access-token")
+}
+
+fn start_at(base_url: &str, token: &str) -> (gateway::Handle, Watcher) {
     let (tx, rx) = mpsc::unbounded_channel();
     let (handle, task) = gateway::client(
-        &base_url,
+        base_url,
         Token {
-            value: "access-token".into(),
+            value: token.to_string(),
             expires_at_ms: now_ms() + 15 * 60 * 1000,
         },
         Recorder { tx },
@@ -998,10 +985,56 @@ async fn a_goodbye_the_server_never_answers_finishes_anyway() {
     peer.ready("session-1").await;
     watch.until_ready().await;
 
-    // The peer is never read from again, so it never answers.
+    // The peer isn't read from until it's over, so it never answers.
+    let asked = std::time::Instant::now();
     timeout(Duration::from_secs(3), handle.goodbye())
         .await
         .expect("the goodbye finishes without the server");
+    let took = asked.elapsed();
+    assert!(
+        took >= Duration::from_millis(500),
+        "gave the server a moment to close its end, not {took:?}"
+    );
+    let said = loop {
+        let message = timeout(PATIENCE, peer.ws.next())
+            .await
+            .expect("the socket says something")
+            .expect("not a socket that just went")
+            .expect("a readable frame");
+        if !matches!(message, Message::Text(_)) {
+            break message;
+        }
+    };
+    assert!(matches!(said, Message::Close(_)), "said {said:?}");
+}
+
+/// Signing out of a server, or a connection being replaced (`shutdown`),
+/// doesn't wait for the server the way a quit does: the old connection's
+/// last status is said at once, so it can't land after the new one's.
+#[tokio::test]
+async fn a_shutdown_does_not_wait_for_the_server() {
+    let server = FakeServer::bind().await;
+    let (handle, mut watch) = start(&server, "access-token");
+
+    let mut peer = server.accept().await;
+    peer.hello(30_000).await;
+    assert_eq!(peer.recv().await["op"], "identify");
+    peer.ready("session-1").await;
+    watch.until_ready().await;
+
+    // The peer never answers.
+    handle.shutdown();
+    timeout(Duration::from_millis(300), async {
+        loop {
+            match watch.rx.recv().await {
+                Some(Note::Status(Status::Offline)) => break,
+                Some(_) => {}
+                None => panic!("the client ended without saying offline"),
+            }
+        }
+    })
+    .await
+    .expect("offline at once, without waiting for the server");
     drop(peer);
 }
 
