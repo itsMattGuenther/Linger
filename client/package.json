@@ -16,7 +16,7 @@
     "test:browser": "playwright test"
   },
   "dependencies": {
-    "@tanstack/react-virtual": "^3.14.10",
+    "@tanstack/react-virtual": "3.14.13",
     "@tauri-apps/api": "^2.12.4",
     "@tauri-apps/plugin-notification": "^2.8.0",
     "@tauri-apps/plugin-opener": "^2.7.2",
