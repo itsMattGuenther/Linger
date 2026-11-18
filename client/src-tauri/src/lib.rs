@@ -430,16 +430,18 @@ fn on_run_event(app: &AppHandle, event: tauri::RunEvent) {
 const GOODBYE_WAIT: std::time::Duration = std::time::Duration::from_secs(1);
 
 /// Tell every server goodbye before the process ends: Quit in the tray,
-/// closing the list when that quits, or restarting into an update. Tauri
-/// ends the process right after the `Exit` event, so this waits for the
-/// close frames to go out (`gateway::Handle::goodbye`), all at once.
+/// closing the list when that quits, or restarting into an update (through
+/// `Exit`, and on Windows from the updater's last step, `updates.rs`). The
+/// process ends right after, so this waits until each server has taken its
+/// goodbye (`gateway::Handle::goodbye`), all at once.
 ///
-/// Without a goodbye the server takes a quit for a dropped connection, and
-/// everybody went on seeing the person as they were, in their room and in
-/// voice, for `PRESENCE_GRACE_MS` (#654). With one, they're offline at once
-/// and their voice seat goes with them, as on signing out of a server.
+/// Without a goodbye the server takes a quit for a dropped connection:
+/// everybody went on seeing the person as they were for `PRESENCE_GRACE_MS`,
+/// and their voice seat stayed until the session's resume window ran out
+/// (#654). With one, they're offline at once and out of voice, as on signing
+/// out of a server. A second call finds nothing left to close.
 #[cfg(desktop)]
-fn say_goodbye(app: &AppHandle) {
+pub(crate) fn say_goodbye(app: &AppHandle) {
     use tauri::Manager;
     let Some(connections) = app.try_state::<Connections>() else {
         return;

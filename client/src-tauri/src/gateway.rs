@@ -47,6 +47,8 @@ const CLIENT_NAME: &str = concat!("linger-desktop/", env!("CARGO_PKG_VERSION"));
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(15);
+/// How long a closing connection waits for the server to close its end.
+const CLOSE_WAIT: Duration = Duration::from_secs(1);
 const BACKOFF_BASE: Duration = Duration::from_millis(500);
 const BACKOFF_CAP: Duration = Duration::from_secs(30);
 /// How long to wait for the frontend to hand over a token before asking again.
@@ -171,18 +173,22 @@ impl Handle {
     }
 
     /// Close the connection for good, and finish once it has closed: the
-    /// server has the close frame that says this app is leaving, or there
-    /// was no socket to send it on. For quitting, where the process ends
-    /// right after, and a goodbye only queued would never be sent. Without
-    /// one the server takes the quit for a drop, and shows the person as
-    /// they were for `PRESENCE_GRACE_MS` and holds their voice seat (#654).
+    /// server has taken the close frame that says this app is leaving and
+    /// closed its end (or `CLOSE_WAIT` passed), or there was no socket to
+    /// send it on. For quitting, where the process ends right after, and a
+    /// goodbye only queued would never be sent. Without one the server takes
+    /// the quit for a drop, and shows the person as they were for
+    /// `PRESENCE_GRACE_MS` and holds their voice seat (#654).
     ///
     /// Unlike `shutdown`, this waits for room in the queue rather than
-    /// giving up on a full one. The caller bounds the wait.
+    /// giving up on a full one. The caller bounds the wait. Dropping the
+    /// handle instead would stop the runner too, but nothing would be left
+    /// to wait on: `closed()` needs a sender, and a kept one holds the
+    /// channel open.
     pub async fn goodbye(self) {
         let _ = self.cmd.send(Cmd::Shutdown).await;
         // The runner holds the other end until it returns, which is after
-        // the close frame is written.
+        // the server has closed its end.
         self.cmd.closed().await;
     }
 
@@ -483,6 +489,16 @@ impl<E: Events> Runner<E> {
                     // the same instruction as an explicit shutdown.
                     None | Some(Cmd::Shutdown) => {
                         let _ = tx.send(Message::Close(None)).await;
+                        // The server closes its end once it has taken the
+                        // goodbye, so reading to there is what tells a quit
+                        // (`Handle::goodbye`) it landed. It also leaves
+                        // nothing unread, which would make the system end
+                        // the socket with a reset that can beat the close
+                        // frame there.
+                        let _ = timeout(CLOSE_WAIT, async {
+                            while next_frame(&mut rx).await.is_some() {}
+                        })
+                        .await;
                         return Outcome::Shutdown;
                     }
                     Some(Cmd::Token(fresh)) => *stored = Some(fresh),

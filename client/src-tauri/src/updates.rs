@@ -246,8 +246,19 @@ fn how(app: &AppHandle) -> How {
 /// of its own: `/S` on top of the config's passive mode, which the .msi keeps,
 /// since it needs Windows' admin prompt (#772). `/R` (from passive mode)
 /// starts the new Linger once it's in.
+///
+/// On Windows, installing ends Linger outright (`std::process::exit`), with
+/// no `Exit` event, so the goodbyes a quit says (`say_goodbye`) are said in
+/// the updater's last step instead. That replaces the plugin's own last
+/// step, the clean-up, so it's done here too. Elsewhere the step is never
+/// run: Linger restarts through `Exit`.
 fn updater(app: &AppHandle, timeout: Option<Duration>) -> Result<Updater, String> {
     let mut builder = app.updater_builder();
+    let leaving = app.clone();
+    builder = builder.on_before_exit(move || {
+        crate::say_goodbye(&leaving);
+        leaving.cleanup_before_exit();
+    });
     if matches!(bundle_type(), Some(BundleType::Nsis)) {
         builder = builder.installer_arg("/S");
     }
