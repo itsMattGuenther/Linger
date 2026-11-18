@@ -942,3 +942,76 @@ async fn dropping_the_handle_closes_the_connection() {
         .until_status("offline", |status| *status == Status::Offline)
         .await;
 }
+
+/// Quitting says goodbye (`Handle::goodbye`): the server gets a close frame,
+/// which it takes as the app leaving rather than a drop to wait out (#654),
+/// and the goodbye finishes only once the connection has closed. Quitting
+/// ends the process right after, so a goodbye only queued would never go.
+#[tokio::test]
+async fn a_goodbye_closes_the_socket_before_it_finishes() {
+    let server = FakeServer::bind().await;
+    let (handle, mut watch) = start(&server, "access-token");
+
+    let mut peer = server.accept().await;
+    peer.hello(30_000).await;
+    assert_eq!(peer.recv().await["op"], "identify");
+    peer.ready("session-1").await;
+    watch.until_ready().await;
+
+    timeout(PATIENCE, handle.goodbye())
+        .await
+        .expect("the goodbye finishes");
+    // Finished means the connection's task has ended: its last word to the
+    // frontend is already said, with nothing waited for.
+    let mut last = None;
+    while let Ok(note) = watch.rx.try_recv() {
+        last = Some(note);
+    }
+    assert!(
+        matches!(last, Some(Note::Status(Status::Offline))),
+        "the connection had ended; its last note was {last:?}"
+    );
+    let said = loop {
+        let message = timeout(PATIENCE, peer.ws.next())
+            .await
+            .expect("the socket says something")
+            .expect("not a socket that just went")
+            .expect("a readable frame");
+        if !matches!(message, Message::Text(_)) {
+            break message;
+        }
+    };
+    assert!(matches!(said, Message::Close(_)), "said {said:?}");
+}
+
+/// With no socket to say it on, a client waiting between tries, a goodbye
+/// finishes at once rather than holding up the quit.
+#[tokio::test]
+async fn a_goodbye_between_tries_finishes_at_once() {
+    let addr = {
+        let server = FakeServer::bind().await;
+        server.addr
+    };
+    let (tx, rx) = mpsc::unbounded_channel();
+    let (handle, task) = gateway::client(
+        &format!("http://{addr}"),
+        Token {
+            value: "access-token".into(),
+            expires_at_ms: now_ms() + 15 * 60 * 1000,
+        },
+        Recorder { tx },
+    )
+    .expect("a dialable address");
+    tokio::spawn(task);
+    let mut watch = Watcher {
+        rx,
+        seen: Vec::new(),
+    };
+    watch
+        .until_status("waiting", |status| matches!(status, Status::Waiting { .. }))
+        .await;
+
+    timeout(Duration::from_millis(500), handle.goodbye())
+        .await
+        .expect("the goodbye finishes without waiting out the backoff");
+}

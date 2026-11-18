@@ -405,15 +405,54 @@ pub fn run() {
     app.run(on_run_event);
 }
 
-/// What the running app does with Tauri's events. Only the iPhone has
-/// anything to do: keep going when iOS lets go of its window's scene, and
-/// open the window again when the scene comes back (`phone_scene.rs`, #836).
+/// What the running app does with Tauri's events. A computer says goodbye to
+/// every server as it quits (`say_goodbye`). The iPhone keeps going when iOS
+/// lets go of its window's scene, and opens the window again when the scene
+/// comes back (`phone_scene.rs`, #836).
 #[allow(clippy::needless_pass_by_value)]
 fn on_run_event(app: &AppHandle, event: tauri::RunEvent) {
+    #[cfg(desktop)]
+    if matches!(event, tauri::RunEvent::Exit) {
+        say_goodbye(app);
+    }
     #[cfg(target_os = "ios")]
     phone_scene::handle(app, event);
     #[cfg(not(target_os = "ios"))]
     let _ = (app, event);
+}
+
+/// The longest quitting waits for its goodbyes. One normally takes a few
+/// milliseconds: the close frame goes into the socket's buffer and the
+/// connection's task ends. This only bounds a socket that can't take it,
+/// so that Quit is never slow; that server then waits out a drop, as
+/// before.
+#[cfg(desktop)]
+const GOODBYE_WAIT: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// Tell every server goodbye before the process ends: Quit in the tray,
+/// closing the list when that quits, or restarting into an update. Tauri
+/// ends the process right after the `Exit` event, so this waits for the
+/// close frames to go out (`gateway::Handle::goodbye`), all at once.
+///
+/// Without a goodbye the server takes a quit for a dropped connection, and
+/// everybody went on seeing the person as they were, in their room and in
+/// voice, for `PRESENCE_GRACE_MS` (#654). With one, they're offline at once
+/// and their voice seat goes with them, as on signing out of a server.
+#[cfg(desktop)]
+fn say_goodbye(app: &AppHandle) {
+    use tauri::Manager;
+    let Some(connections) = app.try_state::<Connections>() else {
+        return;
+    };
+    let handles: Vec<gateway::Handle> =
+        connections.with(|held| held.drain().map(|(_, handle)| handle).collect());
+    if handles.is_empty() {
+        return;
+    }
+    tauri::async_runtime::block_on(async move {
+        let all = futures_util::future::join_all(handles.into_iter().map(gateway::Handle::goodbye));
+        let _ = tokio::time::timeout(GOODBYE_WAIT, all).await;
+    });
 }
 
 /// Everything the desktop app registers. `src/acl.rs` checks that this

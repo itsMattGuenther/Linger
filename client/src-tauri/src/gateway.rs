@@ -170,6 +170,22 @@ impl Handle {
         let _ = self.cmd.try_send(Cmd::Shutdown);
     }
 
+    /// Close the connection for good, and finish once it has closed: the
+    /// server has the close frame that says this app is leaving, or there
+    /// was no socket to send it on. For quitting, where the process ends
+    /// right after, and a goodbye only queued would never be sent. Without
+    /// one the server takes the quit for a drop, and shows the person as
+    /// they were for `PRESENCE_GRACE_MS` and holds their voice seat (#654).
+    ///
+    /// Unlike `shutdown`, this waits for room in the queue rather than
+    /// giving up on a full one. The caller bounds the wait.
+    pub async fn goodbye(self) {
+        let _ = self.cmd.send(Cmd::Shutdown).await;
+        // The runner holds the other end until it returns, which is after
+        // the close frame is written.
+        self.cmd.closed().await;
+    }
+
     /// Try again now if the connection is waiting between tries. The phone
     /// sends this when the app comes back to the screen: Android blocks an
     /// app's network soon after it leaves, the tries into that block back

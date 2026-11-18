@@ -55,6 +55,14 @@ default.
   away; Send still keeps it up for the next message. The app only, no
   server update. Owed after it ships: the TestFlight testers try it on a
   real iPhone, in a room, in Search and in Settings, and with VoiceOver.
+- **Quitting Linger on a computer shows you offline at once.** The app
+  quit without a word to the server, which took it for a dropped
+  connection: everybody went on seeing you as you were for 5 seconds, and
+  in a call your seat stayed for up to two minutes. Now it says goodbye to
+  each server as it quits (closing the list, when that quits, and
+  restarting into an update too). The app only, no server update. Owed
+  after it ships: quit in the middle of a call with a friend watching; you
+  leave their list and the call at once.
 
 **0.5.4 release — prepared 2026-11-02: Linger updates itself, and phones
 share straight to it.** The notes are `docs/releases/0.5.4.md`, and its one
