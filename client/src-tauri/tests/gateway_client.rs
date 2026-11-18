@@ -973,7 +973,7 @@ async fn a_goodbye_finishes_once_the_server_has_closed_its_end() {
 }
 
 /// A server that takes the goodbye and never closes its end doesn't hold up
-/// the quit past `CLOSE_WAIT`, a second.
+/// the quit past `CLOSE_WAIT`, 750 ms.
 #[tokio::test]
 async fn a_goodbye_the_server_never_answers_finishes_anyway() {
     let server = FakeServer::bind().await;
@@ -1024,7 +1024,7 @@ async fn a_shutdown_does_not_wait_for_the_server() {
 
     // The peer never answers.
     handle.shutdown();
-    // Well under `CLOSE_WAIT` (750 ms), which a waiting shutdown would take.
+    // Under `CLOSE_WAIT` (750 ms), which a waiting shutdown would take.
     timeout(Duration::from_millis(600), async {
         loop {
             match watch.rx.recv().await {
