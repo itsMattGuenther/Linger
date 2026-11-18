@@ -47,6 +47,11 @@ const CLIENT_NAME: &str = concat!("linger-desktop/", env!("CARGO_PKG_VERSION"));
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(15);
+/// How long a goodbye takes at most once the connection has it: the close
+/// frame, and the server closing its end. Shorter than the whole quit's
+/// wait (`GOODBYE_WAIT` in lib.rs), so that a server that never closes is
+/// usually let go of here, not by the process ending mid-read.
+const CLOSE_WAIT: Duration = Duration::from_millis(750);
 const BACKOFF_BASE: Duration = Duration::from_millis(500);
 const BACKOFF_CAP: Duration = Duration::from_secs(30);
 /// How long to wait for the frontend to hand over a token before asking again.
@@ -170,6 +175,30 @@ impl Handle {
         let _ = self.cmd.try_send(Cmd::Shutdown);
     }
 
+    /// Close the connection for good, for quitting, and finish once it has
+    /// closed: the server has taken the close frame that says this app is
+    /// leaving and closed its end (or `CLOSE_WAIT` passed), or the client
+    /// was between tries with no socket. The process ends right after a
+    /// quit, so a goodbye only queued would never be sent, and without one
+    /// the server takes the quit for a drop: it shows the person as they
+    /// were for `PRESENCE_GRACE_MS` and holds their voice seat (#654).
+    ///
+    /// Only a quit waits for the server. `shutdown` (signing out, or a
+    /// connection being replaced) doesn't, so the old connection's last
+    /// status can't land after the new one's.
+    ///
+    /// A client mid-dial or mid-handshake isn't reading commands, and
+    /// takes the goodbye when that step ends; the caller bounds the wait.
+    /// Unlike `shutdown`, this waits for room in a full queue. Dropping the
+    /// handle instead would stop the runner too, but leave nothing to wait
+    /// on: `closed()` needs a sender, and a kept one holds the channel open.
+    pub async fn goodbye(self) {
+        let _ = self.cmd.send(Cmd::Goodbye).await;
+        // The runner holds the other end until it returns, which is after
+        // the server has closed its end.
+        self.cmd.closed().await;
+    }
+
     /// Try again now if the connection is waiting between tries. The phone
     /// sends this when the app comes back to the screen: Android blocks an
     /// app's network soon after it leaves, the tries into that block back
@@ -186,6 +215,8 @@ enum Cmd {
     LeaveVoice,
     Retry,
     Shutdown,
+    /// A shutdown that waits for the server to close its end (`Handle::goodbye`).
+    Goodbye,
 }
 
 /// Build a client for `base_url` (an origin like `https://linger.example`).
@@ -469,6 +500,20 @@ impl<E: Events> Runner<E> {
                         let _ = tx.send(Message::Close(None)).await;
                         return Outcome::Shutdown;
                     }
+                    // Quitting (`Handle::goodbye`). The server closes its
+                    // end once it has taken the goodbye, so reading to there
+                    // is what tells the quit it landed. It also leaves
+                    // nothing unread, which would make the system end the
+                    // socket with a reset that can beat the close frame
+                    // there. A broken socket ends the read at once.
+                    Some(Cmd::Goodbye) => {
+                        let _ = timeout(CLOSE_WAIT, async {
+                            let _ = tx.send(Message::Close(None)).await;
+                            while next_frame(&mut rx).await.is_some() {}
+                        })
+                        .await;
+                        return Outcome::Shutdown;
+                    }
                     Some(Cmd::Token(fresh)) => *stored = Some(fresh),
                     Some(Cmd::Send(frame)) => {
                         if !send_frame(&mut tx, &frame).await {
@@ -513,7 +558,7 @@ impl<E: Events> Runner<E> {
             tokio::select! {
                 () = tokio::time::sleep_until(deadline) => return Wait::Elapsed,
                 command = self.cmd.recv() => match command {
-                    None | Some(Cmd::Shutdown) => return Wait::Shutdown,
+                    None | Some(Cmd::Shutdown | Cmd::Goodbye) => return Wait::Shutdown,
                     Some(Cmd::Token(token)) => {
                         self.token = Some(token);
                         if stop_on_token {

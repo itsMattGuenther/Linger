@@ -371,9 +371,9 @@ or when that device goes, or with I'm back on any of them (PROTOCOL §8).
 switching networks say, everybody goes on seeing what it said for a few seconds. If
 it's back in that time, nobody sees anything happen: no going offline, no leaving the
 room and coming back in, and the away message stays. If it isn't, they see it go then.
-An app that says goodbye as it closes its connection, as signing out of a server
-does, is offline at once. Quitting Linger doesn't say one, so a quit shows a few
-seconds later.
+An app that says goodbye as it closes its connection is offline at once, and out
+of voice: signing out of a server says one, and so does quitting Linger on a
+computer.
 
 **Activity detection was cut on 2026-08-28** (Matt — `docs/decisions.md`). This
 section used to specify a feature that watched which application you had in front

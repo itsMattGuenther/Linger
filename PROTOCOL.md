@@ -1996,7 +1996,7 @@ and offline from their last session's part going.
 
 **A short drop tells nobody anything** (#654). A session's part goes at once when its
 socket closes with a goodbye (a WebSocket close frame, which the app sends when it
-closes its connection, as on signing out of a server), or when the server ends the
+closes its connection, as on signing out of a server or quitting), or when the server ends the
 session (`invalid_session`, above). A socket that drops without a
 goodbye leaves its part in place for `PRESENCE_GRACE_MS` (5 seconds), counted as it
 was, and nobody is told anything meanwhile, the way a voice seat waits out a drop
