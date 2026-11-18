@@ -2,11 +2,12 @@ import { observeElementOffset, type Virtualizer } from "@tanstack/react-virtual"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // The conversation's virtualizer watches how far it's scrolled with the
-// library's own `observeElementOffset`. Before `@tanstack/virtual-core`
-// 3.17.11 it said where the conversation was at the last scroll event when
-// scrolling stopped, and a page of history going in above in between threw
-// the reader a page up (#716). The client wrapped it until it was on 3.17.11;
-// these keep a downgrade, or the bug coming back upstream, from going unseen.
+// library's own `observeElementOffset`, the default (Conversation.tsx sets
+// none). Before `@tanstack/virtual-core` 3.17.11 it said where the
+// conversation was at the last scroll event when scrolling stopped, and a
+// page of history going in above in between threw the reader a page up
+// (#716). The client wrapped it until it was on 3.17.11; these keep a
+// downgrade, or the bug coming back upstream, from going unseen.
 
 /** A conversation's scroller: where it's scrolled, and its scroll events, sent by hand. */
 function scroller() {

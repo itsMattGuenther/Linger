@@ -558,15 +558,16 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   `ESTIMATE_PX` tall looked never measured and was drawn again at every stop,
   about a hundred rows each time (#709). When the scrolling stops, the
   virtualizer reads where the conversation is then, not where it was at the
-  last scroll event, from `@tanstack/virtual-core` 3.17.11 on
-  (`core/chat/virtualizer.test.ts` keeps it so). On a busy computer, a page
-  going in above had moved the reader down since, before that move's own
-  scroll event, and the next row measured was corrected from the old place:
-  the reader was thrown a page up into older history (#716). The client
-  pins `@tanstack/react-virtual` to an exact version, since its patch
-  releases can move the core a minor version, and later cores rewrote much
-  of how it scrolls: an update is a change to test like any other here. And on an
-  iPhone, where WebKit stops
+  last scroll event, from `@tanstack/virtual-core` 3.17.11 on, with the
+  default watch the conversation uses (`core/chat/virtualizer.test.ts`
+  checks the library's). On a busy computer, a page going in above had
+  moved the reader down since, before that move's own scroll event, and the
+  next row measured was corrected from the old place: the reader was thrown
+  a page up into older history (#716). The client pins
+  `@tanstack/react-virtual` to an exact version: its patch releases can move
+  the core a minor version (3.14.14 brings core 3.18.0), and later cores
+  rewrote much of how it scrolls, so an update is a change to test like any
+  other here. And on an iPhone, where WebKit stops
   a glide the page moves the scroll position in and the virtualizer so holds
   every correction until the scroll stops, older history that arrives while
   the conversation moves (a scroll, or a finger on it or just off it,
