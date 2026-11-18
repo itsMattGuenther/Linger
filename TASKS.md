@@ -59,10 +59,11 @@ default.
   quit without a word to the server, which took it for a dropped
   connection: everybody went on seeing you as you were for 5 seconds, and
   in a call your seat stayed for up to two minutes. Now it says goodbye to
-  each server as it quits (closing the list, when that quits, too). A
-  restart into an update still doesn't, since it's back in seconds. The app
-  only, no server update. Owed after it ships: quit in the middle of a call
-  with a friend watching; you leave their list and the call at once.
+  each server as it quits, closing the list when that quits too, and on a
+  restart into an update, except on Windows, where the updater ends Linger
+  by itself. The app only, no server update. Owed after it ships: quit in
+  the middle of a call with a friend watching; you leave their list and
+  the call at once.
 
 **0.5.4 release — prepared 2026-11-02: Linger updates itself, and phones
 share straight to it.** The notes are `docs/releases/0.5.4.md`, and its one

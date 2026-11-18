@@ -1024,7 +1024,8 @@ async fn a_shutdown_does_not_wait_for_the_server() {
 
     // The peer never answers.
     handle.shutdown();
-    timeout(Duration::from_millis(300), async {
+    // Well under `CLOSE_WAIT` (750 ms), which a waiting shutdown would take.
+    timeout(Duration::from_millis(600), async {
         loop {
             match watch.rx.recv().await {
                 Some(Note::Status(Status::Offline)) => break,

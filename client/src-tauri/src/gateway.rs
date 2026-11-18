@@ -47,9 +47,10 @@ const CLIENT_NAME: &str = concat!("linger-desktop/", env!("CARGO_PKG_VERSION"));
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(15);
-/// How long a goodbye waits for the server to close its end. Shorter than
-/// whole quit's wait (`GOODBYE_WAIT` in lib.rs), so that a server that never
-/// closes is let go of here, not by the process ending mid-read.
+/// How long a goodbye takes at most once the connection has it: the close
+/// frame, and the server closing its end. Shorter than the whole quit's
+/// wait (`GOODBYE_WAIT` in lib.rs), so that a server that never closes is
+/// usually let go of here, not by the process ending mid-read.
 const CLOSE_WAIT: Duration = Duration::from_millis(750);
 const BACKOFF_BASE: Duration = Duration::from_millis(500);
 const BACKOFF_CAP: Duration = Duration::from_secs(30);
@@ -504,15 +505,13 @@ impl<E: Events> Runner<E> {
                     // is what tells the quit it landed. It also leaves
                     // nothing unread, which would make the system end the
                     // socket with a reset that can beat the close frame
-                    // there. A close that couldn't be written has nothing
-                    // to wait for.
+                    // there. A broken socket ends the read at once.
                     Some(Cmd::Goodbye) => {
-                        if tx.send(Message::Close(None)).await.is_ok() {
-                            let _ = timeout(CLOSE_WAIT, async {
-                                while next_frame(&mut rx).await.is_some() {}
-                            })
-                            .await;
-                        }
+                        let _ = timeout(CLOSE_WAIT, async {
+                            let _ = tx.send(Message::Close(None)).await;
+                            while next_frame(&mut rx).await.is_some() {}
+                        })
+                        .await;
                         return Outcome::Shutdown;
                     }
                     Some(Cmd::Token(fresh)) => *stored = Some(fresh),

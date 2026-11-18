@@ -1483,6 +1483,9 @@ to be resumed. Voice already told the two apart.
   connections, so the server can't tell a quit from a drop, and a quit is now told
   after the grace period, about five seconds late. The app saying goodbye as it quits
   is a client follow-up, and would end a voice seat at once on quitting too.
+  *Built since:* quitting on a computer says goodbye, and so does restarting into
+  an update, except on Windows, where the updater ends Linger without the app's
+  exit event (`say_goodbye` in `client/src-tauri/src/lib.rs`).
 - **After a resume, the session's old presence stands until the app speaks.** The app
   starts again from around in no room on every resume, and says only where it
   differs. So its first frame starts the session's presence again from there, and an
