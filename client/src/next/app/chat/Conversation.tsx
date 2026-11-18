@@ -11,7 +11,6 @@ import { mayActOn } from "../../../lib/host";
 import { useResizeAnchor } from "../../../lib/resize";
 import { sessionLabel } from "../../../lib/time";
 import { type ChatRow, chatRows, newestShareLines, rowIndex, sameRow, shareLineState } from "../../core/chat/rows";
-import { observeScrollNow } from "../../core/chat/scrollWatch";
 import { Button, Icon } from "../../kit";
 import { JoinLine } from "./JoinLine";
 import { LeftLine } from "./LeftLine";
@@ -268,9 +267,6 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
     directDomUpdates: true,
     directDomUpdatesMode: "position",
     rangeExtractor,
-    // Where the conversation is when scrolling stops, not where it was at
-    // the last scroll event: a page of history may have moved it since (#716).
-    observeElementOffset: observeScrollNow,
     // Noted as measured whatever the size, for measuring ahead (above).
     measureElement: (element, entry, instance) => {
       const key = element.getAttribute("data-key");

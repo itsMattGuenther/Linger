@@ -1,6 +1,13 @@
-import type { Virtualizer } from "@tanstack/react-virtual";
+import { observeElementOffset, type Virtualizer } from "@tanstack/react-virtual";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { observeScrollNow } from "./scrollWatch";
+
+// The conversation's virtualizer watches how far it's scrolled with the
+// library's own `observeElementOffset`, the default (Conversation.tsx sets
+// none). Before `@tanstack/virtual-core` 3.17.11 it said where the
+// conversation was at the last scroll event when scrolling stopped, and a
+// page of history going in above in between threw the reader a page up
+// (#716). The client wrapped it until it was on 3.17.11; these keep a
+// downgrade, or the bug coming back upstream, from going unseen.
 
 /** A conversation's scroller: where it's scrolled, and its scroll events, sent by hand. */
 function scroller() {
@@ -23,14 +30,14 @@ function virtualizerOver(element: ReturnType<typeof scroller>) {
   return fake as unknown as Virtualizer<HTMLDivElement, Element>;
 }
 
-describe("observeScrollNow", () => {
+describe("the virtualizer's scroll watch", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
   it("says each scroll as its event saw it", () => {
     const element = scroller();
     const said: [number, boolean][] = [];
-    observeScrollNow(virtualizerOver(element), (offset, isScrolling) => said.push([offset, isScrolling]));
+    observeElementOffset(virtualizerOver(element), (offset, isScrolling) => said.push([offset, isScrolling]));
     element.scrolledTo(1100);
     element.scrolledTo(900);
     vi.advanceTimersByTime(150);
@@ -44,7 +51,7 @@ describe("observeScrollNow", () => {
   it("when scrolling stops, says where the conversation is then, not where its last scroll event saw it (#716)", () => {
     const element = scroller();
     const said: [number, boolean][] = [];
-    observeScrollNow(virtualizerOver(element), (offset, isScrolling) => said.push([offset, isScrolling]));
+    observeElementOffset(virtualizerOver(element), (offset, isScrolling) => said.push([offset, isScrolling]));
     element.scrolledTo(1100);
     // A page of older history went in above, and the virtualizer moved the
     // reader down by its height. On a busy computer, the stop comes before
@@ -60,7 +67,7 @@ describe("observeScrollNow", () => {
   it("stops listening when the virtualizer lets go", () => {
     const element = scroller();
     const said: [number, boolean][] = [];
-    const stop = observeScrollNow(virtualizerOver(element), (offset, isScrolling) => said.push([offset, isScrolling]));
+    const stop = observeElementOffset(virtualizerOver(element), (offset, isScrolling) => said.push([offset, isScrolling]));
     element.scrolledTo(1100);
     stop?.();
     element.scrolledTo(900);
