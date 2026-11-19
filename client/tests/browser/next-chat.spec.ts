@@ -1268,9 +1268,10 @@ test.describe("reading and arriving", () => {
   // estimate's height never counted as measured, so every stop drew the same
   // hundred again, which also failed PERF-2 at random (182 against 48).
   // Measuring ahead is a phone's alone (#944), so the phone's page is the one
-  // that can catch that; the desktop's checks the stops re-render nothing.
+  // that can catch that; the desktop's checks its stops re-render no more
+  // than PERF-2 allows.
   for (const [title, query] of [
-    ["scrolling in steps far apart re-renders no row, on the desktop (#709)", "?big"],
+    ["scrolling in steps far apart re-renders only the rows coming into view, on the desktop (#709)", "?big"],
     ["scrolling in steps far apart measures each row above once, re-rendering none, on a phone (#709)", "?big&shell=phone"],
   ] as const) {
     test(title, async ({ page }) => {
@@ -1354,7 +1355,7 @@ test.describe("reading and arriving", () => {
     const heldBefore = await tall();
     // Every frame from here on: the rows that went onto the page and came
     // off it again before the frame was painted, which nobody could see, and
-    // how long after the conversation last scrolled it was drawn.
+    // how long the conversation has been still.
     await page.evaluate(() => {
       const scroller = document.querySelector(".nx-conv-scroll");
       const rows = document.querySelector(".nx-conv-rows");
@@ -1367,6 +1368,7 @@ test.describe("reading and arriving", () => {
       let added = new Set<Node>();
       let unseen = 0;
       let scrolled = performance.now();
+      let height = rows instanceof HTMLElement ? rows.style.height : "";
       scroller.addEventListener("scroll", () => (scrolled = performance.now()), { passive: true });
       new MutationObserver((records) => {
         for (const record of records) {
@@ -1376,6 +1378,12 @@ test.describe("reading and arriving", () => {
       }).observe(rows, { childList: true });
       const frame = () => {
         if (unseen > 0) unseenFrames.push(unseen);
+        // Still: no scroll and the rows' box the same height, so the
+        // stillness starts after the older page went in, not before it.
+        if (rows instanceof HTMLElement && rows.style.height !== height) {
+          height = rows.style.height;
+          scrolled = performance.now();
+        }
         if (performance.now() - scrolled > 800) stillFrames += 1;
         else stillFrames = 0;
         Object.assign(window, { unseenFrames, stillFrames });
