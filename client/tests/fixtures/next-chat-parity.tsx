@@ -44,7 +44,8 @@
  *
  * `window.parity.holdReads()` makes every history read from then on wait for
  * `window.parity.answerReads(…)`, so a test decides the order two reads come
- * back in.
+ * back in. `window.parity.holdsNewest(room)` says whether the window still
+ * holds a room's newest message, which reading far back lets go of (#173).
  *
  * Files go up as the real server has them: a slot (`POST /uploads`), the
  * bytes to the store (`PUT /api/v1/store/…`), then `complete`. A send that
@@ -382,6 +383,8 @@ declare global {
       holdReads: () => void;
       /** How many history reads are on their way, held or not. */
       reading: () => number;
+      /** The window holds the room's newest message: false once reading far back let go of it (#173). */
+      holdsNewest: (room: string) => boolean;
       /**
        * Answer the held reads whose query has `part` in it; without one,
        * answer them all and stop holding. Says how many were answered.
@@ -428,6 +431,7 @@ window.parity = {
     holdingReads = true;
   },
   reading: () => reading,
+  holdsNewest: (room) => serverState(SERVER).streams[room]?.atEnd ?? false,
   answerReads: (part) => {
     if (part === undefined) holdingReads = false;
     const answering = heldReads.filter((read) => part === undefined || read.query.includes(part));

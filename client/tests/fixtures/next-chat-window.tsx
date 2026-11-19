@@ -15,7 +15,8 @@
  * refuses knocks, as the fourth in an hour; `?servers` signs in to the
  * guild too; `?as=eli` is Eli's window, not yours, to see how the room shows
  * you; `?many=600` puts that many older
- * messages before the evening in #general; `&message=` opens at one, and
+ * messages before the evening in #general; `&readto=` has you read #general
+ * up to one of them, so it opens on "you left off here"; `&message=` opens at one, and
  * `&watch=s-jules` opens watching Jules's share, which `?shared` has going in
  * #general's voice, with you in it, on a server that passes screens (#746). The photo
  * loads only where something serves
@@ -84,6 +85,8 @@ const desktop = fakeDesktop({
   ownerState: {
     ...night,
     ...(query.get("as") === "eli" ? { me: people.eli } : {}),
+    // `?readto=<id>`: you'd read #general up to that message, so it opens there.
+    ...(query.has("readto") ? { read: { ...night.read, "r-general": query.get("readto") ?? "" } } : {}),
     // In voice, the server lists your own seat too.
     // `?ptt`: in voice in #general with push-to-talk, the key up: the
     // microphone closed, but not muted, so the server lists you as on (#232).

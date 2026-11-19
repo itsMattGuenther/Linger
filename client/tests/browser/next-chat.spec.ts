@@ -1286,7 +1286,9 @@ test.describe("reading and arriving", () => {
   test("a new message while you read older ones does not move what you're reading", async ({ page }) => {
     await open(page, "?big");
     await expect(message(page, "(5000)")).toBeInViewport();
-    await log(page).evaluate((element) => element.scrollBy({ top: -1500 }));
+    // A screen up: short of where Back to the newest shows by itself (#945),
+    // so nothing arriving puts it up either.
+    await log(page).evaluate((element) => element.scrollBy({ top: -element.clientHeight }));
     await page.waitForTimeout(200);
     const reading = await firstInView(page);
     const before = await offsetIn(page, reading);

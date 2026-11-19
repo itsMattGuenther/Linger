@@ -1333,11 +1333,13 @@ There are **no unread badges and no unread counts** anywhere in Linger. That is
 deliberate. Nothing is keeping score of what you have not read, so nothing can
 make you feel behind. A room with something new just has a bolder name. Opening
 it lands on a **you left off here** line; caught-up rooms open at the bottom.
-**Back to the newest** skips ahead. Search results still open
-on the message you selected, and new arrivals do not pull you away from
-earlier messages you are reading. If you scroll a long way back, the header
-offers **back to the newest** too — Linger has put down the newest messages
-to save memory, and scrolling down picks them up again.
+Search results still open on the message you selected, and new arrivals do
+not pull you away from earlier messages you are reading. Scroll up more than
+a few screens and **Back to the newest** shows just above the message box: it
+takes you straight down to the newest message, and goes again once you're
+back near the bottom. If you scroll a long way back, Linger puts down the
+newest messages to save memory; **Back to the newest** brings them back, and
+so does scrolling down.
 
 ## Reporting and blocking
 
