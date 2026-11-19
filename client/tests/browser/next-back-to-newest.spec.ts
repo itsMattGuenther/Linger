@@ -250,17 +250,25 @@ test("pressed from the keyboard, the conversation keeps the focus, not the page"
   await expect(log(page)).toBeFocused();
 });
 
-test("pressed the way a screen reader does, with the focus on nothing, the conversation takes the focus once it's gone", async ({ page }) => {
+test("tabbed to and left there, it goes when the reader scrolls back down, and the conversation takes the focus", async ({ page }) => {
   await openWindow(page);
   await upBy(page, 3.5);
-  // A screen reader presses a button where its own cursor is, with no
-  // pointer and without focusing it.
+  await newest(page).focus();
+  await upBy(page, 0.5);
+  await expect(newest(page)).toHaveCount(0);
+  await expect(log(page)).toBeFocused();
+});
+
+test("pressed with the mouse with the focus on nothing, it leaves the focus where it was", async ({ page }) => {
+  await openWindow(page);
+  await upBy(page, 3.5);
   await page.evaluate(() => {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
   });
-  await newest(page).evaluate((button) => (button as HTMLButtonElement).click());
+  await newest(page).click();
   await expectNewestWhole(page, "m000016");
-  await expect(log(page)).toBeFocused();
+  await expect(newest(page)).toHaveCount(0);
+  expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
 });
 
 test("pressed with the mouse, it leaves the cursor in the message box, so typing carries on there", async ({ page }) => {
@@ -345,13 +353,17 @@ test("pressed while a jump to a message further up is on its way, it lands on th
   // message is first drawn, marked, so the jump is surely still aiming.
   await page.evaluate(
     () =>
-      new Promise<void>((done) => {
+      new Promise<void>((done, fail) => {
         window.owner?.open("r-general", undefined, "l0000520");
+        let frames = 0;
         const look = () => {
           const button = document.querySelector<HTMLButtonElement>(".nx-conv-newest button");
           if (document.querySelector('[data-message="l0000520"]')?.getAttribute("data-flash") === "yes" && button) {
             button.click();
             done();
+          } else if ((frames += 1) > 20) {
+            // A jump aims for 20 frames at least: past that, it may be over.
+            fail(new Error("the jump's message wasn't drawn, marked, with the button there, within 20 frames"));
           } else requestAnimationFrame(look);
         };
         requestAnimationFrame(look);
