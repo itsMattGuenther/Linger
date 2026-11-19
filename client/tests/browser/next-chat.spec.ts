@@ -1262,19 +1262,25 @@ test.describe("reading and arriving", () => {
     expect(result.renders).toBeLessThanOrEqual(2 * result.mounts + 2 * result.drawn);
   });
 
-  test("scrolling in steps far apart measures each row above once, re-rendering none (#709)", async ({ page }) => {
-    // Steps further apart than the virtualizer's 150 ms are scrolling that
-    // stopped and started again, as on a busy computer: each stop draws the
-    // unmeasured rows above to measure them (#698). Rows exactly the
-    // estimate's height never counted as measured, so every stop drew the
-    // same hundred again, which also failed PERF-2 at random (182 against 48).
-    // Measuring ahead is a phone's alone (#944), so this is the phone's page.
-    const result = await scrollCounting(page, 200, "?big&shell=phone");
-    expect(result.moved).toBeGreaterThan(40);
-    expect(result.renders).toBeLessThanOrEqual(2 * result.mounts + 2 * result.drawn);
-    // A row goes in to be measured once, and once more if it then came into view.
-    expect(result.mounts).toBeLessThanOrEqual(result.mounted + result.arrived);
-  });
+  // Steps further apart than the virtualizer's 150 ms are scrolling that
+  // stopped and started again, as on a busy computer: on a phone, each stop
+  // draws the unmeasured rows above to measure them (#698). Rows exactly the
+  // estimate's height never counted as measured, so every stop drew the same
+  // hundred again, which also failed PERF-2 at random (182 against 48).
+  // Measuring ahead is a phone's alone (#944), so the phone's page is the one
+  // that can catch that; the desktop's still checks the re-renders.
+  for (const [where, query] of [
+    ["the desktop", "?big"],
+    ["a phone", "?big&shell=phone"],
+  ] as const) {
+    test(`scrolling in steps far apart measures each row above once, re-rendering none, on ${where} (#709)`, async ({ page }) => {
+      const result = await scrollCounting(page, 200, query);
+      expect(result.moved).toBeGreaterThan(40);
+      expect(result.renders).toBeLessThanOrEqual(2 * result.mounts + 2 * result.drawn);
+      // A row goes in to be measured once, and once more if it then came into view.
+      expect(result.mounts).toBeLessThanOrEqual(result.mounted + result.arrived);
+    });
+  }
 
   test("a new message while you read older ones does not move what you're reading", async ({ page }) => {
     await open(page, "?big");
@@ -1347,14 +1353,18 @@ test.describe("reading and arriving", () => {
     const tall = () => page.locator(".nx-conv-rows").evaluate((rows) => rows.getBoundingClientRect().height);
     const heldBefore = await tall();
     // Every frame from here on: the rows that went onto the page and came
-    // off it again before the frame was painted, which nobody could see.
+    // off it again before the frame was painted, which nobody could see, and
+    // how long after the conversation last scrolled it was drawn.
     await page.evaluate(() => {
+      const scroller = document.querySelector(".nx-conv-scroll");
       const rows = document.querySelector(".nx-conv-rows");
-      if (!rows) throw new Error("no rows");
-      const frames: number[] = [];
+      if (!scroller || !rows) throw new Error("no rows");
+      const frames: { unseen: number; still: number }[] = [];
       Object.assign(window, { unseenPerFrame: frames });
       let added = new Set<Node>();
       let unseen = 0;
+      let scrolled = performance.now();
+      scroller.addEventListener("scroll", () => (scrolled = performance.now()), { passive: true });
       new MutationObserver((records) => {
         for (const record of records) {
           for (const node of record.addedNodes) if (node instanceof HTMLElement && node.matches(".nx-conv-row")) added.add(node);
@@ -1362,22 +1372,22 @@ test.describe("reading and arriving", () => {
         }
       }).observe(rows, { childList: true });
       const frame = () => {
-        frames.push(unseen);
+        frames.push({ unseen, still: performance.now() - scrolled });
         added = new Set();
         unseen = 0;
         requestAnimationFrame(frame);
       };
       requestAnimationFrame(frame);
     });
+    const frames = () => page.evaluate(() => (window as unknown as { unseenPerFrame: { unseen: number; still: number }[] }).unseenPerFrame);
     await log(page).evaluate((element) => element.scrollTo({ top: 400 }));
     await expect.poll(async () => (await did(page)).some((one) => one.startsWith("older:"))).toBe(true);
     await expect.poll(tall).toBeGreaterThan(heldBefore);
-    // Still for longer than the virtualizer takes to call scrolling stopped,
-    // which is when they used to be drawn: about 150 in one frame here.
-    await page.waitForTimeout(800);
-    const frames = await page.evaluate(() => (window as unknown as { unseenPerFrame: number[] }).unseenPerFrame);
-    expect(frames.length).toBeGreaterThan(20);
-    expect(frames.filter((count) => count > 0)).toEqual([]);
+    // Still for a few frames past when the virtualizer calls scrolling
+    // stopped (150 ms), which is when they used to be drawn: about 150 rows
+    // in one frame here.
+    await expect.poll(async () => (await frames()).filter((one) => one.still > 400).length).toBeGreaterThanOrEqual(3);
+    expect((await frames()).filter((one) => one.unseen > 0)).toEqual([]);
   });
 });
 
