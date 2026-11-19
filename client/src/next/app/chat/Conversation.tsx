@@ -276,14 +276,16 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
     // it has slowed down (#698).
     directDomUpdates: true,
     directDomUpdatesMode: "position",
-    rangeExtractor,
-    // Noted as measured whatever the size, for measuring ahead (above), on a
-    // phone: nothing reads the note on the desktop.
-    measureElement: (element, entry, instance) => {
-      const key = measureAhead ? element.getAttribute("data-key") : null;
-      if (key !== null) measured.current.add(`${idNow.current} ${key}`);
-      return measureElement(element, entry, instance);
-    },
+    // Measuring ahead, on a phone; the desktop takes the virtualizer's own.
+    rangeExtractor: measureAhead ? rangeExtractor : undefined,
+    // Noted as measured whatever the size, for measuring ahead (above).
+    measureElement: measureAhead
+      ? (element, entry, instance) => {
+          const key = element.getAttribute("data-key");
+          if (key !== null) measured.current.add(`${idNow.current} ${key}`);
+          return measureElement(element, entry, instance);
+        }
+      : measureElement,
   });
   measures.current = virtualizer;
   useResizeAnchor(scroller, virtualizer, id, rows.length, atEnd);

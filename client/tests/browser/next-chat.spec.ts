@@ -1268,12 +1268,12 @@ test.describe("reading and arriving", () => {
   // estimate's height never counted as measured, so every stop drew the same
   // hundred again, which also failed PERF-2 at random (182 against 48).
   // Measuring ahead is a phone's alone (#944), so the phone's page is the one
-  // that can catch that; the desktop's still checks the re-renders.
-  for (const [where, query] of [
-    ["the desktop", "?big"],
-    ["a phone", "?big&shell=phone"],
+  // that can catch that; the desktop's checks the stops re-render nothing.
+  for (const [title, query] of [
+    ["scrolling in steps far apart re-renders no row, on the desktop (#709)", "?big"],
+    ["scrolling in steps far apart measures each row above once, re-rendering none, on a phone (#709)", "?big&shell=phone"],
   ] as const) {
-    test(`scrolling in steps far apart measures each row above once, re-rendering none, on ${where} (#709)`, async ({ page }) => {
+    test(title, async ({ page }) => {
       const result = await scrollCounting(page, 200, query);
       expect(result.moved).toBeGreaterThan(40);
       expect(result.renders).toBeLessThanOrEqual(2 * result.mounts + 2 * result.drawn);
@@ -1359,8 +1359,11 @@ test.describe("reading and arriving", () => {
       const scroller = document.querySelector(".nx-conv-scroll");
       const rows = document.querySelector(".nx-conv-rows");
       if (!scroller || !rows) throw new Error("no rows");
-      const frames: { unseen: number; still: number }[] = [];
-      Object.assign(window, { unseenPerFrame: frames });
+      // How many went on and off unseen, in each frame where any did, and
+      // how many frames in a row have been drawn with it still.
+      const unseenFrames: number[] = [];
+      let stillFrames = 0;
+      Object.assign(window, { unseenFrames, stillFrames });
       let added = new Set<Node>();
       let unseen = 0;
       let scrolled = performance.now();
@@ -1372,22 +1375,24 @@ test.describe("reading and arriving", () => {
         }
       }).observe(rows, { childList: true });
       const frame = () => {
-        frames.push({ unseen, still: performance.now() - scrolled });
+        if (unseen > 0) unseenFrames.push(unseen);
+        if (performance.now() - scrolled > 800) stillFrames += 1;
+        else stillFrames = 0;
+        Object.assign(window, { unseenFrames, stillFrames });
         added = new Set();
         unseen = 0;
         requestAnimationFrame(frame);
       };
       requestAnimationFrame(frame);
     });
-    const frames = () => page.evaluate(() => (window as unknown as { unseenPerFrame: { unseen: number; still: number }[] }).unseenPerFrame);
     await log(page).evaluate((element) => element.scrollTo({ top: 400 }));
     await expect.poll(async () => (await did(page)).some((one) => one.startsWith("older:"))).toBe(true);
     await expect.poll(tall).toBeGreaterThan(heldBefore);
-    // Still for a few frames past when the virtualizer calls scrolling
+    // Still for a few frames well past when the virtualizer calls scrolling
     // stopped (150 ms), which is when they used to be drawn: about 150 rows
     // in one frame here.
-    await expect.poll(async () => (await frames()).filter((one) => one.still > 400).length).toBeGreaterThanOrEqual(3);
-    expect((await frames()).filter((one) => one.unseen > 0)).toEqual([]);
+    await expect.poll(() => page.evaluate(() => (window as unknown as { stillFrames: number }).stillFrames)).toBeGreaterThanOrEqual(3);
+    expect(await page.evaluate(() => (window as unknown as { unseenFrames: number[] }).unseenFrames)).toEqual([]);
   });
 });
 
