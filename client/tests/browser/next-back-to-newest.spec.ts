@@ -250,6 +250,19 @@ test("pressed from the keyboard, the conversation keeps the focus, not the page"
   await expect(log(page)).toBeFocused();
 });
 
+test("pressed the way a screen reader does, with the focus on nothing, the conversation takes the focus once it's gone", async ({ page }) => {
+  await openWindow(page);
+  await upBy(page, 3.5);
+  // A screen reader presses a button where its own cursor is, with no
+  // pointer and without focusing it.
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
+  await newest(page).evaluate((button) => (button as HTMLButtonElement).click());
+  await expectNewestWhole(page, "m000016");
+  await expect(log(page)).toBeFocused();
+});
+
 test("pressed with the mouse, it leaves the cursor in the message box, so typing carries on there", async ({ page }) => {
   await openWindow(page);
   const box = page.getByRole("combobox", { name: /^Message/ });
@@ -328,11 +341,22 @@ test("pressed while a jump to a message further up is on its way, it lands on th
   await upBy(page, 3.5);
   await expect(newest(page)).toBeVisible();
   // A search hit further up, in what's held: jumped to, which takes a third
-  // of a second at least, aiming every frame.
-  await page.evaluate(() => window.owner?.open("r-general", undefined, "l0000520"));
-  // Under way: the message it's going to is marked as it starts.
-  await expect(page.locator('[data-message="l0000520"]')).toHaveAttribute("data-flash", "yes");
-  await newest(page).click();
+  // of a second at least, aiming every frame. Pressed in the frame its
+  // message is first drawn, marked, so the jump is surely still aiming.
+  await page.evaluate(
+    () =>
+      new Promise<void>((done) => {
+        window.owner?.open("r-general", undefined, "l0000520");
+        const look = () => {
+          const button = document.querySelector<HTMLButtonElement>(".nx-conv-newest button");
+          if (document.querySelector('[data-message="l0000520"]')?.getAttribute("data-flash") === "yes" && button) {
+            button.click();
+            done();
+          } else requestAnimationFrame(look);
+        };
+        requestAnimationFrame(look);
+      }),
+  );
   await expectNewestWhole(page, "m000016");
   // The jump gave way: nothing pulls the view back up once it has stopped.
   await settled(page);

@@ -1,6 +1,6 @@
 import { defaultRangeExtractor, measureElement, type Range, useVirtualizer, type Virtualizer } from "@tanstack/react-virtual";
 import type { CustomEmoji } from "../../../generated/CustomEmoji";
-import { memo, type MouseEvent, type SyntheticEvent, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import { memo, type SyntheticEvent, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import type { LinkPreview } from "../../../generated/LinkPreview";
 import type { Message } from "../../../generated/Message";
@@ -643,24 +643,31 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
   // Back to the newest, pressed: gone at once, rather than as the newest
   // arrives. With the newest held, it lands on it, as a caught-up
   // conversation opens (#945); out of a historical window, the window opens
-  // the room at its newest page. Pressed from the keyboard, the focus was on
-  // the button, which goes: the conversation takes it, not the page. (A
-  // pointer's press never moves the focus: `keepFocus`.)
+  // the room at its newest page.
   const { onBackToNewest } = props;
-  const pressNewest = useCallback(
-    (event: MouseEvent<HTMLButtonElement>) => {
-      if (document.activeElement === event.currentTarget) scroller.current?.focus({ preventScroll: true });
-      farNow.current = null;
-      setFarIn(null);
-      if (!atEnd) {
-        onBackToNewest();
-        return;
-      }
-      landing.current = { id, done: false, end: true };
-      reland();
-    },
-    [id, atEnd, onBackToNewest],
-  );
+  const pressedNewest = useRef(false);
+  const pressNewest = useCallback(() => {
+    pressedNewest.current = true;
+    farNow.current = null;
+    setFarIn(null);
+    if (!atEnd) {
+      onBackToNewest();
+      return;
+    }
+    landing.current = { id, done: false, end: true };
+    reland();
+  }, [id, atEnd, onBackToNewest]);
+  // Pressed from the keyboard, or by a screen reader, the focus or the
+  // reader's place was on the button, and it went with it, to the page. Once
+  // the button has gone after a press, a focus left on nothing is the
+  // conversation's. A pointer's press never moves the focus (`keepFocus`),
+  // and a focus somewhere else stays there.
+  const newestShows = !atEnd || farIn === id;
+  useLayoutEffect(() => {
+    if (newestShows || !pressedNewest.current) return;
+    pressedNewest.current = false;
+    if (document.activeElement === null || document.activeElement === document.body) scroller.current?.focus({ preventScroll: true });
+  }, [newestShows]);
 
   const [flash, setFlash] = useState<MessageId | null>(null);
   // Blocked people's messages opened anyway, this time round (PROTOCOL §5).
@@ -776,7 +783,7 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
           </div>
         )}
       </div>
-      {atEnd && farIn !== id ? null : (
+      {!newestShows ? null : (
         <div className="nx-conv-newest" onMouseDown={keepFocus}>
           <Button size="sm" variant="secondary" icon="down" onClick={pressNewest}>
             Back to the newest
