@@ -1286,14 +1286,14 @@ test.describe("reading and arriving", () => {
   test("a new message while you read older ones does not move what you're reading", async ({ page }) => {
     await open(page, "?big");
     await expect(message(page, "(5000)")).toBeInViewport();
-    // A screen up: short of where Back to the newest shows by itself (#945),
-    // so nothing arriving puts it up either.
-    await log(page).evaluate((element) => element.scrollBy({ top: -element.clientHeight }));
+    await log(page).evaluate((element) => element.scrollBy({ top: -1500 }));
     await page.waitForTimeout(200);
     const reading = await firstInView(page);
     const before = await offsetIn(page, reading);
     await page.evaluate(() => window.chat?.arrive("r-general", "u-dave", "did anyone see the moon tonight"));
-    await expect(page.getByRole("button", { name: "Back to the newest" })).toHaveCount(0);
+    // Back to the newest can be showing this far up (#945): it floats, so it
+    // moves nothing either. That nothing new puts it up is
+    // next-back-to-newest.spec.ts's.
     await page.waitForTimeout(300);
     expect(Math.abs((await offsetIn(page, reading)) - before)).toBeLessThanOrEqual(1);
     await expect(message(page, "did anyone see the moon")).not.toBeInViewport();

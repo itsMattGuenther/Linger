@@ -1,6 +1,6 @@
 import { defaultRangeExtractor, measureElement, type Range, useVirtualizer, type Virtualizer } from "@tanstack/react-virtual";
 import type { CustomEmoji } from "../../../generated/CustomEmoji";
-import { memo, type SyntheticEvent, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import { memo, type MouseEvent, type SyntheticEvent, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import type { LinkPreview } from "../../../generated/LinkPreview";
 import type { Message } from "../../../generated/Message";
@@ -595,13 +595,16 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
   // until back within `NEAR_SCREENS`. Judged from the scroll position, which
   // is only read here, so the virtualizer's corrections are left alone, and
   // drawn only when it crosses a line: scrolling redraws nothing. Not while
-  // the conversation is carried somewhere (landing, a jump), whose way there
-  // can pass the line; where it ends up is judged after.
+  // the conversation is carried somewhere (landing, a jump, following new
+  // messages down): each aims by rows' estimates until they're drawn, so its
+  // way there can pass the line, and once past it the button would stay.
+  // Where a landing or a jump ends up is judged after; a follow ends at the
+  // bottom.
   const farNow = useRef<string | null>(null);
   const [farIn, setFarIn] = useState<string | null>(null);
   const judgeFar = useCallback(() => {
     const element = scroller.current;
-    if (!element || !landing.current.done || jumping.current) return;
+    if (!element || !landing.current.done || jumping.current || following.current) return;
     const below = element.scrollHeight - element.scrollTop - element.clientHeight;
     const was = farNow.current === idNow.current;
     const far = below > (was ? NEAR_SCREENS : FAR_SCREENS) * element.clientHeight;
@@ -627,15 +630,37 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
   // Not for messages arriving below: what's new never puts it up by itself
   // (SPEC §4.2), and the reader's next scroll judges where they are.
   useEffect(judgeFar, [landed, atEnd, judgeFar]);
+  // And when the conversation changes height (the window resized, a phone's
+  // keyboard, the splitter under a shared screen), which moves both lines.
+  useEffect(() => {
+    const element = scroller.current;
+    if (!element) return;
+    const observer = new ResizeObserver(() => judgeFar());
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [judgeFar]);
 
-  // Back to the newest with the newest held: land on it, as a caught-up
-  // conversation opens (#945). Gone at once, rather than as it arrives.
-  const toNewest = useCallback(() => {
-    farNow.current = null;
-    setFarIn(null);
-    landing.current = { id, done: false, end: true };
-    reland();
-  }, [id]);
+  // Back to the newest, pressed: gone at once, rather than as the newest
+  // arrives. With the newest held, it lands on it, as a caught-up
+  // conversation opens (#945); out of a historical window, the window opens
+  // the room at its newest page. Pressed from the keyboard, the focus was on
+  // the button, which goes: the conversation takes it, not the page. (A
+  // pointer's press never moves the focus: `keepFocus`.)
+  const { onBackToNewest } = props;
+  const pressNewest = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => {
+      if (document.activeElement === event.currentTarget) scroller.current?.focus({ preventScroll: true });
+      farNow.current = null;
+      setFarIn(null);
+      if (!atEnd) {
+        onBackToNewest();
+        return;
+      }
+      landing.current = { id, done: false, end: true };
+      reland();
+    },
+    [id, atEnd, onBackToNewest],
+  );
 
   const [flash, setFlash] = useState<MessageId | null>(null);
   // Blocked people's messages opened anyway, this time round (PROTOCOL §5).
@@ -753,7 +778,7 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
       </div>
       {atEnd && farIn !== id ? null : (
         <div className="nx-conv-newest" onMouseDown={keepFocus}>
-          <Button size="sm" variant="secondary" icon="down" onClick={atEnd ? toNewest : props.onBackToNewest}>
+          <Button size="sm" variant="secondary" icon="down" onClick={pressNewest}>
             Back to the newest
           </Button>
         </div>

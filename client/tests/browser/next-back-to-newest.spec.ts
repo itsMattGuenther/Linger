@@ -183,7 +183,15 @@ test("well up from the newest it shows; pressed, it lands on the newest from wha
   expect(await reads(page)).not.toContain(id);
   const asked = (await did(page)).filter((line) => line.startsWith("GET /rooms/r-general/messages")).length;
 
-  await newest(page).click();
+  // Pressed, it's gone by the next frame, not once the conversation has got there.
+  const lingered = await newest(page).evaluate(
+    (button) =>
+      new Promise<boolean>((done) => {
+        (button as HTMLButtonElement).click();
+        requestAnimationFrame(() => done(document.querySelector(".nx-conv-newest") !== null));
+      }),
+  );
+  expect(lingered).toBe(false);
   await expectNewestWhole(page, id);
   await expect(newest(page)).toHaveCount(0);
   await expect(log(page)).not.toHaveAttribute("aria-busy", "true");
@@ -223,6 +231,25 @@ test("messages arriving below put nothing up by themselves; the reader's next sc
   await expect(newest(page)).toBeVisible();
 });
 
+test("the conversation getting shorter moves the line: two and a half screens up in a tall one is well up in a short one", async ({ page }) => {
+  await openWindow(page);
+  await upBy(page, 2.5);
+  await expect(newest(page)).toHaveCount(0);
+  await page.setViewportSize({ width: 780, height: 520 });
+  await expect.poll(() => screensUp(page)).toBeGreaterThan(3);
+  await expect(newest(page)).toBeVisible();
+});
+
+test("pressed from the keyboard, the conversation keeps the focus, not the page", async ({ page }) => {
+  await openWindow(page);
+  await upBy(page, 3.5);
+  await newest(page).focus();
+  await page.keyboard.press("Enter");
+  await expectNewestWhole(page, "m000016");
+  await expect(newest(page)).toHaveCount(0);
+  await expect(log(page)).toBeFocused();
+});
+
 test("pressed with the mouse, it leaves the cursor in the message box, so typing carries on there", async ({ page }) => {
   await openWindow(page);
   const box = page.getByRole("combobox", { name: /^Message/ });
@@ -238,7 +265,7 @@ test("pressed with the mouse, it leaves the cursor in the message box, so typing
   await expect(box).toHaveValue("on my way");
 });
 
-test("at the bottom, more than three screens of messages arriving at once are followed down, and it never shows", async ({ page }) => {
+test("at the bottom, more than three screens of messages arriving at once, each taller than its guess, are followed down, and it never shows", async ({ page }) => {
   await watchButton(page);
   await openWindow(page);
   // A little short of the very end, which still counts as at it: the
@@ -249,15 +276,17 @@ test("at the bottom, more than three screens of messages arriving at once are fo
   await settled(page);
   // All in one go, as a reconnect's replay can bring them: the follow
   // carries the reader down, and the way down isn't somewhere they read.
+  // Five lines each, where a row is guessed at one until it's drawn, so on
+  // the way down the end is further than it was aimed at.
   await page.evaluate(() => {
-    for (let nth = 1; nth <= 120; nth += 1) {
+    for (let nth = 1; nth <= 60; nth += 1) {
       window.owner?.frame({
         op: "message.create",
         d: {
           id: `m946${String(nth).padStart(4, "0")}`,
           room_id: "r-general",
           author_id: "u-eli",
-          body: `and another ${nth}`,
+          body: `and another ${nth}\nsecond line\nthird line\nfourth line\nfifth line`,
           reply_to: null,
           attachments: [],
           reactions: [],
@@ -269,7 +298,7 @@ test("at the bottom, more than three screens of messages arriving at once are fo
       });
     }
   });
-  await expectNewestWhole(page, "m9460120");
+  await expectNewestWhole(page, "m9460060");
   await settled(page);
   expect(await showed(page)).toBe(false);
 });
@@ -301,6 +330,8 @@ test("pressed while a jump to a message further up is on its way, it lands on th
   // A search hit further up, in what's held: jumped to, which takes a third
   // of a second at least, aiming every frame.
   await page.evaluate(() => window.owner?.open("r-general", undefined, "l0000520"));
+  // Under way: the message it's going to is marked as it starts.
+  await expect(page.locator('[data-message="l0000520"]')).toHaveAttribute("data-flash", "yes");
   await newest(page).click();
   await expectNewestWhole(page, "m000016");
   // The jump gave way: nothing pulls the view back up once it has stopped.
