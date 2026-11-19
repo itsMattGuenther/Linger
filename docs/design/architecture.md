@@ -552,7 +552,15 @@ the owner. Its shell opens `next.html?shell=phone` (`tauri.android.conf.json`,
   conversation is still, rows within `MEASURE_AHEAD` above the screen that
   have never been drawn are drawn once and measured, in a frame and
   synchronously (`flushSync`) so no scroll can land between, and a later
-  glide meets only rows of known height. Which rows were measured is the
+  glide meets only rows of known height. That's a phone's alone (`onPhone`):
+  on the desktop it was a page of older history and more drawn and measured
+  in one frame, a fifth of a second or more on a big screen, ending in one
+  correction of thousands of pixels. WebKitGTK scrolls on a thread of its
+  own (its async overflow scrolling), so on Linux a wheel turned meanwhile
+  kept scrolling, and that correction was painted before the rows it made
+  room for: the conversation went blank for a moment (#944). There a row is
+  measured as it comes near the screen, and `next-chat.spec.ts` checks no
+  row is drawn out of sight to be measured. Which rows were measured is the
   conversation's own note (`measured`), not the virtualizer's size cache:
   that keeps a size only when it differs from the estimate, so a row exactly
   `ESTIMATE_PX` tall looked never measured and was drawn again at every stop,
