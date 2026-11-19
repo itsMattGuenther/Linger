@@ -1,6 +1,6 @@
 import { defaultRangeExtractor, measureElement, type Range, useVirtualizer, type Virtualizer } from "@tanstack/react-virtual";
 import type { CustomEmoji } from "../../../generated/CustomEmoji";
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import { memo, type SyntheticEvent, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import type { LinkPreview } from "../../../generated/LinkPreview";
 import type { Message } from "../../../generated/Message";
@@ -27,6 +27,13 @@ const BACKFILL_MARGIN_PX = 1200;
 const TRIM_IDLE_MS = 600;
 /** A couple of lines of slack: a scroll a pixel short still sees the end. */
 const BOTTOM_MARGIN_PX = 48;
+/**
+ * "Back to the newest" shows once the reader is more than this many screens
+ * above the newest message, and goes again within the second (#945): apart,
+ * so it doesn't come and go at one line.
+ */
+const FAR_SCREENS = 3;
+const NEAR_SCREENS = 1;
 /** A one-line continuation is 24px (SPEC §4.7). Every row is measured once drawn. */
 const ESTIMATE_PX = 24;
 /**
@@ -106,7 +113,10 @@ export interface ConversationProps {
   onSeenNewest: (id: MessageId) => void;
   /** Scrolling stopped: everything outside first…last may be let go (#173). */
   onLetGo: (first: MessageId, last: MessageId) => void;
-  /** "Back to the newest", out of a historical window. */
+  /**
+   * "Back to the newest", out of a historical window. Read far up with the
+   * newest still held, the button lands on the newest itself (#945).
+   */
   onBackToNewest: () => void;
   actions: Omit<MessageActions, "jumpTo">;
   /** Who shares a screen in this conversation's voice now, for its share lines (#746). */
@@ -333,15 +343,27 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
 
   // Landing: once per conversation, on the line or the bottom. Rows are
   // estimates until drawn, so aim every frame until the target holds still.
-  const landing = useRef({ id: "", done: false });
+  // Back to the newest, pressed with the newest held, lands again, on the
+  // bottom whatever the first landing was on (`end`, #945).
+  const landing = useRef<{ id: string; done: boolean; end?: boolean }>({ id: "", done: false });
   const jumping = useRef(false);
   const [landed, setLanded] = useState(0);
+  const [relanding, reland] = useReducer((count: number) => count + 1, 0);
   useEffect(() => {
     if (rows.length === 0 || !land.ready || props.goTo) return;
     if (landing.current.id !== id) landing.current = { id, done: false };
     if (landing.current.done) return;
-    const toLine = land.at === "left-off" && rows.some((row) => row.kind === "left-off");
-    if (!atEnd && !toLine) return;
+    const toLine = !landing.current.end && land.at === "left-off" && rows.some((row) => row.kind === "left-off");
+    if (!atEnd && !toLine) {
+      // Back to the newest, and the newest let go of since: that's the
+      // window's to bring back (`onBackToNewest`), so this landing is over
+      // rather than left waiting, holding off everything that waits for it.
+      if (landing.current.end) {
+        landing.current.done = true;
+        setLanded((count) => count + 1);
+      }
+      return;
+    }
     let frames = 0;
     let stable = 0;
     let total = -1;
@@ -370,7 +392,7 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
     };
     frame = requestAnimationFrame(step);
     return () => cancelAnimationFrame(frame);
-  }, [id, rows.length, land.ready, land.at, atEnd, virtualizer, props.goTo]);
+  }, [id, rows.length, land.ready, land.at, atEnd, virtualizer, props.goTo, relanding]);
 
   // Measuring ahead (above), and when: once nothing scrolls the
   // conversation, in a frame, after its scroll events, so the virtualizer
@@ -568,16 +590,84 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
     if (below <= BACKFILL_MARGIN_PX && !atEnd) onNearEnd();
   }, [atStart, atEnd, onNearStart, onNearEnd]);
 
+  // Read well up from the newest, Back to the newest shows (#945): more than
+  // `FAR_SCREENS` of the conversation's own height above it, and once shown,
+  // until back within `NEAR_SCREENS`. Judged from the scroll position, which
+  // is only read here, so the virtualizer's corrections are left alone, and
+  // drawn only when it crosses a line: scrolling redraws nothing. Not while
+  // the conversation is carried somewhere (landing, a jump, following new
+  // messages down): each aims by rows' estimates until they're drawn, so its
+  // way there can pass the line, and once past it the button would stay.
+  // Where a landing or a jump ends up is judged after; a follow ends at the
+  // bottom.
+  const farNow = useRef<string | null>(null);
+  const [farIn, setFarIn] = useState<string | null>(null);
+  const judgeFar = useCallback(() => {
+    const element = scroller.current;
+    if (!element || !landing.current.done || jumping.current || following.current) return;
+    const below = element.scrollHeight - element.scrollTop - element.clientHeight;
+    const was = farNow.current === idNow.current;
+    const far = below > (was ? NEAR_SCREENS : FAR_SCREENS) * element.clientHeight;
+    if (far === was) return;
+    farNow.current = far ? idNow.current : null;
+    setFarIn(farNow.current);
+  }, []);
+
   const onScroll = useCallback(() => {
     noteSeen();
     window.clearTimeout(trimTimer.current);
     trimTimer.current = window.setTimeout(letGo, TRIM_IDLE_MS);
     checkEdges();
-  }, [noteSeen, letGo, checkEdges]);
+    judgeFar();
+  }, [noteSeen, letGo, checkEdges, judgeFar]);
 
   // After landing, and whenever what's held changes: an edge that is already
   // in reach (or a first page too short to scroll) loads the next page.
   useEffect(checkEdges, [landed, rows.length, checkEdges]);
+  // And where the reader is, judged again where a landing ends, and when the
+  // newest end is let go of or held again with no scroll (the newest page
+  // back after Back to the newest, a read forwards making the room whole).
+  // Not for messages arriving below: what's new never puts it up by itself
+  // (SPEC §4.2), and the reader's next scroll judges where they are.
+  useEffect(judgeFar, [landed, atEnd, judgeFar]);
+  // And when the conversation changes height (the window resized, a phone's
+  // keyboard, the splitter under a shared screen), which moves both lines.
+  useEffect(() => {
+    const element = scroller.current;
+    if (!element) return;
+    const observer = new ResizeObserver(() => judgeFar());
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [judgeFar]);
+
+  // Back to the newest, pressed: gone at once, rather than as the newest
+  // arrives. With the newest held, it lands on it, as a caught-up
+  // conversation opens (#945); out of a historical window, the window opens
+  // the room at its newest page.
+  const { onBackToNewest } = props;
+  const pressNewest = useCallback(() => {
+    farNow.current = null;
+    setFarIn(null);
+    if (!atEnd) {
+      onBackToNewest();
+      return;
+    }
+    landing.current = { id, done: false, end: true };
+    reland();
+  }, [id, atEnd, onBackToNewest]);
+  // The button going with the focus on it (pressed from the keyboard, or
+  // scrolled away from after tabbing to it) hands the focus to the
+  // conversation: left to the page, the next key went nowhere and the next
+  // Tab started from the top. A ref's cleanup runs before the button leaves
+  // the page, while it still has the focus. A pointer's press never gives it
+  // the focus (`keepFocus`), so never moves it.
+  const handFocusOn = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return;
+    return () => {
+      if (node.contains(document.activeElement)) scroller.current?.focus({ preventScroll: true });
+    };
+  }, []);
+  const newestShows = !atEnd || farIn === id;
 
   const [flash, setFlash] = useState<MessageId | null>(null);
   // Blocked people's messages opened anyway, this time round (PROTOCOL §5).
@@ -595,7 +685,8 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
       let height = -1;
       const step = () => {
         const index = indexNow.current.get(target);
-        if (index === undefined) {
+        // Gone, or Back to the newest pressed on the way: that landing takes over.
+        if (index === undefined || !landing.current.done) {
           jumping.current = false;
           return;
         }
@@ -611,6 +702,7 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
         const onScreen = row !== undefined && view !== null && row.end - offset > 0 && row.start - offset < view.clientHeight;
         if ((onScreen && still >= JUMP_STILL_FRAMES && frames >= JUMP_MIN_FRAMES) || frames >= JUMP_MAX_FRAMES) {
           jumping.current = false;
+          judgeFar();
           return;
         }
         requestAnimationFrame(step);
@@ -620,7 +712,7 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
       window.setTimeout(() => setFlash((current) => (current === target ? null : current)), FLASH_MS);
       return true;
     },
-    [id, virtualizer],
+    [id, virtualizer, judgeFar],
   );
 
   const { goTo, onWentTo } = props;
@@ -691,9 +783,9 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
           </div>
         )}
       </div>
-      {atEnd ? null : (
-        <div className="nx-conv-newest">
-          <Button size="sm" variant="secondary" icon="down" onClick={props.onBackToNewest}>
+      {!newestShows ? null : (
+        <div ref={handFocusOn} className="nx-conv-newest" onMouseDown={keepFocus}>
+          <Button size="sm" variant="secondary" icon="down" onClick={pressNewest}>
             Back to the newest
           </Button>
         </div>
@@ -823,6 +915,15 @@ const RowView = memo(function RowView({
     }
   }
 }, sameRowView);
+
+/**
+ * A press on Back to the newest leaves the focus where it was, the message
+ * box mostly: the button goes once pressed, and the focus it took went with
+ * it, so whatever was typed next went nowhere (#945).
+ */
+function keepFocus(event: SyntheticEvent) {
+  event.preventDefault();
+}
 
 /**
  * Stop the virtualizer aiming at a row it was sent to (`scrollToIndex`). It

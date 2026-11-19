@@ -99,13 +99,19 @@
   text-align: center;
 }
 
-/* Out of a historical window: floats, so it moves nothing when it appears. */
+/* Back to the newest, out of a historical window or read well up (#945):
+   floats, so it moves nothing when it appears. The button's own fill is all
+   but see-through, and the words of the messages under it showed through,
+   so it sits on the conversation's background. */
 .nx-conv-newest {
   position: absolute;
   bottom: var(--space-2);
   left: 50%;
   transform: translateX(-50%);
   z-index: var(--z-raised);
+  display: flex;
+  border-radius: var(--radius-pill);
+  background: var(--surface-window);
 }
 
 /* A message from somebody you blocked (PROTOCOL §5): one quiet line in its

@@ -1179,6 +1179,27 @@ reading exactly where it is. A glide on a phone slows to a stop without a
 skip, into older history loading as it goes (#698); on an iPhone, older
 history that arrives mid-glide goes in once the conversation is still.
 
+**Back to the newest** is the one way down that isn't scrolling: a small
+secondary `Button` with the down arrow, floating centered just above the
+message box (`.nx-conv-newest`), so nothing moves when it comes or goes, the
+same on the computer and the phone. The button's own fill is all but
+see-through, so it sits on the conversation's background, and the words of
+the messages under it don't show through. It shows once the reader is more
+than three of the conversation's own heights above the newest message, and
+goes again within one, so it doesn't flicker at a line (#945). Where the
+reader is decides it, never what's new: messages arriving below put nothing
+up until the reader next scrolls. The distance is the conversation's own
+reckoning, in which rows not drawn yet count at their one-line guess, so a
+long unread tail of pictures can count as nearer than it is until it has
+been scrolled through. A change in the conversation's height moves both
+lines. Pressed, it lands on the newest the way a caught-up conversation
+opens; a pointer's press leaves the cursor where it was, in the message box
+mostly, and when it goes with the focus on it (pressed from the keyboard, or
+scrolled away from after tabbing to it), the conversation takes the focus.
+Out of a historical window (#173) it shows wherever the reader is, and opens
+the room at its newest page again. It never carries a number or a dot (SPEC
+§4.2).
+
 ## Settings
 
 Settings is its own window (`app/settings/`): the `NavList` sidebar on the
@@ -1315,6 +1336,7 @@ it catches, and nowhere else (AGENTS.md hard rule 4).
 | A shared file's card (FILE-6, #703): Download goes to the browser and says so without claiming it was saved, and one that fails offers Try again; either way the address is in a box with Copy beside it, which copies it and says Copied, or says the clipboard refused; on an iPhone Download asks the shell for the share sheet instead, busy until it shows and adding nothing after, and one it couldn't get offers Try again and the address; Media's download does the same there, its line saying it's getting the file; Android still goes to the browser | `next-chat.spec.ts` › a file to download; `next-phone.spec.ts` › a shared file (#703); `next-media.spec.ts` › a link opens in the browser, a file downloads; `core/download.test.ts`; `src-tauri/src/phone_save.rs` (the file's name made safe, web addresses only) |
 | A shared audio file's player: every part named, a 32px line of kit-sized controls on the card's edges, the volume and mute reaching the element, the last level kept but never silence, a seek by keys asking for a later byte range, End reaching the end without a failed load, and a failed load said on the same line | `next-chat-parity.spec.ts` › a shared audio file (#247); `core/audioPlayer.test.ts` |
 | A glide in a long conversation slows to a stop without a skip (#698): in every frame as painted the words move exactly as far as the glide scrolls and nothing else moves them, toward older messages into a page of them loading as it goes and into one loaded before, as Android and as an iPhone; on a phone, older history is measured before anybody scrolls up to it; on an iPhone, older history arriving while the conversation moves waits until it's still, one page only, and goes in without moving what's read; taken hold of while it lands, or just as it follows a new message down, it stays where it was put when older history goes in | `next-phone-glide.spec.ts` |
+| Back to the newest (#945): not there a little way up, shown more than three screens above the newest and still at two on the way down, gone within one, and not back at two going up; messages arriving below put nothing up by themselves, nor while they're followed down, and the next scroll judges; opened on "you left off here", shown straight away more than three screens up and never under; a search hit jumped to well up shows it once the jump is there, and one under three screens up never does; pressed with the newest held, the newest lands whole at the bottom and is read, with nothing asked of the server, not back on the line, the cursor left where it was by a pointer's press, and the conversation given it when the button goes with it, and a jump on its way gives way; a conversation made shorter judges again; centered above the message box, hiding the words under it, in a window, docked beside the list and on the phone, as an iPhone too; out of a historical window it opens the room at its newest page, as before | `next-back-to-newest.spec.ts`; `next-chat-parity.spec.ts` › reading far back |
 | 5,000 messages draw fewer than 80 rows | `next-chat.spec.ts` › 5,000 messages draw only what is near the view |
 | On the desktop, older history above is drawn as it comes near the screen, never drawn out of sight to be measured: all at once, it stalled the window and, on Linux, painted the conversation blank (#944) | `next-chat.spec.ts` › on the desktop, older history above is drawn as it comes near the screen |
 | A long message folds: past twenty lines its words are drawn twenty lines tall, fading out, with Show all, and all of it stays in the page; Show all and Show less draw it whole and fold it again, with no row overlapping the next; a long paragraph folds too, and twenty lines or fewer never do; unfolded, it stays unfolded after its row is scrolled away and back; Show all is reachable by keyboard | `next-chat-parity.spec.ts` › a long message folds |

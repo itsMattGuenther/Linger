@@ -250,9 +250,18 @@ Replace with:
   A caught-up conversation opens at the newest messages. There is no catch-up
   button or band. Live arrivals never move someone reading earlier messages.
   Search still opens its exact result, and **"back to the newest"** skips ahead.
+- **"Back to the newest"** is one small button floating centered above the
+  message box, on the computer and the phone, with no number and no dot. It
+  shows once you are more than about three screens above the newest message,
+  and goes once you are back within about one screen of it (#945). Pressed, it
+  lands on the newest message, the way a caught-up conversation opens. It goes
+  by how far up you are, never by how much is new, so a room that opens on
+  "you left off here" with more than three screens after the line offers it
+  straight away.
 - The client holds what is on screen plus a margin, not everything ever scrolled
-  past (#173). Reading far back lets go of the newest end: the header then offers
-  **"back to the newest"**, and reading down brings the rest back with no gap.
+  past (#173). Reading far back lets go of the newest end: **"back to the
+  newest"** then shows wherever you are, and opens the room at its newest page
+  again, and reading down brings the rest back with no gap.
   Rooms you have left keep only their newest page.
 
 **One exception:** direct mentions produce a real notification and a marker. Mentions

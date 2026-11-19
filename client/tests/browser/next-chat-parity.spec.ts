@@ -2077,6 +2077,9 @@ test.describe("reading far back", () => {
   /** Back far enough to hold more than a room keeps (800), then stop: the newest end is let go. */
   async function readFarBack(page: Page) {
     await readBack(page, 9);
+    // Let go of. Not Back to the newest's showing: read this far up, that
+    // shows before anything is let go (#945).
+    await expect.poll(() => page.evaluate(() => window.parity?.holdsNewest("r-general"))).toBe(false);
     await expect(newest(page)).toBeVisible();
   }
 
