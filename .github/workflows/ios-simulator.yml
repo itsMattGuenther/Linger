@@ -114,12 +114,14 @@ jobs:
         working-directory: client
         run: pnpm install --frozen-lockfile
       - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master, 2026-10-09
+        id: toolchain
         with:
           toolchain: stable
           targets: aarch64-apple-ios-sim
       # Kept even when the flows fail: the builds are most of the run, and a
       # failed flow is when it's run again.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        id: rust
         with:
           workspaces: |
             client/src-tauri
@@ -194,23 +196,29 @@ jobs:
       # pull requests that mostly never touch the server. Keyed on
       # everything its release build reads (the crates, the workspace's
       # Cargo files and config), on this file, which says how it's built,
-      # and on the Xcode, whose Mac it was built on; no restore-keys, so a
-      # change to any of them builds it again. Kept straight after a build
-      # that worked, not at the job's end, so a flow failing doesn't lose
-      # it.
+      # on the compiler, and on the Xcode, whose Mac it was built on; no
+      # restore-keys, so a change to any of them builds it again. Kept
+      # straight after a build that worked, not at the job's end, so a
+      # flow failing doesn't lose it.
+      #
+      # Still built whenever the Rust cache had no exact match (the app's
+      # own Cargo.lock changed, say): that cache is saved again at the
+      # job's end from what this run built, and without the server's build
+      # it would be saved without the server's release dependencies, for
+      # the next run that builds the server to compile from nothing.
       - name: the server, as built before from this code
         id: server
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: target/release/linger-server
-          key: linger-server-xcode-${{ inputs.xcode || '27.1' }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('crates/**', 'Cargo.toml', 'Cargo.lock', '.cargo/config.toml', '.github/workflows/ios-simulator.yml') }}
+          key: linger-server-xcode-${{ inputs.xcode || '27.1' }}-${{ runner.os }}-${{ runner.arch }}-rustc-${{ steps.toolchain.outputs.cachekey }}-${{ hashFiles('crates/**', 'Cargo.toml', 'Cargo.lock', '.cargo/config.toml', '.github/workflows/ios-simulator.yml') }}
       # Release, as a host runs it (deploy/Dockerfile). Its password
       # hashing unoptimized took 23 to over 30 seconds a sign-in here, past
       # the 30 the app waits for an answer. Without the link-time
       # optimisation the image has, which changes how fast it runs, not
       # what it does: with it, this build took 14 minutes here.
       - name: build the server
-        if: steps.server.outputs.cache-hit != 'true'
+        if: steps.server.outputs.cache-hit != 'true' || steps.rust.outputs.cache-hit != 'true'
         env:
           CARGO_PROFILE_RELEASE_LTO: "false"
         run: cargo build --locked --release -p linger-server
