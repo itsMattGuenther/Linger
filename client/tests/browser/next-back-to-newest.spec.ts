@@ -358,13 +358,14 @@ test("pressed while a jump to a message further up is on its way, it lands on th
         let frames = 0;
         const look = () => {
           const button = document.querySelector<HTMLButtonElement>(".nx-conv-newest button");
-          if (document.querySelector('[data-message="l0000520"]')?.getAttribute("data-flash") === "yes" && button) {
+          // Drawn marked in the jump's first frames, which aim for 20 at least.
+          const marked = document.querySelector('[data-message="l0000520"]')?.getAttribute("data-flash") === "yes";
+          if (marked && button) {
             button.click();
             done();
-          } else if ((frames += 1) > 20) {
-            // A jump aims for 20 frames at least: past that, it may be over.
-            fail(new Error("the jump's message wasn't drawn, marked, with the button there, within 20 frames"));
-          } else requestAnimationFrame(look);
+          } else if (marked) fail(new Error("the jump's message was marked with no Back to the newest to press"));
+          else if ((frames += 1) > 600) fail(new Error("the jump's message was never drawn marked"));
+          else requestAnimationFrame(look);
         };
         requestAnimationFrame(look);
       }),
