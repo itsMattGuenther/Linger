@@ -204,6 +204,16 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
   // once it's still, rows above that have never been drawn are drawn,
   // out of sight, to be measured, and go again before the frame is painted
   // ("Measuring ahead", below, says when).
+  //
+  // Only on a phone, where glides are. On the desktop, once a page of older
+  // history had gone in, that was the page and more drawn and measured in
+  // one frame, a fifth of a second or more on a big screen, ending in one
+  // correction of thousands of pixels. On Linux, WebKitGTK scrolls on a
+  // thread of its own and kept the wheel's scroll going meanwhile, then
+  // painted that correction before the rows it made room for: the
+  // conversation went blank until they were drawn (#944). On the desktop a
+  // row is measured as it comes near the screen instead.
+  const measureAhead = onPhone();
   const [aheadToo, setAheadToo] = useState(false);
   /**
    * Every row measured, by conversation and key. The virtualizer keeps a
@@ -367,14 +377,14 @@ export const Conversation = memo(function Conversation(props: ConversationProps)
   // the correction put the view back where it had been.
   const scrolling = virtualizer.isScrolling;
   useEffect(() => {
-    if (scrolling) return;
+    if (scrolling || !measureAhead) return;
     const frame = requestAnimationFrame(() => {
       const range = measures.current?.range;
       if (!range || !landing.current.done || jumping.current || !still()) return;
       if (unmeasuredAbove(Math.max(0, range.startIndex - OVERSCAN)).length > 0) flushSync(() => setAheadToo(true));
     });
     return () => cancelAnimationFrame(frame);
-  }, [rows, scrolling, landed, woken, still, unmeasuredAbove]);
+  }, [rows, scrolling, landed, woken, still, unmeasuredAbove, measureAhead]);
 
   // Follow a new last message down, only when the bottom is where you were.
   // Keyed on the last row, so history loading above never triggers it.

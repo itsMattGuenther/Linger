@@ -1185,7 +1185,7 @@ test.describe("reading and arriving", () => {
   // Rows going onto the page are counted apart: a row drawn because it came
   // into view, or drawn out of sight to be measured (#698), renders as it
   // goes in (twice, in StrictMode). What's left over is rows re-rendered.
-  async function scrollCounting(page: Page, pauseMs: number) {
+  async function scrollCounting(page: Page, pauseMs: number, query = "?big") {
     await page.addInitScript(() => {
       const format = Object.getOwnPropertyDescriptor(Intl.DateTimeFormat.prototype, "format");
       if (!format?.get) throw new Error("Intl.DateTimeFormat#format is not a getter here");
@@ -1203,7 +1203,7 @@ test.describe("reading and arriving", () => {
         },
       });
     });
-    await open(page, "?big");
+    await open(page, query);
     await expect(message(page, "(5000)")).toBeInViewport();
     await log(page).evaluate((element) => element.scrollBy({ top: -600 }));
     // Let the scroll and the rows' measuring settle before counting.
@@ -1268,7 +1268,8 @@ test.describe("reading and arriving", () => {
     // unmeasured rows above to measure them (#698). Rows exactly the
     // estimate's height never counted as measured, so every stop drew the
     // same hundred again, which also failed PERF-2 at random (182 against 48).
-    const result = await scrollCounting(page, 200);
+    // Measuring ahead is a phone's alone (#944), so this is the phone's page.
+    const result = await scrollCounting(page, 200, "?big&shell=phone");
     expect(result.moved).toBeGreaterThan(40);
     expect(result.renders).toBeLessThanOrEqual(2 * result.mounts + 2 * result.drawn);
     // A row goes in to be measured once, and once more if it then came into view.
@@ -1328,6 +1329,55 @@ test.describe("reading and arriving", () => {
     await expect.poll(tall).toBeGreaterThan(heldBefore);
     await page.waitForTimeout(300);
     expect(Math.abs((await offsetIn(page, reading)) - before)).toBeLessThanOrEqual(1);
+  });
+
+  // On the desktop, rows above aren't drawn out of sight to be measured
+  // ahead of a glide, as a phone's are (#698). Once the conversation stopped,
+  // the rows above it that were never drawn, a page of older history and
+  // more, were all drawn, measured and taken away again in one frame: a
+  // fifth of a second or more on a big screen, ending in one scroll
+  // correction of thousands of pixels. On Linux, WebKitGTK scrolls on a
+  // thread of its own and kept the wheel's scroll going meanwhile, then
+  // painted the correction before the rows it made room for: the
+  // conversation went blank for a moment (#944). Each row is now drawn when
+  // it comes near the screen.
+  test("on the desktop, older history above is drawn as it comes near the screen, not drawn out of sight to be measured (#944)", async ({ page }) => {
+    await open(page, "?big&paged");
+    await expect(message(page, "(5000)")).toBeInViewport();
+    const tall = () => page.locator(".nx-conv-rows").evaluate((rows) => rows.getBoundingClientRect().height);
+    const heldBefore = await tall();
+    // Every frame from here on: the rows that went onto the page and came
+    // off it again before the frame was painted, which nobody could see.
+    await page.evaluate(() => {
+      const rows = document.querySelector(".nx-conv-rows");
+      if (!rows) throw new Error("no rows");
+      const frames: number[] = [];
+      Object.assign(window, { unseenPerFrame: frames });
+      let added = new Set<Node>();
+      let unseen = 0;
+      new MutationObserver((records) => {
+        for (const record of records) {
+          for (const node of record.addedNodes) if (node instanceof HTMLElement && node.matches(".nx-conv-row")) added.add(node);
+          for (const node of record.removedNodes) if (added.delete(node)) unseen += 1;
+        }
+      }).observe(rows, { childList: true });
+      const frame = () => {
+        frames.push(unseen);
+        added = new Set();
+        unseen = 0;
+        requestAnimationFrame(frame);
+      };
+      requestAnimationFrame(frame);
+    });
+    await log(page).evaluate((element) => element.scrollTo({ top: 400 }));
+    await expect.poll(async () => (await did(page)).some((one) => one.startsWith("older:"))).toBe(true);
+    await expect.poll(tall).toBeGreaterThan(heldBefore);
+    // Still for longer than the virtualizer takes to call scrolling stopped,
+    // which is when they used to be drawn: about 150 in one frame here.
+    await page.waitForTimeout(800);
+    const frames = await page.evaluate(() => (window as unknown as { unseenPerFrame: number[] }).unseenPerFrame);
+    expect(frames.length).toBeGreaterThan(20);
+    expect(frames.filter((count) => count > 0)).toEqual([]);
   });
 });
 
