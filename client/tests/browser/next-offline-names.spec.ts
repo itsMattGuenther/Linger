@@ -36,6 +36,9 @@ const styled = (user: User, look: Look): User => ({ ...user, style: { ...user.st
 
 async function open(page: Page) {
   await page.goto("/tests/fixtures/next-list-window.html?one");
+  // A shimmer's light crosses three times and rests (#532): held where it
+  // starts, a lit name's band is there however long a test takes to look.
+  await page.addStyleTag({ content: `.k-name-band, .k-name-band::before { animation-play-state: paused !important; }` });
   await page.evaluate(() => document.fonts.ready);
   await expect(page.locator("[data-screen='list']")).toBeVisible();
   await expect(rows(page, "People here").first()).toBeVisible();
@@ -139,14 +142,13 @@ async function expectTheirs(page: Page, name: Locator, look: Look) {
   const throughLetters = look.fill.kind === "gradient" || look.effect === "shimmer";
   const color = throughLetters ? "rgba(0, 0, 0, 0)" : from;
   const painted = (image: string) => image.includes("linear-gradient") && image.includes(from) && image.includes(to);
-  // A shimmer's light crosses a few times and then rests (#532), so a lit
-  // name may be either; when it crosses is `next-name-shimmer.spec.ts`'s.
-  const animations = look.effect === "shimmer" ? ["k-name-band k-name-band-letters", "none"] : ["none"];
+  // A lit shimmering name's band, held where it starts (`open`).
+  const animation = look.effect === "shimmer" ? "k-name-band k-name-band-letters" : "none";
   await expectLook(name, (now) => [
     ...(now.color === color ? [] : [`color ${now.color}`]),
     ...((throughLetters ? painted(now.image) : now.image === "none") ? [] : [`image ${now.image}`]),
     ...((look.effect === "glow" ? now.filter.includes(`drop-shadow(${from}`) : now.filter === "none") ? [] : [`filter ${now.filter}`]),
-    ...(animations.includes(now.animation) ? [] : [`animation ${now.animation}`]),
+    ...(now.animation === animation ? [] : [`animation ${now.animation}`]),
   ]);
 }
 

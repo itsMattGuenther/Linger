@@ -151,6 +151,23 @@ function SplitPanes() {
   );
 }
 
+/**
+ * One spot, one Name, whoever is there now: a line of names that reuses its
+ * Name for the next person, as a folded room's line does. Somebody new there
+ * has just shown up, so their light crosses (#532).
+ */
+function SwapName() {
+  const [who, setWho] = useState(jules);
+  return (
+    <div className="g-row" data-testid="swap-name">
+      <Name person={who} shine />
+      <Button onClick={() => setWho(who.id === jules.id ? eli : jules)}>
+        Somebody else here
+      </Button>
+    </div>
+  );
+}
+
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
     <section className="g-section" data-section={id} aria-labelledby={`g-${id}`}>
@@ -590,6 +607,7 @@ function Gallery() {
                 <Name person={sam} size="inline" shine /> are typing, inside a sentence, in its own size and line.
               </span>
             </p>
+            <SwapName />
             <p className="g-row g-sentence" data-testid="turned-name">
               <span>
                 <Name person={turned} size="inline" shine /> is typing, the right way round.

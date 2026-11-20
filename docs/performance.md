@@ -151,8 +151,15 @@ Shimmer name effect: the page redraws their name every frame, for as long
 as it is on screen, and the same idle minute costs 10–20% of a core (four
 measurements: 10.5%, 10.4%, 11.8% and 19.6%), two thirds of it in WebKit's
 page process and a third in the app's own. On a laptop that is battery.
-That's #532, still open. The measurements above were on a 60 Hz screen,
-except the first two, at 240 Hz; it made no clear difference.
+That's #532. The measurements above were on a 60 Hz screen,
+except the first two, at 240 Hz; it made no clear difference. #593 moved
+the light onto `transform`, which roughly halved it, and since 2026-11-19
+the light crosses three times when a name shows up or comes back, once
+when pointed at, and then rests, only in the list and on a card: an idle
+list with Shimmer names is back to next to nothing. Before that, on a 4K
+165 Hz NVIDIA desktop, it held the app's main thread at 58% of a core, the
+whole window copied into place on every refresh (`docs/design/system.md`,
+Name).
 
 ### Over a real network
 

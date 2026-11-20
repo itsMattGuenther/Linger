@@ -40,12 +40,17 @@ const finish = (names: Locator) =>
 /** Held where they are, for tests that read the band's pixels, however long that takes. */
 const holdBands = (page: Page) => page.addStyleTag({ content: `.k-name-band, .k-name-band::before { animation-play-state: paused !important; }` });
 
-/** The list, with Matt, Jules and Dave lit and shimmering. */
-async function listOfShimmers(page: Page) {
+/**
+ * The list, with Matt, Jules and Dave lit and shimmering. `hold` keeps every
+ * band still where it starts, so a test reads the crossings at its own pace
+ * and ends them itself, however slow the machine.
+ */
+async function listOfShimmers(page: Page, { hold = false } = {}) {
   await page.setViewportSize({ width: 340, height: 820 });
   await page.goto("/tests/fixtures/next-list-window.html?one");
   await page.evaluate(() => document.fonts.ready);
   await expect(page.locator("[data-screen='list']")).toBeVisible();
+  if (hold) await holdBands(page);
   // You at the top of the list (display size), and two friends' rows.
   const look = { fill: { kind: "gradient", from: "violet", to: "sky" }, effect: "shimmer" } as const;
   for (const user of [people.matt, people.jules, people.dave]) await restyle(page, { ...user, style: { ...user.style, ...look } });
@@ -112,7 +117,7 @@ test("a shimmering name moves only by transform, so the page does nothing per fr
 });
 
 test("a list at rest draws nothing: a shimmering name crosses three times, then its band is gone (#532)", async ({ page }) => {
-  await listOfShimmers(page);
+  await listOfShimmers(page, { hold: true });
   const bands = page.locator(".k-name-band");
   await expect(bands).toHaveCount(3);
   for (const band of await bands.all()) await expect(band).toHaveAttribute("data-sweep", "arrive");
@@ -132,7 +137,7 @@ test("a list at rest draws nothing: a shimmering name crosses three times, then 
 });
 
 test("pointing at a resting name crosses it once more; pointing while it crosses changes nothing (#532)", async ({ page }) => {
-  await listOfShimmers(page);
+  await listOfShimmers(page, { hold: true });
   const jules = shimmering(page).filter({ hasText: "Jules" });
   await expect(jules.locator(".k-name-band")).toHaveAttribute("data-sweep", "arrive");
   // Mid-crossing, the pointer leaves the crossing it's on alone.
@@ -141,6 +146,11 @@ test("pointing at a resting name crosses it once more; pointing while it crosses
   await expect(jules.locator(".k-name-band[data-seen='yes']")).toHaveAttribute("data-sweep", "arrive");
   await page.mouse.move(0, 0);
   await finish(jules);
+  await expect(jules.locator(".k-name-band")).toHaveCount(0);
+
+  // A finger is no pointer: on a phone it lands on names to scroll past them.
+  await jules.dispatchEvent("pointerover", { pointerType: "touch", isPrimary: true });
+  await page.waitForTimeout(100);
   await expect(jules.locator(".k-name-band")).toHaveCount(0);
 
   // At rest, pointed at: one crossing, the window and its copy together.
@@ -153,7 +163,7 @@ test("pointing at a resting name crosses it once more; pointing while it crosses
 });
 
 test("somebody coming back crosses their name three times again (#532)", async ({ page }) => {
-  await listOfShimmers(page);
+  await listOfShimmers(page, { hold: true });
   // Dave, in a room without voice: somebody in voice stays lit.
   const dave = page.locator("[data-kit='Name']", { hasText: "Dave" });
   await expect(dave).toHaveCount(1);
@@ -168,6 +178,22 @@ test("somebody coming back crosses their name three times again (#532)", async (
   await expect(dave).not.toHaveAttribute("data-dim");
   await expect(dave.locator(".k-name-band")).toHaveAttribute("data-sweep", "arrive");
   const rounds = await dave.evaluate((node) => node.getAnimations({ subtree: true }).map((running) => running.effect?.getComputedTiming().iterations));
+  expect(rounds).toEqual([3, 3]);
+});
+
+test("somebody new in the same spot crosses as they show up (#532)", async ({ page }) => {
+  await page.goto("/tests/fixtures/kit.html?shimmer");
+  await holdBands(page);
+  const spot = page.getByTestId("swap-name");
+  const name = spot.locator("[data-kit='Name']");
+  await expect(name).toHaveText("Jules");
+  await finish(name);
+  await expect(name.locator(".k-name-band")).toHaveCount(0);
+  // The same Name, somebody else in it: theirs arrives, three crossings.
+  await spot.getByRole("button", { name: "Somebody else here" }).click();
+  await expect(name).toHaveText("Eli");
+  await expect(name.locator(".k-name-band")).toHaveAttribute("data-sweep", "arrive");
+  const rounds = await name.evaluate((node) => node.getAnimations({ subtree: true }).map((running) => running.effect?.getComputedTiming().iterations));
   expect(rounds).toEqual([3, 3]);
 });
 
@@ -232,8 +258,8 @@ for (const scale of [1, 2]) {
       // Every face in a row, the display, body, control and meta sizes, a
       // long name cut short with "…", two with emoji in them (#512), three
       // names inside a sentence, and one with a character that turns text
-      // around (#488).
-      await expect(names).toHaveCount(12 + 5 + 2 + 3 + 1);
+      // around (#488), and one in a spot whoever is there now takes.
+      await expect(names).toHaveCount(12 + 5 + 2 + 3 + 1 + 1);
       // That one turned at its start too, so all its letters are drawn
       // backwards: the band still has to lie on them.
       await page.getByTestId("turned-name").locator("[data-kit='Name']").evaluate((node) => {

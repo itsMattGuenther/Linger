@@ -164,7 +164,7 @@ wire (AGENTS rules 8 and 12). It becomes a color only in the generated
 | Shadows | `--shadow-window`, `--shadow-window-focused`, `--shadow-popover`, `--shadow-notice`; never on a row or a control |
 | Type | `--text-label` 11 (Departure Mono, uppercase) · `-meta` 12.5 · `-control` 13.5 · `-body` 14.5 · `-name` 15.5 · `-title` 20 · `-display` 22 |
 | Faces | `--font-ui` Geist Sans · `--font-mono` Geist Mono · `--font-label` Departure Mono · `--font-pixel` Silkscreen · `--font-<key>` for each of the twelve name faces (a contract with `lib/fonts.ts`) |
-| Motion | `--duration-fast` 120ms · `-base` 160ms · `-slow` 260ms · `--ease-out`; all 1ms under reduced motion · `--nudge` 2px, how far a knocked row shakes · a repeating animation repeats `--loop` times (forever; once under reduced motion) and its length is times `--motion` (1; 0 under reduced motion) |
+| Motion | `--duration-fast` 120ms · `-base` 160ms · `-slow` 260ms · `--ease-out`; all 1ms under reduced motion · `--nudge` 2px, how far a knocked row shakes · a repeating animation repeats `--loop` times (forever; once under reduced motion) and its length is times `--motion` (1; 0 under reduced motion), but for a Shimmer name's light, which crosses `--name-shimmer-arrive` (3) or `--name-shimmer-point` (1) times and then rests, so nothing on an idle page moves (§ Name) |
 | Layers | `--z-raised` 10 · `-sticky` 20 · `-popover` 100 · `-notice` 200 · `-tooltip` 300 |
 
 All sizes are in pixels.

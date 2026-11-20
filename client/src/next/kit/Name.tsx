@@ -1,4 +1,4 @@
-import { type AnimationEvent, useState } from "react";
+import { type AnimationEvent, type PointerEvent, useState } from "react";
 import type { User } from "../../generated/User";
 import { nameProps, nameRuns } from "../../lib/names";
 import "./Name.css";
@@ -49,7 +49,7 @@ export function Name({
 }) {
   const props = nameProps(person, raw ? "k-name name-raw" : "k-name");
   const shimmer = props["data-name-effect"] === "shimmer" && !dim;
-  const light = useShine(shimmer && shine);
+  const light = useShine(shimmer && shine, person.id);
   // Emoji drawn apart from the letters, so a gradient or a shimmer doesn't paint them flat (#512).
   const runs = nameRuns(person.display_name);
   const letters =
@@ -93,17 +93,33 @@ type Sweep = "arrive" | "point";
  *
  * The band says when it's done (`rest`); a pointer over a name already
  * crossing changes nothing. A run counter keys the band, so every crossing
- * starts its window and its copy of the letters together.
+ * starts its window and its copy of the letters together. Somebody else in
+ * the same place (a line of names that reuses this one for whoever is in it
+ * now) has just shown up, so theirs arrives too.
+ *
+ * Pointing is a mouse or a pen. A finger on a phone lands on names to
+ * scroll the list past them, and every one would cross; there their card is
+ * what crosses a name again.
+ *
+ * A band that can't show (plain names, reduced motion, high contrast) never
+ * runs, so it never ends: it waits, drawing nothing, and crosses once it
+ * can, the names showing up in their own style again.
  */
-function useShine(on: boolean) {
-  const [light, setLight] = useState<{ on: boolean; sweep: Sweep | null; run: number }>({ on, sweep: on ? "arrive" : null, run: 0 });
-  // Lights on, or a new Shimmer: it arrives again. Lights off: no band.
-  if (light.on !== on) setLight({ on, sweep: on ? "arrive" : null, run: light.run + 1 });
-  const resting = on && light.on && light.sweep === null;
+function useShine(on: boolean, who: string) {
+  const [light, setLight] = useState<{ on: boolean; who: string; sweep: Sweep | null; run: number }>({ on, who, sweep: on ? "arrive" : null, run: 0 });
+  // Lights on, a new Shimmer or somebody new here: it arrives again. Lights off: no band.
+  if (light.on !== on || light.who !== who) setLight({ on, who, sweep: on ? "arrive" : null, run: light.run + 1 });
+  const current = light.on === on && light.who === who;
+  const resting = on && current && light.sweep === null;
   return {
-    sweep: on && light.on ? light.sweep : null,
+    sweep: on && current ? light.sweep : null,
     run: light.run,
-    point: resting ? () => setLight((now) => (now.on && now.sweep === null ? { ...now, sweep: "point", run: now.run + 1 } : now)) : undefined,
+    point: resting
+      ? (event: PointerEvent) => {
+          if (event.pointerType === "touch") return;
+          setLight((now) => (now.on && now.sweep === null ? { ...now, sweep: "point", run: now.run + 1 } : now));
+        }
+      : undefined,
     rest: () => setLight((now) => ({ ...now, sweep: null })),
   };
 }
