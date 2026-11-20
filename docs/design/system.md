@@ -164,7 +164,7 @@ wire (AGENTS rules 8 and 12). It becomes a color only in the generated
 | Shadows | `--shadow-window`, `--shadow-window-focused`, `--shadow-popover`, `--shadow-notice`; never on a row or a control |
 | Type | `--text-label` 11 (Departure Mono, uppercase) · `-meta` 12.5 · `-control` 13.5 · `-body` 14.5 · `-name` 15.5 · `-title` 20 · `-display` 22 |
 | Faces | `--font-ui` Geist Sans · `--font-mono` Geist Mono · `--font-label` Departure Mono · `--font-pixel` Silkscreen · `--font-<key>` for each of the twelve name faces (a contract with `lib/fonts.ts`) |
-| Motion | `--duration-fast` 120ms · `-base` 160ms · `-slow` 260ms · `--ease-out`; all 1ms under reduced motion · `--nudge` 2px, how far a knocked row shakes · a repeating animation repeats `--loop` times (forever; once under reduced motion) and its length is times `--motion` (1; 0 under reduced motion), but for a Shimmer name's light, which crosses `--name-shimmer-arrive` (3) or `--name-shimmer-point` (1) times and then rests, so nothing on an idle page moves (§ Name) |
+| Motion | `--duration-fast` 120ms · `-base` 160ms · `-slow` 260ms · `--ease-out`; all 1ms under reduced motion · `--nudge` 2px, how far a knocked row shakes · a repeating animation repeats `--loop` times (forever; once under reduced motion) and its length is times `--motion` (1; 0 under reduced motion), but for a Shimmer name's light, which crosses three times when its person arrives or once for a mouse (`lib/arrivals.ts`, `kit/Name.tsx`) and then rests, so nothing on an idle page moves (§ Name) |
 | Layers | `--z-raised` 10 · `-sticky` 20 · `-popover` 100 · `-notice` 200 · `-tooltip` 300 |
 
 All sizes are in pixels.
@@ -334,22 +334,26 @@ gradient at 92°, and shimmer or glow.
   moves.
 - **Shimmer** is a band of `--name-shimmer` crossing the letters, 4s a
   crossing, a quarter of the name wide, and it costs the page nothing per
-  frame (#532). It crosses only where a name passes `shine`: the list, a
-  person's card and the style picker's preview. There it crosses
-  `--name-shimmer-arrive` times (three) when the name shows up or its
-  lights come on, somebody back from idle, away or offline, and
-  `--name-shimmer-point` times (once) when a pointer comes over it at rest;
-  then the band is gone until the next. Pointing is a mouse or a pen: a
-  finger on a phone lands on names to scroll past them, and there a
-  person's card is what crosses a name again. Somebody new in a spot that
-  takes whoever is there now crosses as they show up, and a name still in a
-  line keeps its rest when somebody joins it or its order changes. In a conversation, search, media
-  and everywhere else a shimmering name is still: its colors, no light. It
-  used to cross forever, and anything moving makes the page hand the window
-  a new frame every refresh: in the Linux app each one is the whole window
-  copied into place on the app's main thread, and an idle list with seven
-  Shimmer names held a 165 Hz 4K NVIDIA desktop at 58% of a core and 50 W,
-  visible or on another workspace (1 to 4% and 21 W with the band still).
+  frame (#532). It crosses only where a name passes `shine`. In the list
+  (`shine="list"`) it crosses three times when the person arrives: the
+  first time the page sees them lit (Linger starting) and each time they
+  come back from idle, away or offline (`lib/arrivals.ts`, lit as the
+  list's rows are). The light is the person's, not the name's: every name
+  of theirs crosses in the same 12 seconds, in step, and a name drawn again
+  because the layout around it changed shape (a folded server's line
+  going from a room to voice, the voice dock growing) picks the crossing
+  up where it is, or is still once it's over. A card and the style
+  picker's preview (`shine="open"`) cross three times as they open. Either
+  crosses once when a mouse or a pen comes over it at rest; a finger on a
+  phone lands on names to scroll past them, and there a person's card is
+  what crosses a name again. Then the band is gone until the next. In a
+  conversation, search, media and everywhere else a shimmering name is
+  still: its colors, no light. It used to cross forever, and anything
+  moving makes the page hand the window a new frame every refresh: in the
+  Linux app each one is the whole window copied into place on the app's
+  main thread, and an idle list with seven Shimmer names held a 165 Hz 4K
+  NVIDIA desktop at 58% of a core and 50 W, visible or on another
+  workspace (1 to 4% and 21 W with the band still).
   It is not a background moved by `background-position`, which no
   engine can move by itself: that made every member's app restyle and
   repaint a shimmering name 60 times a second wherever it showed. A window
@@ -1336,7 +1340,7 @@ it catches, and nowhere else (AGENTS.md hard rule 4).
 | The message box's `@` list: who it offers and in what order, the keys, Enter never sending, an input method left alone, the combobox and listbox, and mentions read by name | `core/chat/mentions.test.ts`, `next-chat-parity.spec.ts` › mentioning somebody by the name you know |
 | An inline name never makes its line taller | `kit.spec.ts` › a name inside a sentence sits on the sentence's own lines |
 | A name with a character that turns text around in it leaves the words after it the right way round, read letter by letter as drawn, and a row's title, note, second line and name are isolated; a file named `invoice` + U+202E + `fdp.exe` shows "invoicefdp.exe" on its card, isolated, and in Media and Search; a message ending in U+202E leaves its "edited" the right way round (#488) | `kit.spec.ts` › a name that turns text around; `next-chat.spec.ts` › a name with a character that turns text around, words ending in a character that turns text around; `lib/media.test.ts`, `core/search.test.ts` |
-| A shimmering name moves only by `transform` (a window and its copy of the letters, in step, nothing on the name itself), and in Chromium the page does no style work per frame; in the list it crosses three times and then its band is gone, so a list at rest runs no animation at all; a pointer over it at rest crosses it once, and one over it mid-crossing changes nothing; somebody back from idle crosses three times again; the copy lies on the letters in every face and size, cut short with "…", inside a sentence and in a name that turns text around (#488), at 100% and 200%; it's never selected, copied or read out; no band with plain names or reduced motion (#532) | `next-name-shimmer.spec.ts` |
+| A shimmering name moves only by `transform` (a window and its copy of the letters, in step, nothing on the name itself), and in Chromium the page does no style work per frame; in the list it crosses three times when its person arrives and then its band is gone, so a list at rest runs no animation at all; a mouse over it at rest crosses it once, a finger doesn't, and a pointer mid-crossing changes nothing; somebody back from idle crosses three times again; a folded server's line reordered, going from voice to a room or one name, crosses nobody, and drawn again mid-crossing a name picks it up that far in (who arrived when is `lib/arrivals.test.ts`); the copy lies on the letters in every face and size, cut short with "…", inside a sentence and in a name that turns text around (#488), at 100% and 200%; it's never selected, copied or read out; no band with plain names or reduced motion (#532) | `next-name-shimmer.spec.ts` |
 | A name reads the same in a message and on its card: the same colors letter by letter and the same glow for its size, sampled from screenshots, for a solid color, a gradient, glow and shimmer (still in the conversation even under the pointer, and crossing on the card, the same letters at a crossing's start); the card's own surface behind it, at 4.5:1; a name's box no wider than its letters; the glow gone with plain names and in high contrast | `next-name-paint.spec.ts` |
 | A glowing name's light fades out past its box in a list row, a voice chip in the list, a reply's quote, the reply line and the typing line, with no step at the box's edges (sampled from screenshots), and in a row and a chip its rings match the person card's; in the chat window's voice strip it fades out across the chip and stays inside the chip above and below; a long glowing name in a row still ends in its own "…", and long lines still end in "…", with no letter past their box; rows, chips, lines and names sit exactly where they did when those parts cut on every side, at 100% and 200% and at the chat window's narrowest (420) and a conversation window's (360), where the strip hides the chips that don't fit; plain names, reduced motion and high contrast leave no light past the box | `next-name-glow.spec.ts` | `next-name-glow.spec.ts` |
 | An offline person's name in the list is `--text-offline` with no gradient, glow, shadow or shimmer, for a solid color, a gradient, glow and shimmer, and every pixel in and beside it grey in a screenshot; an idle or away name too, glow and all, with an away message still warm (#301); somebody here keeps their look; going idle, away or offline and coming back (around, in a room) switches both ways in the same face; plain names and high contrast (`GrayText`); offline rows 48px with names on the others' edge and line, at 100% and 200% | `next-offline-names.spec.ts` |

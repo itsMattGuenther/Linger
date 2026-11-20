@@ -71,7 +71,7 @@ function OneArrival({ card, onGone }: { card: ArrivalCard; onGone?: (id: string)
   }, [id, at, onGone]);
   return (
     <Notice icon="door" tag={card.serverName ? <span className="nx-knock-server">{card.serverName}</span> : undefined}>
-      {card.who ? <Name person={card.who} size="inline" shine /> : "Somebody"} came into #{card.room}.
+      {card.who ? <Name person={card.who} size="inline" shine="list" /> : "Somebody"} came into #{card.room}.
     </Notice>
   );
 }
@@ -89,7 +89,7 @@ function OneKnock({ card, onGone }: { card: KnockCard; onGone: (server: string, 
 
   return (
     <Notice icon="knock" tag={card.serverName ? <span className="nx-knock-server">{card.serverName}</span> : undefined}>
-      {card.from ? <Name person={card.from} size="inline" shine /> : "Somebody"} knocked. <span className="nx-knock-hi">Just saying hi.</span>
+      {card.from ? <Name person={card.from} size="inline" shine="list" /> : "Somebody"} knocked. <span className="nx-knock-hi">Just saying hi.</span>
     </Notice>
   );
 }

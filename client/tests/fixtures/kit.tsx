@@ -151,23 +151,6 @@ function SplitPanes() {
   );
 }
 
-/**
- * One spot, one Name, whoever is there now: a line of names that reuses its
- * Name for the next person, as a folded room's line does. Somebody new there
- * has just shown up, so their light crosses (#532).
- */
-function SwapName() {
-  const [who, setWho] = useState(jules);
-  return (
-    <div className="g-row" data-testid="swap-name">
-      <Name person={who} shine />
-      <Button onClick={() => setWho(who.id === jules.id ? eli : jules)}>
-        Somebody else here
-      </Button>
-    </div>
-  );
-}
-
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
     <section className="g-section" data-section={id} aria-labelledby={`g-${id}`}>
@@ -573,25 +556,25 @@ function Gallery() {
           <div>
             {FACES.map(({ user }) => (
               <div className="g-row" key={user.id}>
-                <Name person={user} shine />
+                <Name person={user} shine="open" />
               </div>
             ))}
           </div>
           <div>
             <div className="g-row">
-              <Name person={jules} size="display" shine />
+              <Name person={jules} size="display" shine="open" />
             </div>
             <div className="g-row">
-              <Name person={eli} size="body" shine />
-              <Name person={callie} size="control" shine />
-              <Name person={sam} size="meta" shine />
+              <Name person={eli} size="body" shine="open" />
+              <Name person={callie} size="control" shine="open" />
+              <Name person={sam} size="meta" shine="open" />
             </div>
             <div className="g-row g-narrow">
-              <Name person={longName} shine />
+              <Name person={longName} shine="open" />
             </div>
             <div className="g-row" data-testid="emoji-names">
-              <Name person={moon} shine />
-              <Name person={sparkle} shine />
+              <Name person={moon} shine="open" />
+              <Name person={sparkle} shine="open" />
             </div>
             <div className="g-row">
               {/* Offline (#274): the same people, their faces kept, none of their colors or effects. */}
@@ -603,14 +586,13 @@ function Gallery() {
             </div>
             <p className="g-row g-sentence" data-testid="inline-names">
               <span>
-                Replying to <Name person={jules} size="inline" shine />: <Name person={eli} size="inline" shine /> and{" "}
-                <Name person={sam} size="inline" shine /> are typing, inside a sentence, in its own size and line.
+                Replying to <Name person={jules} size="inline" shine="open" />: <Name person={eli} size="inline" shine="open" /> and{" "}
+                <Name person={sam} size="inline" shine="open" /> are typing, inside a sentence, in its own size and line.
               </span>
             </p>
-            <SwapName />
             <p className="g-row g-sentence" data-testid="turned-name">
               <span>
-                <Name person={turned} size="inline" shine /> is typing, the right way round.
+                <Name person={turned} size="inline" shine="open" /> is typing, the right way round.
               </span>
             </p>
           </div>

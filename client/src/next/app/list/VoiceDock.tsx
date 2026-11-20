@@ -170,7 +170,7 @@ export function VoiceDock({ where, people, muted, deafened, line, server, onGoTo
         fill={fill}
         {...chipAction(person)}
       >
-        {person.you ? "you" : <Name person={person.user} size="control" shine />}
+        {person.you ? "you" : <Name person={person.user} size="control" shine="list" />}
       </Chip>
     </li>
   );
@@ -268,7 +268,7 @@ export function VoiceDock({ where, people, muted, deafened, line, server, onGoTo
                   set its Shimmer crossing again (#532). */}
               <span className="nx-voice-share-words">
                 {one.watching ? "You're watching " : null}
-                <Name person={one.user} size="inline" shine />
+                <Name person={one.user} size="inline" shine="list" />
                 {one.watching ? "'s screen" : " is sharing their screen"}
               </span>
               {one.watching ? null : (

@@ -1,6 +1,7 @@
 import { getCurrentWindow, LogicalPosition, LogicalSize } from "@tauri-apps/api/window";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { type CSSProperties, memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { watchArrivals } from "../../../lib/arrivals";
 import { useNow } from "../../../lib/clock";
 import {
   connect,
@@ -424,6 +425,9 @@ function Servers({
   offerTaken: (none: null) => void;
 }) {
   const states = useServers();
+  // Who just arrived, for their Shimmer names' light (#532): the list is
+  // the window that's always open, the phone's included.
+  useEffect(() => watchArrivals(states), [states]);
   const now = useNow();
   const [prefs, setPrefs] = useState<ServerPrefs>(() => loadServerPrefs(localStore()));
   // The phone app, a while in the background (SPEC §4.15): its connections close.

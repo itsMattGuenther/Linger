@@ -285,9 +285,9 @@ function Names({ people, more }: { people: readonly User[]; more: boolean }) {
   if (!first) return null;
   return (
     <>
-      <Name key={first.id} person={first} size="inline" shine />
+      <Name key={first.id} person={first} size="inline" shine="list" />
       {second ? (more ? ", " : " and ") : null}
-      {second ? <Name key={second.id} person={second} size="inline" shine /> : null}
+      {second ? <Name key={second.id} person={second} size="inline" shine="list" /> : null}
       {more ? " and others" : null}
     </>
   );
@@ -409,7 +409,7 @@ function YouHere({ line, saveLine, onFocusIn }: { line: OpenLine; saveLine?: (li
   const words = (
     <>
       <span className="nx-srv-you-is">
-        you're <Name person={line.me} size="inline" shine /> here
+        you're <Name person={line.me} size="inline" shine="list" /> here
       </span>
       {away || line.status ? (
         <>

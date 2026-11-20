@@ -142,7 +142,8 @@ async function expectTheirs(page: Page, name: Locator, look: Look) {
   const throughLetters = look.fill.kind === "gradient" || look.effect === "shimmer";
   const color = throughLetters ? "rgba(0, 0, 0, 0)" : from;
   const painted = (image: string) => image.includes("linear-gradient") && image.includes(from) && image.includes(to);
-  // A lit shimmering name's band, held where it starts (`open`).
+  // A lit shimmering name's band, held where it starts (`open`): its person
+  // has just arrived, as each test that looks at one makes sure.
   const animation = look.effect === "shimmer" ? "k-name-band k-name-band-letters" : "none";
   await expectLook(name, (now) => [
     ...(now.color === color ? [] : [`color ${now.color}`]),
@@ -225,6 +226,13 @@ test.describe("an offline name is drawn in the dim grey, with none of their look
       const jen = nameIn(page, "Offline", "Jen");
       const eli = nameIn(page, "People here", "Eli");
       await expectDim(page, jen);
+      // A shimmer's light crosses when somebody arrives (#532): Eli away and
+      // back, so it's crossing now, however long the page took to get here.
+      if (look.effect === "shimmer") {
+        await move(page, people.eli.id, "away");
+        await expectDim(page, nameIn(page, "Away", "Eli"));
+        await move(page, people.eli.id, "in_room", "r-general");
+      }
       await expectTheirs(page, eli, look);
       await page.mouse.move(0, 0);
 

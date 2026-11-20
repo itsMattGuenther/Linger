@@ -1,5 +1,6 @@
-import { type AnimationEvent, type PointerEvent, useState } from "react";
+import { type AnimationEvent, type CSSProperties, type PointerEvent, useState, useSyncExternalStore } from "react";
 import type { User } from "../../generated/User";
+import { type Arrival, ARRIVAL_ROUNDS, arrivalOf, endArrival, lightAt, subscribeArrivals } from "../../lib/arrivals";
 import { nameProps, nameRuns } from "../../lib/names";
 import "./Name.css";
 
@@ -30,26 +31,27 @@ export type NameSize = "meta" | "control" | "body" | "name" | "display" | "inlin
  * moment they do, because the caller passes their presence as it is now.
  *
  * `shine` lets a Shimmer's light cross the name, a few times and then never
- * again until something new happens (`useShine`): only the list and a
- * person's card pass it, and the style picker's preview. Everywhere else, a
- * conversation included, a shimmering name is still: its colors, no light.
+ * again until something new happens (`useShine`). `list`, for the list: when
+ * its person arrives (`lib/arrivals.ts`). `open`, for a person's card and the
+ * style picker's preview: when it opens. Everywhere else, a conversation
+ * included, a shimmering name is still: its colors, no light.
  */
 export function Name({
   person,
   size = "name",
   raw = false,
   dim = false,
-  shine = false,
+  shine,
 }: {
   person: User;
   size?: NameSize;
   raw?: boolean;
   dim?: boolean;
-  shine?: boolean;
+  shine?: Shine;
 }) {
   const props = nameProps(person, raw ? "k-name name-raw" : "k-name");
   const shimmer = props["data-name-effect"] === "shimmer" && !dim;
-  const light = useShine(shimmer && shine, person.id);
+  const light = useShine(shimmer, person.id, shine);
   // Emoji drawn apart from the letters, so a gradient or a shimmer doesn't paint them flat (#512).
   const runs = nameRuns(person.display_name);
   const letters =
@@ -70,19 +72,43 @@ export function Name({
           character in it that turns text around can't move the band's place
           after them (#488, #532). */}
       {shimmer ? <span className="k-name-letters">{letters}</span> : letters}
-      {light.sweep ? <ShimmerBand key={`${person.display_name}\n${light.run}`} letters={person.display_name} sweep={light.sweep} onDone={light.rest} /> : null}
+      {light.crossing ? <ShimmerBand key={`${person.display_name}\n${light.crossing.key}`} letters={person.display_name} crossing={light.crossing} onDone={light.rest} /> : null}
     </span>
   );
 }
 
-/** Which crossing a name's light is on: the few on arrival, or the one for a pointer. */
-type Sweep = "arrive" | "point";
+/** Where a Shimmer's light crosses a name: in the list, or on something that opens. */
+export type Shine = "list" | "open";
+
+/** A crossing to draw: the few for an arrival, or the one for a pointer. */
+interface Crossing {
+  sweep: "arrive" | "point";
+  rounds: number;
+  /** How far in it starts, in milliseconds: an arrival's other names are already that far. */
+  into: number;
+  /** Keys the band, so each crossing starts its window and its copy of the letters together. */
+  key: string;
+  /** The arrival it belongs to, to end it. */
+  at: number;
+}
+
+const noSubscribe = () => () => {};
 
 /**
- * When a Shimmer's light crosses a name: a few times when it shows up or its
- * lights come on (somebody back from idle, away or offline, or a new
- * Shimmer), once more when a pointer comes over it at rest, and otherwise
- * never. How many times each is `Name.css`'s to say.
+ * When a Shimmer's light crosses a name, and none of it while the name can't
+ * shine (dimmed, or no Shimmer).
+ *
+ * In the list it crosses when its person arrives (`lib/arrivals.ts`): that is
+ * the person's, not this name's, so a name rebuilt because the layout around
+ * it changed shape picks the crossing up where their other names are, or is
+ * still once it's over. Nothing about it is kept here.
+ *
+ * Something that opens (a person's card, the style picker's preview) crosses
+ * when it does, and again when its Shimmer comes on.
+ *
+ * And either crosses once when a mouse or a pen comes over it at rest. A
+ * finger on a phone lands on names to scroll past them, and every one would
+ * cross; there their card is what crosses a name again.
  *
  * It used to cross forever. Anything that moves makes the page draw a new
  * frame every refresh, and in the Linux app each frame is the whole window
@@ -91,39 +117,42 @@ type Sweep = "arrive" | "point";
  * another workspace. Between crossings the band isn't there at all, so a list
  * at rest draws nothing.
  *
- * The band says when it's done (`rest`); a pointer over a name already
- * crossing changes nothing. A run counter keys the band, so every crossing
- * starts its window and its copy of the letters together. Somebody else in
- * the same place (a line of names that reuses this one for whoever is in it
- * now) has just shown up, so theirs arrives too.
- *
- * Pointing is a mouse or a pen. A finger on a phone lands on names to
- * scroll the list past them, and every one would cross; there their card is
- * what crosses a name again.
- *
  * A band that can't show (plain names, reduced motion, high contrast) never
- * runs, so it never ends: it waits, drawing nothing, and crosses once it
- * can, the names showing up in their own style again.
+ * runs, so it never ends and draws nothing; the next time the name is drawn
+ * after its time, it's gone.
  */
-function useShine(on: boolean, who: string) {
-  const [light, setLight] = useState<{ on: boolean; who: string; sweep: Sweep | null; run: number }>({ on, who, sweep: on ? "arrive" : null, run: 0 });
-  // Lights on, a new Shimmer or somebody new here: it arrives again. Lights
-  // off: no band. Who is only asked while it can shine, so a name that never
-  // does draws once when somebody else takes its place.
-  const moved = on && light.who !== who;
-  if (light.on !== on || moved) setLight({ on, who, sweep: on ? "arrive" : null, run: light.run + 1 });
-  const current = light.on === on && !moved;
-  const resting = on && current && light.sweep === null;
+function useShine(on: boolean, who: string, shine: Shine | undefined) {
+  const listed = useSyncExternalStore(shine === "list" ? subscribeArrivals : noSubscribe, () => (shine === "list" ? arrivalOf(who) : undefined));
+  const [pointed, setPointed] = useState<{ run: number; crossing: boolean }>({ run: 0, crossing: false });
+  // Something that opens: its own arrival, when it opens and when its Shimmer comes on.
+  const [opened, setOpened] = useState<{ on: boolean; arrival: Arrival | undefined }>(() => ({ on, arrival: shine === "open" && on ? { at: performance.now(), ended: false } : undefined }));
+  if (opened.on !== on) {
+    setOpened({ on, arrival: shine === "open" && on ? { at: performance.now(), ended: false } : opened.arrival });
+    setPointed((now) => ({ ...now, crossing: false }));
+  }
+
+  const arrival = shine === "list" ? listed : opened.arrival;
+  const into = on && shine ? lightAt(arrival, performance.now()) : null;
+  const crossing: Crossing | null =
+    arrival && into !== null
+      ? { sweep: "arrive", rounds: ARRIVAL_ROUNDS, into, key: `a${arrival.at}`, at: arrival.at }
+      : on && shine && pointed.crossing
+        ? { sweep: "point", rounds: 1, into: 0, key: `p${pointed.run}`, at: 0 }
+        : null;
   return {
-    sweep: on && current ? light.sweep : null,
-    run: light.run,
-    point: resting
-      ? (event: PointerEvent) => {
-          if (event.pointerType === "touch") return;
-          setLight((now) => (now.on && now.sweep === null ? { ...now, sweep: "point", run: now.run + 1 } : now));
-        }
-      : undefined,
-    rest: () => setLight((now) => ({ ...now, sweep: null })),
+    crossing,
+    point:
+      on && shine && crossing === null
+        ? (event: PointerEvent) => {
+            if (event.pointerType === "touch") return;
+            setPointed((now) => ({ run: now.run + 1, crossing: true }));
+          }
+        : undefined,
+    rest: (done: Crossing) => {
+      if (done.sweep === "point") setPointed((now) => ({ ...now, crossing: false }));
+      else if (shine === "list") endArrival(who, done.at);
+      else setOpened((now) => (now.arrival?.at === done.at ? { ...now, arrival: { at: done.at, ended: true } } : now));
+    },
   };
 }
 
@@ -135,14 +164,18 @@ function useShine(on: boolean, who: string) {
  * crossing starts the window and its copy again together: they move in step
  * only because they started together. It's there only while it crosses.
  */
-function ShimmerBand({ letters, sweep, onDone }: { letters: string; sweep: Sweep; onDone: () => void }) {
+function ShimmerBand({ letters, crossing, onDone }: { letters: string; crossing: Crossing; onDone: (done: Crossing) => void }) {
   // The window's own end; its copy of the letters ends at the same moment.
   const ended = (event: AnimationEvent) => {
-    if (event.animationName === "k-name-band" && event.target === event.currentTarget && !event.pseudoElement) onDone();
+    if (event.animationName === "k-name-band" && event.target === event.currentTarget && !event.pseudoElement) onDone(crossing);
   };
+  // How many crossings, and how far into them it starts; its copy of the
+  // letters reads the same two, so the two stay in step. Fixed when the band
+  // is drawn: drawn again mid-crossing, a new delay would jump it ahead.
+  const [timing] = useState(() => ({ "--name-shimmer-rounds": crossing.rounds, "--name-shimmer-delay": `${-Math.round(crossing.into)}ms` }) as CSSProperties);
   return (
     <span className="k-name-band-place" aria-hidden="true">
-      <span className="k-name-band" data-letters={letters} data-sweep={sweep} onAnimationEnd={ended} />
+      <span className="k-name-band" data-letters={letters} data-sweep={crossing.sweep} style={timing} onAnimationEnd={ended} />
     </span>
   );
 }

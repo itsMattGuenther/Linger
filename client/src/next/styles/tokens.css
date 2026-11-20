@@ -183,11 +183,6 @@
   /* The band that crosses a shimmering name (SPEC §4.5). `lib/names.ts`
      and `kit/Name.css` read it. */
   --name-shimmer: rgb(255 255 255 / 0.6);
-  /* How many times that band crosses a name in the list or on a card: when
-     it shows up or its lights come on, and when a pointer comes over it at
-     rest. Then it rests, and nothing on the page moves (`kit/Name.tsx`). */
-  --name-shimmer-arrive: 3;
-  --name-shimmer-point: 1;
   /* How far a glowing name's light reaches, in the name's own ems, so a glow
      looks the same on a message (8px at 14.5px) and on a card (#272). */
   --name-glow: 0.55em;
