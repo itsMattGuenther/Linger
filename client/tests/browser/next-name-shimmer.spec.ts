@@ -178,6 +178,25 @@ test("pointing at a resting name crosses it once more; pointing while it crosses
   await expect(callie.locator(".k-name-band")).toHaveCount(0);
 });
 
+test("a mouse's crossing is over when its name stops shining, and doesn't come back with it (#532)", async ({ page }) => {
+  await listOfShimmers(page, { hold: true });
+  const callie = shimmering(page).filter({ hasText: "Callie" });
+  await finish(callie);
+  await expect(callie.locator(".k-name-band")).toHaveCount(0);
+  await callie.hover();
+  await expect(callie.locator(".k-name-band")).toHaveAttribute("data-sweep", "point");
+  await page.mouse.move(0, 0);
+  // Her Shimmer off and on again within the crossing's four seconds: no
+  // arrival, so nothing crosses, the mouse's crossing included.
+  const name = page.locator("[data-kit='Name']", { hasText: "Callie" });
+  await restyle(page, { ...people.callie, style: { ...people.callie.style, fill: { kind: "gradient", from: "violet", to: "sky" }, effect: "none" } });
+  await expect(name).not.toHaveAttribute("data-name-effect");
+  await restyle(page, { ...people.callie, style: { ...people.callie.style, fill: { kind: "gradient", from: "violet", to: "sky" }, effect: "shimmer" } });
+  await expect(name).toHaveAttribute("data-name-effect", "shimmer");
+  await page.waitForTimeout(100);
+  await expect(name.locator(".k-name-band")).toHaveCount(0);
+});
+
 test("somebody coming back crosses their name three times again (#532)", async ({ page }) => {
   await listOfShimmers(page, { hold: true });
   // Dave, in a room without voice: somebody in voice stays lit.
