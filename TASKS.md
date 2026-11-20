@@ -64,6 +64,43 @@ default.
   by itself. The app only, no server update. Owed after it ships: quit in
   the middle of a call with a friend watching; you leave their list and
   the call at once.
+- **A list at rest no longer works the computer hard** (#950). A Shimmer
+  name's light used to cross it forever. On Linux every frame of that is
+  the whole window copied over, so an idle list held about half a CPU core
+  and kept the graphics card busy (58% of a core and 50 W on Matt's 4K,
+  165 Hz NVIDIA desktop, against 1% and 18 W now). The light now crosses
+  three times when that person arrives (Linger starts, or they come back
+  from idle, away or offline) and once under the mouse, then rests. A
+  person's card and the style preview in Settings cross three times as
+  they open; a conversation, search and media show the name still.
+  Windows and phones gain too, by less. The app only, no server update.
+  Owed after it ships: a glance on Windows and on a phone.
+- **Scrolling up through a long conversation on Linux no longer goes
+  blank** (#944, PR #947). When a page of older messages went in above,
+  the app drew and measured all of it in one long frame, and WebKitGTK,
+  which scrolls on a thread of its own, painted the scroll before the
+  rows: a third of a second of empty conversation, then rows somewhere
+  else. On a computer, rows are now measured as they come near the
+  screen. A rare one-frame jump is left (WebKitGTK paints a correction a
+  frame early, about once in a 14-second scroll); #944 has the option if
+  it still bothers anybody. Phones are unchanged. The app only, no server
+  update.
+- **Back to the newest shows whenever you've scrolled well up** (#945,
+  PR #948), not only after a long read back. It appears more than three
+  screens above the newest message and goes within one screen of it, and
+  pressing it takes you straight there. The words under it no longer show
+  through, and pressing it leaves the cursor in the message box, so what
+  you type next isn't lost. The app only, no server update.
+- **A voice message called off as it starts no longer keeps recording**
+  (#913, #920; PRs #919, #923). A voice message takes a moment to start
+  while the microphone opens. Closing the window, pressing Escape or
+  Discard, folding the docked chat or opening another conversation in
+  that moment left it recording with nothing on screen to stop it, and
+  later voice messages were refused until it ran out five minutes later.
+  Now each of those calls it off, on a computer and on a phone. The app
+  only, no server update. Owed after it ships: with a real microphone,
+  start a voice message and close the chat window at once; nothing keeps
+  recording, and the next voice message starts.
 
 **0.5.4 release — prepared 2026-11-02: Linger updates itself, and phones
 share straight to it.** The notes are `docs/releases/0.5.4.md`, and its one
