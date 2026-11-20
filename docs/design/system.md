@@ -339,7 +339,11 @@ gradient at 92°, and shimmer or glow.
   `--name-shimmer-arrive` times (three) when the name shows up or its
   lights come on, somebody back from idle, away or offline, and
   `--name-shimmer-point` times (once) when a pointer comes over it at rest;
-  then the band is gone until the next. In a conversation, search, media
+  then the band is gone until the next. Pointing is a mouse or a pen: a
+  finger on a phone lands on names to scroll past them, and there a
+  person's card is what crosses a name again. Somebody new in a spot that
+  takes whoever is there now crosses as they show up, and a name still in a
+  line keeps its rest when somebody joins it or its order changes. In a conversation, search, media
   and everywhere else a shimmering name is still: its colors, no light. It
   used to cross forever, and anything moving makes the page hand the window
   a new frame every refresh: in the Linux app each one is the whole window

@@ -181,6 +181,41 @@ test("somebody coming back crosses their name three times again (#532)", async (
   expect(rounds).toEqual([3, 3]);
 });
 
+test("a folded server's line keeps a name's rest when somebody joins it or the order changes, and only they cross (#532)", async ({ page }) => {
+  // Several servers, each folded to its one line (#712).
+  await page.setViewportSize({ width: 340, height: 820 });
+  await page.goto("/tests/fixtures/next-list-window.html");
+  await holdBands(page);
+  await page.evaluate(() => document.fonts.ready);
+  const line = page.getByRole("region", { name: "The Good Company", exact: true }).locator(".nx-srv-line-text");
+  await expect(line).toBeVisible();
+  for (const user of [people.eli, people.jules]) await restyle(page, { ...user, style: { ...user.style, effect: "shimmer" } });
+  /** Who is in #general's voice, in the server's order: the line names them. */
+  const inVoice = (...ids: string[]) =>
+    page.evaluate(
+      ([server, ids]) => window.core?.frame(server, { op: "voice.state", d: { room_id: "r-general", peers: ids.map((user_id) => ({ session_id: `s-${user_id}`, user_id, controls: { muted: false, deafened: false } })) } } as never),
+      [HOME, ids] as const,
+    );
+  const names = line.locator("[data-kit='Name']");
+  const bandOf = (who: string) => line.locator("[data-kit='Name']", { hasText: who }).locator(".k-name-band");
+  // Eli alone, at rest.
+  await inVoice(people.eli.id);
+  await expect(names).toHaveText(["Eli"]);
+  await finish(names);
+  await expect(line.locator(".k-name-band")).toHaveCount(0);
+  // Jules joins, ahead of him: Eli moves to second and stays at rest; only Jules crosses.
+  await inVoice(people.jules.id, people.eli.id);
+  await expect(names).toHaveText(["Jules", "Eli"]);
+  await expect(bandOf("Jules")).toHaveAttribute("data-sweep", "arrive");
+  await expect(bandOf("Eli")).toHaveCount(0);
+  // And the order turning round again moves names at rest, it doesn't light them.
+  await finish(names);
+  await expect(line.locator(".k-name-band")).toHaveCount(0);
+  await inVoice(people.eli.id, people.jules.id);
+  await expect(names).toHaveText(["Eli", "Jules"]);
+  await expect(line.locator(".k-name-band")).toHaveCount(0);
+});
+
 test("somebody new in the same spot crosses as they show up (#532)", async ({ page }) => {
   await page.goto("/tests/fixtures/kit.html?shimmer");
   await holdBands(page);

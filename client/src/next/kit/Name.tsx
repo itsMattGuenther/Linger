@@ -107,9 +107,12 @@ type Sweep = "arrive" | "point";
  */
 function useShine(on: boolean, who: string) {
   const [light, setLight] = useState<{ on: boolean; who: string; sweep: Sweep | null; run: number }>({ on, who, sweep: on ? "arrive" : null, run: 0 });
-  // Lights on, a new Shimmer or somebody new here: it arrives again. Lights off: no band.
-  if (light.on !== on || light.who !== who) setLight({ on, who, sweep: on ? "arrive" : null, run: light.run + 1 });
-  const current = light.on === on && light.who === who;
+  // Lights on, a new Shimmer or somebody new here: it arrives again. Lights
+  // off: no band. Who is only asked while it can shine, so a name that never
+  // does draws once when somebody else takes its place.
+  const moved = on && light.who !== who;
+  if (light.on !== on || moved) setLight({ on, who, sweep: on ? "arrive" : null, run: light.run + 1 });
+  const current = light.on === on && !moved;
   const resting = on && current && light.sweep === null;
   return {
     sweep: on && current ? light.sweep : null,

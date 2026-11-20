@@ -155,7 +155,8 @@ That's #532. The measurements above were on a 60 Hz screen,
 except the first two, at 240 Hz; it made no clear difference. #593 moved
 the light onto `transform`, which roughly halved it, and since 2026-11-19
 the light crosses three times when a name shows up or comes back, once
-when pointed at, and then rests, only in the list and on a card: an idle
+when pointed at, and then rests, only in the list, on a card and in the
+style picker's preview: an idle
 list with Shimmer names is back to next to nothing. Before that, on a 4K
 165 Hz NVIDIA desktop, it held the app's main thread at 58% of a core, the
 whole window copied into place on every refresh (`docs/design/system.md`,

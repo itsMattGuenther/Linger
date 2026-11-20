@@ -264,21 +264,18 @@ export function VoiceDock({ where, people, muted, deafened, line, server, onGoTo
               <span className="nx-voice-share-mark" aria-hidden="true">
                 <Icon name="screen" size="sm" />
               </span>
-              {one.watching ? (
-                <span className="nx-voice-share-words">
-                  You're watching <Name person={one.user} size="inline" shine />
-                  {"'s screen"}
-                </span>
-              ) : (
-                <>
-                  <span className="nx-voice-share-words">
-                    <Name person={one.user} size="inline" shine /> is sharing their screen
-                  </span>
-                  {/* Named for whose with several, as the voice line's are: it's the button's name too. */}
-                  <Button size="sm" variant="primary" onClick={() => watch.onWatch(one.session)}>
-                    {watch.sharers.length > 1 ? `Watch ${one.user.display_name}` : "Watch"}
-                  </Button>
-                </>
+              {/* The name in one place either way, so watching or not doesn't
+                  set its Shimmer crossing again (#532). */}
+              <span className="nx-voice-share-words">
+                {one.watching ? "You're watching " : null}
+                <Name person={one.user} size="inline" shine />
+                {one.watching ? "'s screen" : " is sharing their screen"}
+              </span>
+              {one.watching ? null : (
+                // Named for whose with several, as the voice line's are: it's the button's name too.
+                <Button size="sm" variant="primary" onClick={() => watch.onWatch(one.session)}>
+                  {watch.sharers.length > 1 ? `Watch ${one.user.display_name}` : "Watch"}
+                </Button>
               )}
             </li>
           ))}
