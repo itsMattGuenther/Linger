@@ -149,6 +149,35 @@ jobs:
           # TestFlight with altool, and fails before building without it.
           xcrun altool --version || echo "::warning::this Xcode has no altool, which ios.yml uploads with"
 
+      # The server, as built before from the same code. The Rust cache
+      # above brings back its dependencies, but its own three crates were
+      # compiled again every run: 11 to 14 minutes, the longest step, on
+      # pull requests that mostly never touch the server. Keyed on
+      # everything its release build reads (the crates, the workspace's
+      # Cargo files and config), on this file, which says how it's built,
+      # on the compiler, and on the Xcode, whose Mac it was built on; no
+      # restore-keys, so a change to any of them builds it again. Kept
+      # straight after a build that worked, not at the job's end, so a
+      # flow failing doesn't lose it.
+      #
+      # Still built whenever the Rust cache had no exact match (the app's
+      # own Cargo.lock changed, say): that cache is saved again at the
+      # job's end from what this run built, and without the server's build
+      # it would be saved without the server's release dependencies, for
+      # the next run that builds the server to compile from nothing.
+      #
+      # Looked up before the iPhone starts, never after: its key hashes the
+      # crates with `hashFiles`, which GitHub's runner stops at a fixed 120
+      # seconds, and for the minutes after `simctl boot` this Mac barely
+      # runs anything (the build after it printed nothing for three to four
+      # minutes). Straight after the boot, the hash ran out of time and
+      # failed the job before any flow ran ("The template is not valid").
+      - name: the server, as built before from this code
+        id: server
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: target/release/linger-server
+          key: linger-server-xcode-${{ inputs.xcode || '27.1' }}-${{ runner.os }}-${{ runner.arch }}-rustc-${{ steps.toolchain.outputs.cachekey }}-${{ hashFiles('crates/**', 'Cargo.toml', 'Cargo.lock', '.cargo/config.toml', '.github/workflows/ios-simulator.yml') }}
       # The plain iPhone (not a Pro, Plus, Max, Air or Duo), the size most
       # people have and the one share-photo.yaml's taps inside the share
       # window were measured on, on the newest iOS that has one. Not just the
@@ -190,28 +219,6 @@ jobs:
           sudo killall -HUP mDNSResponder || true
           xcrun simctl boot "$udid"
 
-      # The server, as built before from the same code. The Rust cache
-      # above brings back its dependencies, but its own three crates were
-      # compiled again every run: 11 to 14 minutes, the longest step, on
-      # pull requests that mostly never touch the server. Keyed on
-      # everything its release build reads (the crates, the workspace's
-      # Cargo files and config), on this file, which says how it's built,
-      # on the compiler, and on the Xcode, whose Mac it was built on; no
-      # restore-keys, so a change to any of them builds it again. Kept
-      # straight after a build that worked, not at the job's end, so a
-      # flow failing doesn't lose it.
-      #
-      # Still built whenever the Rust cache had no exact match (the app's
-      # own Cargo.lock changed, say): that cache is saved again at the
-      # job's end from what this run built, and without the server's build
-      # it would be saved without the server's release dependencies, for
-      # the next run that builds the server to compile from nothing.
-      - name: the server, as built before from this code
-        id: server
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: target/release/linger-server
-          key: linger-server-xcode-${{ inputs.xcode || '27.1' }}-${{ runner.os }}-${{ runner.arch }}-rustc-${{ steps.toolchain.outputs.cachekey }}-${{ hashFiles('crates/**', 'Cargo.toml', 'Cargo.lock', '.cargo/config.toml', '.github/workflows/ios-simulator.yml') }}
       # Release, as a host runs it (deploy/Dockerfile). Its password
       # hashing unoptimized took 23 to over 30 seconds a sign-in here, past
       # the 30 the app waits for an answer. Without the link-time
