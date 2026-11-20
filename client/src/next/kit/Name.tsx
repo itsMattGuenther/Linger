@@ -1,6 +1,6 @@
 import { type AnimationEvent, type CSSProperties, type PointerEvent, useState, useSyncExternalStore } from "react";
 import type { User } from "../../generated/User";
-import { type Arrival, ARRIVAL_ROUNDS, arrivalOf, endArrival, lightAt, subscribeArrivals } from "../../lib/arrivals";
+import { type Arrival, ARRIVAL_ROUNDS, arrivalOf, CROSSING_MS, endArrival, lightAt, subscribeArrivals } from "../../lib/arrivals";
 import { nameProps, nameRuns } from "../../lib/names";
 import "./Name.css";
 
@@ -123,21 +123,23 @@ const noSubscribe = () => () => {};
  */
 function useShine(on: boolean, who: string, shine: Shine | undefined) {
   const listed = useSyncExternalStore(shine === "list" ? subscribeArrivals : noSubscribe, () => (shine === "list" ? arrivalOf(who) : undefined));
-  const [pointed, setPointed] = useState<{ run: number; crossing: boolean }>({ run: 0, crossing: false });
+  // A mouse's one crossing: whose name, and when. It lasts one crossing from
+  // then, like an arrival's three, so one cut short by an arrival never comes
+  // back after it, and one for somebody else's name is never theirs.
+  const [pointed, setPointed] = useState<{ who: string; at: number } | null>(null);
   // Something that opens: its own arrival, when it opens and when its Shimmer comes on.
   const [opened, setOpened] = useState<{ on: boolean; arrival: Arrival | undefined }>(() => ({ on, arrival: shine === "open" && on ? { at: performance.now(), ended: false } : undefined }));
-  if (opened.on !== on) {
-    setOpened({ on, arrival: shine === "open" && on ? { at: performance.now(), ended: false } : opened.arrival });
-    setPointed((now) => ({ ...now, crossing: false }));
-  }
+  if (opened.on !== on) setOpened({ on, arrival: shine === "open" && on ? { at: performance.now(), ended: false } : opened.arrival });
 
+  const now = performance.now();
   const arrival = shine === "list" ? listed : opened.arrival;
-  const into = on && shine ? lightAt(arrival, performance.now()) : null;
+  const into = on && shine ? lightAt(arrival, now) : null;
+  const pointInto = on && shine && pointed?.who === who ? now - pointed.at : null;
   const crossing: Crossing | null =
     arrival && into !== null
       ? { sweep: "arrive", rounds: ARRIVAL_ROUNDS, into, key: `a${arrival.at}`, at: arrival.at }
-      : on && shine && pointed.crossing
-        ? { sweep: "point", rounds: 1, into: 0, key: `p${pointed.run}`, at: 0 }
+      : pointed && pointInto !== null && pointInto >= 0 && pointInto < CROSSING_MS
+        ? { sweep: "point", rounds: 1, into: pointInto, key: `p${pointed.at}`, at: pointed.at }
         : null;
   return {
     crossing,
@@ -145,11 +147,11 @@ function useShine(on: boolean, who: string, shine: Shine | undefined) {
       on && shine && crossing === null
         ? (event: PointerEvent) => {
             if (event.pointerType === "touch") return;
-            setPointed((now) => ({ run: now.run + 1, crossing: true }));
+            setPointed({ who, at: performance.now() });
           }
         : undefined,
     rest: (done: Crossing) => {
-      if (done.sweep === "point") setPointed((now) => ({ ...now, crossing: false }));
+      if (done.sweep === "point") setPointed((was) => (was?.at === done.at ? null : was));
       else if (shine === "list") endArrival(who, done.at);
       else setOpened((now) => (now.arrival?.at === done.at ? { ...now, arrival: { at: done.at, ended: true } } : now));
     },
@@ -172,7 +174,9 @@ function ShimmerBand({ letters, crossing, onDone }: { letters: string; crossing:
   // How many crossings, and how far into them it starts; its copy of the
   // letters reads the same two, so the two stay in step. Fixed when the band
   // is drawn: drawn again mid-crossing, a new delay would jump it ahead.
-  const [timing] = useState(() => ({ "--name-shimmer-rounds": crossing.rounds, "--name-shimmer-delay": `${-Math.round(crossing.into)}ms` }) as CSSProperties);
+  const [timing] = useState(
+    () => ({ "--name-shimmer-length": `${CROSSING_MS}ms`, "--name-shimmer-rounds": crossing.rounds, "--name-shimmer-delay": `${-Math.round(crossing.into)}ms` }) as CSSProperties,
+  );
   return (
     <span className="k-name-band-place" aria-hidden="true">
       <span className="k-name-band" data-letters={letters} data-sweep={crossing.sweep} style={timing} onAnimationEnd={ended} />

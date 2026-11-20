@@ -117,7 +117,7 @@
   }
 
   /* Shimmer (#532): a band of `--name-shimmer` crossing the letters from
-     left to right, 4s a crossing, a quarter of the name wide (24% of its
+     left to right, 4s a crossing (`lib/arrivals.ts`), a quarter of the name wide (24% of its
      box), its middle travelling from half a name before the box to half a
      name past it. The band used to be a second background moved by
      `background-position`, which no engine can move by itself: every
@@ -177,7 +177,7 @@
     /* At rest (an animation stopped or not yet started), past the name's
        end, where the old background band rested too: nothing lit. */
     transform: translateX(100%);
-    animation: k-name-band calc(4s * var(--motion)) linear var(--name-shimmer-delay) var(--name-shimmer-rounds);
+    animation: k-name-band calc(var(--name-shimmer-length) * var(--motion)) linear var(--name-shimmer-delay) var(--name-shimmer-rounds);
   }
 
   :root:not([data-normalize="true"]) .name[data-name-effect="shimmer"] > .k-name-band-place > .k-name-band::before {
@@ -193,7 +193,7 @@
     color: var(--name-shimmer);
     -webkit-text-fill-color: var(--name-shimmer);
     transform: translateX(-100%);
-    animation: k-name-band-letters calc(4s * var(--motion)) linear var(--name-shimmer-delay) var(--name-shimmer-rounds);
+    animation: k-name-band-letters calc(var(--name-shimmer-length) * var(--motion)) linear var(--name-shimmer-delay) var(--name-shimmer-rounds);
   }
 
   /* Inside a sentence the name has no box of its own, only its letters on

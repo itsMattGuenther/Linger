@@ -74,6 +74,17 @@ describe("who arrived", () => {
     expect(resumed.arrived).toEqual([]);
   });
 
+  it("is nobody when a server's state is let go of and comes back: the phone's list in the background", () => {
+    const first = arrivalsBetween(new Map(), { [GOOD]: server([at("u-eli", "around")]), [GUILD]: server([at("u-kes", "around")]) });
+    // Backgrounded: the phone forgets its servers' state, and the list sees none.
+    const away = arrivalsBetween(first.seen, {});
+    expect(away.arrived).toEqual([]);
+    expect(away.seen.get(GOOD)).toBe(first.seen.get(GOOD));
+    // Back: the same people, nobody new.
+    const back = arrivalsBetween(away.seen, { [GOOD]: server([at("u-eli", "around")]), [GUILD]: server([at("u-kes", "around")]) });
+    expect(back.arrived).toEqual([]);
+  });
+
   it("keeps each server's look apart", () => {
     const first = arrivalsBetween(new Map(), { [GOOD]: server([at("u-eli", "around")]), [GUILD]: server([at("u-kes", "around")]) });
     expect(first.arrived.sort()).toEqual(["u-eli", "u-kes"]);

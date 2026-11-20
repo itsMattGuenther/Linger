@@ -14,14 +14,16 @@
  *
  * Lit is the list's own rule (`next/core/list.ts`): here or around, or in a
  * room, which a room's voice counts as (`shownState`), never idle, away or
- * offline. Only a connected server is looked at, and one that isn't keeps
- * what it last showed, so a dropped connection, a resume or a second `ready`
- * isn't everybody arriving at once.
+ * offline. Only a connected server is looked at, and one that isn't, or
+ * isn't there at all, keeps what it last showed: a dropped connection, a
+ * resume, a second `ready`, or the phone's list let go of while it's in the
+ * background (its servers' state is forgotten then, and comes back on
+ * return), isn't everybody arriving at once.
  */
 import type { GatewayState } from "./gateway";
 import { shownState, voiceRoomsOf } from "./roster";
 
-/** One crossing of a name, as long as `kit/Name.css` draws it (4s). */
+/** How long one crossing of a name takes; `kit/Name.tsx` hands it to `Name.css`. */
 export const CROSSING_MS = 4000;
 /** Crossings when somebody arrives. */
 export const ARRIVAL_ROUNDS = 3;
@@ -45,17 +47,14 @@ export function litOn(state: GatewayState): Set<string> {
 /**
  * Who arrived since the last look: lit now on a connected server, and not lit
  * there last time (or the server not seen before). A server that isn't
- * connected keeps its last look; one that's gone is forgotten.
+ * connected, or isn't there, keeps its last look.
  */
 export function arrivalsBetween(before: Seen, states: Readonly<Record<string, GatewayState>>): { seen: Map<string, ReadonlySet<string>>; arrived: string[] } {
-  const seen = new Map<string, ReadonlySet<string>>();
+  const seen = new Map<string, ReadonlySet<string>>(before);
   const arrived: string[] = [];
   for (const [server, state] of Object.entries(states)) {
+    if (state.status.kind !== "ready") continue;
     const last = before.get(server);
-    if (state.status.kind !== "ready") {
-      if (last) seen.set(server, last);
-      continue;
-    }
     const lit = litOn(state);
     for (const id of lit) if (!last?.has(id)) arrived.push(id);
     seen.set(server, lit);
