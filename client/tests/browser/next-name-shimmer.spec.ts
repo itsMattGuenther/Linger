@@ -11,6 +11,17 @@ import { people } from "../fixtures/next/evening";
 // it, and the page does nothing per frame. These hold that, and that the
 // copy is there only for the eye: it lies on the letters exactly, and is
 // never selected, copied or read out.
+//
+// And that it doesn't cross forever. Anything that moves has the page hand
+// the window a new frame every refresh, and in the Linux app every frame is
+// the whole window copied into place: an idle list with Shimmer names kept
+// a 165 Hz NVIDIA desktop at 58% of a core and 50 W. So in the list the light
+// crosses three times when its person arrives (Linger starting, or back from
+// idle, away or offline: `lib/arrivals.ts`, whose own tests hold the timing),
+// every name of theirs in step, and a name drawn again because the layout
+// around it changed picks that up or stays still; once more for a mouse; and
+// the band is then gone. A card crosses when it opens; a conversation never
+// does (`next-name-paint.spec.ts`).
 
 const HOME = "https://good-company.example";
 
@@ -18,6 +29,45 @@ const HOME = "https://good-company.example";
 const restyle = (page: Page, user: User) => page.evaluate(([server, d]) => window.core?.frame(server, { op: "user.update", d } as never), [HOME, user] as const);
 
 const shimmering = (page: Page) => page.locator(".name[data-name-effect='shimmer']:not([data-dim])");
+
+/** Somebody's presence changes, as the server says it. */
+const move = (page: Page, user_id: string, state: string, room_id: string | null = null) =>
+  page.evaluate(([server, user_id, state, room_id]) => window.core?.frame(server, { op: "presence.update", d: { user_id, state, room_id, away_message: null } } as never), [HOME, user_id, state, room_id] as const);
+
+/** Every crossing under these names, done: what their last round's end does. */
+const finish = (names: Locator) =>
+  names.evaluateAll((nodes) => {
+    for (const node of nodes) for (const running of node.getAnimations({ subtree: true })) running.finish();
+  });
+
+/** Held where they are, for tests that read the band's pixels, however long that takes. */
+const holdBands = (page: Page) => page.addStyleTag({ content: `.k-name-band, .k-name-band::before { animation-play-state: paused !important; }` });
+
+/**
+ * The list, with Dave and Callie shimmering and both just back (idle, then
+ * here again), so their light is crossing now: it crosses when somebody
+ * arrives, and a test can't count on Linger having started less than 12
+ * seconds ago. Neither is in voice, which keeps somebody lit through idle.
+ * `hold` keeps every band still where it starts, so a test reads the
+ * crossings at its own pace and ends them itself, however slow the machine.
+ */
+async function listOfShimmers(page: Page, { hold = false } = {}) {
+  await page.setViewportSize({ width: 340, height: 820 });
+  await page.goto("/tests/fixtures/next-list-window.html?one");
+  await page.evaluate(() => document.fonts.ready);
+  await expect(page.locator("[data-screen='list']")).toBeVisible();
+  if (hold) await holdBands(page);
+  const look = { fill: { kind: "gradient", from: "violet", to: "sky" }, effect: "shimmer" } as const;
+  for (const user of [people.dave, people.callie]) await restyle(page, { ...user, style: { ...user.style, ...look } });
+  for (const user of [people.dave, people.callie]) await move(page, user.id, "idle");
+  await expect(shimmering(page)).toHaveCount(0);
+  // Back around, not into a room: coming into one puts up a card saying so
+  // (#211), with their name in it too.
+  await move(page, people.dave.id, "around");
+  await move(page, people.callie.id, "around");
+  await expect(shimmering(page)).toHaveCount(2);
+  await expect(shimmering(page).locator(".k-name-band[data-sweep='arrive']")).toHaveCount(2);
+}
 
 /** What moves on each shimmering name: its own animations, and every part's under it. */
 const motion = (names: Locator) =>
@@ -42,17 +92,10 @@ const motion = (names: Locator) =>
   );
 
 test("a shimmering name moves only by transform, so the page does nothing per frame (#532)", async ({ page, browserName }) => {
-  await page.setViewportSize({ width: 340, height: 820 });
-  await page.goto("/tests/fixtures/next-list-window.html?one");
-  await page.evaluate(() => document.fonts.ready);
-  await expect(page.locator("[data-screen='list']")).toBeVisible();
-  // You at the top of the list (display size), and two friends' rows.
-  const look = { fill: { kind: "gradient", from: "violet", to: "sky" }, effect: "shimmer" } as const;
-  for (const user of [people.matt, people.jules, people.dave]) await restyle(page, { ...user, style: { ...user.style, ...look } });
-  await expect(shimmering(page)).toHaveCount(3);
+  await listOfShimmers(page);
 
   // Running, in step: each name's window and its copy, started together,
-  // forever, 4 seconds a round, changing nothing but where they are.
+  // three rounds of 4 seconds, changing nothing but where they are.
   await expect
     .poll(async () => (await motion(shimmering(page))).every((name) => name.parts.every((part) => part.start !== null)))
     .toBe(true);
@@ -62,7 +105,7 @@ test("a shimmering name moves only by transform, so the page does nothing per fr
     for (const part of name.parts) {
       expect(part.moves, `${name.who}'s ${part.name}`).toEqual(["transform"]);
       expect(part.length).toBe(4000);
-      expect(part.rounds).toBe(Infinity);
+      expect(part.rounds).toBe(3);
       expect(part.start, `${name.who}'s window and copy started together`).toBe(name.parts[0]?.start);
     }
   }
@@ -83,6 +126,152 @@ test("a shimmering name moves only by transform, so the page does nothing per fr
     await page.waitForTimeout(1000);
     expect((await count()) - before, "style recalculations in a second").toBeLessThan(15);
   }
+});
+
+test("a list at rest draws nothing: a shimmering name crosses three times, then its band is gone (#532)", async ({ page }) => {
+  await listOfShimmers(page, { hold: true });
+  const bands = page.locator(".k-name-band");
+  await expect(bands).toHaveCount(2);
+  // Every crossing ends: its last round at most 12 seconds after the arrival
+  // (less by however far in the band was drawn).
+  const ends = await shimmering(page).evaluateAll((nodes) => nodes.flatMap((node) => node.getAnimations({ subtree: true }).map((running) => Number(running.effect?.getComputedTiming().endTime))));
+  expect(ends).toHaveLength(4);
+  for (const end of ends) {
+    expect(end).toBeLessThanOrEqual(12000);
+    expect(end).toBeGreaterThan(10000);
+  }
+
+  // Done with every animation on the list, which only a finite one can be:
+  // the bands go, and nothing on the page moves, so it draws nothing.
+  await page.evaluate(() => {
+    for (const running of document.getAnimations()) running.finish();
+  });
+  await expect(bands).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => document.getAnimations().map((running) => (running instanceof CSSAnimation ? running.animationName : "script")))).toEqual([]);
+  // Still their colors: only the light rests.
+  for (const image of await shimmering(page).evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).backgroundImage))) expect(image).toContain("linear-gradient");
+});
+
+test("pointing at a resting name crosses it once more; pointing while it crosses changes nothing (#532)", async ({ page }) => {
+  await listOfShimmers(page, { hold: true });
+  const callie = shimmering(page).filter({ hasText: "Callie" });
+  await expect(callie.locator(".k-name-band")).toHaveAttribute("data-sweep", "arrive");
+  // Mid-crossing, the pointer leaves the crossing it's on alone.
+  await callie.locator(".k-name-band").evaluate((node: HTMLElement) => (node.dataset.seen = "yes"));
+  await callie.hover();
+  await expect(callie.locator(".k-name-band[data-seen='yes']")).toHaveAttribute("data-sweep", "arrive");
+  await page.mouse.move(0, 0);
+  await finish(callie);
+  await expect(callie.locator(".k-name-band")).toHaveCount(0);
+
+  // A finger is no pointer: on a phone it lands on names to scroll past them.
+  await callie.dispatchEvent("pointerover", { pointerType: "touch", isPrimary: true });
+  await page.waitForTimeout(100);
+  await expect(callie.locator(".k-name-band")).toHaveCount(0);
+
+  // At rest, pointed at: one crossing, the window and its copy together.
+  await callie.hover();
+  await expect(callie.locator(".k-name-band")).toHaveAttribute("data-sweep", "point");
+  const rounds = await callie.evaluate((node) => node.getAnimations({ subtree: true }).map((running) => running.effect?.getComputedTiming().iterations));
+  expect(rounds).toEqual([1, 1]);
+  await finish(callie);
+  await expect(callie.locator(".k-name-band")).toHaveCount(0);
+});
+
+test("a mouse's crossing is over when its name stops shining, and doesn't come back with it (#532)", async ({ page }) => {
+  await listOfShimmers(page, { hold: true });
+  const callie = shimmering(page).filter({ hasText: "Callie" });
+  await finish(callie);
+  await expect(callie.locator(".k-name-band")).toHaveCount(0);
+  await callie.hover();
+  await expect(callie.locator(".k-name-band")).toHaveAttribute("data-sweep", "point");
+  await page.mouse.move(0, 0);
+  // Her Shimmer off and on again within the crossing's four seconds: no
+  // arrival, so nothing crosses, the mouse's crossing included.
+  const name = page.locator("[data-kit='Name']", { hasText: "Callie" });
+  await restyle(page, { ...people.callie, style: { ...people.callie.style, fill: { kind: "gradient", from: "violet", to: "sky" }, effect: "none" } });
+  await expect(name).not.toHaveAttribute("data-name-effect");
+  await restyle(page, { ...people.callie, style: { ...people.callie.style, fill: { kind: "gradient", from: "violet", to: "sky" }, effect: "shimmer" } });
+  await expect(name).toHaveAttribute("data-name-effect", "shimmer");
+  await page.waitForTimeout(100);
+  await expect(name.locator(".k-name-band")).toHaveCount(0);
+});
+
+test("somebody coming back crosses their name three times again (#532)", async ({ page }) => {
+  await listOfShimmers(page, { hold: true });
+  // Dave, in a room without voice: somebody in voice stays lit.
+  const dave = page.locator("[data-kit='Name']", { hasText: "Dave" });
+  await expect(dave).toHaveCount(1);
+  await finish(dave);
+  await expect(dave.locator(".k-name-band")).toHaveCount(0);
+  // Idle: the lights go off, and with them the shimmer.
+  await move(page, people.dave.id, "idle");
+  await expect(dave).toHaveAttribute("data-dim", "yes");
+  await expect(dave.locator(".k-name-band")).toHaveCount(0);
+  // Back: three crossings, as when the name first showed up.
+  await move(page, people.dave.id, "around");
+  await expect(dave).not.toHaveAttribute("data-dim");
+  await expect(dave.locator(".k-name-band")).toHaveAttribute("data-sweep", "arrive");
+  const rounds = await dave.evaluate((node) => node.getAnimations({ subtree: true }).map((running) => running.effect?.getComputedTiming().iterations));
+  expect(rounds).toEqual([3, 3]);
+});
+
+test("a folded server's line: a name rebuilt as it changes shape stays still, and one crossing goes on where it was (#532)", async ({ page }) => {
+  // Several servers, each folded to its one line (#712).
+  await page.setViewportSize({ width: 340, height: 820 });
+  await page.goto("/tests/fixtures/next-list-window.html");
+  await holdBands(page);
+  await page.evaluate(() => document.fonts.ready);
+  const line = page.getByRole("region", { name: "The Good Company", exact: true }).locator(".nx-srv-line-text");
+  await expect(line).toBeVisible();
+  for (const user of [people.eli, people.jules]) await restyle(page, { ...user, style: { ...user.style, effect: "shimmer" } });
+  /** Who is in #general's voice, in the server's order: the line names them. */
+  const inVoice = (...ids: string[]) =>
+    page.evaluate(
+      ([server, ids]) => window.core?.frame(server, { op: "voice.state", d: { room_id: "r-general", peers: ids.map((user_id) => ({ session_id: `s-${user_id}`, user_id, controls: { muted: false, deafened: false } })) } } as never),
+      [HOME, ids] as const,
+    );
+  const names = line.locator("[data-kit='Name']");
+  const bands = line.locator(".k-name-band");
+  // Both in its voice, their light over (Linger started a while ago).
+  await inVoice(people.eli.id, people.jules.id);
+  await expect(names).toHaveText(["Eli", "Jules"]);
+  await finish(names);
+  await expect(bands).toHaveCount(0);
+  // The order turning round, the line going from voice to the room and back
+  // to one name in voice: names moved and rebuilt, nobody arrived.
+  await inVoice(people.jules.id, people.eli.id);
+  await expect(names).toHaveText(["Jules", "Eli"]);
+  await inVoice();
+  await expect(line).toHaveText(/in #general/);
+  await inVoice(people.eli.id);
+  await expect(names).toHaveText(["Eli"]);
+  await expect(bands).toHaveCount(0);
+
+  // Eli away and back while the line shows him: he arrived, so it crosses.
+  await move(page, people.eli.id, "away");
+  await move(page, people.eli.id, "in_room", "r-general");
+  await expect(bands).toHaveCount(1);
+  /** How far into the crossings a band is: its own time, plus how far in it was drawn (its negative delay). */
+  const into = () =>
+    bands.evaluate((node) => {
+      const timing = node.getAnimations()[0]?.effect?.getComputedTiming();
+      return Number(timing?.localTime ?? 0) - Number(timing?.delay ?? 0);
+    });
+  const first = await into();
+  await page.waitForTimeout(600);
+  // The server opened and folded again mid-crossing: the line is drawn anew,
+  // and his name picks the crossing up that far in rather than starting it
+  // again.
+  const toggle = page.getByRole("region", { name: "The Good Company", exact: true }).locator("button.nx-srv-toggle");
+  await toggle.click();
+  await expect(line).toHaveText(/you're/);
+  await toggle.click();
+  await expect(names).toHaveText(["Eli"]);
+  await expect(bands).toHaveCount(1);
+  await expect(bands).toHaveAttribute("data-sweep", "arrive");
+  const after = await into();
+  expect(after).toBeGreaterThan(first + 400);
 });
 
 interface Box {
@@ -138,6 +327,7 @@ for (const scale of [1, 2]) {
 
     test("a shimmering name's copy of its letters lies on them, in every face and size, cut short or in a sentence (#532)", async ({ page }) => {
       await page.goto("/tests/fixtures/kit.html?shimmer");
+      await holdBands(page);
       await page.evaluate(() => document.fonts.ready);
       const section = page.locator("[data-section='names']");
       await section.scrollIntoViewIfNeeded();
@@ -190,6 +380,7 @@ for (const scale of [1, 2]) {
 
 test("a shimmering name's copy is never selected, copied or read out (#532)", async ({ page }) => {
   await page.goto("/tests/fixtures/kit.html?shimmer");
+  await holdBands(page);
   const sentence = page.getByTestId("inline-names");
   await expect(sentence.locator(".k-name-band")).toHaveCount(3);
   // Words here can't be selected (#483); in a conversation they can.

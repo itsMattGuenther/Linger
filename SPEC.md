@@ -448,7 +448,12 @@ Each user controls the rendering of their own display name:
 2. **No arbitrary fonts.** Curated bundled set only. Arbitrary font URLs are a
    fingerprinting vector and a remote-load dependency.
 3. **Gradient angle is fixed at 92°**, not user-configurable.
-4. **Shimmer and glow respect `prefers-reduced-motion`.**
+4. **Shimmer and glow respect `prefers-reduced-motion`.** And a shimmer never runs
+   forever. In the list its light crosses three times when the person arrives (Linger
+   starting, or back from idle, away or offline), every one of their names in step; a
+   card crosses it three times as it opens; a mouse over it at rest, once. Then it
+   rests, and in a conversation it doesn't move at all. An idle window draws nothing
+   (#532).
 5. **A global "Use plain names and message fonts" toggle** renders all names in the reader's default
    style. Some people will want this. Give it to them without friction.
 6. **Newcomers start in different colors.** A new account starts on the palette color the

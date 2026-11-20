@@ -556,25 +556,25 @@ function Gallery() {
           <div>
             {FACES.map(({ user }) => (
               <div className="g-row" key={user.id}>
-                <Name person={user} />
+                <Name person={user} shine="open" />
               </div>
             ))}
           </div>
           <div>
             <div className="g-row">
-              <Name person={jules} size="display" />
+              <Name person={jules} size="display" shine="open" />
             </div>
             <div className="g-row">
-              <Name person={eli} size="body" />
-              <Name person={callie} size="control" />
-              <Name person={sam} size="meta" />
+              <Name person={eli} size="body" shine="open" />
+              <Name person={callie} size="control" shine="open" />
+              <Name person={sam} size="meta" shine="open" />
             </div>
             <div className="g-row g-narrow">
-              <Name person={longName} />
+              <Name person={longName} shine="open" />
             </div>
             <div className="g-row" data-testid="emoji-names">
-              <Name person={moon} />
-              <Name person={sparkle} />
+              <Name person={moon} shine="open" />
+              <Name person={sparkle} shine="open" />
             </div>
             <div className="g-row">
               {/* Offline (#274): the same people, their faces kept, none of their colors or effects. */}
@@ -586,13 +586,13 @@ function Gallery() {
             </div>
             <p className="g-row g-sentence" data-testid="inline-names">
               <span>
-                Replying to <Name person={jules} size="inline" />: <Name person={eli} size="inline" /> and{" "}
-                <Name person={sam} size="inline" /> are typing, inside a sentence, in its own size and line.
+                Replying to <Name person={jules} size="inline" shine="open" />: <Name person={eli} size="inline" shine="open" /> and{" "}
+                <Name person={sam} size="inline" shine="open" /> are typing, inside a sentence, in its own size and line.
               </span>
             </p>
             <p className="g-row g-sentence" data-testid="turned-name">
               <span>
-                <Name person={turned} size="inline" /> is typing, the right way round.
+                <Name person={turned} size="inline" shine="open" /> is typing, the right way round.
               </span>
             </p>
           </div>

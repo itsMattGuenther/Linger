@@ -36,6 +36,9 @@ const styled = (user: User, look: Look): User => ({ ...user, style: { ...user.st
 
 async function open(page: Page) {
   await page.goto("/tests/fixtures/next-list-window.html?one");
+  // A shimmer's light crosses three times and rests (#532): held where it
+  // starts, a lit name's band is there however long a test takes to look.
+  await page.addStyleTag({ content: `.k-name-band, .k-name-band::before { animation-play-state: paused !important; }` });
   await page.evaluate(() => document.fonts.ready);
   await expect(page.locator("[data-screen='list']")).toBeVisible();
   await expect(rows(page, "People here").first()).toBeVisible();
@@ -139,6 +142,8 @@ async function expectTheirs(page: Page, name: Locator, look: Look) {
   const throughLetters = look.fill.kind === "gradient" || look.effect === "shimmer";
   const color = throughLetters ? "rgba(0, 0, 0, 0)" : from;
   const painted = (image: string) => image.includes("linear-gradient") && image.includes(from) && image.includes(to);
+  // A lit shimmering name's band, held where it starts (`open`): its person
+  // has just arrived, as each test that looks at one makes sure.
   const animation = look.effect === "shimmer" ? "k-name-band k-name-band-letters" : "none";
   await expectLook(name, (now) => [
     ...(now.color === color ? [] : [`color ${now.color}`]),
@@ -221,6 +226,13 @@ test.describe("an offline name is drawn in the dim grey, with none of their look
       const jen = nameIn(page, "Offline", "Jen");
       const eli = nameIn(page, "People here", "Eli");
       await expectDim(page, jen);
+      // A shimmer's light crosses when somebody arrives (#532): Eli away and
+      // back, so it's crossing now, however long the page took to get here.
+      if (look.effect === "shimmer") {
+        await move(page, people.eli.id, "away");
+        await expectDim(page, nameIn(page, "Away", "Eli"));
+        await move(page, people.eli.id, "in_room", "r-general");
+      }
       await expectTheirs(page, eli, look);
       await page.mouse.move(0, 0);
 

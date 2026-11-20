@@ -429,6 +429,12 @@ on a world that has changed.
   `missing_docs` sees only what a library exports, and these are in a
   binary's private modules. *Changed:* the comments are in, and the
   question for written rules now names this one.
+- **#950 (4 catches): docs left describing the light as it was.** The design
+  system's motion rule, its Name section, `docs/performance.md` and two code
+  comments still said what a Shimmer did before a change in the same pull
+  request. Caught by the fresh review. *Missed because* the rule (docs in the
+  same commit) is followed by memory, and a design that changed four times
+  outran it. *Changed:* each rewritten in the commit after.
 
 ## Tests written from the case in mind, not from the ways things fail
 
@@ -904,6 +910,23 @@ on a world that has changed.
   the limit counts the phone's address once it's open, so every token for one
   phone shares one allowance; a test sends two tokens for one phone and six
   spellings of one.
+- **#950 (6 catches): a Shimmer name's light tied to the name being drawn.**
+  It crossed when the name appeared, and the list draws a name again whenever
+  the layout around it changes shape: a name reused for somebody else, a
+  folded server's line reordering or switching between a room and voice, the
+  voice dock growing past its seats, Watch moving the sharer's name, and a
+  mouse's crossing coming back with a name lit again. Caught by the fresh
+  review, one layout a round, three rounds running. *Missed because* the tests
+  drew each name once and never changed the layout around it. *Changed:* at
+  the third of a kind (AGENTS.md) the design changed: the light is the
+  person's arrival (`lib/arrivals.ts`), the same for every name of theirs, so
+  a rebuild can't cross one; a test rebuilds a folded line mid-crossing.
+- **#950 (3 catches): tests against a light that now ends.** Two tests could
+  miss the 12 seconds a crossing lasts on a slow machine, one was loosened to
+  accept no light at all, and one fix came without a test. Caught by the
+  fresh review. *Missed because* the tests were written while the light never
+  ended. *Changed:* they hold the bands still and have the people they look at
+  arrive just before; the fix has its test.
 
 ## A copy in another language, tested where the two agree
 
@@ -929,6 +952,12 @@ on a world that has changed.
   nothing blocks the reactor. Awaiting `tokio::fs` there would mean starting
   a runtime only to wait on it on the same thread, and the marking has to be
   done before the web view writes anything. Kept as it is.
+- **#950 (3 catches): three findings left as they were.** The everyone-in-voice card
+  in the chat window not crossing (the chat window's rule is no light); the
+  first of a person's bands to end ending them all (a band drawn a moment
+  later loses about 0.2 s, past the letters); and a server removed and added
+  back not crossing names the first time (the cost of keeping a server's last
+  look, which the phone's background needs).
 
 ## Said of one platform from another's design
 
@@ -940,6 +969,11 @@ on a world that has changed.
   and `docs/decisions.md` say voice ends, and staying in voice in the
   background is #851; the platform question asks that what's said of one
   platform holds there.
+- **#950: a finger counted as pointing at a name.** A mouse over a resting
+  Shimmer name crosses it once; on a phone, a finger landing on names to
+  scroll the list did it to each one. Caught by the fresh review. *Missed
+  because* pointing was written for a mouse and tested with one. *Changed:*
+  pointing is a mouse or a pen, with a test that a touch doesn't cross.
 
 ## Code only one platform compiles
 
@@ -1117,6 +1151,13 @@ it, or another program, runs at the same time.
   has its own life, and the tests only had the one. *Changed:* no copy: the
   page reads back the file the window reads (`share_window_list_read`), which
   signing out of every server empties.
+- **#950: a phone back from the background made everybody arrive.** The
+  record of who arrived (`lib/arrivals.ts`) forgot a server that wasn't in the
+  store, and the phone lets go of its servers' state in the background, so on
+  return every Shimmer name crossed. Caught by the fresh review. *Missed
+  because* the tests had servers connected or dropped, never gone from the
+  store and back. *Changed:* a server that isn't there keeps its last look,
+  with a test that fails without it.
 
 ## One connection checked when the app opens several
 

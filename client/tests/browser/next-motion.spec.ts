@@ -57,7 +57,8 @@ test("a name's shimmer and glow stop under reduced motion, and the name keeps it
   await page.setViewportSize({ width: 1280, height: 900 });
   const look = () =>
     page.evaluate(() => {
-      const shimmer = document.querySelector(".name[data-name-effect='shimmer']");
+      // In the gallery's names, which pass `shine` as the list does.
+      const shimmer = document.querySelector("[data-section='names'] .name[data-name-effect='shimmer']");
       const glow = document.querySelector(".name[data-name-effect='glow']");
       if (!shimmer || !glow) return null;
       const s = getComputedStyle(shimmer);

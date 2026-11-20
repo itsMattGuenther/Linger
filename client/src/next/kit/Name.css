@@ -117,21 +117,28 @@
   }
 
   /* Shimmer (#532): a band of `--name-shimmer` crossing the letters from
-     left to right every 4s, a quarter of the name wide (24% of its box),
-     its middle travelling from half a name before the box to half a name
-     past it. The band used to be a second background moved by
+     left to right, 4s a crossing (`lib/arrivals.ts`), a quarter of the name wide (24% of its
+     box), its middle travelling from half a name before the box to half a
+     name past it. The band used to be a second background moved by
      `background-position`, which no engine can move by itself: every
      member's app restyled and repainted the name 60 times a second, for as
      long as it was on screen. Now the moving parts move only by
      `transform`, which the compositor (the part that puts the page's
      layers together, on the GPU where there is one) does without asking the
      page: the letters are drawn once, and the page does nothing per frame.
-     Measured with one shimmering name in the list, Chromium (WebView2's
-     engine) went from 6% of a core to 3% drawing without the GPU, and the
-     Linux release app from 12% to 9% on a 60 Hz screen and from 16% to 8%
-     on a 165 Hz one. What the Linux app still spends goes on showing a new
-     frame of the window every refresh, which anything that moves costs
-     there.
+
+     It crosses three times when its person arrives (`lib/arrivals.ts`:
+     Linger starting, or back from idle, away or offline), in step with
+     their other names, or when a card opens; once for a mouse; and then the
+     band is gone (`Name.tsx`'s `useShine`, which sets each band's
+     `--name-shimmer-rounds` and how far in it starts,
+     `--name-shimmer-delay`). Only in the list, on a card and in the style
+     picker's preview. It used to cross forever, and anything that moves
+     makes the page hand the window a new frame every refresh. In the Linux app each
+     frame is the whole window copied into place on the app's main thread
+     (GTK's `gdk_cairo_draw_from_gl`): an idle list with seven Shimmer names
+     kept a 165 Hz 4K NVIDIA desktop at 58% of a core and 50 W, visible or
+     on another workspace, and at 1 to 4% and 21 W with the band still.
 
      Three parts, in `Name.tsx`'s `ShimmerBand`:
        - `.k-name-band-place`, where the band lives, which doesn't move;
@@ -170,7 +177,7 @@
     /* At rest (an animation stopped or not yet started), past the name's
        end, where the old background band rested too: nothing lit. */
     transform: translateX(100%);
-    animation: k-name-band calc(4s * var(--motion)) linear var(--loop);
+    animation: k-name-band calc(var(--name-shimmer-length) * var(--motion)) linear var(--name-shimmer-delay) var(--name-shimmer-rounds);
   }
 
   :root:not([data-normalize="true"]) .name[data-name-effect="shimmer"] > .k-name-band-place > .k-name-band::before {
@@ -186,7 +193,7 @@
     color: var(--name-shimmer);
     -webkit-text-fill-color: var(--name-shimmer);
     transform: translateX(-100%);
-    animation: k-name-band-letters calc(4s * var(--motion)) linear var(--loop);
+    animation: k-name-band-letters calc(var(--name-shimmer-length) * var(--motion)) linear var(--name-shimmer-delay) var(--name-shimmer-rounds);
   }
 
   /* Inside a sentence the name has no box of its own, only its letters on

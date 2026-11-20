@@ -274,19 +274,21 @@ function isTalking(line: FoldedLine, speaking: ReadonlySet<string> | undefined):
   return line.kind === "voice" && speaking !== undefined && line.people.some((user) => speaking.has(user.id));
 }
 
-/** Names in a sentence, each in its own face: "Eli", "Eli and Jules", "Eli, Jules and others". */
+/**
+ * Names in a sentence, each in its own face: "Eli", "Eli and Jules", "Eli,
+ * Jules and others". One shape for one name or two, each keyed by its
+ * person, so a name still in the line keeps its Shimmer's rest when
+ * somebody joins or the order changes, and only somebody new crosses (#532).
+ */
 function Names({ people, more }: { people: readonly User[]; more: boolean }) {
   const [first, second] = people;
   if (!first) return null;
-  const name = (user: User) => <Name person={user} size="inline" />;
-  if (!second) return more ? <>{name(first)} and others</> : name(first);
-  return more ? (
+  return (
     <>
-      {name(first)}, {name(second)} and others
-    </>
-  ) : (
-    <>
-      {name(first)} and {name(second)}
+      <Name key={first.id} person={first} size="inline" shine="list" />
+      {second ? (more ? ", " : " and ") : null}
+      {second ? <Name key={second.id} person={second} size="inline" shine="list" /> : null}
+      {more ? " and others" : null}
     </>
   );
 }
@@ -407,7 +409,7 @@ function YouHere({ line, saveLine, onFocusIn }: { line: OpenLine; saveLine?: (li
   const words = (
     <>
       <span className="nx-srv-you-is">
-        you're <Name person={line.me} size="inline" /> here
+        you're <Name person={line.me} size="inline" shine="list" /> here
       </span>
       {away || line.status ? (
         <>

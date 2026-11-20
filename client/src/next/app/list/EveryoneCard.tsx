@@ -90,7 +90,7 @@ export function EveryoneCard({
                     key={person.user.id}
                     lead={{ kind: "person", person: markerFor(person.user, "in_room") }}
                     lines="one"
-                    title={<Name person={person.user} />}
+                    title={<Name person={person.user} shine="list" />}
                     trailing={<Marks person={person} />}
                     note={noteOf(person)}
                     {...(action === null ? {} : { label: action, onActivate: () => onPick(person) })}
