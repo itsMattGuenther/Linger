@@ -480,7 +480,7 @@ const PersonItem = memo(function PersonItem({
       lines={oneLine ? "one" : "two"}
       // The lights are on only for somebody here (#301): idle, away and
       // offline names are the dim grey, and their mark says which.
-      title={<Name person={row.user} dim={row.state === "idle" || row.state === "away" || row.state === "offline"} />}
+      title={<Name person={row.user} shine dim={row.state === "idle" || row.state === "away" || row.state === "offline"} />}
       // Written to you and not read: said in words too, never a count (SPEC §4.2).
       // One line per person has no second line, so the status goes in the words (#197).
       label={`${row.user.display_name}, ${row.note}${row.sharing ? ", sharing their screen" : ""}${oneLine && row.line ? `, ${row.line}` : ""}${row.fresh ? ", wrote to you" : ""}`}

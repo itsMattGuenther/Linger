@@ -88,10 +88,10 @@ export function YouCard({ me, actions, nudge, onEditProfile }: { me: MeCard; act
                 setCard({ top: box.top, bottom: box.bottom });
               }}
             >
-              <Name person={me.user} size="display" />
+              <Name person={me.user} size="display" shine />
             </button>
           ) : (
-            <Name person={me.user} size="display" />
+            <Name person={me.user} size="display" shine />
           )}
           <span className="nx-you-where">
             <Marker {...markerFor(me.user, me.state)} size="sm" label={MARKER_WORDS[markerStateOf(me.state)]} />

@@ -230,7 +230,7 @@ export function PersonCard({ user, state, note, anchor, onMessage, onKnock, onEd
       <div className="nx-person" ref={first}>
         {onEditProfile ? <p className="nx-person-yours">This is how friends see you</p> : null}
         <div className="nx-person-head">
-          <Name person={user} size="display" />
+          <Name person={user} size="display" shine />
           <span className="nx-person-where">
             <Marker {...markerFor(user, state)} size="sm" label={MARKER_WORDS[markerStateOf(state)]} />
             <span className="nx-person-note">{note}</span>

@@ -139,12 +139,14 @@ async function expectTheirs(page: Page, name: Locator, look: Look) {
   const throughLetters = look.fill.kind === "gradient" || look.effect === "shimmer";
   const color = throughLetters ? "rgba(0, 0, 0, 0)" : from;
   const painted = (image: string) => image.includes("linear-gradient") && image.includes(from) && image.includes(to);
-  const animation = look.effect === "shimmer" ? "k-name-band k-name-band-letters" : "none";
+  // A shimmer's light crosses a few times and then rests (#532), so a lit
+  // name may be either; when it crosses is `next-name-shimmer.spec.ts`'s.
+  const animations = look.effect === "shimmer" ? ["k-name-band k-name-band-letters", "none"] : ["none"];
   await expectLook(name, (now) => [
     ...(now.color === color ? [] : [`color ${now.color}`]),
     ...((throughLetters ? painted(now.image) : now.image === "none") ? [] : [`image ${now.image}`]),
     ...((look.effect === "glow" ? now.filter.includes(`drop-shadow(${from}`) : now.filter === "none") ? [] : [`filter ${now.filter}`]),
-    ...(now.animation === animation ? [] : [`animation ${now.animation}`]),
+    ...(animations.includes(now.animation) ? [] : [`animation ${now.animation}`]),
   ]);
 }
 

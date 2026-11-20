@@ -170,7 +170,7 @@ export function VoiceDock({ where, people, muted, deafened, line, server, onGoTo
         fill={fill}
         {...chipAction(person)}
       >
-        {person.you ? "you" : <Name person={person.user} size="control" />}
+        {person.you ? "you" : <Name person={person.user} size="control" shine />}
       </Chip>
     </li>
   );
@@ -266,13 +266,13 @@ export function VoiceDock({ where, people, muted, deafened, line, server, onGoTo
               </span>
               {one.watching ? (
                 <span className="nx-voice-share-words">
-                  You're watching <Name person={one.user} size="inline" />
+                  You're watching <Name person={one.user} size="inline" shine />
                   {"'s screen"}
                 </span>
               ) : (
                 <>
                   <span className="nx-voice-share-words">
-                    <Name person={one.user} size="inline" /> is sharing their screen
+                    <Name person={one.user} size="inline" shine /> is sharing their screen
                   </span>
                   {/* Named for whose with several, as the voice line's are: it's the button's name too. */}
                   <Button size="sm" variant="primary" onClick={() => watch.onWatch(one.session)}>

@@ -342,7 +342,7 @@ function YourLook({ me, plainNames, saveStyle }: { me: User; plainNames: boolean
     <Block heading={HEADINGS.look} lead="Your name, your colors. Try a look before you save it.">
       <div className="nx-set-preview" aria-label="Preview of your name">
         <span className="nx-set-preview-top">
-          <Name person={preview} size="display" raw />
+          <Name person={preview} size="display" raw shine />
           <span className="nx-set-preview-note">Preview · only you can see this</span>
         </span>
         <p className="nx-set-preview-message" style={{ fontFamily: messageFontVar(draft.msgFontKey) }}>

@@ -278,7 +278,7 @@ function isTalking(line: FoldedLine, speaking: ReadonlySet<string> | undefined):
 function Names({ people, more }: { people: readonly User[]; more: boolean }) {
   const [first, second] = people;
   if (!first) return null;
-  const name = (user: User) => <Name person={user} size="inline" />;
+  const name = (user: User) => <Name person={user} size="inline" shine />;
   if (!second) return more ? <>{name(first)} and others</> : name(first);
   return more ? (
     <>
@@ -407,7 +407,7 @@ function YouHere({ line, saveLine, onFocusIn }: { line: OpenLine; saveLine?: (li
   const words = (
     <>
       <span className="nx-srv-you-is">
-        you're <Name person={line.me} size="inline" /> here
+        you're <Name person={line.me} size="inline" shine /> here
       </span>
       {away || line.status ? (
         <>

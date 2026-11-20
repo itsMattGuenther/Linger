@@ -49,7 +49,7 @@ export function YouEverywhere({ me, servers, actions, nudge }: { me: User; serve
     <section className="nx-you" aria-label="You" data-away={away.length > 0 ? "yes" : undefined}>
       <div className="nx-you-top">
         <div className="nx-you-who">
-          <Name person={me} size="display" />
+          <Name person={me} size="display" shine />
           <span className="nx-you-where">
             {away.length > 0 ? (
               <>

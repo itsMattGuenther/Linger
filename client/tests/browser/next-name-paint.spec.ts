@@ -316,22 +316,27 @@ test.describe("a name reads the same in a message and on its card (#272)", () =>
     });
   }
 
-  test("a shimmer caught mid-way is the same band across the same letters", async ({ page }) => {
+  test("a shimmer is still in a conversation and crosses on the card, over the same letters", async ({ page }) => {
     await open(page, eliIn(GRADIENT_SHIMMER));
-    // Both bands stopped at the same point of their pass.
-    const stop = (name: Locator) =>
-      name.evaluate((node) => {
-        for (const running of node.getAnimations({ subtree: true })) {
-          running.pause();
-          const length = running.effect?.getComputedTiming().duration;
-          running.currentTime = typeof length === "number" ? length * 0.45 : 0;
-        }
-      });
-    await stop(inChat(page).locator("[data-kit='Name']"));
-    const chat = await paintOf(page, inChat(page).locator("[data-kit='Name']"), "allow");
+    // In the conversation the light never crosses, not even under the
+    // pointer: only the list and a card pass `shine` (#532).
+    const inConversation = inChat(page).locator("[data-kit='Name']");
+    await inConversation.hover();
+    await expect(inConversation.locator(".k-name-band")).toHaveCount(0);
+    expect(await inConversation.evaluate((node) => node.getAnimations({ subtree: true }).length)).toBe(0);
+    const chat = await paintOf(page, inConversation, "allow");
+    // The card crosses it as it opens. Held at the start of a crossing, the
+    // band is still before the letters, so the name is the conversation's.
     await openCard(page);
-    await stop(card(page).locator("[data-kit='Name']"));
-    const onCard = await paintOf(page, card(page).locator("[data-kit='Name']"), "allow");
+    const onCardName = card(page).locator("[data-kit='Name']");
+    await expect(onCardName.locator(".k-name-band[data-sweep='arrive']")).toHaveCount(1);
+    await onCardName.evaluate((node) => {
+      for (const running of node.getAnimations({ subtree: true })) {
+        running.pause();
+        running.currentTime = 0;
+      }
+    });
+    const onCard = await paintOf(page, onCardName, "allow");
     chat.bands.forEach((band, i) => {
       const other = onCard.bands[i] ?? band;
       expect(apart(band, other), `band ${i + 1}: in chat ${show(band)}, on the card ${show(other)}`).toBeLessThan(0.03);
