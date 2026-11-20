@@ -32,8 +32,9 @@ export type NameSize = "meta" | "control" | "body" | "name" | "display" | "inlin
  *
  * `shine` lets a Shimmer's light cross the name, a few times and then never
  * again until something new happens (`useShine`). `list`, for the list: when
- * its person arrives (`lib/arrivals.ts`). `open`, for a person's card and the
- * style picker's preview: when it opens. Everywhere else, a conversation
+ * its person arrives (`lib/arrivals.ts`). `open`, for a person's card, a
+ * knock or "came into #room" card and the style picker's preview: when it
+ * opens. Everywhere else, a conversation
  * included, a shimmering name is still: its colors, no light.
  */
 export function Name({
@@ -103,8 +104,10 @@ const noSubscribe = () => () => {};
  * it changed shape picks the crossing up where their other names are, or is
  * still once it's over. Nothing about it is kept here.
  *
- * Something that opens (a person's card, the style picker's preview) crosses
- * when it does, and again when its Shimmer comes on.
+ * Something that opens (a person's card, a knock or "came into #room" card,
+ * the style picker's preview) crosses when it does, and again when its
+ * Shimmer comes on. A card that goes before its crossings are done takes
+ * them with it.
  *
  * And either crosses once when a mouse or a pen comes over it at rest. A
  * finger on a phone lands on names to scroll past them, and every one would
@@ -129,7 +132,12 @@ function useShine(on: boolean, who: string, shine: Shine | undefined) {
   const [pointed, setPointed] = useState<{ who: string; at: number } | null>(null);
   // Something that opens: its own arrival, when it opens and when its Shimmer comes on.
   const [opened, setOpened] = useState<{ on: boolean; arrival: Arrival | undefined }>(() => ({ on, arrival: shine === "open" && on ? { at: performance.now(), ended: false } : undefined }));
-  if (opened.on !== on) setOpened({ on, arrival: shine === "open" && on ? { at: performance.now(), ended: false } : opened.arrival });
+  // Its Shimmer coming on or going: something that opens arrives again, and
+  // a mouse's crossing cut short by it is over.
+  if (opened.on !== on) {
+    setOpened({ on, arrival: shine === "open" && on ? { at: performance.now(), ended: false } : opened.arrival });
+    setPointed(null);
+  }
 
   const now = performance.now();
   const arrival = shine === "list" ? listed : opened.arrival;
