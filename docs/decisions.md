@@ -2250,3 +2250,58 @@ through `sonora` 0.3.0): a normal microphone comes out where it went in; one
 steady noise drops about 10 dB between words; all of it takes about a third
 of a percent of one processor core, and adds well under a megabyte to the
 app.
+
+## Decided — 13 and older, and the store's age where a law asks for it (#953)
+
+**Matt, 2026-11-24**, getting the iPhone app ready for the App Store (#779).
+Some US states make the app stores share the age they hold for a person with
+apps: Texas from 2026-06-04 (Apple's notice that day, after a court lifted the
+injunction on SB 2420), with Utah's and Louisiana's dates still moving. Apple
+and Google both say an app must check it where the law applies, and Apple's
+own answer is that an app rated 18+ must too. Matt asked what the big chat
+apps do: Discord is rated 13+, teens use it, and its adults confirm their age
+in several ways, one of them the age range a store shares. "The 16 year old me
+would've used Linger to hang out with my friends and play games."
+
+- **Linger is for people 13 and older**, on both stores (App Store
+  Connect's answers come out at 13+; Google Play's target audience is 13-15,
+  16-17 and 18+). The privacy page already said nobody under 13 should have an
+  account.
+- **The phone app asks its store, only where the store says it must**, so
+  nobody anywhere else is asked to share an age: Apple's Declared Age Range
+  from iOS 26.2 (`requiredRegulatoryFeatures` from 26.4, `isEligibleForAgeFeatures`
+  before), Google Play's Age Signals (`MANDATORY_SHARING`). Under 13 is a range
+  whose top is under 13, not one with no bottom: a region's own age gates can
+  replace Linger's, and then a missing bottom can mean "under 16".
+- **Under 13: one screen, and nothing else.** It says Linger is for people 13
+  and older, and the app lets go of every server.
+- **Every failure lets the person in.** An iPhone before iOS 26.2, a copy from
+  the GitHub release (Play answers only a copy installed from Play), a person
+  who hasn't verified their age with Play yet, any error. The real path runs
+  only on a real phone (Apple's sandbox needs an iPhone in Developer Mode),
+  and a check that failed closed would lock every phone out.
+- **The age stays on the phone**, in memory: never on the wire, stored or
+  logged. The log says only which way the check went.
+- **Teens use Linger as everybody else does.** Discord also gives teens
+  stricter defaults (messages from strangers held back, sensitive images
+  blurred, age-restricted servers closed); those keep strangers away from
+  teens, and Linger has no strangers: no public servers, no messages from
+  anybody outside a server the host invited them to, nothing age-restricted.
+
+**Not built, and why.** Apple's Texas notice lists three more pieces; none is
+needed until something happens that Linger hasn't done:
+- *Asking parents again after a significant change.* The developer decides
+  what's significant; nothing so far is. When something is (a new age rating,
+  say), Apple's Significant Change API and Play Console's significant change
+  notice go in with it.
+- *Consent withdrawn by a parent* reaches a developer's own server as an App
+  Store Server Notification. Linger has no server of its own to receive it,
+  and Apple stops the app from opening for that child itself.
+- *Screen Time's communication limits* for a child are for apps that let
+  children message people their parents haven't approved; Linger isn't open
+  to children.
+
+**Alternatives turned down:** 18+ only (Matt: not what Linger is); 18+ without
+asking the store (Apple's answer says an 18+ app must still ask); asking
+everybody, everywhere (it would show Apple's and Google's sharing question to
+people no law covers).

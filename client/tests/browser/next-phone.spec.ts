@@ -117,6 +117,38 @@ test("has no close button of its own: a phone's app is closed the phone's way", 
   await expect(page.locator("[data-screen='list']").getByRole("button", { name: "Close window" })).toHaveCount(0);
 });
 
+test("a store that says the person is under 13 leaves only the 13-and-older screen, and closes every connection (#953)", async ({ page }) => {
+  // The list opens without waiting for the check, and connects.
+  await open(page, "?one&shell=phone&age=child&agehold");
+  await settled(page);
+  expect(await did(page)).toContain("phone_age_check");
+  const connected = (await did(page)).filter((line) => line.startsWith("connect ")).map((line) => line.slice("connect ".length));
+  expect(connected.length).toBeGreaterThan(0);
+  // The store answers: the list goes, and everything it connected to is let go.
+  await page.evaluate(() => window.core?.aged());
+  const message = page.getByRole("status");
+  await expect(message).toContainText("Linger is for people 13 and older.");
+  await expect(message).toContainText("The age on this phone's account is under 13");
+  await expect(page.locator("[data-screen='list']")).toHaveCount(0);
+  for (const server of connected) await expect.poll(async () => did(page)).toContain(`disconnect ${server}`);
+  // Nothing on it leads anywhere: no close button, no button at all.
+  await expect(page.getByRole("button")).toHaveCount(0);
+  expect(await sticksOut(page)).toEqual([]);
+});
+
+test("everybody else keeps the list: the check is asked once, and an ordinary answer changes nothing (#953)", async ({ page }) => {
+  await phone(page);
+  await expect.poll(async () => (await did(page)).filter((line) => line === "phone_age_check").length).toBe(1);
+  await expect(list(page)).toBeVisible();
+  await expect(page.getByText("Linger is for people 13 and older.")).toHaveCount(0);
+});
+
+test("a computer never asks for an age: there's no store to ask (#953)", async ({ page }) => {
+  await open(page, "?one");
+  await settled(page);
+  expect(await did(page)).not.toContain("phone_age_check");
+});
+
 test("opens Settings over the list, as its sections and then one section, without asking for a window", async ({ page }) => {
   // A computer asks the shell for Settings' own window.
   await open(page, "");

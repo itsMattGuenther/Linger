@@ -579,6 +579,24 @@ in Swift's Docker image (`swift:6.1`) as a small package that depends on
 `import Crypto`, the same API. A notification end to end needs a TestFlight
 build on a real iPhone.
 
+**The store's age check (#953, SPEC §4.15)** asks the age the store holds for
+the person, only where the store says a law makes it: Rust's
+`phone_age_check` (`src-tauri/src/phone_age.rs`) answers the page `child` or
+`ok`, and the page (`core/ageCheck.ts`, `app/list/AgeGate.tsx`) never waits
+for it. On an iPhone it's `gen/apple/linger-client_iOS/AgeCheck.swift`, the
+app's one Swift file, behind one C function; on Android, `AgeCheck.kt`, which
+Rust calls through JNI. Their decisions have tests of their own: the Swift
+one in `gen/apple/AgeCheckTests` (`share-window.yml` runs it; without a Mac,
+`docker run --rm -v "$PWD/client/src-tauri/gen/apple:/src:ro" -w /tmp
+swift:6.1-noble bash -c 'swiftc /src/linger-client_iOS/AgeCheck.swift
+/src/AgeCheckTests/main.swift -o t && ./t'`), the Kotlin one against Google
+Play's own fake (`./gradlew -q :app:testUniversalDebugUnitTest`). In a
+browser, the list window's fixture takes `?age=child`. Anywhere no law
+applies, both answer `ok` without asking, so a real "under 13" needs Apple's
+sandbox: an iPhone in Developer Mode, Settings → Developer → Sandbox Apple
+Account → Manage → Age Assurance → "Under 13". The phone's own log says
+which way each check went (`age check: …`), never the age.
+
 On a virtual phone with an NVIDIA card, the emulator may switch itself to
 drawing on the CPU ("Your GPU drivers may have a bug"). It works, but the
 phone's graphics driver crashed the app once when it was reinstalled while

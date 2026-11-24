@@ -120,6 +120,13 @@ jobs:
             "$apple/NotificationServiceTests/main.swift"
           "$RUNNER_TEMP/push-tests" crates/linger-server/tests/fixtures/push-notification.json \
             "$apple/NotificationServiceTests/keys-table.json"
+          # The app's age check (#953), on the same Mac: which ranges Apple
+          # shares are a person under 13, and its bridge to Rust without
+          # the framework (gen/apple/AgeCheckTests).
+          xcrun swiftc -O -o "$RUNNER_TEMP/age-tests" \
+            "$apple/linger-client_iOS/AgeCheck.swift" \
+            "$apple/AgeCheckTests/main.swift"
+          "$RUNNER_TEMP/age-tests"
       # Unsigned, so its build phase signs it ad hoc with its App Group (#811).
       - name: build the notification extension
         run: |

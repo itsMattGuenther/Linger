@@ -30,6 +30,10 @@ pub mod graphics;
 #[cfg(desktop)]
 mod notifications;
 pub mod packaging;
+// The store's age range, where a law makes it share one (#953). Tests read
+// how the page is told here too.
+#[cfg(any(mobile, test))]
+mod phone_age;
 // The iPhone's folders marked "don't back up" (#790). Tests read which ones here too.
 #[cfg(any(target_os = "ios", test))]
 mod phone_backup;
@@ -628,6 +632,7 @@ fn phone_app() -> tauri::Builder<tauri::Wry> {
             app_version,
             deep_link::link_offered,
             graphics::graphics_started,
+            phone_age::phone_age_check,
             phone_call::phone_call_bar,
             phone_network::phone_local_network,
             phone_push::push_permission,

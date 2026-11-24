@@ -30,7 +30,9 @@ You do **not** need `.sig`, `latest.json`, or the source-code ZIP/tar files.
 The `.msi` is an alternative Windows installer, not an extra required download.
 There are no macOS or ARM desktop installers yet. The iPhone app is only in
 testing, through Apple's TestFlight for invited testers, and isn't in the
-App Store yet. It needs iOS 15 or later. Its words grow with the iPhone's
+App Store yet. It needs iOS 15 or later. Linger is for people 13 and older:
+where a law makes the phone's store share your age with apps, the phone app
+asks it, and keeps the answer to itself. Its words grow with the iPhone's
 **Text Size** (in Settings, under Display & Brightness), and with the **Text
 size** in Linger's **Settings → Appearance** on top of it.
 

@@ -80,6 +80,10 @@
  * (`phone_save`) as `phone_save <url> <name>`, and answered at once, or with
  * `?savehold` only at `window.core.saved()`; `?savefail` has it refused.
  *
+ * The store's age check on a phone (#953): asking is written down as
+ * `phone_age_check`, and answered `ok`, or with `?age=child` that the person
+ * is under 13. `?agehold` holds the answer until `window.core.aged()`.
+ *
  * Share to Linger (#785): `?shared` has the shell's inbox holding one picture,
  * `porch.png`, as if shared from another app's share sheet, taken as share
  * `1`; `?sharedbig` adds `film.mov`, too big to send, and `?sharedgone` adds
@@ -405,6 +409,10 @@ mockIPC((cmd, args) => {
         if (query.has("savefail")) throw "Couldn't get the file.";
         return null;
       });
+    // The store's age range, as the phone's shell answers it (#953).
+    case "phone_age_check":
+      note("phone_age_check");
+      return (query.has("agehold") ? aging : Promise.resolve()).then(() => query.get("age") ?? "ok");
     case "update_check": {
       note("update_check");
       const line = "Screen sharing, and fixes for voice.";
@@ -556,6 +564,8 @@ declare global {
       raise: (server: string) => void;
       /** With `?savehold`, the iPhone's shell has the file, and the share sheet shows. */
       saved: () => void;
+      /** With `?agehold`, the phone's store answers the age check (#953). */
+      aged: () => void;
       /** Files shared to Linger while the app runs, and the shell's word that they're in its inbox (#785). */
       share: (names: string[]) => void;
       /** With `?sharedslow`, the shell has read the shared files' bytes. */
@@ -628,6 +638,7 @@ window.core = {
     tooOld.add(server);
   },
   saved: () => showSheet(),
+  aged: () => answerAge(),
   share: (names) => {
     shareId += 1;
     inbox = names.map(sharedPicture);
@@ -672,6 +683,10 @@ const shareRead = new Promise<void>((settle) => {
 /** The servers that say they work with 0.5.4 or newer (#793): `?tooold` Casa da Ribeira, `?tooold=all` every one. */
 const tooOld = new Set<string>(query.has("tooold") ? (query.get("tooold") === "all" ? Object.keys(states) : [LISBON]) : []);
 /** With `?savehold`, the iPhone's share sheet waits for `window.core.saved()`. */
+let answerAge: () => void = () => undefined;
+const aging = new Promise<void>((settle) => {
+  answerAge = settle;
+});
 let showSheet: () => void = () => undefined;
 const saving = new Promise<void>((settle) => {
   showSheet = settle;

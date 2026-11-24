@@ -19,8 +19,8 @@ const read = (path) => readFileSync(join(ROOT, path), "utf8");
 const RELEASED = read("scripts/fixtures/dexdump-0.5.4.txt");
 /**
  * The same, with `update` where a release build that kept it has it, and the
- * crossings added since 0.5.4 (PushBridge, #830): a build that kept
- * everything Rust calls today.
+ * crossings added since 0.5.4 (PushBridge #830, LocalNetwork #842, AgeCheck
+ * #953): a build that kept everything Rust calls today.
  */
 const KEPT = RELEASED.replace(
   /(Class descriptor\s*: 'Lio\/github\/itsmattguenther\/linger\/VoiceCallService;'[\s\S]*?Direct methods\s*-\n)/,
@@ -39,6 +39,14 @@ Class #10           -
     #0              : (in Lio/github/itsmattguenther/linger/LocalNetwork;)
       name          : 'state'
       type          : '(Landroid/content/Context;Z)Ljava/lang/String;'
+      access        : 0x0019 (PUBLIC STATIC FINAL)
+  Virtual methods   -
+Class #11           -
+  Class descriptor  : 'Lio/github/itsmattguenther/linger/AgeCheck;'
+  Direct methods    -
+    #0              : (in Lio/github/itsmattguenther/linger/AgeCheck;)
+      name          : 'ask'
+      type          : '(Landroid/content/Context;)I'
       access        : 0x0019 (PUBLIC STATIC FINAL)
   Virtual methods   -
 `;

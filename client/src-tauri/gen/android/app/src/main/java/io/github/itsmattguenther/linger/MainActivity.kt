@@ -37,6 +37,7 @@ class MainActivity : TauriActivity() {
     super.onCreate(savedInstanceState)
     VoiceCallService.activity = WeakReference(this)
     PushBridge.activity = WeakReference(this)
+    AgeCheck.activity = WeakReference(this)
     LocalNetwork.activity = WeakReference(this)
     val actions = IntentFilter().apply {
       addAction(VoiceCallService.MUTE)

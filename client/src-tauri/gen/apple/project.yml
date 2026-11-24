@@ -59,10 +59,13 @@ targets:
     # And phone notifications through Apple's push service (#889): Xcode
     # writes `development` here, and exporting for App Store Connect signs
     # with the distribution profile's `production`, which ios.yml checks.
+    # And Apple's Declared Age Range (#953, AgeCheck.swift): the age the App
+    # Store holds, where a law says the app must check it.
     entitlements:
       path: linger-client_iOS/linger-client_iOS.entitlements
       properties:
         aps-environment: development
+        com.apple.developer.declared-age-range: true
         com.apple.security.application-groups:
           - group.io.github.itsmattguenther.linger
     scheme:
@@ -86,6 +89,10 @@ targets:
       - framework: libapp.a
         embed: false
       - sdk: CoreGraphics.framework
+      # The age check (#953, AgeCheck.swift): only on iOS 26 and later, and
+      # the app runs from iOS 15, so weak, or it wouldn't open before 26.
+      - sdk: DeclaredAgeRange.framework
+        weak: true
       - sdk: Metal.framework
       - sdk: MetalKit.framework
       - sdk: QuartzCore.framework

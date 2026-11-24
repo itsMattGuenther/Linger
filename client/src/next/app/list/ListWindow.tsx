@@ -114,6 +114,7 @@ import { openExternal } from "../../../lib/external";
 import { justUpdated, putOff, putOffNow, releaseLine, restartWhileAway, UPDATE_SAID, type UpdateSaid } from "../../core/updates";
 import { ListNotes, type UpdateActions } from "./ListNotes";
 import { UpdateGate } from "./UpdateGate";
+import { AgeGate } from "./AgeGate";
 import { knockOn } from "../../core/knock";
 import { readPasted, type SignInActions, signInActions } from "../../core/signin";
 import { numbering, type Offered, watchOfferedLinks } from "../../core/offeredLink";
@@ -152,11 +153,14 @@ const TABS_KEY = "linger.next.tabs";
  */
 export function ListWindow() {
   // An update kept for this start goes in first (#772): nothing signs in or
-  // connects until it has, or couldn't.
+  // connects until it has, or couldn't. On a phone, a store that says the
+  // person is under 13 closes it all again (#953).
   return (
-    <UpdateGate>
-      <Owner />
-    </UpdateGate>
+    <AgeGate>
+      <UpdateGate>
+        <Owner />
+      </UpdateGate>
+    </AgeGate>
   );
 }
 

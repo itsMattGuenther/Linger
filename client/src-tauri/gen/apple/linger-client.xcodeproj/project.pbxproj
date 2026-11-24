@@ -12,6 +12,8 @@
 		4FA89DCA84186B8AA5E14FC9 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F0BE2F6E3B8751E90FAD89C2 /* PrivacyInfo.xcprivacy */; };
 		729C2A9DFFFB4295CF78A4E2 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AE705E4EC85B45B9E7500E7E /* LaunchScreen.storyboard */; };
 		8764638F0DA3D485CE2320FC /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9D3EBA43367D79352D60B3FF /* Metal.framework */; };
+		A6E1C0DE0953A6E1C0DE0002 /* AgeCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6E1C0DE0953A6E1C0DE0001 /* AgeCheck.swift */; };
+		A6E1C0DE0953A6E1C0DE0004 /* DeclaredAgeRange.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A6E1C0DE0953A6E1C0DE0003 /* DeclaredAgeRange.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		A14031F750EEB638A2CAC97F /* main.mm in Sources */ = {isa = PBXBuildFile; fileRef = 1BC9B8D865020091F3C3B5F0 /* main.mm */; };
 		B2170E33D4D441A9524F0545 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = C08B70DAF7297FD94820976B /* assets */; };
 		B8E0F6B0B6EC00F47E7F0486 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0D0A409BE562864A912B962F /* Assets.xcassets */; };
@@ -74,6 +76,8 @@
 		15A071A0158CAD2919F2BC95 /* portal.rs */ = {isa = PBXFileReference; path = portal.rs; sourceTree = "<group>"; };
 		16F899AE6D227E8412E2C458 /* main.rs */ = {isa = PBXFileReference; path = main.rs; sourceTree = "<group>"; };
 		19D92E253E3403136AC777B9 /* audio.rs */ = {isa = PBXFileReference; path = audio.rs; sourceTree = "<group>"; };
+		A6E1C0DE0953A6E1C0DE0001 /* AgeCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgeCheck.swift; sourceTree = "<group>"; };
+		A6E1C0DE0953A6E1C0DE0003 /* DeclaredAgeRange.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = DeclaredAgeRange.framework; path = System/Library/Frameworks/DeclaredAgeRange.framework; sourceTree = SDKROOT; };
 		1BC9B8D865020091F3C3B5F0 /* main.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = main.mm; sourceTree = "<group>"; };
 		20BB3990A47FD9203959B7C2 /* notifications.rs */ = {isa = PBXFileReference; path = notifications.rs; sourceTree = "<group>"; };
 		27B08263471F82F0C111F063 /* cue.rs */ = {isa = PBXFileReference; path = cue.rs; sourceTree = "<group>"; };
@@ -139,6 +143,7 @@
 			files = (
 				CC3BE010D86E8A9A4E1C63DE /* libapp.a in Frameworks */,
 				E18C0CF53EEDAC716D748051 /* CoreGraphics.framework in Frameworks */,
+				A6E1C0DE0953A6E1C0DE0004 /* DeclaredAgeRange.framework in Frameworks */,
 				8764638F0DA3D485CE2320FC /* Metal.framework in Frameworks */,
 				C96696781CBF9790F2BDF374 /* MetalKit.framework in Frameworks */,
 				C9C11BB75FBAD4E300682A22 /* QuartzCore.framework in Frameworks */,
@@ -218,6 +223,7 @@
 			isa = PBXGroup;
 			children = (
 				DEF53FF665AF224362271456 /* CoreGraphics.framework */,
+				A6E1C0DE0953A6E1C0DE0003 /* DeclaredAgeRange.framework */,
 				A609B54A3E5DCC5A6CE9A3EC /* libapp.a */,
 				9D3EBA43367D79352D60B3FF /* Metal.framework */,
 				001FF2C59C8D082AA4F22F33 /* MetalKit.framework */,
@@ -232,6 +238,7 @@
 		87266F1A384C876BC34CFBC8 /* linger-client_iOS */ = {
 			isa = PBXGroup;
 			children = (
+				A6E1C0DE0953A6E1C0DE0001 /* AgeCheck.swift */,
 				8E411DBF608BE5A22A2F0A9A /* Info.plist */,
 				FFF7964A17D426FD29114A57 /* linger-client_iOS.entitlements */,
 				F0BE2F6E3B8751E90FAD89C2 /* PrivacyInfo.xcprivacy */,
@@ -569,6 +576,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A6E1C0DE0953A6E1C0DE0002 /* AgeCheck.swift in Sources */,
 				A14031F750EEB638A2CAC97F /* main.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
