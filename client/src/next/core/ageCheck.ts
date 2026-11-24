@@ -96,22 +96,26 @@ export interface LeaveShell {
   shareKept(): Promise<readonly string[] | null>;
   /** Stops keeping the share window's sign-in, answering with it, to sign out. */
   shareForget(baseUrl: string): Promise<string | null>;
+  /** Empties the list the iPhone's share window offers; nothing elsewhere. */
+  shareListClear(): Promise<void>;
 }
 
 /**
  * Signs out of every saved server, as Sign out does, from the saved sign-ins
  * themselves: the list may never have opened, and a server it couldn't reach
- * still has its sign-in kept here. Each server is told first, while the
- * sign-in is still known, then the phone forgets it; one that doesn't answer
- * is forgotten all the same. Then the share window's own sign-ins, the same
- * way. Nothing here stops for a failure.
+ * still has its sign-in kept here. As Sign out does, the phone forgets each
+ * sign-in first, holding on to its token only to tell the server, so one
+ * that's slow or doesn't answer (or the app closed meanwhile) leaves nothing
+ * saved; `forget` also stops a try of the list's already under way from
+ * saving it again. Then the share window's own sign-ins, the same way, and
+ * its list, emptied. Nothing here stops for a failure.
  */
 export async function signOutEverywhere(shell: LeaveShell): Promise<void> {
   const saved = await shell.saved().catch(() => []);
   await Promise.allSettled(
     saved.map(async ({ baseUrl, refreshToken }) => {
-      await shell.logout(baseUrl, refreshToken).catch(() => undefined);
-      await shell.forget(baseUrl);
+      await shell.forget(baseUrl).catch(() => undefined);
+      await shell.logout(baseUrl, refreshToken);
     }),
   );
   const kept = (await shell.shareKept().catch(() => null)) ?? [];
@@ -121,4 +125,5 @@ export async function signOutEverywhere(shell: LeaveShell): Promise<void> {
       if (token !== null) await shell.logout(baseUrl, token);
     }),
   );
+  await shell.shareListClear().catch(() => undefined);
 }

@@ -2,8 +2,10 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { type ReactNode, useEffect, useSyncExternalStore } from "react";
 import { PublicApi } from "../../../lib/api";
 import { forgetSession, loadSessions } from "../../../lib/ipc";
+import { markSignedOut } from "../../../lib/session";
 import { ASK_WITHIN_MS, type LeaveShell, phoneAge, signOutEverywhere } from "../../core/ageCheck";
 import { onPhone } from "../../core/phone";
+import { colorReader, nameColor, readTheme, shareWindowList } from "../../core/shareWindow";
 import { WindowMessage } from "../WindowMessage";
 
 /**
@@ -43,9 +45,23 @@ const leaving: LeaveShell = {
     return loaded.kind === "found" ? loaded.sessions.map((each) => ({ baseUrl: each.base_url, refreshToken: each.refresh_token })) : [];
   },
   logout: (baseUrl, refreshToken) => new PublicApi(baseUrl).logout(refreshToken),
-  forget: async (baseUrl) => void (await forgetSession(baseUrl)),
+  forget: async (baseUrl) => {
+    markSignedOut(baseUrl);
+    await forgetSession(baseUrl);
+  },
   shareKept: () => invoke<string[] | null>("share_sign_ins_kept"),
   shareForget: (baseUrl) => invoke<string | null>("share_sign_in_forget", { baseUrl }),
+  // As signing out of the last server does (`useShareWindow`): the window
+  // has nothing to offer.
+  shareListClear: async () => {
+    const reader = colorReader(document);
+    try {
+      const empty = shareWindowList([], new Map(), readTheme(reader), (key) => nameColor(reader, key), Date.now());
+      await invoke("share_window_list_save", { list: JSON.stringify(empty) });
+    } finally {
+      reader.done();
+    }
+  },
 };
 
 /** What's left for somebody the store says is under 13: no way past it, and nothing to do. */

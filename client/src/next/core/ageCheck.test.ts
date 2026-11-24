@@ -89,22 +89,30 @@ describe("signing a child out of everything (#953)", () => {
       forget: async (baseUrl) => void did.push(`forget ${baseUrl}`),
       shareKept: async () => ["https://a.example"],
       shareForget: async (baseUrl) => (did.push(`share-forget ${baseUrl}`), "sa"),
+      shareListClear: async () => void did.push("share-list-clear"),
     };
     return { did, shell: { ...base, ...overrides } };
   }
 
-  it("tells each saved server first, then forgets it, a server that doesn't answer too", async () => {
+  it("forgets each saved sign-in first, as Sign out does, then tells its server, a server that doesn't answer too", async () => {
     const { did, shell: leave } = shell();
     await signOutEverywhere(leave);
-    expect(did.indexOf("logout https://a.example ra")).toBeLessThan(did.indexOf("forget https://a.example"));
-    expect(did.indexOf("logout https://down.example rd")).toBeLessThan(did.indexOf("forget https://down.example"));
+    expect(did.indexOf("forget https://a.example")).toBeLessThan(did.indexOf("logout https://a.example ra"));
+    expect(did.indexOf("forget https://down.example")).toBeLessThan(did.indexOf("logout https://down.example rd"));
   });
 
-  it("signs the share window's own sign-ins out too, with their own tokens", async () => {
+  it("forgets a sign-in even when its server never answers", async () => {
+    const { did, shell: leave } = shell({ logout: () => new Promise<void>(() => undefined) });
+    void signOutEverywhere(leave);
+    await expect.poll(() => did).toEqual(expect.arrayContaining(["forget https://a.example", "forget https://down.example"]));
+  });
+
+  it("signs the share window's own sign-ins out too, with their own tokens, and empties its list", async () => {
     const { did, shell: leave } = shell();
     await signOutEverywhere(leave);
     expect(did).toContain("share-forget https://a.example");
     expect(did).toContain("logout https://a.example sa");
+    expect(did.at(-1)).toBe("share-list-clear");
   });
 
   it("goes on through every failure: no saved sign-ins to read, no share window", async () => {
@@ -115,6 +123,6 @@ describe("signing a child out of everything (#953)", () => {
       shareKept: async () => null,
     });
     await expect(signOutEverywhere(leave)).resolves.toBeUndefined();
-    expect(did).toEqual([]);
+    expect(did).toEqual(["share-list-clear"]);
   });
 });
