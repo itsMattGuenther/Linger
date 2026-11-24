@@ -22,7 +22,7 @@ class AgeCheckTest {
   /** The fake's tasks are done when they're handed over: no thread to wait on. */
   private val now =
     object : AgeCheck.Waiter {
-      override fun <T> wait(task: Task<T>): T {
+      override fun <T> wait(task: Task<T>, person: Boolean): T {
         task.exception?.let { throw it }
         return task.result
       }
@@ -66,6 +66,21 @@ class AgeCheckTest {
     for (status in listOf(AgeSignalsStatus.NOT_SHARED, AgeSignalsStatus.VERIFICATION_REQUIRED, AgeSignalsStatus.UNSPECIFIED, null)) {
       assertEquals(-1, AgeCheck.decide(play(mandatory = true, status = status, upper = 12), screen, now).verdict)
     }
+  }
+
+  @Test
+  fun onlyTheAccessRequestWaitsAsLongAsAPersonMight() {
+    val waited = mutableListOf<Boolean>()
+    val recording =
+      object : AgeCheck.Waiter {
+        override fun <T> wait(task: Task<T>, person: Boolean): T {
+          waited += person
+          return now.wait(task, person)
+        }
+      }
+    AgeCheck.decide(play(mandatory = true, upper = 15), android.app.Activity(), recording)
+    // Play's features, the access request, the signals: only the middle one may be a person reading.
+    assertEquals(listOf(false, true, false), waited)
   }
 
   @Test

@@ -38,21 +38,30 @@ object AgeCheck {
   /** The app's screen, while it has one: Play asks the person from it, where it asks at all. */
   var activity: WeakReference<Activity>? = null
 
-  /** How long each of Play's answers may take before the check gives up. */
+  /** How long one of Play's own answers may take before the check gives up. */
   private const val WAIT_SECONDS = 20L
+
+  /**
+   * How long the access request may take. Where sharing is mandatory, Play
+   * says it shows the person nothing and answers at once; if it ever shows
+   * them something, giving up while they read it would let them in, and the
+   * list doesn't wait for this anyway (core/ageCheck.ts), so it waits long.
+   */
+  private const val PERSON_SECONDS = 15L * 60
 
   /** An answer, and which way the check went to it, for the log. */
   data class Answer(val verdict: Int, val why: String)
 
-  /** Waits for one of Play's answers. */
+  /** Waits for one of Play's answers: `person` when somebody might be answering it. */
   interface Waiter {
-    fun <T> wait(task: Task<T>): T
+    fun <T> wait(task: Task<T>, person: Boolean): T
   }
 
   /** Each answer, waited for on this thread, for a while. */
   private val blocking =
     object : Waiter {
-      override fun <T> wait(task: Task<T>): T = Tasks.await(task, WAIT_SECONDS, TimeUnit.SECONDS)
+      override fun <T> wait(task: Task<T>, person: Boolean): T =
+        Tasks.await(task, if (person) PERSON_SECONDS else WAIT_SECONDS, TimeUnit.SECONDS)
     }
 
   /** 1, 0 or -1, as above. Blocks while Play answers: never on the main thread. */
@@ -70,17 +79,17 @@ object AgeCheck {
 
   /** The check itself, with Play's manager and the waiting handed in, so a test can give Play's fake. */
   fun decide(manager: AgeSignalsManager, screen: Activity?, waiter: Waiter): Answer {
-    val features = waiter.wait(manager.getApplicableAgeFeatures(ApplicableAgeFeaturesRequest.builder().build())).features()
+    val features = waiter.wait(manager.getApplicableAgeFeatures(ApplicableAgeFeaturesRequest.builder().build()), person = false).features()
     if (!features.contains(ApplicableAgeFeature.MANDATORY_SHARING)) return Answer(0, "not required here")
     val from = screen ?: return Answer(-1, "no screen to ask from")
-    val access = waiter.wait(manager.requestAgeSignalsAccess(AgeSignalsAccessRequest.builder().setActivity(from).build()))
+    val access = waiter.wait(manager.requestAgeSignalsAccess(AgeSignalsAccessRequest.builder().setActivity(from).build()), person = true)
     when (access.ageSignalsStatus()) {
       AgeSignalsStatus.SHARED -> {}
       AgeSignalsStatus.VERIFICATION_REQUIRED -> return Answer(-1, "the person hasn't verified their age with Play yet")
       AgeSignalsStatus.NOT_SHARED -> return Answer(-1, "not shared")
       else -> return Answer(-1, "an access status this build doesn't know")
     }
-    val signals = waiter.wait(manager.checkAgeSignals(AgeSignalsRequest.builder().build()))
+    val signals = waiter.wait(manager.checkAgeSignals(AgeSignalsRequest.builder().build()), person = false)
     return Answer(verdict(signals.ageUpper()), "shared")
   }
 
