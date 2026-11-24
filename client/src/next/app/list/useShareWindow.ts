@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
 import { PublicApi } from "../../../lib/api";
+import { refusedSignIn } from "../../../lib/ipc";
 import type { Sessions } from "../../../lib/session";
 import {
   colorReader,
@@ -12,6 +13,7 @@ import {
   type ShareListing,
   type ShareShell,
   type ShareStatus,
+  type ShareWindowList,
   type ShareWindowServer,
   shareWindowList,
   shareWindowServers,
@@ -21,7 +23,8 @@ import {
 /** The shell's half (`share_window.rs`). */
 const shell: ShareShell = {
   savedAt: (baseUrl) => invoke<number | null>("share_sign_in_saved_at", { baseUrl }),
-  save: (baseUrl, refreshToken) => invoke<string | null>("share_sign_in_save", { baseUrl, refreshToken }),
+  // Refused for a child (#953, lib/ipc.ts): told to its server instead.
+  save: async (baseUrl, refreshToken) => (refusedSignIn(baseUrl, refreshToken) ? null : invoke<string | null>("share_sign_in_save", { baseUrl, refreshToken })),
   forget: (baseUrl) => invoke<string | null>("share_sign_in_forget", { baseUrl }),
   kept: () => invoke<string[]>("share_sign_ins_kept"),
   writeList: (list) => invoke("share_window_list_save", { list: JSON.stringify(list) }),
@@ -29,6 +32,23 @@ const shell: ShareShell = {
 };
 
 const logout = (baseUrl: string, refreshToken: string) => new PublicApi(baseUrl).logout(refreshToken);
+
+/**
+ * The share window's list with nothing in it: signed out of every server,
+ * here or by a child's sign-out (#953, `app/list/AgeGate.tsx`), the window
+ * has nothing to offer.
+ */
+export async function emptyShareList(): Promise<void> {
+  const reader = colorReader(document);
+  let list: ShareWindowList;
+  try {
+    list = shareWindowList([], new Map(), readTheme(reader), (key) => nameColor(reader, key), Date.now());
+  } finally {
+    // The colours are read: the probe goes now, not when the shell answers.
+    reader.done();
+  }
+  await shell.writeList(list);
+}
 
 /** How often a running app looks again at whether a sign-in needs renewing: a phone keeps an app for days. */
 const LOOK_AGAIN_MS = 6 * 60 * 60 * 1000;
@@ -88,14 +108,7 @@ export function useShareSignIns(on: boolean, sessions: Sessions): ReadonlyMap<st
       })
       .catch(() => undefined);
     // Signed out of every server: the window has nothing to offer.
-    if (signedIn.length === 0) {
-      const reader = colorReader(document);
-      try {
-        void shell.writeList(shareWindowList([], new Map(), readTheme(reader), (key) => nameColor(reader, key), Date.now())).catch(() => undefined);
-      } finally {
-        reader.done();
-      }
-    }
+    if (signedIn.length === 0) void emptyShareList().catch(() => undefined);
     return () => {
       live = false;
     };

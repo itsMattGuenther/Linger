@@ -117,6 +117,112 @@ test("has no close button of its own: a phone's app is closed the phone's way", 
   await expect(page.locator("[data-screen='list']").getByRole("button", { name: "Close window" })).toHaveCount(0);
 });
 
+const SAVED = ["https://good-company.example", "https://ashen-lanterns.example", "https://casa-da-ribeira.example"];
+
+/** Each saved server told to sign this phone out, then forgotten here (#953). */
+async function signedOutOf(page: Page, servers: string[], reach: (server: string) => string = (server) => `POST ${server}/auth/logout`) {
+  for (const server of servers) {
+    await expect.poll(async () => did(page)).toContain(reach(server));
+    await expect.poll(async () => did(page)).toContain(`forget ${server}`);
+  }
+}
+
+const ageScreen = (page: Page) => page.getByRole("status");
+
+test("a store that says the person is under 13 never opens the list, and signs out of every saved server (#953)", async ({ page }) => {
+  // Every server's sign-in is saved; one of them doesn't answer at all.
+  await page.goto("/tests/fixtures/next-list-window.html?shell=phone&age=child&down");
+  await expect(ageScreen(page)).toContainText("Linger is for people 13 and older.");
+  await expect(ageScreen(page)).toContainText("The age on this phone's account is under 13");
+  await expect(page.locator("[data-screen='list']")).toHaveCount(0);
+  // The two that answer sign the phone out, which forgets its
+  // notifications there; the one that doesn't is forgotten here all the same.
+  await signedOutOf(page, SAVED.slice(0, 1).concat(SAVED.slice(2)));
+  await signedOutOf(page, [SAVED[1] ?? ""], (server) => `unreachable ${server}/auth/logout`);
+  expect((await did(page)).filter((line) => line.startsWith("connect "))).toEqual([]);
+  // Nothing on it leads anywhere: no close button, no button at all.
+  await expect(page.getByRole("button")).toHaveCount(0);
+  expect(await sticksOut(page)).toEqual([]);
+});
+
+test("while the store hasn't answered, nothing opens or connects; after a while the list opens anyway (#953)", async ({ page }) => {
+  await page.goto("/tests/fixtures/next-list-window.html?one&shell=phone&agehold");
+  await expect.poll(async () => did(page)).toContain("phone_age_check");
+  await page.waitForTimeout(1_000);
+  await expect(page.locator("[data-screen='list']")).toHaveCount(0);
+  expect((await did(page)).filter((line) => line.startsWith("connect "))).toEqual([]);
+  // A store that never answers keeps nobody out.
+  await expect(list(page)).toBeVisible({ timeout: 10_000 });
+  await settled(page);
+});
+
+test("a child's answer that comes after the list opened closes it, with what it had open, and signs out (#953)", async ({ page }) => {
+  await page.goto("/tests/fixtures/next-list-window.html?one&shell=phone&age=child&agehold");
+  await expect(list(page)).toBeVisible({ timeout: 10_000 });
+  await settled(page);
+  const connected = (await did(page)).filter((line) => line.startsWith("connect ")).map((line) => line.slice("connect ".length));
+  expect(connected.length).toBeGreaterThan(0);
+  await page.evaluate(() => window.core?.aged());
+  await expect(ageScreen(page)).toContainText("Linger is for people 13 and older.");
+  await expect(page.locator("[data-screen='list']")).toHaveCount(0);
+  for (const server of connected) await expect.poll(async () => did(page)).toContain(`disconnect ${server}`);
+  await signedOutOf(page, connected);
+});
+
+/** Whether a sign-in for `server` is saved on the phone, as the fixture's keyring holds it. */
+async function savedFor(page: Page, server: string): Promise<boolean> {
+  const saved = await page.evaluate(() =>
+    (window as unknown as { __TAURI_INTERNALS__: { invoke: (cmd: string) => Promise<unknown> } }).__TAURI_INTERNALS__.invoke("sessions_load"),
+  );
+  return ((saved as { sessions?: { base_url: string }[] }).sessions ?? []).some((each) => each.base_url === server);
+}
+
+test("after a child's answer nothing is saved: a sign-in the list had under way is told to its server instead (#953)", async ({ page }) => {
+  await page.goto("/tests/fixtures/next-list-window.html?one&shell=phone&age=child&agehold");
+  await expect(list(page)).toBeVisible({ timeout: 10_000 });
+  await settled(page);
+  await page.evaluate(() => window.core?.aged());
+  const server = "https://good-company.example";
+  await signedOutOf(page, [server]);
+  // A renewal, or a sign-in on a slow server, lands now and is saved as the list would.
+  await page.evaluate((base) => window.core?.saveSignIn(base, "late"), server);
+  await expect.poll(async () => did(page)).toContain(`logout ${server} late`);
+  expect(await savedFor(page, server)).toBe(false);
+});
+
+test("a sign-in already being written when a child's answer came is signed out of on the pass 5 seconds later (#953)", async ({ page }) => {
+  await page.goto("/tests/fixtures/next-list-window.html?one&shell=phone&age=child&agehold");
+  await expect(list(page)).toBeVisible({ timeout: 10_000 });
+  await settled(page);
+  await page.evaluate(() => window.core?.aged());
+  const server = "https://good-company.example";
+  await signedOutOf(page, [server]);
+  // Straight to the keyring, as a save under way before the answer would land.
+  await page.evaluate(
+    (base_url) =>
+      (window as unknown as { __TAURI_INTERNALS__: { invoke: (cmd: string, args: unknown) => Promise<unknown> } }).__TAURI_INTERNALS__.invoke("session_save", {
+        session: { base_url, refresh_token: "written" },
+      }),
+    server,
+  );
+  await expect.poll(async () => did(page), { timeout: 15_000 }).toContain(`logout ${server} written`);
+  expect(await savedFor(page, server)).toBe(false);
+});
+
+test("everybody else keeps the list: the check is asked once, and an ordinary answer changes nothing (#953)", async ({ page }) => {
+  await phone(page);
+  await expect.poll(async () => (await did(page)).filter((line) => line === "phone_age_check").length).toBe(1);
+  await expect(list(page)).toBeVisible();
+  await expect(page.getByText("Linger is for people 13 and older.")).toHaveCount(0);
+  expect((await did(page)).some((line) => line.endsWith("/auth/logout"))).toBe(false);
+});
+
+test("a computer never asks for an age: there's no store to ask (#953)", async ({ page }) => {
+  await open(page, "?one");
+  await settled(page);
+  expect(await did(page)).not.toContain("phone_age_check");
+});
+
 test("opens Settings over the list, as its sections and then one section, without asking for a window", async ({ page }) => {
   // A computer asks the shell for Settings' own window.
   await open(page, "");

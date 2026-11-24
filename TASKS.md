@@ -27,6 +27,17 @@ default.
 ## How to run a task
 
 **Next release — what its notes owe so far.**
+- **Linger is for people 13 and older, and the phone app checks the store's
+  age where a law asks for it** (#953). Some US states (Texas so far) make the
+  app stores share the age they hold with apps, and Apple and Google say an
+  app must check it there. So where the store says so, the phone app asks it,
+  and somebody it says is under 13 sees one screen saying Linger is for people
+  13 and older, and is signed out of every server. Everywhere else nothing
+  changes, and nobody is asked anything.
+  The age stays on the phone: it's never sent anywhere or kept. The app only,
+  no server update. Owed after it ships: a TestFlight tester with Developer
+  Mode tries Apple's sandbox "Under 13" and "18+" cases; a tester on an iPhone
+  below iOS 26, if there is one, opens the app.
 - **Phones stay in voice when locked or in the background** (#851, PR #856).
   The iPhone keeps voice going with the screen locked or another app in
   front, and so does Android. A phone call takes priority. If voice ends

@@ -37,3 +37,8 @@
 # by its Java name, through JNI (src-tauri/src/phone_network.rs).
 # scripts/android-jni.mjs checks a release build keeps it.
 -keep class io.github.itsmattguenther.linger.LocalNetwork { *; }
+
+# The store's age check (#953): Rust calls AgeCheck.ask by its Java name,
+# through JNI (src-tauri/src/phone_age.rs). scripts/android-jni.mjs checks a
+# release build keeps it.
+-keep class io.github.itsmattguenther.linger.AgeCheck { *; }

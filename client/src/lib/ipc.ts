@@ -47,7 +47,29 @@ export async function loadSessions(): Promise<SessionsLoad> {
   return result;
 }
 
+/**
+ * Set once the phone's store says the person is under 13 (#953,
+ * `app/list/AgeGate.tsx`): from then on no sign-in is saved on this phone,
+ * the share window's included (`useShareWindow.ts`). Whatever arrives anyway,
+ * because it was under way when the answer came (a renewal, a sign-in typed
+ * on a slow server, a share window's sign-in), is handed to `refused`, which
+ * tells its server to forget it. Every sign-in this page saves comes here.
+ */
+let refusing: ((baseUrl: string, refreshToken: string) => void) | null = null;
+
+export function refuseSignIns(refused: (baseUrl: string, refreshToken: string) => void): void {
+  refusing = refused;
+}
+
+/** True, and the sign-in handed to `refused`, once sign-ins are refused; false before. */
+export function refusedSignIn(baseUrl: string, refreshToken: string): boolean {
+  if (refusing === null) return false;
+  refusing(baseUrl, refreshToken);
+  return true;
+}
+
 export async function saveSession(session: StoredSession): Promise<SessionWrite> {
+  if (refusedSignIn(session.base_url, session.refresh_token)) return { kind: "unavailable", reason: "Linger is for people 13 and older." };
   if (!isTauri()) return { kind: "unavailable", reason: NO_TAURI };
   const result: SessionWrite = await invoke("session_save", { session });
   return result;

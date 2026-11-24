@@ -10,11 +10,16 @@
   And Apple's push service (#889). `development` is what Xcode writes;
   exporting for App Store Connect signs the app with its distribution
   profile's `production`, which ios.yml checks before an upload.
+
+  And Apple's Declared Age Range (#953, AgeCheck.swift): the age the App
+  Store holds for the person, where a law says the app must check it.
 -->
 <plist version="1.0">
 <dict>
 	<key>aps-environment</key>
 	<string>development</string>
+	<key>com.apple.developer.declared-age-range</key>
+	<true/>
 	<key>com.apple.security.application-groups</key>
 	<array>
 		<string>group.io.github.itsmattguenther.linger</string>

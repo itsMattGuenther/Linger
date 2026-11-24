@@ -104,6 +104,10 @@ dependencies {
     // client/src/next/privacy.test.ts fails on any other.
     implementation(platform("com.google.firebase:firebase-bom:35.2.0"))
     implementation("com.google.firebase:firebase-messaging")
+    // The age Google Play holds for the person, where a law makes Play share
+    // it (#953, AgeCheck.kt). It collects nothing itself, Google says, and
+    // only answers a copy installed from Play.
+    implementation("com.google.android.play:age-signals:0.0.6")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.4")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.0")

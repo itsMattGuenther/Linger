@@ -80,6 +80,10 @@
  * (`phone_save`) as `phone_save <url> <name>`, and answered at once, or with
  * `?savehold` only at `window.core.saved()`; `?savefail` has it refused.
  *
+ * The store's age check on a phone (#953): asking is written down as
+ * `phone_age_check`, and answered `ok`, or with `?age=child` that the person
+ * is under 13. `?agehold` holds the answer until `window.core.aged()`.
+ *
  * Share to Linger (#785): `?shared` has the shell's inbox holding one picture,
  * `porch.png`, as if shared from another app's share sheet, taken as share
  * `1`; `?sharedbig` adds `film.mov`, too big to send, and `?sharedgone` adds
@@ -129,7 +133,7 @@ import { customEmoji, SERVER, SERVER_NAME, evening, messages, people, withLongWo
 import { collections, fakeMedia, fakeSearch } from "./next/finds";
 import type { MediaKind } from "../../src/generated/MediaKind";
 import { GUILD, guild, LISBON, lisbon, serverInfo } from "./next/servers";
-import { voiceInThePage } from "../../src/lib/ipc";
+import { saveSession, voiceInThePage } from "../../src/lib/ipc";
 import { browserWorld } from "../../src/lib/pageVoice";
 import { FakeSfu, fakeMicrophone, realAudio, type Received } from "./next/sfu";
 import releaseLine from "../../src/next/core/release-line.json";
@@ -405,6 +409,10 @@ mockIPC((cmd, args) => {
         if (query.has("savefail")) throw "Couldn't get the file.";
         return null;
       });
+    // The store's age range, as the phone's shell answers it (#953).
+    case "phone_age_check":
+      note("phone_age_check");
+      return (query.has("agehold") ? aging : Promise.resolve()).then(() => query.get("age") ?? "ok");
     case "update_check": {
       note("update_check");
       const line = "Screen sharing, and fixes for voice.";
@@ -556,6 +564,10 @@ declare global {
       raise: (server: string) => void;
       /** With `?savehold`, the iPhone's shell has the file, and the share sheet shows. */
       saved: () => void;
+      /** With `?agehold`, the phone's store answers the age check (#953). */
+      aged: () => void;
+      /** A sign-in the list had under way arrives now, and is saved as the list would (#953). */
+      saveSignIn: (baseUrl: string, refreshToken: string) => Promise<unknown>;
       /** Files shared to Linger while the app runs, and the shell's word that they're in its inbox (#785). */
       share: (names: string[]) => void;
       /** With `?sharedslow`, the shell has read the shared files' bytes. */
@@ -628,6 +640,8 @@ window.core = {
     tooOld.add(server);
   },
   saved: () => showSheet(),
+  aged: () => answerAge(),
+  saveSignIn: (baseUrl, refreshToken) => saveSession({ base_url: baseUrl, refresh_token: refreshToken }),
   share: (names) => {
     shareId += 1;
     inbox = names.map(sharedPicture);
@@ -671,6 +685,11 @@ const shareRead = new Promise<void>((settle) => {
 });
 /** The servers that say they work with 0.5.4 or newer (#793): `?tooold` Casa da Ribeira, `?tooold=all` every one. */
 const tooOld = new Set<string>(query.has("tooold") ? (query.get("tooold") === "all" ? Object.keys(states) : [LISBON]) : []);
+/** With `?agehold`, the phone's store answers the age check at `window.core.aged()` (#953). */
+let answerAge: () => void = () => undefined;
+const aging = new Promise<void>((settle) => {
+  answerAge = settle;
+});
 /** With `?savehold`, the iPhone's share sheet waits for `window.core.saved()`. */
 let showSheet: () => void = () => undefined;
 const saving = new Promise<void>((settle) => {
@@ -827,6 +846,11 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
     issued[server] = `refresh-${minted}-${server}`;
     return json({ access_token: `token-${server}`, refresh_token: issued[server], expires_in: 600, user: state.me });
   };
+  // Signing out (#953): which token the server was told to forget.
+  if (path === "/auth/logout" && method === "POST") {
+    note(`logout ${server} ${String(body.refresh_token)}`);
+    return new Response(null, { status: 204 });
+  }
   if (path === "/auth/refresh") {
     if (refusing) {
       refusing = false;

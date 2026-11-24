@@ -48,6 +48,14 @@ export const CROSSINGS = [
     type: "(Landroid/content/Context;Z)Ljava/lang/String;",
     from: "client/src-tauri/src/phone_network.rs",
   },
+  {
+    // Rust calls it (phone_age.rs): the age Google Play holds for the
+    // person, where a law makes Play share it (#953).
+    class: "io.github.itsmattguenther.linger.AgeCheck",
+    method: "ask",
+    type: "(Landroid/content/Context;)I",
+    from: "client/src-tauri/src/phone_age.rs",
+  },
 ];
 
 /**

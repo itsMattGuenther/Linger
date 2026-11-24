@@ -350,6 +350,14 @@ Play's listing shows under Nearby devices. It changes none of the answers
 above: Linger asks for it only to reach a server on the phone's own network
 (SPEC §4.15), and sends nothing new anywhere.
 
+From 0.5.5 the app asks Google Play's Age Signals for the person's age range,
+only where a law makes Play share it (#953, SPEC §4.15). Google says its
+library collects nothing, and the range never leaves the phone, so none of the
+answers above change either. Using it means agreeing to the Play Age Signals
+terms of service (on its developer pages). Play Console's target audience is
+13-15, 16-17 and 18+ (2026-11-24, `docs/decisions.md`): Linger is for people
+13 and older, as on the App Store.
+
 The App Store's privacy answers (App Store Connect → the app → App Privacy)
 move the same way now the iPhone has notifications (#889): add
 **Identifiers → Device ID**, the push address Apple gives the phone, which
@@ -477,6 +485,15 @@ before any tester saw a build.
   build's to. `share-window.yml` builds it and runs its tests on every pull
   request that changes it. It has no privacy manifest of its own, for the
   same reason the share extension hasn't.
+- **The age check** (#953) asks Apple's Declared Age Range, in
+  `linger-client_iOS/AgeCheck.swift`, the app's own one Swift file. Its
+  capability, **Declared Age Range** on the app's identifier, was turned on by
+  hand on 2026-11-24, for the reason above, before the first build with it:
+  automatic signing can't make a profile with an entitlement the identifier
+  hasn't got, and the export fails. The framework exists only from iOS 26 and
+  the app runs from 15, so it's weak-linked, and the simulator's run fails a
+  build that links it strongly ("the app, as built"). App Store Connect's age
+  rating answers **Age Assurance: Yes**, and comes out at 13+.
 
 ## Worth knowing
 
