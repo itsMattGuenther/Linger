@@ -879,8 +879,9 @@ macOS runners, or a friend's Mac.
   wants as well as the one in App Store Connect: built 2026-10-31 (#779),
   **Privacy** under Settings → Account & App → This Phone (This Computer on
   a desktop), opening linger.im/privacy.
-  The App Store came first (Matt, 2026-11-19): Google Play waits on the 12
-  testers its closed test needs. The listing's privacy answers ("Data safety") must
+  The App Store came first, with 0.5.5 (Matt, 2026-11-19, `docs/decisions.md`,
+  "Android first, Apple after"): Play's closed test waits until Matt has 12
+  Android testers. The listing's privacy answers ("Data safety") must
   say the app uses the microphone only to record a voice message the person
   chooses to send.
   Friends first, then the stores. Android: a signed APK on the GitHub release

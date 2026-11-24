@@ -740,9 +740,15 @@ eGGnogSC's proposal on #253 over his own brainstorm of 2026-09-26, which had a
   wait with it. *Since then:* Matt's Apple Developer membership came through,
   and the iPhone app went to friends through TestFlight from 0.5.1
   (2026-10-20), beside Play's internal test. Friends with iPhones have tested
-  it since, swiping back and photos included (#697, #785). The App Store
-  itself still comes after Play (#779). Getting the app to other people (T-1604) waits until report
-  and block are done and Matt says go.
+  it since, swiping back and photos included (#697, #785). Getting the app
+  to other people (T-1604) waited until report and block were done and Matt
+  said go.
+  *Reversed for the stores (Matt, 2026-11-19):* the App Store comes first,
+  after 0.5.5 (#779). A new personal Play account must run a closed test
+  with at least 12 testers opted in for 14 days in a row before it can
+  publish, and Matt doesn't know 12 people on Android to ask. Apple has no
+  such wait. Play's closed test waits until he has the testers, and the
+  `.apk` on each GitHub release stays until then (#773).
 - **Friends first, from the release page** (Matt, 2026-10-03). Report and
   block were done and every Pixel check had passed, so Matt said go, for the
   quick path first: a signed `.apk` on each GitHub release, which an Android
