@@ -110,9 +110,11 @@ mod platform {
 
     static ONE: OneAsk = OneAsk::new();
 
-    /// Where the check applies Apple answers by itself, with no sheet to
-    /// read: a minute is an Apple that isn't answering.
-    const WITHIN: Duration = Duration::from_secs(60);
+    /// Where the check applies Apple may answer by itself, or show its sheet,
+    /// which a person reads: giving up while they do would let a child in.
+    /// Nothing waits on this past the page's own few seconds, so it's long,
+    /// as on Android.
+    const WITHIN: Duration = Duration::from_secs(15 * 60);
 
     extern "C" fn answered(answer: i32) {
         ONE.answer(answer);
