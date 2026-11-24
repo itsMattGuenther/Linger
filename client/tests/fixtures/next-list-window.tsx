@@ -843,6 +843,11 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
     issued[server] = `refresh-${minted}-${server}`;
     return json({ access_token: `token-${server}`, refresh_token: issued[server], expires_in: 600, user: state.me });
   };
+  // Signing out (#953): which token the server was told to forget.
+  if (path === "/auth/logout" && method === "POST") {
+    note(`logout ${server} ${String(body.refresh_token)}`);
+    return new Response(null, { status: 204 });
+  }
   if (path === "/auth/refresh") {
     if (refusing) {
       refusing = false;

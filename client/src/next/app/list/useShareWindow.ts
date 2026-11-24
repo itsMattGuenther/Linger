@@ -35,10 +35,10 @@ const logout = (baseUrl: string, refreshToken: string) => new PublicApi(baseUrl)
  * here or by a child's sign-out (#953, `app/list/AgeGate.tsx`), the window
  * has nothing to offer.
  */
-export function emptyShareList(): Promise<void> {
+export async function emptyShareList(): Promise<void> {
   const reader = colorReader(document);
   try {
-    return shell.writeList(shareWindowList([], new Map(), readTheme(reader), (key) => nameColor(reader, key), Date.now()));
+    await shell.writeList(shareWindowList([], new Map(), readTheme(reader), (key) => nameColor(reader, key), Date.now()));
   } finally {
     reader.done();
   }

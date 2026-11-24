@@ -94,21 +94,26 @@ describe("signing a child out of everything (#953)", () => {
     return { did, shell: { ...base, ...overrides } };
   }
 
-  it("forgets everything on the phone before any server is told, a server that doesn't answer too", async () => {
+  it("forgets each sign-in here before its server is told, a server that doesn't answer too", async () => {
     const { did, shell: leave } = shell();
     await signOutEverywhere(leave);
-    const firstTold = did.findIndex((line) => line.startsWith("logout "));
-    for (const here of ["forget https://a.example", "forget https://down.example", "share-forget https://a.example", "share-list-clear"]) {
-      expect(did.indexOf(here)).toBeGreaterThanOrEqual(0);
-      expect(did.indexOf(here)).toBeLessThan(firstTold);
-    }
-    expect(did).toEqual(expect.arrayContaining(["logout https://a.example ra", "logout https://down.example rd", "logout https://a.example sa"]));
+    expect(did.indexOf("forget https://a.example")).toBeLessThan(did.indexOf("logout https://a.example ra"));
+    expect(did.indexOf("forget https://down.example")).toBeLessThan(did.indexOf("logout https://down.example rd"));
+    expect(did.indexOf("share-forget https://a.example")).toBeLessThan(did.indexOf("logout https://a.example sa"));
+    expect(did).toContain("share-list-clear");
+  });
+
+  it("tells the servers even when the share window's steps never finish", async () => {
+    const { did, shell: leave } = shell({ shareKept: () => new Promise<null>(() => undefined), shareListClear: () => new Promise<void>(() => undefined) });
+    void signOutEverywhere(leave);
+    await expect.poll(() => did).toEqual(expect.arrayContaining(["logout https://a.example ra", "logout https://down.example rd"]));
   });
 
   it("forgets everything here even when no server ever answers", async () => {
     const { did, shell: leave } = shell({ logout: () => new Promise<void>(() => undefined) });
     void signOutEverywhere(leave);
-    await expect.poll(() => did).toEqual(["forget https://a.example", "forget https://down.example", "share-forget https://a.example", "share-list-clear"]);
+    const here = ["forget https://a.example", "forget https://down.example", "share-forget https://a.example", "share-list-clear"];
+    await expect.poll(() => [...did].sort()).toEqual([...here].sort());
   });
 
   it("goes on through every failure: no saved sign-ins to read, no share window", async () => {

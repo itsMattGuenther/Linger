@@ -103,29 +103,42 @@ export interface LeaveShell {
 /**
  * Signs out of every saved server, as Sign out does, from the saved sign-ins
  * themselves: the list may never have opened, and a server it couldn't reach
- * still has its sign-in kept here. Everything on the phone goes first, the
- * share window's own sign-ins and its list included, each sign-in's token
- * held on to only to tell its server; then every server is told, at once.
- * So a server that's slow or doesn't answer, or the app closed meanwhile,
- * leaves nothing saved. Nothing here stops for a failure.
+ * still has its sign-in kept here. Each sign-in is forgotten here first, its
+ * token held on to only to tell its server, so a server that's slow or
+ * doesn't answer, or the app closed meanwhile, leaves nothing saved. The
+ * share window's own sign-ins and its list go alongside, neither waiting on
+ * the other. Nothing here stops for a failure.
+ *
+ * A token the list renews after this (an answer that came after the list
+ * opened) is dead anyway: the server revokes the whole family a sign-in's
+ * tokens belong to, the renewed one too (`revoke_family`). It's a stale
+ * entry, not a sign-in, and the passes below forget it.
  */
 export async function signOutEverywhere(shell: LeaveShell): Promise<void> {
-  const saved = await shell.saved().catch(() => []);
-  const kept = (await shell.shareKept().catch(() => null)) ?? [];
-  await Promise.allSettled(saved.map(({ baseUrl }) => shell.forget(baseUrl)));
-  const shared = await Promise.allSettled(kept.map(async (baseUrl) => ({ baseUrl, refreshToken: await shell.shareForget(baseUrl) })));
-  await shell.shareListClear().catch(() => undefined);
-  const tell = [...saved];
-  for (const each of shared) {
-    if (each.status === "fulfilled" && each.value.refreshToken !== null) tell.push({ baseUrl: each.value.baseUrl, refreshToken: each.value.refreshToken });
-  }
-  await Promise.allSettled(tell.map(({ baseUrl, refreshToken }) => shell.logout(baseUrl, refreshToken)));
+  const servers = async () => {
+    const saved = await shell.saved().catch(() => []);
+    await Promise.allSettled(
+      saved.map(async ({ baseUrl, refreshToken }) => {
+        await shell.forget(baseUrl).catch(() => undefined);
+        await shell.logout(baseUrl, refreshToken);
+      }),
+    );
+  };
+  const shareWindow = async () => {
+    const kept = (await shell.shareKept().catch(() => null)) ?? [];
+    const told = kept.map(async (baseUrl) => {
+      const token = await shell.shareForget(baseUrl);
+      if (token !== null) await shell.logout(baseUrl, token);
+    });
+    await Promise.allSettled([shell.shareListClear(), ...told]);
+  };
+  await Promise.allSettled([servers(), shareWindow()]);
 }
 
 /**
  * When a child's sign-out runs again, after the first: anything the list had
  * under way when the answer came (a sign-in being renewed, a share window's
  * sign-in being asked for) has landed by then, and is signed out of in turn.
- * The next start asks before the list opens, so nothing is under way then.
+ * Only a late answer, after the list opened, leaves anything under way.
  */
 export const SIGN_OUT_AGAIN_MS = [5_000, 30_000] as const;

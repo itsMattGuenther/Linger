@@ -184,10 +184,14 @@ test("a sign-in saved again after a child's sign-out, by something the list had 
       }),
     server,
   );
-  const forgets = async () => (await did(page)).filter((line) => line === `forget ${server}`).length;
-  const before = await forgets();
-  // The next pass, 5 seconds after the first, finds it and signs out of it.
-  await expect.poll(forgets, { timeout: 10_000 }).toBeGreaterThan(before);
+  // A later pass (5 or 30 seconds after the first, whichever comes after
+  // the save) finds it, tells the server to forget that very token, and
+  // forgets it here.
+  await expect.poll(async () => did(page), { timeout: 40_000 }).toContain(`logout ${server} late`);
+  const saved = await page.evaluate(() =>
+    (window as unknown as { __TAURI_INTERNALS__: { invoke: (cmd: string) => Promise<unknown> } }).__TAURI_INTERNALS__.invoke("sessions_load"),
+  );
+  expect(saved).not.toMatchObject({ kind: "found", sessions: [expect.objectContaining({ base_url: server })] });
 });
 
 test("everybody else keeps the list: the check is asked once, and an ordinary answer changes nothing (#953)", async ({ page }) => {
