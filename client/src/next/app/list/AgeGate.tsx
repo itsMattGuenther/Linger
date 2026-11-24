@@ -2,11 +2,10 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { type ReactNode, useEffect, useSyncExternalStore } from "react";
 import { PublicApi } from "../../../lib/api";
 import { forgetSession, loadSessions } from "../../../lib/ipc";
-import { markSignedOut } from "../../../lib/session";
-import { ASK_WITHIN_MS, type LeaveShell, phoneAge, signOutEverywhere } from "../../core/ageCheck";
+import { ASK_WITHIN_MS, type LeaveShell, phoneAge, SIGN_OUT_AGAIN_MS, signOutEverywhere } from "../../core/ageCheck";
 import { onPhone } from "../../core/phone";
-import { colorReader, nameColor, readTheme, shareWindowList } from "../../core/shareWindow";
 import { WindowMessage } from "../WindowMessage";
+import { emptyShareList } from "./useShareWindow";
 
 /**
  * Linger is for people 13 and older (#953, SPEC §4.15). On a phone the shell
@@ -16,8 +15,9 @@ import { WindowMessage } from "../WindowMessage";
  * anyway. For a person under 13 the list never opens, or, for an answer
  * that came after it did, goes at once, and everything it had open with it
  * (connections, menus, notification sign-ups). What's left is one screen,
- * and every saved sign-in is signed out of (`signOutEverywhere`). The
- * desktop has no store to ask and never checks.
+ * and every saved sign-in is signed out of (`signOutEverywhere`), and again
+ * a few seconds later, for anything the list had under way. The desktop has
+ * no store to ask and never checks.
  */
 export function AgeGate({ children }: { children: ReactNode }) {
   const age = useSyncExternalStore(phoneAge.subscribe, phoneAge.state);
@@ -29,7 +29,10 @@ export function AgeGate({ children }: { children: ReactNode }) {
     return () => window.clearTimeout(wait);
   }, [asks]);
   useEffect(() => {
-    if (age === "child") void phoneAge.leave(() => signOutEverywhere(leaving));
+    if (age !== "child") return;
+    void phoneAge.leave(() => signOutEverywhere(leaving));
+    const again = SIGN_OUT_AGAIN_MS.map((after) => window.setTimeout(() => void signOutEverywhere(leaving), after));
+    return () => again.forEach((timer) => window.clearTimeout(timer));
   }, [age]);
   if (age === "child") return <NotForChildren />;
   // Waiting for the store: drawn as nothing, as the update gate draws its
@@ -45,23 +48,11 @@ const leaving: LeaveShell = {
     return loaded.kind === "found" ? loaded.sessions.map((each) => ({ baseUrl: each.base_url, refreshToken: each.refresh_token })) : [];
   },
   logout: (baseUrl, refreshToken) => new PublicApi(baseUrl).logout(refreshToken),
-  forget: async (baseUrl) => {
-    markSignedOut(baseUrl);
-    await forgetSession(baseUrl);
-  },
+  forget: async (baseUrl) => void (await forgetSession(baseUrl)),
   shareKept: () => invoke<string[] | null>("share_sign_ins_kept"),
   shareForget: (baseUrl) => invoke<string | null>("share_sign_in_forget", { baseUrl }),
-  // As signing out of the last server does (`useShareWindow`): the window
-  // has nothing to offer.
-  shareListClear: async () => {
-    const reader = colorReader(document);
-    try {
-      const empty = shareWindowList([], new Map(), readTheme(reader), (key) => nameColor(reader, key), Date.now());
-      await invoke("share_window_list_save", { list: JSON.stringify(empty) });
-    } finally {
-      reader.done();
-    }
-  },
+  // As signing out of the last server does: the window has nothing to offer.
+  shareListClear: () => emptyShareList(),
 };
 
 /** What's left for somebody the store says is under 13: no way past it, and nothing to do. */

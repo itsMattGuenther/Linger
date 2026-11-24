@@ -136,15 +136,6 @@ const trying = new Map<string, Promise<Refreshed>>();
  */
 const forgotten = new Set<string>();
 
-/**
- * Signed out of from outside the list (#953: a child's sign-out, which may
- * come while the list's own tries are under way): such a try won't write
- * its fresh token back, as for Sign out.
- */
-export function markSignedOut(baseUrl: string): void {
-  forgotten.add(baseUrl);
-}
-
 function once(baseUrl: string, attempt: () => Promise<Refreshed>): Promise<Refreshed> {
   const running = trying.get(baseUrl);
   if (running) return running;

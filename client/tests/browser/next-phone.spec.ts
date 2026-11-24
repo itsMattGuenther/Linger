@@ -169,6 +169,27 @@ test("a child's answer that comes after the list opened closes it, with what it 
   await signedOutOf(page, connected);
 });
 
+test("a sign-in saved again after a child's sign-out, by something the list had under way, is signed out of on the next pass (#953)", async ({ page }) => {
+  await page.goto("/tests/fixtures/next-list-window.html?one&shell=phone&age=child&agehold");
+  await expect(list(page)).toBeVisible({ timeout: 10_000 });
+  await settled(page);
+  await page.evaluate(() => window.core?.aged());
+  const server = "https://good-company.example";
+  await signedOutOf(page, [server]);
+  // A renewal the list had under way lands now, saving a fresh token.
+  await page.evaluate(
+    (base_url) =>
+      (window as unknown as { __TAURI_INTERNALS__: { invoke: (cmd: string, args: unknown) => Promise<unknown> } }).__TAURI_INTERNALS__.invoke("session_save", {
+        session: { base_url, refresh_token: "late" },
+      }),
+    server,
+  );
+  const forgets = async () => (await did(page)).filter((line) => line === `forget ${server}`).length;
+  const before = await forgets();
+  // The next pass, 5 seconds after the first, finds it and signs out of it.
+  await expect.poll(forgets, { timeout: 10_000 }).toBeGreaterThan(before);
+});
+
 test("everybody else keeps the list: the check is asked once, and an ordinary answer changes nothing (#953)", async ({ page }) => {
   await phone(page);
   await expect.poll(async () => (await did(page)).filter((line) => line === "phone_age_check").length).toBe(1);

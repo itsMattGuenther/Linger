@@ -30,6 +30,20 @@ const shell: ShareShell = {
 
 const logout = (baseUrl: string, refreshToken: string) => new PublicApi(baseUrl).logout(refreshToken);
 
+/**
+ * The share window's list with nothing in it: signed out of every server,
+ * here or by a child's sign-out (#953, `app/list/AgeGate.tsx`), the window
+ * has nothing to offer.
+ */
+export function emptyShareList(): Promise<void> {
+  const reader = colorReader(document);
+  try {
+    return shell.writeList(shareWindowList([], new Map(), readTheme(reader), (key) => nameColor(reader, key), Date.now()));
+  } finally {
+    reader.done();
+  }
+}
+
 /** How often a running app looks again at whether a sign-in needs renewing: a phone keeps an app for days. */
 const LOOK_AGAIN_MS = 6 * 60 * 60 * 1000;
 
@@ -88,14 +102,7 @@ export function useShareSignIns(on: boolean, sessions: Sessions): ReadonlyMap<st
       })
       .catch(() => undefined);
     // Signed out of every server: the window has nothing to offer.
-    if (signedIn.length === 0) {
-      const reader = colorReader(document);
-      try {
-        void shell.writeList(shareWindowList([], new Map(), readTheme(reader), (key) => nameColor(reader, key), Date.now())).catch(() => undefined);
-      } finally {
-        reader.done();
-      }
-    }
+    if (signedIn.length === 0) void emptyShareList().catch(() => undefined);
     return () => {
       live = false;
     };

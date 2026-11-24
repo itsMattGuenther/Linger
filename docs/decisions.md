@@ -2282,7 +2282,13 @@ would've used Linger to hang out with my friends and play games."
   notifications (a phone signed in, with them on, when the check first
   ships), and no sign-in stays saved, the share window's included. An answer
   that comes after the list opened closes it at once, with whatever it had
-  open, and signs out the same way.
+  open, and signs out the same way. Everything on the phone goes first, and
+  only then is each server told, so a slow server can't hold anything up.
+  And the sign-out runs again 5 and 30 seconds later, reading the saved
+  sign-ins afresh: a renewal the list had under way can land after the
+  first pass and save a sign-in again, and the next pass signs out of that
+  too. (Chasing each such race in the list's own code was tried first; the
+  review kept finding another, so the passes are what makes it sure.)
 - **Every failure lets the person in.** An iPhone before iOS 26.2, a copy from
   the GitHub release (Play answers only a copy installed from Play), a person
   who hasn't verified their age with Play yet, any error. The real path runs

@@ -94,25 +94,21 @@ describe("signing a child out of everything (#953)", () => {
     return { did, shell: { ...base, ...overrides } };
   }
 
-  it("forgets each saved sign-in first, as Sign out does, then tells its server, a server that doesn't answer too", async () => {
+  it("forgets everything on the phone before any server is told, a server that doesn't answer too", async () => {
     const { did, shell: leave } = shell();
     await signOutEverywhere(leave);
-    expect(did.indexOf("forget https://a.example")).toBeLessThan(did.indexOf("logout https://a.example ra"));
-    expect(did.indexOf("forget https://down.example")).toBeLessThan(did.indexOf("logout https://down.example rd"));
+    const firstTold = did.findIndex((line) => line.startsWith("logout "));
+    for (const here of ["forget https://a.example", "forget https://down.example", "share-forget https://a.example", "share-list-clear"]) {
+      expect(did.indexOf(here)).toBeGreaterThanOrEqual(0);
+      expect(did.indexOf(here)).toBeLessThan(firstTold);
+    }
+    expect(did).toEqual(expect.arrayContaining(["logout https://a.example ra", "logout https://down.example rd", "logout https://a.example sa"]));
   });
 
-  it("forgets a sign-in even when its server never answers", async () => {
+  it("forgets everything here even when no server ever answers", async () => {
     const { did, shell: leave } = shell({ logout: () => new Promise<void>(() => undefined) });
     void signOutEverywhere(leave);
-    await expect.poll(() => did).toEqual(expect.arrayContaining(["forget https://a.example", "forget https://down.example"]));
-  });
-
-  it("signs the share window's own sign-ins out too, with their own tokens, and empties its list", async () => {
-    const { did, shell: leave } = shell();
-    await signOutEverywhere(leave);
-    expect(did).toContain("share-forget https://a.example");
-    expect(did).toContain("logout https://a.example sa");
-    expect(did.at(-1)).toBe("share-list-clear");
+    await expect.poll(() => did).toEqual(["forget https://a.example", "forget https://down.example", "share-forget https://a.example", "share-list-clear"]);
   });
 
   it("goes on through every failure: no saved sign-ins to read, no share window", async () => {
