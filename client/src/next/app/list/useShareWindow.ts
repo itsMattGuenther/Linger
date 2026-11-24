@@ -12,6 +12,7 @@ import {
   type ShareListing,
   type ShareShell,
   type ShareStatus,
+  type ShareWindowList,
   type ShareWindowServer,
   shareWindowList,
   shareWindowServers,
@@ -37,11 +38,14 @@ const logout = (baseUrl: string, refreshToken: string) => new PublicApi(baseUrl)
  */
 export async function emptyShareList(): Promise<void> {
   const reader = colorReader(document);
+  let list: ShareWindowList;
   try {
-    await shell.writeList(shareWindowList([], new Map(), readTheme(reader), (key) => nameColor(reader, key), Date.now()));
+    list = shareWindowList([], new Map(), readTheme(reader), (key) => nameColor(reader, key), Date.now());
   } finally {
+    // The colours are read: the probe goes now, not when the shell answers.
     reader.done();
   }
+  await shell.writeList(list);
 }
 
 /** How often a running app looks again at whether a sign-in needs renewing: a phone keeps an app for days. */

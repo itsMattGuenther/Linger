@@ -106,33 +106,37 @@ export interface LeaveShell {
  * still has its sign-in kept here. Each sign-in is forgotten here first, its
  * token held on to only to tell its server, so a server that's slow or
  * doesn't answer, or the app closed meanwhile, leaves nothing saved. The
- * share window's own sign-ins and its list go alongside, neither waiting on
- * the other. Nothing here stops for a failure.
+ * share window's own sign-ins and its list go alongside, none of them
+ * waiting on another. Nothing here stops for a failure.
  *
- * A token the list renews after this (an answer that came after the list
- * opened) is dead anyway: the server revokes the whole family a sign-in's
- * tokens belong to, the renewed one too (`revoke_family`). It's a stale
- * entry, not a sign-in, and the passes below forget it.
+ * Something the list had under way can land after this (an answer that came
+ * after the list opened): a renewed token, once its server was told, is dead,
+ * since the server revokes every token in a sign-in's family (`revoke_family`);
+ * a share window's sign-in just asked for is a family of its own. The passes
+ * below (`SIGN_OUT_AGAIN_MS`) are what sign out of either.
  */
 export async function signOutEverywhere(shell: LeaveShell): Promise<void> {
+  // A step that throws before its promise is a failed step, not a stop.
+  const settle = <T,>(step: () => Promise<T>): Promise<T> => Promise.resolve().then(step);
   const servers = async () => {
-    const saved = await shell.saved().catch(() => []);
+    const saved = await settle(() => shell.saved()).catch(() => []);
     await Promise.allSettled(
       saved.map(async ({ baseUrl, refreshToken }) => {
-        await shell.forget(baseUrl).catch(() => undefined);
+        await settle(() => shell.forget(baseUrl)).catch(() => undefined);
         await shell.logout(baseUrl, refreshToken);
       }),
     );
   };
-  const shareWindow = async () => {
-    const kept = (await shell.shareKept().catch(() => null)) ?? [];
-    const told = kept.map(async (baseUrl) => {
-      const token = await shell.shareForget(baseUrl);
-      if (token !== null) await shell.logout(baseUrl, token);
-    });
-    await Promise.allSettled([shell.shareListClear(), ...told]);
+  const shareSignIns = async () => {
+    const kept = (await settle(() => shell.shareKept()).catch(() => null)) ?? [];
+    await Promise.allSettled(
+      kept.map(async (baseUrl) => {
+        const token = await shell.shareForget(baseUrl);
+        if (token !== null) await shell.logout(baseUrl, token);
+      }),
+    );
   };
-  await Promise.allSettled([servers(), shareWindow()]);
+  await Promise.allSettled([servers(), shareSignIns(), settle(() => shell.shareListClear())]);
 }
 
 /**

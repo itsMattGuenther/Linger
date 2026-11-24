@@ -170,6 +170,8 @@ test("a child's answer that comes after the list opened closes it, with what it 
 });
 
 test("a sign-in saved again after a child's sign-out, by something the list had under way, is signed out of on the next pass (#953)", async ({ page }) => {
+  // The pass that finds it may be the one 30 seconds after the answer.
+  test.setTimeout(60_000);
   await page.goto("/tests/fixtures/next-list-window.html?one&shell=phone&age=child&agehold");
   await expect(list(page)).toBeVisible({ timeout: 10_000 });
   await settled(page);
@@ -191,7 +193,8 @@ test("a sign-in saved again after a child's sign-out, by something the list had 
   const saved = await page.evaluate(() =>
     (window as unknown as { __TAURI_INTERNALS__: { invoke: (cmd: string) => Promise<unknown> } }).__TAURI_INTERNALS__.invoke("sessions_load"),
   );
-  expect(saved).not.toMatchObject({ kind: "found", sessions: [expect.objectContaining({ base_url: server })] });
+  const left = (saved as { sessions?: { base_url: string }[] }).sessions ?? [];
+  expect(left.filter((each) => each.base_url === server)).toEqual([]);
 });
 
 test("everybody else keeps the list: the check is asked once, and an ordinary answer changes nothing (#953)", async ({ page }) => {

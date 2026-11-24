@@ -97,10 +97,31 @@ describe("signing a child out of everything (#953)", () => {
   it("forgets each sign-in here before its server is told, a server that doesn't answer too", async () => {
     const { did, shell: leave } = shell();
     await signOutEverywhere(leave);
-    expect(did.indexOf("forget https://a.example")).toBeLessThan(did.indexOf("logout https://a.example ra"));
-    expect(did.indexOf("forget https://down.example")).toBeLessThan(did.indexOf("logout https://down.example rd"));
-    expect(did.indexOf("share-forget https://a.example")).toBeLessThan(did.indexOf("logout https://a.example sa"));
+    const before = (first: string, then: string) => {
+      expect(did).toContain(first);
+      expect(did).toContain(then);
+      expect(did.indexOf(first)).toBeLessThan(did.indexOf(then));
+    };
+    before("forget https://a.example", "logout https://a.example ra");
+    before("forget https://down.example", "logout https://down.example rd");
+    before("share-forget https://a.example", "logout https://a.example sa");
     expect(did).toContain("share-list-clear");
+  });
+
+  it("empties the share list even while the share window's sign-ins can't be read", async () => {
+    const { did, shell: leave } = shell({ shareKept: () => new Promise<null>(() => undefined) });
+    void signOutEverywhere(leave);
+    await expect.poll(() => did).toContain("share-list-clear");
+  });
+
+  it("goes on when a step throws before it even starts", async () => {
+    const { did, shell: leave } = shell({
+      shareListClear: () => {
+        throw new Error("no canvas");
+      },
+    });
+    await expect(signOutEverywhere(leave)).resolves.toBeUndefined();
+    expect(did).toEqual(expect.arrayContaining(["logout https://a.example ra", "logout https://a.example sa"]));
   });
 
   it("tells the servers even when the share window's steps never finish", async () => {
