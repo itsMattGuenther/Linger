@@ -30,9 +30,10 @@ default.
 
 **0.5.5 release, prepared 2026-11-24: phone notifications, and a clearer
 voice on the desktop.** The notes are `docs/releases/0.5.5.md`, and its one
-line is in `client/src/next/core/release-line.json`. Released once Matt had
-tested it on Linux, with fixes going into 0.5.6 (Matt, 2026-11-24); the iPhone
-app goes to the App Store after the testers try it. What each change owes
+line is in `client/src/next/core/release-line.json`. Tagged 2026-11-24,
+straight after Matt had tried `main` on Linux, with fixes going into 0.5.6
+(Matt, 2026-11-24); the iPhone app goes to the App Store after the testers
+try it. What each change owes
 after it ships:
 - **Linger is for people 13 and older, and the phone app checks the store's
   age where a law asks for it** (#953). Some US states (Texas so far) make the

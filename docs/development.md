@@ -779,7 +779,8 @@ simulator's reads of the page come back empty for a few seconds, while
 Apple's age check (#953) gives up there (no Apple account): the first screen
 had taken 20 s, so its assert had no time left, its one look fell in that
 gap, and it failed twice running (#955).
-`assertNotVisible` can stay: a read that misses something can't fail it.
+That gap fools `assertNotVisible` the other way: an empty read passes it
+without looking. Wait for something on the same screen right before one.
 
 **A wait's timeout counts from the last tap, not from when it starts.**
 Maestro takes off the time since the last command that could change the

@@ -57,12 +57,17 @@ produces a green release that no installed copy will accept.
   App Store. Then this step only runs the check. A copy built from `main`
   meanwhile (a dev build, a pull request's package) calls itself the new
   version, so the release isn't offered to it as an update.
-- **Once the App Store has approved the version**, bump `main` to the next
-  one straight away: App Store Connect takes no more TestFlight builds for a
-  version it has approved, so `ios.yml` from `main` fails until it moves on.
-  And Google Play takes each version code once: a Play test build uploaded
+- **Once the App Store has approved the version, and the tag exists**, bump
+  `main` to the next one: App Store Connect takes no more TestFlight builds
+  for a version it has approved, so `ios.yml` from `main` fails until it
+  moves on. Never before the tag, or the tag's commit says the next version
+  and `scripts/version-check.sh` stops the release.
+- **Google Play takes each version code once.** A Play test build uploaded
   before the tag (built here, `--config '{"bundle":{"android":{"versionCode":N}}}'`)
-  uses up a code, so the release's bundle needs the next unused one.
+  uses up a code, and `play.yml` always builds the code Tauri works out from
+  the version. So when a test build took it, build the release's bundle here
+  from the tag the same way, with the next unused code, and upload it in Play
+  Console by hand (0.5.5 went as 5006, since a test build had 5005).
 - Write `docs/releases/<version>.md`: what changed for people, with issue
   numbers; how to install or update; whether hosts need to update the server
   (check `git diff --stat v<previous> -- crates deploy`); and the checklist for
