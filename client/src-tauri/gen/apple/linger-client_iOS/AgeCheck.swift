@@ -3,8 +3,9 @@
 // question is whether the person is under 13. Apple says where the check
 // applies: Linger asks only there, so nobody anywhere else sees Apple's sheet.
 //
-// Declared Age Range is Swift only, so this is the app's one Swift file: the
-// Rust (src/phone_age.rs) calls `linger_age_check` and gets one answer back,
+// Declared Age Range is Swift only, so this is the app's one Swift file. The
+// app's main.mm hands `linger_age_check` to the Rust (src/phone_age.rs)
+// before the app starts, and the Rust calls it and gets one answer back,
 // 1 for a person under 13, 0 for anybody else, and -1 when it couldn't tell
 // (before iOS 26.2, an error, no screen to ask from). Rust and the page treat
 // -1 as 0: a check that failed never locks anybody out.

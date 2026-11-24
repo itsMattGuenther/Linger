@@ -91,22 +91,34 @@ impl OneAsk {
     }
 }
 
+/// Asks Apple, where Apple says the app must, and calls its argument once: 1
+/// for a person under 13, 0 for anybody else, -1 when it couldn't tell.
+#[cfg(target_os = "ios")]
+type AppleAgeCheck = extern "C" fn(extern "C" fn(i32));
+
+/// The app's Swift check (`gen/apple/linger-client_iOS/AgeCheck.swift`),
+/// handed over by the app's `main.mm` before the app starts. Handed over
+/// rather than named here: this library is also linked on its own, where
+/// the app's Swift isn't, and a name it can't find fails that link.
+#[cfg(target_os = "ios")]
+static APPLE: std::sync::OnceLock<AppleAgeCheck> = std::sync::OnceLock::new();
+
+/// Called once, by the app's `main.mm`, with Swift's `linger_age_check`.
+#[cfg(target_os = "ios")]
+#[no_mangle]
+pub extern "C" fn linger_register_age_check(check: AppleAgeCheck) {
+    let _ = APPLE.set(check);
+}
+
 #[cfg(target_os = "ios")]
 mod platform {
     //! Apple's Declared Age Range is Swift only, so the asking is in Swift,
-    //! in the app (`gen/apple/linger-client_iOS/AgeCheck.swift`), behind one
-    //! C function. It answers once, by calling back, from any thread.
+    //! in the app, behind one C function the app hands over (`APPLE`). It
+    //! answers once, by calling back, from any thread.
 
     use std::time::Duration;
 
-    use super::OneAsk;
-
-    extern "C" {
-        /// Asks Apple, where Apple says the app must, and calls `done` once:
-        /// 1 for a person under 13, 0 for anybody else, -1 when it couldn't
-        /// tell.
-        fn linger_age_check(done: extern "C" fn(i32));
-    }
+    use super::{OneAsk, APPLE};
 
     static ONE: OneAsk = OneAsk::new();
 
@@ -122,13 +134,12 @@ mod platform {
 
     pub async fn ask() -> Option<i32> {
         ONE.ask(
-            || {
-                // SAFETY: `linger_age_check` is defined in the app's Swift
-                // with this signature, takes nothing but a plain C function
-                // pointer to a function that lives as long as the program,
-                // and may be called from any thread: it hops to the main
+            || match APPLE.get() {
+                // It may be called from any thread: it hops to the main
                 // thread itself.
-                unsafe { linger_age_check(answered) };
+                Some(check) => check(answered),
+                // Not handed over: nothing to ask, so it couldn't tell.
+                None => answered(-1),
             },
             WITHIN,
         )
