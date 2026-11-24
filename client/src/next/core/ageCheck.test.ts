@@ -116,12 +116,15 @@ describe("signing a child out of everything (#953)", () => {
 
   it("goes on when a step throws before it even starts", async () => {
     const { did, shell: leave } = shell({
+      forget: () => {
+        throw new Error("no keyring");
+      },
       shareListClear: () => {
         throw new Error("no canvas");
       },
     });
     await expect(signOutEverywhere(leave)).resolves.toBeUndefined();
-    expect(did).toEqual(expect.arrayContaining(["logout https://a.example ra", "logout https://a.example sa"]));
+    expect(did).toEqual(expect.arrayContaining(["logout https://a.example ra", "logout https://down.example rd", "logout https://a.example sa"]));
   });
 
   it("tells the servers even when the share window's steps never finish", async () => {

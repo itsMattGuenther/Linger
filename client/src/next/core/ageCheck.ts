@@ -110,10 +110,12 @@ export interface LeaveShell {
  * waiting on another. Nothing here stops for a failure.
  *
  * Something the list had under way can land after this (an answer that came
- * after the list opened): a renewed token, once its server was told, is dead,
- * since the server revokes every token in a sign-in's family (`revoke_family`);
- * a share window's sign-in just asked for is a family of its own. The passes
- * below (`SIGN_OUT_AGAIN_MS`) are what sign out of either.
+ * after the list opened). A renewed token, once its server was told, is dead
+ * already, since the server revokes every token in a sign-in's family
+ * (`revoke_family`): the passes below (`SIGN_OUT_AGAIN_MS`) only clear its
+ * stale entry. A share window's sign-in just asked for is a family of its
+ * own, and a later pass is what signs out of it, if it has landed by then;
+ * one that lands after the last pass is signed out of on the next start.
  */
 export async function signOutEverywhere(shell: LeaveShell): Promise<void> {
   // A step that throws before its promise is a failed step, not a stop.
@@ -142,7 +144,8 @@ export async function signOutEverywhere(shell: LeaveShell): Promise<void> {
 /**
  * When a child's sign-out runs again, after the first: anything the list had
  * under way when the answer came (a sign-in being renewed, a share window's
- * sign-in being asked for) has landed by then, and is signed out of in turn.
- * Only a late answer, after the list opened, leaves anything under way.
+ * sign-in being asked for) that has landed by then is signed out of in turn.
+ * Only a late answer, after the list opened, leaves anything under way, and
+ * the next start asks before the list opens.
  */
 export const SIGN_OUT_AGAIN_MS = [5_000, 30_000] as const;

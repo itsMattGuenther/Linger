@@ -2289,9 +2289,11 @@ would've used Linger to hang out with my friends and play games."
   first pass and save a sign-in again, and the next pass signs out of that
   too. A renewed token is dead already once its server was told (logging
   out revokes every token in the sign-in's family, `revoke_family`), but a
-  share window's sign-in just asked for is a family of its own, and the
-  passes are what sign out of it. (Chasing each such race in the list's own
-  code was tried first; the review kept finding another.)
+  share window's sign-in just asked for is a family of its own, and a
+  later pass signs out of it if it has landed by then; one that lands
+  after the 30-second pass stays until the next start, which asks before
+  the list opens and signs out again. (Chasing each such race in the list's
+  own code was tried first; the review kept finding another.)
 - **Every failure lets the person in.** An iPhone before iOS 26.2, a copy from
   the GitHub release (Play answers only a copy installed from Play), a person
   who hasn't verified their age with Play yet, any error. The real path runs

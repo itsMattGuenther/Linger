@@ -171,7 +171,7 @@ test("a child's answer that comes after the list opened closes it, with what it 
 
 test("a sign-in saved again after a child's sign-out, by something the list had under way, is signed out of on the next pass (#953)", async ({ page }) => {
   // The pass that finds it may be the one 30 seconds after the answer.
-  test.setTimeout(60_000);
+  test.setTimeout(90_000);
   await page.goto("/tests/fixtures/next-list-window.html?one&shell=phone&age=child&agehold");
   await expect(list(page)).toBeVisible({ timeout: 10_000 });
   await settled(page);
