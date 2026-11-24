@@ -2330,3 +2330,30 @@ needed until something happens that Linger hasn't done:
 asking the store (Apple's answer says an 18+ app must still ask); asking
 everybody, everywhere (it would show Apple's and Google's sharing question to
 people no law covers).
+
+## Decided — the App Store listing (#779)
+
+**Matt, 2026-11-24**, while App Store Connect was filled in for the first
+submission (it carries 0.5.5; the age decision, #953, has its own section).
+
+- **Guideline 1.2's "method for filtering objectionable material" is
+  explained, not built.** Only people a host invited can post on a server at
+  all: there are no public servers, no directory and no random or anonymous
+  chat. The host and co-hosts delete messages and remove people, Report goes
+  to them, and Block hides a person. The notes for App Review say so. If
+  Apple rejects the app over it, the smallest filter Apple will take is built
+  then, not before.
+- **The App Privacy label is "Data Not Collected".** Apple counts data as
+  collected only when the developer or its partners can get at it; Linger
+  the project gets nothing (`docs/releasing.md`, "Google Play"). It matches
+  linger.im/privacy.
+- **Not a trader**, on both stores (the EU's Digital Services Act): Linger is
+  free, earns nothing and isn't a business, so no address or phone number is
+  published.
+- **Contact**: hello@linger.im, on linger.im's support and privacy pages; the
+  app's Report a problem stays GitHub's issue forms.
+- **Released by hand** once approved, so the website and the release go out
+  together.
+- **Every country but mainland China**, which needs government filings, and
+  not on Macs or Vision Pro: the iPhone app is for phones, and the desktop
+  app is the computer's.

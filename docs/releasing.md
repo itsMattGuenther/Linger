@@ -376,12 +376,13 @@ terms of service (on its developer pages). Play Console's target audience is
 13 and older, as on the App Store.
 
 The App Store's privacy answers (App Store Connect → the app → App Privacy)
-move the same way now the iPhone has notifications (#889): add
-**Identifiers → Device ID**, the push address Apple gives the phone, which
-the person's server keeps with their sign-in, so it's linked to them; for
-**App Functionality** only, and **not** used for tracking. They must be in
-before the first submission for App Store review, and agree with
-linger.im/privacy (step 5).
+are **Data Not Collected** (Matt, 2026-11-24, `docs/decisions.md`), and
+published. Apple counts data as collected only when the developer or its
+partners can get at it: what Linger sends goes to the server the person signed
+in to, run by their host, and the notification relay passes each one on and
+keeps nothing. Google counts everything the app sends anywhere, which is why
+the Data safety answers above differ. If Linger ever sends something the
+project itself keeps, both change, and linger.im/privacy with them (step 5).
 
 ## The iPhone
 
