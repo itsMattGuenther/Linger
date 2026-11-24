@@ -769,11 +769,17 @@ tree says, which isn't always what's drawn: a room's row reads `#evenings`,
 the # and the name together. When a flow can't find something, the failed
 step's `screen-hierarchy/*.json` in the artifact has every element's words.
 
-**Wait for anything that arrives on its own** with `extendedWaitUntil` and
-a timeout; `assertVisible` looks once, and suits only what's drawn with
-something the flow already waited for. After setting up, the list arrived
-first and the server's name a moment later, and a one-look check for the
-name failed in one of the three runs that got that far.
+**Check that something is there with `extendedWaitUntil`** and a timeout,
+never `assertVisible`. An assert gets what's left of 17 s since the last tap
+(below), so after a long wait it looks once, and one read of the page can
+miss what's on it. After setting up, the list arrived first and the
+server's name a moment later, and a one-look check for the name failed in
+one of the three runs that got that far. And about 20 s after a launch, the
+simulator's reads of the page come back empty for a few seconds, while
+Apple's age check (#953) gives up there (no Apple account): the first screen
+had taken 20 s, so its assert had no time left, its one look fell in that
+gap, and it failed twice running (#955).
+`assertNotVisible` can stay: a read that misses something can't fail it.
 
 **A wait's timeout counts from the last tap, not from when it starts.**
 Maestro takes off the time since the last command that could change the

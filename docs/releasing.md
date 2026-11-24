@@ -50,7 +50,19 @@ produces a green release that no installed copy will accept.
   `client/src-tauri/Cargo.toml`, `client/src-tauri/tauri.conf.json` and the
   root `Cargo.toml`) and refresh both Rust lockfiles
   (`cargo update -w` at the root and in `client/src-tauri`).
-  `scripts/version-check.sh v<version>` must pass.
+  `scripts/version-check.sh v<version>` must pass. The bump may already be on
+  `main`: for 0.5.5 it went in early (Matt, 2026-11-24), so the TestFlight
+  and Play test builds friends tried were labelled with the version that
+  ships, and the TestFlight build they passed is the one submitted to the
+  App Store. Then this step only runs the check. A copy built from `main`
+  meanwhile (a dev build, a pull request's package) calls itself the new
+  version, so the release isn't offered to it as an update.
+- **Once the App Store has approved the version**, bump `main` to the next
+  one straight away: App Store Connect takes no more TestFlight builds for a
+  version it has approved, so `ios.yml` from `main` fails until it moves on.
+  And Google Play takes each version code once: a Play test build uploaded
+  before the tag (built here, `--config '{"bundle":{"android":{"versionCode":N}}}'`)
+  uses up a code, so the release's bundle needs the next unused one.
 - Write `docs/releases/<version>.md`: what changed for people, with issue
   numbers; how to install or update; whether hosts need to update the server
   (check `git diff --stat v<previous> -- crates deploy`); and the checklist for

@@ -6,6 +6,15 @@ appId: io.github.itsmattguenther.linger
 - extendedWaitUntil:
     visible: "Join your people."
     timeout: 120000
-- assertVisible: "Server or link"
-- assertVisible: "Continue"
+# Waited for, not asserted: an assert after a wait gets what's left of
+# Maestro's 17 s from the launch, and the first screen can take 20 (#955).
+# Then it looks once, and about 20 s after a launch the simulator's reads of
+# the page come back empty for a few seconds, while Apple's age check (#953)
+# gives up there. The one look fell in that gap twice running.
+- extendedWaitUntil:
+    visible: "Server or link"
+    timeout: 130000
+- extendedWaitUntil:
+    visible: "Continue"
+    timeout: 140000
 - takeScreenshot: 01-first-screen
