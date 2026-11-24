@@ -1,7 +1,7 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { type ReactNode, useEffect, useSyncExternalStore } from "react";
 import { PublicApi } from "../../../lib/api";
-import { forgetSession, loadSessions } from "../../../lib/ipc";
+import { forgetSession, loadSessions, refuseSignIns } from "../../../lib/ipc";
 import { ASK_WITHIN_MS, type LeaveShell, phoneAge, SIGN_OUT_AGAIN_MS, signOutEverywhere } from "../../core/ageCheck";
 import { onPhone } from "../../core/phone";
 import { WindowMessage } from "../WindowMessage";
@@ -15,9 +15,10 @@ import { emptyShareList } from "./useShareWindow";
  * anyway. For a person under 13 the list never opens, or, for an answer
  * that came after it did, goes at once, and everything it had open with it
  * (connections, menus, notification sign-ups). What's left is one screen,
- * and every saved sign-in is signed out of (`signOutEverywhere`), and again
- * a few seconds later, for anything the list had under way. The desktop has
- * no store to ask and never checks.
+ * nothing can be saved from that moment on (a sign-in that was under way is
+ * told to its server instead), and every saved sign-in is signed out of
+ * (`signOutEverywhere`), once more 5 seconds later for a save that was
+ * already being written. The desktop has no store to ask and never checks.
  */
 export function AgeGate({ children }: { children: ReactNode }) {
   const age = useSyncExternalStore(phoneAge.subscribe, phoneAge.state);
@@ -31,8 +32,8 @@ export function AgeGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (age !== "child") return;
     void phoneAge.leave(() => signOutEverywhere(leaving));
-    const again = SIGN_OUT_AGAIN_MS.map((after) => window.setTimeout(() => void signOutEverywhere(leaving), after));
-    return () => again.forEach((timer) => window.clearTimeout(timer));
+    const again = window.setTimeout(() => void signOutEverywhere(leaving), SIGN_OUT_AGAIN_MS);
+    return () => window.clearTimeout(again);
   }, [age]);
   if (age === "child") return <NotForChildren />;
   // Waiting for the store: drawn as nothing, as the update gate draws its
@@ -40,6 +41,12 @@ export function AgeGate({ children }: { children: ReactNode }) {
   if (age === "unknown" && asks) return null;
   return children;
 }
+
+// From the moment a child's answer comes, not when the screen next draws:
+// no sign-in is saved again, and one that arrives is told to its server.
+phoneAge.subscribe(() => {
+  if (phoneAge.state() === "child") refuseSignIns((baseUrl, refreshToken) => void new PublicApi(baseUrl).logout(refreshToken).catch(() => undefined));
+});
 
 /** The shell and the servers, as signing out of everything uses them. */
 const leaving: LeaveShell = {

@@ -109,13 +109,10 @@ export interface LeaveShell {
  * share window's own sign-ins and its list go alongside, none of them
  * waiting on another. Nothing here stops for a failure.
  *
- * Something the list had under way can land after this (an answer that came
- * after the list opened). A renewed token, once its server was told, is dead
- * already, since the server revokes every token in a sign-in's family
- * (`revoke_family`): the passes below (`SIGN_OUT_AGAIN_MS`) only clear its
- * stale entry. A share window's sign-in just asked for is a family of its
- * own, and a later pass is what signs out of it, if it has landed by then;
- * one that lands after the last pass is signed out of on the next start.
+ * Nothing can be saved after a child's answer (`refuseSignIns`, lib/ipc.ts):
+ * a sign-in that was under way when it came is told to its server instead.
+ * Only a save already on its way to the keyring can land after this pass,
+ * and the one after it (`SIGN_OUT_AGAIN_MS`) finds it.
  */
 export async function signOutEverywhere(shell: LeaveShell): Promise<void> {
   // A step that throws before its promise is a failed step, not a stop.
@@ -142,10 +139,8 @@ export async function signOutEverywhere(shell: LeaveShell): Promise<void> {
 }
 
 /**
- * When a child's sign-out runs again, after the first: anything the list had
- * under way when the answer came (a sign-in being renewed, a share window's
- * sign-in being asked for) that has landed by then is signed out of in turn.
- * Only a late answer, after the list opened, leaves anything under way, and
- * the next start asks before the list opens.
+ * When a child's sign-out runs again, once: for a sign-in whose save was
+ * already on its way to the keyring when the answer came, the only thing
+ * that can land after the first pass. Anything later is refused.
  */
-export const SIGN_OUT_AGAIN_MS = [5_000, 30_000] as const;
+export const SIGN_OUT_AGAIN_MS = 5_000;

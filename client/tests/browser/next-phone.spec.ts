@@ -169,32 +169,44 @@ test("a child's answer that comes after the list opened closes it, with what it 
   await signedOutOf(page, connected);
 });
 
-test("a sign-in saved again after a child's sign-out, by something the list had under way, is signed out of on the next pass (#953)", async ({ page }) => {
-  // The pass that finds it may be the one 30 seconds after the answer.
-  test.setTimeout(90_000);
+/** Whether a sign-in for `server` is saved on the phone, as the fixture's keyring holds it. */
+async function savedFor(page: Page, server: string): Promise<boolean> {
+  const saved = await page.evaluate(() =>
+    (window as unknown as { __TAURI_INTERNALS__: { invoke: (cmd: string) => Promise<unknown> } }).__TAURI_INTERNALS__.invoke("sessions_load"),
+  );
+  return ((saved as { sessions?: { base_url: string }[] }).sessions ?? []).some((each) => each.base_url === server);
+}
+
+test("after a child's answer nothing is saved: a sign-in the list had under way is told to its server instead (#953)", async ({ page }) => {
   await page.goto("/tests/fixtures/next-list-window.html?one&shell=phone&age=child&agehold");
   await expect(list(page)).toBeVisible({ timeout: 10_000 });
   await settled(page);
   await page.evaluate(() => window.core?.aged());
   const server = "https://good-company.example";
   await signedOutOf(page, [server]);
-  // A renewal the list had under way lands now, saving a fresh token.
+  // A renewal, or a sign-in on a slow server, lands now and is saved as the list would.
+  await page.evaluate((base) => window.core?.saveSignIn(base, "late"), server);
+  await expect.poll(async () => did(page)).toContain(`logout ${server} late`);
+  expect(await savedFor(page, server)).toBe(false);
+});
+
+test("a sign-in already being written when a child's answer came is signed out of on the pass 5 seconds later (#953)", async ({ page }) => {
+  await page.goto("/tests/fixtures/next-list-window.html?one&shell=phone&age=child&agehold");
+  await expect(list(page)).toBeVisible({ timeout: 10_000 });
+  await settled(page);
+  await page.evaluate(() => window.core?.aged());
+  const server = "https://good-company.example";
+  await signedOutOf(page, [server]);
+  // Straight to the keyring, as a save under way before the answer would land.
   await page.evaluate(
     (base_url) =>
       (window as unknown as { __TAURI_INTERNALS__: { invoke: (cmd: string, args: unknown) => Promise<unknown> } }).__TAURI_INTERNALS__.invoke("session_save", {
-        session: { base_url, refresh_token: "late" },
+        session: { base_url, refresh_token: "written" },
       }),
     server,
   );
-  // A later pass (5 or 30 seconds after the first, whichever comes after
-  // the save) finds it, tells the server to forget that very token, and
-  // forgets it here.
-  await expect.poll(async () => did(page), { timeout: 40_000 }).toContain(`logout ${server} late`);
-  const saved = await page.evaluate(() =>
-    (window as unknown as { __TAURI_INTERNALS__: { invoke: (cmd: string) => Promise<unknown> } }).__TAURI_INTERNALS__.invoke("sessions_load"),
-  );
-  const left = (saved as { sessions?: { base_url: string }[] }).sessions ?? [];
-  expect(left.filter((each) => each.base_url === server)).toEqual([]);
+  await expect.poll(async () => did(page), { timeout: 15_000 }).toContain(`logout ${server} written`);
+  expect(await savedFor(page, server)).toBe(false);
 });
 
 test("everybody else keeps the list: the check is asked once, and an ordinary answer changes nothing (#953)", async ({ page }) => {

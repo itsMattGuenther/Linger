@@ -2282,18 +2282,18 @@ would've used Linger to hang out with my friends and play games."
   notifications (a phone signed in, with them on, when the check first
   ships), and no sign-in stays saved, the share window's included. An answer
   that comes after the list opened closes it at once, with whatever it had
-  open, and signs out the same way. Everything on the phone goes first, and
-  only then is each server told, so a slow server can't hold anything up.
-  And the sign-out runs again 5 and 30 seconds later, reading the saved
-  sign-ins afresh: a renewal the list had under way can land after the
-  first pass and save a sign-in again, and the next pass signs out of that
-  too. A renewed token is dead already once its server was told (logging
-  out revokes every token in the sign-in's family, `revoke_family`), but a
-  share window's sign-in just asked for is a family of its own, and a
-  later pass signs out of it if it has landed by then; one that lands
-  after the 30-second pass stays until the next start, which asks before
-  the list opens and signs out again. (Chasing each such race in the list's
-  own code was tried first; the review kept finding another.)
+  open, and signs out the same way. Each sign-in is forgotten here before
+  its server is told, so a slow server can't leave it saved.
+- **From the moment of a child's answer, nothing is saved.** Every sign-in
+  the page saves goes through one function (`saveSession`), and the share
+  window's through one more; both refuse from then on, and tell the server
+  to forget the sign-in instead. So something the list had under way (a
+  renewal, a sign-in typed on a slow server, a share window's sign-in being
+  asked for) can't leave a sign-in on the phone, however late it lands. The
+  only thing that can is a save already being written when the answer came,
+  and the sign-out runs once more 5 seconds later for that. (Chasing each
+  late arrival in the list's own code, then timed passes, were tried first;
+  the review kept finding another way through either.)
 - **Every failure lets the person in.** An iPhone before iOS 26.2, a copy from
   the GitHub release (Play answers only a copy installed from Play), a person
   who hasn't verified their age with Play yet, any error. The real path runs

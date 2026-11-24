@@ -133,7 +133,7 @@ import { customEmoji, SERVER, SERVER_NAME, evening, messages, people, withLongWo
 import { collections, fakeMedia, fakeSearch } from "./next/finds";
 import type { MediaKind } from "../../src/generated/MediaKind";
 import { GUILD, guild, LISBON, lisbon, serverInfo } from "./next/servers";
-import { voiceInThePage } from "../../src/lib/ipc";
+import { saveSession, voiceInThePage } from "../../src/lib/ipc";
 import { browserWorld } from "../../src/lib/pageVoice";
 import { FakeSfu, fakeMicrophone, realAudio, type Received } from "./next/sfu";
 import releaseLine from "../../src/next/core/release-line.json";
@@ -566,6 +566,8 @@ declare global {
       saved: () => void;
       /** With `?agehold`, the phone's store answers the age check (#953). */
       aged: () => void;
+      /** A sign-in the list had under way arrives now, and is saved as the list would (#953). */
+      saveSignIn: (baseUrl: string, refreshToken: string) => Promise<unknown>;
       /** Files shared to Linger while the app runs, and the shell's word that they're in its inbox (#785). */
       share: (names: string[]) => void;
       /** With `?sharedslow`, the shell has read the shared files' bytes. */
@@ -639,6 +641,7 @@ window.core = {
   },
   saved: () => showSheet(),
   aged: () => answerAge(),
+  saveSignIn: (baseUrl, refreshToken) => saveSession({ base_url: baseUrl, refresh_token: refreshToken }),
   share: (names) => {
     shareId += 1;
     inbox = names.map(sharedPicture);

@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
 import { PublicApi } from "../../../lib/api";
+import { refusedSignIn } from "../../../lib/ipc";
 import type { Sessions } from "../../../lib/session";
 import {
   colorReader,
@@ -22,7 +23,8 @@ import {
 /** The shell's half (`share_window.rs`). */
 const shell: ShareShell = {
   savedAt: (baseUrl) => invoke<number | null>("share_sign_in_saved_at", { baseUrl }),
-  save: (baseUrl, refreshToken) => invoke<string | null>("share_sign_in_save", { baseUrl, refreshToken }),
+  // Refused for a child (#953, lib/ipc.ts): told to its server instead.
+  save: async (baseUrl, refreshToken) => (refusedSignIn(baseUrl, refreshToken) ? null : invoke<string | null>("share_sign_in_save", { baseUrl, refreshToken })),
   forget: (baseUrl) => invoke<string | null>("share_sign_in_forget", { baseUrl }),
   kept: () => invoke<string[]>("share_sign_ins_kept"),
   writeList: (list) => invoke("share_window_list_save", { list: JSON.stringify(list) }),
