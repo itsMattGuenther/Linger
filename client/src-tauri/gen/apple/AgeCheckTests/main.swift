@@ -27,11 +27,10 @@ check(AgeCheck.verdict(upperBound: 0) == 1, "a top of 0 is a child")
 // 13 to 15 and 16 to 17 share a top of 15 and 17.
 check(AgeCheck.verdict(upperBound: 15) == 0, "13 to 15 is not")
 check(AgeCheck.verdict(upperBound: 17) == 0, "16 to 17 is not")
-// 18 and older share no top.
+// 18 and older share no top. (A region whose own lowest gate is 16 shares
+// a top of 15 for anybody under it, the 13 to 15 case above: the bottom
+// isn't read at all, so its being missing there changes nothing.)
 check(AgeCheck.verdict(upperBound: nil) == 0, "no top (the gate or older) is not")
-// A region's own lowest gate of 16 shares a top of 15 for anybody under it:
-// that can't say under 13, so it isn't.
-check(AgeCheck.verdict(upperBound: 15) == 0, "under a region's gate of 16 is not")
 check(AgeCheck.gate == 13, "Linger's gate is 13")
 
 // The bridge, with no framework to ask: it answers once, that it couldn't tell.
