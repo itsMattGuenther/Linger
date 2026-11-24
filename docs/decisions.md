@@ -2274,7 +2274,15 @@ would've used Linger to hang out with my friends and play games."
   whose top is under 13, not one with no bottom: a region's own age gates can
   replace Linger's, and then a missing bottom can mean "under 16".
 - **Under 13: one screen, and nothing else.** It says Linger is for people 13
-  and older, and the app lets go of every server.
+  and older. The list waits for the store before it opens (3 seconds at
+  most), so for a child it never opens: nothing connects, and nothing
+  registers the phone for notifications. And the app signs out of every
+  saved server, from the saved sign-ins rather than from the list, so a
+  server it couldn't reach is signed out of too: each forgets the phone's
+  notifications (a phone signed in, with them on, when the check first
+  ships), and no sign-in stays saved, the share window's included. An answer
+  that comes after the list opened closes it at once, with whatever it had
+  open, and signs out the same way.
 - **Every failure lets the person in.** An iPhone before iOS 26.2, a copy from
   the GitHub release (Play answers only a copy installed from Play), a person
   who hasn't verified their age with Play yet, any error. The real path runs

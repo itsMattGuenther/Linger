@@ -117,23 +117,56 @@ test("has no close button of its own: a phone's app is closed the phone's way", 
   await expect(page.locator("[data-screen='list']").getByRole("button", { name: "Close window" })).toHaveCount(0);
 });
 
-test("a store that says the person is under 13 leaves only the 13-and-older screen, and closes every connection (#953)", async ({ page }) => {
-  // The list opens without waiting for the check, and connects.
-  await open(page, "?one&shell=phone&age=child&agehold");
-  await settled(page);
-  expect(await did(page)).toContain("phone_age_check");
-  const connected = (await did(page)).filter((line) => line.startsWith("connect ")).map((line) => line.slice("connect ".length));
-  expect(connected.length).toBeGreaterThan(0);
-  // The store answers: the list goes, and everything it connected to is let go.
-  await page.evaluate(() => window.core?.aged());
-  const message = page.getByRole("status");
-  await expect(message).toContainText("Linger is for people 13 and older.");
-  await expect(message).toContainText("The age on this phone's account is under 13");
+const SAVED = ["https://good-company.example", "https://ashen-lanterns.example", "https://casa-da-ribeira.example"];
+
+/** Each saved server told to sign this phone out, then forgotten here (#953). */
+async function signedOutOf(page: Page, servers: string[], reach: (server: string) => string = (server) => `POST ${server}/auth/logout`) {
+  for (const server of servers) {
+    await expect.poll(async () => did(page)).toContain(reach(server));
+    await expect.poll(async () => did(page)).toContain(`forget ${server}`);
+  }
+}
+
+const ageScreen = (page: Page) => page.getByRole("status");
+
+test("a store that says the person is under 13 never opens the list, and signs out of every saved server (#953)", async ({ page }) => {
+  // Every server's sign-in is saved; one of them doesn't answer at all.
+  await page.goto("/tests/fixtures/next-list-window.html?shell=phone&age=child&down");
+  await expect(ageScreen(page)).toContainText("Linger is for people 13 and older.");
+  await expect(ageScreen(page)).toContainText("The age on this phone's account is under 13");
   await expect(page.locator("[data-screen='list']")).toHaveCount(0);
-  for (const server of connected) await expect.poll(async () => did(page)).toContain(`disconnect ${server}`);
+  // The two that answer sign the phone out, which forgets its
+  // notifications there; the one that doesn't is forgotten here all the same.
+  await signedOutOf(page, SAVED.slice(0, 1).concat(SAVED.slice(2)));
+  await signedOutOf(page, [SAVED[1] ?? ""], (server) => `unreachable ${server}/auth/logout`);
+  expect((await did(page)).filter((line) => line.startsWith("connect "))).toEqual([]);
   // Nothing on it leads anywhere: no close button, no button at all.
   await expect(page.getByRole("button")).toHaveCount(0);
   expect(await sticksOut(page)).toEqual([]);
+});
+
+test("while the store hasn't answered, nothing opens or connects; after a while the list opens anyway (#953)", async ({ page }) => {
+  await page.goto("/tests/fixtures/next-list-window.html?one&shell=phone&agehold");
+  await expect.poll(async () => did(page)).toContain("phone_age_check");
+  await page.waitForTimeout(1_000);
+  await expect(page.locator("[data-screen='list']")).toHaveCount(0);
+  expect((await did(page)).filter((line) => line.startsWith("connect "))).toEqual([]);
+  // A store that never answers keeps nobody out.
+  await expect(list(page)).toBeVisible({ timeout: 10_000 });
+  await settled(page);
+});
+
+test("a child's answer that comes after the list opened closes it, with what it had open, and signs out (#953)", async ({ page }) => {
+  await page.goto("/tests/fixtures/next-list-window.html?one&shell=phone&age=child&agehold");
+  await expect(list(page)).toBeVisible({ timeout: 10_000 });
+  await settled(page);
+  const connected = (await did(page)).filter((line) => line.startsWith("connect ")).map((line) => line.slice("connect ".length));
+  expect(connected.length).toBeGreaterThan(0);
+  await page.evaluate(() => window.core?.aged());
+  await expect(ageScreen(page)).toContainText("Linger is for people 13 and older.");
+  await expect(page.locator("[data-screen='list']")).toHaveCount(0);
+  for (const server of connected) await expect.poll(async () => did(page)).toContain(`disconnect ${server}`);
+  await signedOutOf(page, connected);
 });
 
 test("everybody else keeps the list: the check is asked once, and an ordinary answer changes nothing (#953)", async ({ page }) => {
@@ -141,6 +174,7 @@ test("everybody else keeps the list: the check is asked once, and an ordinary an
   await expect.poll(async () => (await did(page)).filter((line) => line === "phone_age_check").length).toBe(1);
   await expect(list(page)).toBeVisible();
   await expect(page.getByText("Linger is for people 13 and older.")).toHaveCount(0);
+  expect((await did(page)).some((line) => line.endsWith("/auth/logout"))).toBe(false);
 });
 
 test("a computer never asks for an age: there's no store to ask (#953)", async ({ page }) => {

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ageCheck, verdictOf } from "./ageCheck";
+import { ageCheck, type LeaveShell, signOutEverywhere, verdictOf } from "./ageCheck";
 
 describe("the phone's age check (#953)", () => {
   it("counts only the shell's exact child as one", () => {
@@ -9,19 +9,22 @@ describe("the phone's age check (#953)", () => {
     }
   });
 
-  it("starts ok, and a child answer closes it and tells whoever listens", async () => {
-    const check = ageCheck();
+  it("is unknown until it answers, then child or ok, telling whoever listens", async () => {
+    const child = ageCheck();
     const heard = vi.fn();
-    check.subscribe(heard);
-    expect(check.verdict()).toBe("ok");
-    await check.ask(async () => "child");
-    expect(check.verdict()).toBe("child");
+    child.subscribe(heard);
+    expect(child.state()).toBe("unknown");
+    await child.ask(async () => "child");
+    expect(child.state()).toBe("child");
     expect(heard).toHaveBeenCalledTimes(1);
+
+    const other = ageCheck();
+    await other.ask(async () => "ok");
+    expect(other.state()).toBe("ok");
   });
 
-  it("stays ok when the check fails, throws or says anything else", async () => {
+  it("is ok when the check fails, throws or says anything else", async () => {
     for (const question of [
-      async () => "ok",
       async () => null,
       async () => {
         throw new Error("no store");
@@ -31,12 +34,28 @@ describe("the phone's age check (#953)", () => {
       },
     ]) {
       const check = ageCheck();
-      const heard = vi.fn();
-      check.subscribe(heard);
       await check.ask(question);
-      expect(check.verdict()).toBe("ok");
-      expect(heard).not.toHaveBeenCalled();
+      expect(check.state()).toBe("ok");
     }
+  });
+
+  it("giving up on the wait is ok for now, and a child's answer after it still counts", async () => {
+    const check = ageCheck();
+    let answer: (value: unknown) => void = () => undefined;
+    const pending = new Promise((settle) => (answer = settle));
+    const asked = check.ask(() => pending);
+    check.giveUp();
+    expect(check.state()).toBe("ok");
+    answer("child");
+    await asked;
+    expect(check.state()).toBe("child");
+  });
+
+  it("giving up changes nothing once it has answered", async () => {
+    const check = ageCheck();
+    await check.ask(async () => "child");
+    check.giveUp();
+    expect(check.state()).toBe("child");
   });
 
   it("asks the shell once, however often the page asks", async () => {
@@ -47,11 +66,55 @@ describe("the phone's age check (#953)", () => {
     expect(question).toHaveBeenCalledTimes(1);
   });
 
-  it("stops telling a listener that has gone", async () => {
+  it("signs a child out once, however often it's asked to", async () => {
     const check = ageCheck();
-    const heard = vi.fn();
-    check.subscribe(heard)();
-    await check.ask(async () => "child");
-    expect(heard).not.toHaveBeenCalled();
+    const signOut = vi.fn(async () => undefined);
+    await Promise.all([check.leave(signOut), check.leave(signOut)]);
+    expect(signOut).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("signing a child out of everything (#953)", () => {
+  function shell(overrides: Partial<LeaveShell> = {}) {
+    const did: string[] = [];
+    const base: LeaveShell = {
+      saved: async () => [
+        { baseUrl: "https://a.example", refreshToken: "ra" },
+        { baseUrl: "https://down.example", refreshToken: "rd" },
+      ],
+      logout: async (baseUrl, token) => {
+        did.push(`logout ${baseUrl} ${token}`);
+        if (baseUrl === "https://down.example") throw new Error("unreachable");
+      },
+      forget: async (baseUrl) => void did.push(`forget ${baseUrl}`),
+      shareKept: async () => ["https://a.example"],
+      shareForget: async (baseUrl) => (did.push(`share-forget ${baseUrl}`), "sa"),
+    };
+    return { did, shell: { ...base, ...overrides } };
+  }
+
+  it("tells each saved server first, then forgets it, a server that doesn't answer too", async () => {
+    const { did, shell: leave } = shell();
+    await signOutEverywhere(leave);
+    expect(did.indexOf("logout https://a.example ra")).toBeLessThan(did.indexOf("forget https://a.example"));
+    expect(did.indexOf("logout https://down.example rd")).toBeLessThan(did.indexOf("forget https://down.example"));
+  });
+
+  it("signs the share window's own sign-ins out too, with their own tokens", async () => {
+    const { did, shell: leave } = shell();
+    await signOutEverywhere(leave);
+    expect(did).toContain("share-forget https://a.example");
+    expect(did).toContain("logout https://a.example sa");
+  });
+
+  it("goes on through every failure: no saved sign-ins to read, no share window", async () => {
+    const { did, shell: leave } = shell({
+      saved: async () => {
+        throw new Error("no keyring");
+      },
+      shareKept: async () => null,
+    });
+    await expect(signOutEverywhere(leave)).resolves.toBeUndefined();
+    expect(did).toEqual([]);
   });
 });

@@ -682,11 +682,12 @@ const shareRead = new Promise<void>((settle) => {
 });
 /** The servers that say they work with 0.5.4 or newer (#793): `?tooold` Casa da Ribeira, `?tooold=all` every one. */
 const tooOld = new Set<string>(query.has("tooold") ? (query.get("tooold") === "all" ? Object.keys(states) : [LISBON]) : []);
-/** With `?savehold`, the iPhone's share sheet waits for `window.core.saved()`. */
+/** With `?agehold`, the phone's store answers the age check at `window.core.aged()` (#953). */
 let answerAge: () => void = () => undefined;
 const aging = new Promise<void>((settle) => {
   answerAge = settle;
 });
+/** With `?savehold`, the iPhone's share sheet waits for `window.core.saved()`. */
 let showSheet: () => void = () => undefined;
 const saving = new Promise<void>((settle) => {
   showSheet = settle;

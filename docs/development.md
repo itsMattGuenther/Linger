@@ -582,8 +582,8 @@ build on a real iPhone.
 **The store's age check (#953, SPEC §4.15)** asks the age the store holds for
 the person, only where the store says a law makes it: Rust's
 `phone_age_check` (`src-tauri/src/phone_age.rs`) answers the page `child` or
-`ok`, and the page (`core/ageCheck.ts`, `app/list/AgeGate.tsx`) never waits
-for it. On an iPhone it's `gen/apple/linger-client_iOS/AgeCheck.swift`, the
+`ok`, and the page (`core/ageCheck.ts`, `app/list/AgeGate.tsx`) waits for it
+3 seconds at most before the list opens. On an iPhone it's `gen/apple/linger-client_iOS/AgeCheck.swift`, the
 app's one Swift file, behind one C function; on Android, `AgeCheck.kt`, which
 Rust calls through JNI. Their decisions have tests of their own: the Swift
 one in `gen/apple/AgeCheckTests` (`share-window.yml` runs it; without a Mac,

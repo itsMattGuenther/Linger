@@ -1314,10 +1314,13 @@ the phone app asks its store, and only where the store says it must, so nobody
 anywhere else is asked to share an age: on an iPhone from iOS 26.2, Apple's Declared
 Age Range (`gen/apple/linger-client_iOS/AgeCheck.swift`); on Android, Google Play's
 Age Signals, for a copy installed from Play. A person the store says is under 13 gets
-one screen saying Linger is for people 13 and older, and the app lets go of every
-server. Every way the check can't happen (an older iPhone, a copy from the GitHub
-release, the store not answering) leaves Linger as it was: a check that failed never
-locks anybody out. The list doesn't wait for it. The age itself stays in the phone's
+one screen saying Linger is for people 13 and older, and the list never opens; and the
+app signs out of every saved server, from the saved sign-ins, so no server keeps
+notifying the phone and no sign-in stays saved, the share window's included. The list
+waits for the answer 3 seconds at most: every way the check can't happen (an older
+iPhone, a copy from the GitHub release, the store slow or not answering) leaves Linger
+as it was, so a check that failed never locks anybody out, and a child's answer that
+comes after the list opened closes it again. The age itself stays in the phone's
 memory: it's never sent anywhere, stored or logged, and the next start asks again
 (`src-tauri/src/phone_age.rs`, `core/ageCheck.ts`).
 

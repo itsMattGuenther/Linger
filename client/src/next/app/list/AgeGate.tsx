@@ -1,25 +1,52 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { type ReactNode, useEffect, useSyncExternalStore } from "react";
-import { phoneAge } from "../../core/ageCheck";
+import { PublicApi } from "../../../lib/api";
+import { forgetSession, loadSessions } from "../../../lib/ipc";
+import { ASK_WITHIN_MS, type LeaveShell, phoneAge, signOutEverywhere } from "../../core/ageCheck";
 import { onPhone } from "../../core/phone";
 import { WindowMessage } from "../WindowMessage";
 
 /**
  * Linger is for people 13 and older (#953, SPEC §4.15). On a phone the shell
- * checks the age the app store holds, where a law says the app must, and
- * the list opens at once without waiting for it. An answer that the person
- * is under 13 takes the list's place: everything inside unmounts, which
- * closes every connection the list made, and only this screen is left. The
+ * checks the age the app store holds, where a law says the app must, before
+ * the list opens: nothing signs in or connects meanwhile. A store slow to
+ * answer never keeps anybody out: after `ASK_WITHIN_MS` the list opens
+ * anyway. For a person under 13 the list never opens, or, for an answer
+ * that came after it did, goes at once, and everything it had open with it
+ * (connections, menus, notification sign-ups). What's left is one screen,
+ * and every saved sign-in is signed out of (`signOutEverywhere`). The
  * desktop has no store to ask and never checks.
  */
 export function AgeGate({ children }: { children: ReactNode }) {
-  const verdict = useSyncExternalStore(phoneAge.subscribe, phoneAge.verdict);
+  const age = useSyncExternalStore(phoneAge.subscribe, phoneAge.state);
+  const asks = isTauri() && onPhone();
   useEffect(() => {
-    if (isTauri() && onPhone()) void phoneAge.ask(() => invoke("phone_age_check"));
-  }, []);
-  if (verdict === "child") return <NotForChildren />;
+    if (!asks) return;
+    void phoneAge.ask(() => invoke("phone_age_check"));
+    const wait = window.setTimeout(() => phoneAge.giveUp(), ASK_WITHIN_MS);
+    return () => window.clearTimeout(wait);
+  }, [asks]);
+  useEffect(() => {
+    if (age === "child") void phoneAge.leave(() => signOutEverywhere(leaving));
+  }, [age]);
+  if (age === "child") return <NotForChildren />;
+  // Waiting for the store: drawn as nothing, as the update gate draws its
+  // own short wait.
+  if (age === "unknown" && asks) return null;
   return children;
 }
+
+/** The shell and the servers, as signing out of everything uses them. */
+const leaving: LeaveShell = {
+  saved: async () => {
+    const loaded = await loadSessions();
+    return loaded.kind === "found" ? loaded.sessions.map((each) => ({ baseUrl: each.base_url, refreshToken: each.refresh_token })) : [];
+  },
+  logout: (baseUrl, refreshToken) => new PublicApi(baseUrl).logout(refreshToken),
+  forget: async (baseUrl) => void (await forgetSession(baseUrl)),
+  shareKept: () => invoke<string[] | null>("share_sign_ins_kept"),
+  shareForget: (baseUrl) => invoke<string | null>("share_sign_in_forget", { baseUrl }),
+};
 
 /** What's left for somebody the store says is under 13: no way past it, and nothing to do. */
 function NotForChildren() {

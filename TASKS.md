@@ -32,7 +32,8 @@ default.
   app stores share the age they hold with apps, and Apple and Google say an
   app must check it there. So where the store says so, the phone app asks it,
   and somebody it says is under 13 sees one screen saying Linger is for people
-  13 and older. Everywhere else nothing changes, and nobody is asked anything.
+  13 and older, and is signed out of every server. Everywhere else nothing
+  changes, and nobody is asked anything.
   The age stays on the phone: it's never sent anywhere or kept. The app only,
   no server update. Owed after it ships: a TestFlight tester with Developer
   Mode tries Apple's sandbox "Under 13" and "18+" cases; a tester on an iPhone
