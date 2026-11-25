@@ -162,7 +162,7 @@ rewritten for it.
   runs them again. The longest, the iPhone app in the simulator (35 to 60
   minutes), runs on a pull request only when it changes what that run
   builds, drives or runs (the flows, the shell's code and project only a
-  phone builds, its workflow and the scripts that runs) or it's a release's;
+  phone builds, its workflow and the scripts it runs) or it's a release's;
   the nightly run on `main` runs it for the rest (#955).
 - **Before opening a pull request, run `node scripts/pr-questions.mjs`** and
   answer the questions it prints for your change: the kinds of mistake

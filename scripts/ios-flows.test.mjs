@@ -98,48 +98,23 @@ test("each flow names the app it drives (Linger's, or Photos for a share), then 
  * `extendedWaitUntil` keeps looking until its own timeout.
  */
 export function assertVisibleLines(text) {
-  // A command is a key: `- assertVisible:` at any indent, quoted or not, or
-  // inside a flow mapping (`- {assertVisible: x}`).
-  const command = /(?:^|[\s{,-])(["']?)assertVisible\1\s*:/;
-  return text.split("\n").flatMap((line, i) => (command.test(uncommented(line)) ? [i + 1] : []));
+  // Any mention outside a comment line of its own. A command can't hide in
+  // one, and nothing has to read quotes, tags or flow mappings: a reader
+  // that did missed a form in each of three reviews. A comment after a
+  // command that names it counts too; say it on a line of its own.
+  return text.split("\n").flatMap((line, i) => (!/^\s*#/.test(line) && /\bassertVisible\b/.test(line) ? [i + 1] : []));
 }
 
-/**
- * A YAML line without its comment: a # at the start or after a space,
- * outside quotes. A quote opens only where a value can start (the line's
- * start, or after -, :, {, [ or , and spaces), so the apostrophe in
- * `Don't Allow` isn't one; a backslash escapes in double quotes, and '' is a
- * quote inside single ones.
- */
-function uncommented(line) {
-  let quote = null;
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i];
-    if (quote === '"') {
-      if (c === "\\") i++;
-      else if (c === '"') quote = null;
-    } else if (quote === "'") {
-      if (c === "'") {
-        if (line[i + 1] === "'") i++;
-        else quote = null;
-      }
-    } else if ((c === '"' || c === "'") && /(?:^|[-:{[,])\s*$/.test(line.slice(0, i))) quote = c;
-    else if (c === "#" && (i === 0 || /\s/.test(line[i - 1]))) return line.slice(0, i);
-  }
-  return line;
-}
-
-test("the check for assertVisible finds it at any depth, and not in a comment or a word", () => {
+test("the check for assertVisible finds it in any form, and not in a comment line or another command", () => {
   assert.deepEqual(assertVisibleLines('- launchApp\n- assertVisible: "Join your people."\n'), [2]);
   assert.deepEqual(assertVisibleLines("- assertVisible:\n    text: Continue\n"), [1]);
   assert.deepEqual(assertVisibleLines('- runFlow:\n    commands:\n      - tapOn: Open\n      - assertVisible: "Open"\n'), [4]);
   assert.deepEqual(assertVisibleLines("- repeat:\n    times: 2\n    commands:\n        -   assertVisible: Send\n"), [4]);
   assert.deepEqual(assertVisibleLines("- {assertVisible: Send}\n- tapOn: {text: x, assertVisible: y}\n"), [1, 2]);
-  // Quoted keys, and a # inside quotes, which isn't a comment.
-  assert.deepEqual(assertVisibleLines(`- "assertVisible": x\n- 'assertVisible': x\n- {tapOn: "Room #2", assertVisible: y}\n- {tapOn: 'a #b', "assertVisible": y}\n- {tapOn: 'it''s #1', assertVisible: y}\n`), [1, 2, 3, 4, 5]);
-  // An apostrophe in a plain value, or an escaped backslash, opens or keeps no quote: the comment after is a comment.
-  assert.deepEqual(assertVisibleLines(`- tapOn: Don't Allow  # never assertVisible: it looks once\n- tapOn: "a\\\\" # assertVisible: no\n`), []);
-  assert.deepEqual(assertVisibleLines('# never assertVisible: it looks once\n- extendedWaitUntil:\n    visible: "assertVisible"\n- assertNotVisible: "x"\n- tapOn: "#evenings" # no assertVisible: here\n'), []);
+  assert.deepEqual(assertVisibleLines(`- "assertVisible": x\n- 'assertVisible': x\n- {tapOn: "Room #2", assertVisible: y}\n- {tapOn: !!str "Room #2", assertVisible: y}\n`), [1, 2, 3, 4]);
+  // A comment after a command that names it counts: it goes on a line of its own.
+  assert.deepEqual(assertVisibleLines("- tapOn: Yes, 'til later  # never assertVisible: it looks once\n"), [1]);
+  assert.deepEqual(assertVisibleLines('# never assertVisible: it looks once\n  # nor assertVisible here\n- extendedWaitUntil:\n    visible: "x"\n- assertNotVisible: "x"\n'), []);
 });
 
 test("no flow checks with assertVisible: each waits with extendedWaitUntil (#955)", () => {

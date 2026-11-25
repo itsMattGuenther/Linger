@@ -159,24 +159,27 @@ function simulatorsOwn(path, read, before) {
   const inside = path.slice(SHELL.length);
   // The phone's now, or the phone's before this change moved it.
   if (CAPABILITY.test(inside)) return capabilityReaches(path, read, before).includes("phone");
-  // lib.rs says which app builds each module: one the phone app built
-  // before or builds now, whose say changed (added, removed, moved), is a
-  // change to the phone app. Git not knowing lib.rs before counts.
-  if (inside === "src/lib.rs") {
+  // lib.rs says which app builds each module. Any change to its module
+  // lines (one added, removed, or built by a different app or platform)
+  // can change what the iPhone builds, so it counts; an edit to the rest of
+  // lib.rs doesn't. Git not knowing lib.rs before counts.
+  const lib = `${SHELL}src/lib.rs`;
+  if (path === lib) {
     if (!before) return false;
     const was = before(path);
-    return was === null || phoneModuleMoved(shellModules(was ?? ""), shellModules(read(path) ?? ""));
+    return was === null || moduleLines(was ?? "") !== moduleLines(read(path) ?? "");
   }
   // A module's file, by what lib.rs says now and said before: a phone
   // module deleted or moved to the desktop still counts.
-  const then = before ? (asked) => before(asked) ?? null : null;
-  return shellReach(path, read) === "phone" || (then !== null && shellReach(path, then) === "phone");
+  if (!before) return shellReach(path, read) === "phone";
+  if (before(lib) === null) return true;
+  return shellReach(path, read) === "phone" || shellReach(path, (asked) => before(asked) ?? null) === "phone";
 }
 
-/** Whether a module the phone app builds, on one side, is said differently on the other. */
-function phoneModuleMoved(was, now) {
-  return [...new Set([...Object.keys(was), ...Object.keys(now)])]
-    .some((name) => was[name] !== now[name] && (was[name] === "phone" || now[name] === "phone"));
+/** lib.rs's module declarations, each with its attributes, in one string to compare. */
+function moduleLines(lib) {
+  const declared = /((?:^[ \t]*#\[[^\n]*\]\n)*)^[ \t]*(?:pub(?:\([^)]*\))? )?mod (\w+);/gm;
+  return [...lib.matchAll(declared)].map((match) => match[0].split("\n").map((line) => line.trim()).join(" ")).sort().join("\n");
 }
 
 /**
