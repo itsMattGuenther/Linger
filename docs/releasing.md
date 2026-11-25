@@ -399,10 +399,13 @@ under TestFlight, ready to give to testers, and on the app's page, ready to
 submit for review.
 
 **Before a build goes to TestFlight,** the iPhone simulator check should be
-green on what it's built from: it runs on every pull request that touches
-the app and every night on `main` (`ios-simulator.yml`; docs/development.md,
-"The iPhone in the simulator"), and its pictures show each screen it went
-through. It catches what breaks before a person would see it: the app not
+green on what it's built from: it runs every night on `main`, on the
+release's pull request (the one that adds `docs/releases/<version>.md`), and
+on pull requests that change what it builds, drives or runs
+(`ios-simulator.yml`; docs/development.md, "The iPhone in the simulator"),
+and its pictures show each screen it went through. For a test build from
+`main` between releases, check last night's run, or run it by hand on
+`main` first. It catches what breaks before a person would see it: the app not
 starting, a screen drawn wrong, signing in or the gateway failing. The
 testers' time is then for what a simulator can't show: a real phone's
 memory, calls, the share sheet, sleep.

@@ -11,9 +11,14 @@ name: iphone simulator
 # report, and the app's and server's logs.
 #
 # A simulator build needs no Apple account and nothing is signed for a
-# phone, so this uses no secrets and runs on any pull request that touches
-# the app or what it runs (scripts/ci-scope.mjs, `ios`), once it's out of
-# draft (#933). The signed build for TestFlight is ios.yml's.
+# phone, so this uses no secrets. On a pull request it runs only for what it
+# builds, drives or runs (its flows, the Xcode project and the shell's code
+# only a phone builds, this workflow and the scripts it runs) and for a
+# release's pull request, once it's out of draft (#933); the nightly run on
+# main runs it for everything
+# else (scripts/ci-scope.mjs, `simulator`; Matt, 2026-11-24, after #955).
+# By hand, it runs on any branch: gh workflow run ios-simulator.yml --ref
+# <branch>. The signed build for TestFlight is ios.yml's.
 # docs/development.md, "The iPhone in the simulator", says how to run the
 # flows.
 #
@@ -58,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      ios: ${{ steps.classify.outputs.ios }}
+      simulator: ${{ steps.classify.outputs.simulator }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -69,15 +74,12 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           CI_SCOPE_ALL: ${{ inputs.all }}
-          # `desktop-only` on a pull request leaves the iPhone run out for
-          # files both apps build (#914, AGENTS.md).
-          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
         run: node scripts/ci-scope.mjs
 
   simulator:
     name: the iPhone app in the simulator
     needs: changes
-    if: ${{ needs.changes.outputs.ios == 'true' && !github.event.pull_request.draft }}
+    if: ${{ needs.changes.outputs.simulator == 'true' && !github.event.pull_request.draft }}
     # The Mac and Xcode ios.yml builds the TestFlight app with (#779, #839).
     runs-on: ${{ startsWith(inputs.xcode || '27.1', '26') && 'macos-26' || 'xcode-27' }}
     timeout-minutes: 75

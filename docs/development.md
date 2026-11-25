@@ -642,9 +642,15 @@ Simulator on one of GitHub's Macs, starts it on a simulated iPhone, and
 drives it with [Maestro](https://maestro.dev), which taps and types the way a
 person does. It builds with Xcode 27.1, as the TestFlight build does, and
 runs on the plain iPhone (an iPhone 17) of the newest iOS that has one. It
-runs on every pull request that touches the app
-(`client/src`, `client/src-tauri`, the flows; `scripts/ci-scope.mjs` says
-exactly) once it's out of draft (#933), every night on `main`, and by hand:
+runs every night on `main`, on a pull request that changes the phone app's
+own files (the flows, the Xcode project, the shell's code only a phone
+builds, this workflow and the scripts it runs; `scripts/ci-scope.mjs`,
+`simulator`, says exactly) or is a release's (it adds `docs/releases/<version>.md`) once it's
+out of draft (#933), and by hand. A change to the page or to what both apps
+build waits for the nightly run, which opens an issue when it fails (Matt,
+2026-11-24, after #955: the run is 35 to 60 minutes, and most of its
+failures were GitHub's Mac or the flows). Run it by hand on a branch whose
+change a phone would feel most:
 
 ```bash
 gh workflow run ios-simulator.yml --ref <your-branch>   # whatever the branch changed
@@ -778,7 +784,9 @@ one of the three runs that got that far. And about 20 s after a launch, the
 simulator's reads of the page come back empty for a few seconds, while
 Apple's age check (#953) gives up there (no Apple account): the first screen
 had taken 20 s, so its assert had no time left, its one look fell in that
-gap, and it failed twice running (#955).
+gap, and it failed twice running (#955). `scripts/ios-flows.test.mjs` fails
+a flow or subflow that mentions `assertVisible` anywhere but a comment line
+of its own, so a comment about it goes on a line by itself.
 That gap fools `assertNotVisible` the other way: an empty read passes it
 without looking. Wait for something on the same screen right before one.
 

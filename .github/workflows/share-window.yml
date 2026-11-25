@@ -48,10 +48,8 @@ jobs:
   # Which of this a change can reach (#914). The paths above start the
   # workflow for any change to the shell's code, and most of that is one
   # app's: a file only the desktop app builds can't change the iPhone's
-  # extensions or its Rust, and a pull request labelled desktop-only says
-  # the same of files both apps build (AGENTS.md). The server's and the wire
-  # types' changes run it as before. Anything but a pull request (the
-  # nightly run, a run by hand) runs everything.
+  # extensions or its Rust. The server's and the wire types' changes run it
+  # as before. Anything but a pull request (a run by hand) runs everything.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -67,7 +65,6 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           CI_SCOPE_ALL: ${{ github.event_name != 'pull_request' }}
-          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
         run: node scripts/ci-scope.mjs
 
   extension:

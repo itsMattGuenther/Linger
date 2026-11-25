@@ -88,6 +88,56 @@ test("each flow names the app it drives (Linger's, or Photos for a share), then 
   }
 });
 
+/**
+ * The lines of a flow that use `assertVisible`, at any depth (inside a
+ * `runFlow`'s or a `repeat`'s commands too). Maestro gives an assert what's
+ * left of 17 s since the last tap or launch, so after a slow screen it looks
+ * once, and about 20 s after a launch the simulator's reads of the page come
+ * back empty for a few seconds while Apple's age check gives up there: that
+ * one look failed twice running with nothing wrong in the app (#955).
+ * `extendedWaitUntil` keeps looking until its own timeout.
+ */
+export function assertVisibleLines(text) {
+  // Any mention outside a comment line of its own, so nothing has to read
+  // quotes, tags or flow mappings: a reader that did missed a form in each
+  // of three reviews. A comment after a command that names it counts too;
+  // say it on a line of its own. (A key spelled with YAML escapes would
+  // still get past; nobody writes one by accident.)
+  return text.split("\n").flatMap((line, i) => (!/^\s*#/.test(line) && /\bassertVisible\b/.test(line) ? [i + 1] : []));
+}
+
+test("the check for assertVisible finds it in any form, and not in a comment line or another command", () => {
+  assert.deepEqual(assertVisibleLines('- launchApp\n- assertVisible: "Join your people."\n'), [2]);
+  assert.deepEqual(assertVisibleLines("- assertVisible:\n    text: Continue\n"), [1]);
+  assert.deepEqual(assertVisibleLines('- runFlow:\n    commands:\n      - tapOn: Open\n      - assertVisible: "Open"\n'), [4]);
+  assert.deepEqual(assertVisibleLines("- repeat:\n    times: 2\n    commands:\n        -   assertVisible: Send\n"), [4]);
+  assert.deepEqual(assertVisibleLines("- {assertVisible: Send}\n- tapOn: {text: x, assertVisible: y}\n"), [1, 2]);
+  assert.deepEqual(assertVisibleLines(`- "assertVisible": x\n- 'assertVisible': x\n- {tapOn: "Room #2", assertVisible: y}\n- {tapOn: !!str "Room #2", assertVisible: y}\n`), [1, 2, 3, 4]);
+  // A comment after a command that names it counts: it goes on a line of its own.
+  assert.deepEqual(assertVisibleLines("- tapOn: Yes, 'til later  # never assertVisible: it looks once\n"), [1]);
+  assert.deepEqual(assertVisibleLines('# never assertVisible: it looks once\n  # nor assertVisible here\n- extendedWaitUntil:\n    visible: "x"\n- assertNotVisible: "x"\n'), []);
+});
+
+test("no flow checks with assertVisible: each waits with extendedWaitUntil (#955)", () => {
+  const files = [...readdirSync(DIR).filter((name) => name.endsWith(".yaml")), ...readdirSync(join(DIR, "subflows")).map((name) => `subflows/${name}`)];
+  assert.ok(files.includes("first-screen.yaml") && files.includes("subflows/type.yaml"), "the flows and subflows are read");
+  for (const file of files)
+    assert.deepEqual(assertVisibleLines(readFileSync(join(DIR, file), "utf8")), [], `${file}: use extendedWaitUntil with a timeout, never assertVisible (docs/development.md)`);
+});
+
+test("the simulator's run is gated on the simulator scope ci-scope.mjs gives, which a run of everything turns on", async () => {
+  const text = readFileSync(fileURLToPath(new URL("../.github/workflows/ios-simulator.yml", import.meta.url)), "utf8");
+  const jobs = jobsOf(text);
+  // The job reads an output of `changes`, and that output is ci-scope's `simulator`.
+  const read = /^ {4}if: \$\{\{ needs\.changes\.outputs\.(\w+) == 'true' && !github\.event\.pull_request\.draft \}\}$/m.exec(jobs.simulator ?? "")?.[1];
+  assert.equal(read, "simulator", "the simulator job's if: reads needs.changes.outputs.simulator");
+  assert.match(jobs.changes ?? "", /^ {6}simulator: \$\{\{ steps\.classify\.outputs\.simulator \}\}$/m);
+  const { classify } = await import("./ci-scope.mjs");
+  // The nightly run and a run by hand compare nothing, so everything runs.
+  assert.equal(classify([]).simulator, true);
+  assert.equal(classify(["client/tests/ios/first-screen.yaml"]).simulator, true);
+});
+
 test("docs/development.md lists the flows in config.yaml's order", () => {
   const order = flowsOrder(readFileSync(join(DIR, "config.yaml"), "utf8"));
   const listed = [...readFileSync(GUIDE, "utf8").matchAll(/^(\d+)\. `([\w-]+)\.yaml`/gm)];

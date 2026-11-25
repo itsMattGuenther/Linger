@@ -22,7 +22,7 @@ if [ -z "$base" ]; then
 fi
 
 if [ "$all" = 1 ] || [ -z "$base" ]; then
-  scope=$'changed=0\nrust=true\ns3=true\nweb=true\nshell=true\ncoturn=true\npackages=true\nios=true\nrelay=true'
+  scope=$'changed=0\nrust=true\ns3=true\nweb=true\nshell=true\ncoturn=true\npackages=true\nios=true\nsimulator=true\nrelay=true'
 else
   scope="$(node scripts/ci-scope.mjs --local "$base")"
 fi
@@ -155,7 +155,7 @@ if on web && [ "$webkit_here" = 0 ]; then
   extra+=("the WebKit browser tests, and this branch's new or edited ones ten times (scripts/webkit.sh runs them here, with Docker)")
 fi
 on packages && extra+=("the desktop packages on Linux and Windows")
-on ios && extra+=("the iPhone app in the simulator, on a Mac (ios-simulator.yml), once the pull request is out of draft, unless it's labelled desktop-only (AGENTS.md)")
+on simulator && extra+=("the iPhone app in the simulator, on a Mac (ios-simulator.yml), once the pull request is out of draft, when it changes what that run builds, drives or runs or is a release's")
 if [ "${#extra[@]}" -gt 0 ]; then
   echo "== CI also runs =="
   printf '  %s\n' "${extra[@]}"
