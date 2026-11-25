@@ -98,10 +98,11 @@ test("each flow names the app it drives (Linger's, or Photos for a share), then 
  * `extendedWaitUntil` keeps looking until its own timeout.
  */
 export function assertVisibleLines(text) {
-  // Any mention outside a comment line of its own. A command can't hide in
-  // one, and nothing has to read quotes, tags or flow mappings: a reader
-  // that did missed a form in each of three reviews. A comment after a
-  // command that names it counts too; say it on a line of its own.
+  // Any mention outside a comment line of its own, so nothing has to read
+  // quotes, tags or flow mappings: a reader that did missed a form in each
+  // of three reviews. A comment after a command that names it counts too;
+  // say it on a line of its own. (A key spelled with YAML escapes would
+  // still get past; nobody writes one by accident.)
   return text.split("\n").flatMap((line, i) => (!/^\s*#/.test(line) && /\bassertVisible\b/.test(line) ? [i + 1] : []));
 }
 

@@ -468,33 +468,28 @@ test("in CI: a pull request adding a release's notes runs the simulator, one fix
   assert.match(fixed.said, /The iPhone app in the simulator isn't run: .* gh workflow run ios-simulator\.yml --ref <branch>/);
 });
 
-test("lib.rs: a change to its module lines runs the simulator, an edit to the rest doesn't; a phone module's file is read against lib.rs as it was", () => {
-  const WAS = LIB;
+test("a phone module's file runs the simulator, deleted or moved to the desktop too; lib.rs, both apps', waits for the nightly run", () => {
   const libPath = "client/src-tauri/src/lib.rs";
-  const before = (asked) => (asked === libPath ? WAS : "was there");
-  const withLib = (text) => shell({ [libPath]: text });
-  const runs = (paths, text, options = {}) => reached(paths, { read: withLib(text), before, ...options }).includes("simulator");
+  const before = (asked) => (asked === libPath ? LIB : "was there");
   const swap = (from, to) => {
     assert(LIB.includes(from), from);
     return LIB.replace(from, to);
   };
-  // A phone module deleted, with its line.
+  const runs = (paths, text, options = {}) => reached(paths, { read: shell({ [libPath]: text }), before, ...options }).includes("simulator");
+  // phone_scene deleted, with its line in lib.rs: its file was the phone's.
   const withoutScene = swap("#[cfg(any(target_os = \"ios\", test))]\nmod phone_scene;\n", "");
   assert(runs(["client/src-tauri/src/phone_scene.rs", libPath], withoutScene));
-  // Its file alone, read against lib.rs as it was.
   assert(runs(["client/src-tauri/src/phone_scene.rs"], withoutScene));
-  // Moved from the phone to the desktop; a module both build taken off the
-  // phone; one moved from the iPhone to Android; one the desktop gains.
-  assert(runs([libPath], swap("#[cfg(any(mobile, test))]\nmod share_window;", "#[cfg(desktop)]\nmod share_window;")));
-  assert(runs([libPath], swap("pub mod gateway;", "#[cfg(desktop)]\npub mod gateway;")));
-  assert(runs([libPath], swap("#[cfg(target_os = \"ios\")]\nmod phone_keyboard;", "#[cfg(target_os = \"android\")]\nmod phone_keyboard;")));
-  assert(runs([libPath], `${LIB}#[cfg(desktop)]\nmod updater_ui;\n`));
-  // The rest of lib.rs, or the same modules in another order: no simulator.
+  // share_window moved to the desktop, with its file changed.
+  assert(runs(["client/src-tauri/src/share_window.rs", libPath], swap("#[cfg(any(mobile, test))]\nmod share_window;", "#[cfg(desktop)]\nmod share_window;")));
+  // lib.rs alone, however its modules change: both apps', so the nightly run.
+  assert(!runs([libPath], swap("pub mod gateway;", "#[cfg(desktop)]\npub mod gateway;")));
   assert(!runs([libPath], `${LIB}\npub fn run() {}\n`));
-  assert(!runs([libPath], `${swap("#[cfg(test)]\nmod acl;\n", "")}#[cfg(test)]\nmod acl;\n`));
-  // Git can't say what lib.rs was: lib.rs, and a module's file, run it. Nothing known of before: what it is now is all there is.
-  assert(reached([libPath], { before: () => null }).includes("simulator"));
-  assert(reached(["client/src-tauri/src/gateway.rs"], { before: (asked) => (asked === libPath ? null : "was there") }).includes("simulator"));
-  assert(!reached([libPath]).includes("simulator"));
-  assert(!reached(["client/src-tauri/src/gateway.rs"]).includes("simulator"));
+  // A module both build, or the desktop's, isn't the phone's before or after.
+  assert(!runs(["client/src-tauri/src/gateway.rs"], LIB));
+  assert(!runs(["client/src-tauri/src/tray.rs"], LIB));
+  // Git can't say what lib.rs was, or nothing known of before: what it is now is all there is.
+  assert(!reached(["client/src-tauri/src/tray.rs"], { before: () => null }).includes("simulator"));
+  assert(reached(["client/src-tauri/src/phone_scene.rs"], { before: () => null }).includes("simulator"));
+  assert(!reached(["client/src-tauri/src/phone_scene.rs"], { read: shell({ [libPath]: withoutScene }) }).includes("simulator"));
 });

@@ -159,27 +159,11 @@ function simulatorsOwn(path, read, before) {
   const inside = path.slice(SHELL.length);
   // The phone's now, or the phone's before this change moved it.
   if (CAPABILITY.test(inside)) return capabilityReaches(path, read, before).includes("phone");
-  // lib.rs says which app builds each module. Any change to its module
-  // lines (one added, removed, or built by a different app or platform)
-  // can change what the iPhone builds, so it counts; an edit to the rest of
-  // lib.rs doesn't. Git not knowing lib.rs before counts.
-  const lib = `${SHELL}src/lib.rs`;
-  if (path === lib) {
-    if (!before) return false;
-    const was = before(path);
-    return was === null || moduleLines(was ?? "") !== moduleLines(read(path) ?? "");
-  }
   // A module's file, by what lib.rs says now and said before: a phone
-  // module deleted or moved to the desktop still counts.
-  if (!before) return shellReach(path, read) === "phone";
-  if (before(lib) === null) return true;
-  return shellReach(path, read) === "phone" || shellReach(path, (asked) => before(asked) ?? null) === "phone";
-}
-
-/** lib.rs's module declarations, each with its attributes, in one string to compare. */
-function moduleLines(lib) {
-  const declared = /((?:^[ \t]*#\[[^\n]*\]\n)*)^[ \t]*(?:pub(?:\([^)]*\))? )?mod (\w+);/gm;
-  return [...lib.matchAll(declared)].map((match) => match[0].split("\n").map((line) => line.trim()).join(" ")).sort().join("\n");
+  // module deleted, or moved to the desktop, is still the phone's change.
+  // lib.rs itself is both apps', so a change to it waits for the nightly run.
+  if (shellReach(path, read) === "phone") return true;
+  return Boolean(before) && shellReach(path, (asked) => before(asked) ?? null) === "phone";
 }
 
 /**
