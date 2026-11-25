@@ -262,8 +262,8 @@ refused, and the tests for them skip. The phone app needs Android
 Studio, Java 21 and the Rust Android targets; the steps are in its section
 there. The iPhone app needs a Mac, which you don't need to have: GitHub's
 build it, and every night (and on a release's pull request, or one that
-changes the code only a phone builds, the flows, or the simulator's
-workflow and scripts) one also runs it in the iPhone simulator and keeps a
+changes a file only a phone builds, the flows, or the simulator's
+workflow and scripts; not `lib.rs`, which both apps build) one also runs it in the iPhone simulator and keeps a
 picture of each screen (the same doc, "The iPhone in the simulator"). **Run `scripts/check.sh` before
 pushing**; it runs what CI runs for your change, and
 [docs/testing-strategy.md](docs/testing-strategy.md) says what runs where.
