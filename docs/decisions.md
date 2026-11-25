@@ -748,7 +748,8 @@ eGGnogSC's proposal on #253 over his own brainstorm of 2026-09-26, which had a
   with at least 12 testers opted in for 14 days in a row before it can
   publish, and Matt doesn't know 12 people on Android to ask. Apple has no
   such wait. Play's closed test waits until he has the testers, and the
-  `.apk` on each GitHub release stays until then (#773).
+  `.apk` on each GitHub release stays until then (#773). Apple approved 0.5.5,
+  and it has been in the App Store since 2026-11-25.
 - **Friends first, from the release page** (Matt, 2026-10-03). Report and
   block were done and every Pixel check had passed, so Matt said go, for the
   quick path first: a signed `.apk` on each GitHub release, which an Android
@@ -2331,7 +2332,7 @@ asking the store (Apple's answer says an 18+ app must still ask); asking
 everybody, everywhere (it would show Apple's and Google's sharing question to
 people no law covers).
 
-## Decided — the App Store listing (#779)
+## Decided: the App Store listing (#779)
 
 **Matt, 2026-11-24**, while App Store Connect was filled in for the first
 submission (it carries 0.5.5; the age decision, #953, has its own section).
@@ -2352,8 +2353,9 @@ submission (it carries 0.5.5; the age decision, #953, has its own section).
   published.
 - **Contact**: hello@linger.im, on linger.im's support and privacy pages; the
   app's Report a problem stays GitHub's issue forms.
-- **Released by hand** once approved, so the website and the release go out
-  together.
+- **Released by itself** once Apple approves (Matt, 2026-11-25, changed
+  from by hand before submitting): nothing waits on the release, which is
+  out already, and the website follows in its own pull request.
 - **Every country but mainland China**, which needs government filings, and
   not on Macs or Vision Pro: the iPhone app is for phones, and the desktop
   app is the computer's.
