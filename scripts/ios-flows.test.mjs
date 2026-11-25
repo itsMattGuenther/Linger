@@ -98,10 +98,23 @@ test("each flow names the app it drives (Linger's, or Photos for a share), then 
  * `extendedWaitUntil` keeps looking until its own timeout.
  */
 export function assertVisibleLines(text) {
-  // A command is a key: `- assertVisible:` at any indent, or inside a flow
-  // mapping (`- {assertVisible: x}`). What follows a YAML comment's # isn't.
-  const command = /(?:^|[\s{,-])assertVisible\s*:/;
-  return text.split("\n").flatMap((line, i) => (command.test(line.replace(/(?:^|\s)#.*$/, "")) ? [i + 1] : []));
+  // A command is a key: `- assertVisible:` at any indent, quoted or not, or
+  // inside a flow mapping (`- {assertVisible: x}`).
+  const command = /(?:^|[\s{,-])(["']?)assertVisible\1\s*:/;
+  return text.split("\n").flatMap((line, i) => (command.test(uncommented(line)) ? [i + 1] : []));
+}
+
+/** A YAML line without its comment: a # at the start or after a space, outside quotes. */
+function uncommented(line) {
+  let quote = null;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (quote) {
+      if (c === quote && !(quote === '"' && line[i - 1] === "\\")) quote = null;
+    } else if (c === '"' || c === "'") quote = c;
+    else if (c === "#" && (i === 0 || /\s/.test(line[i - 1]))) return line.slice(0, i);
+  }
+  return line;
 }
 
 test("the check for assertVisible finds it at any depth, and not in a comment or a word", () => {
@@ -110,6 +123,8 @@ test("the check for assertVisible finds it at any depth, and not in a comment or
   assert.deepEqual(assertVisibleLines('- runFlow:\n    commands:\n      - tapOn: Open\n      - assertVisible: "Open"\n'), [4]);
   assert.deepEqual(assertVisibleLines("- repeat:\n    times: 2\n    commands:\n        -   assertVisible: Send\n"), [4]);
   assert.deepEqual(assertVisibleLines("- {assertVisible: Send}\n- tapOn: {text: x, assertVisible: y}\n"), [1, 2]);
+  // Quoted keys, and a # inside quotes, which isn't a comment.
+  assert.deepEqual(assertVisibleLines(`- "assertVisible": x\n- 'assertVisible': x\n- {tapOn: "Room #2", assertVisible: y}\n- {tapOn: 'a #b', "assertVisible": y}\n`), [1, 2, 3, 4]);
   assert.deepEqual(assertVisibleLines('# never assertVisible: it looks once\n- extendedWaitUntil:\n    visible: "assertVisible"\n- assertNotVisible: "x"\n- tapOn: "#evenings" # no assertVisible: here\n'), []);
 });
 

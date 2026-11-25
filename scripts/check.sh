@@ -22,7 +22,7 @@ if [ -z "$base" ]; then
 fi
 
 if [ "$all" = 1 ] || [ -z "$base" ]; then
-  scope=$'changed=0\nrust=true\ns3=true\nweb=true\nshell=true\ncoturn=true\npackages=true\nios=true\nrelay=true'
+  scope=$'changed=0\nrust=true\ns3=true\nweb=true\nshell=true\ncoturn=true\npackages=true\nios=true\nsimulator=true\nrelay=true'
 else
   scope="$(node scripts/ci-scope.mjs --local "$base")"
 fi

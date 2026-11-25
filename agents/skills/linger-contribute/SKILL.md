@@ -105,11 +105,8 @@ commits that carry them (`scripts/lint-rules.sh`).
   only when the phone app's own files changed or it's a release's pull
   request; the nightly run covers the rest.
 - CI runs only the checks your change can reach, by which app builds each
-  file. If it touches files both apps build (the page, the shared parts of
-  the shell) but can't change what the phone app does, open it with the
-  `desktop-only` label (`gh pr create --label desktop-only`) and say why in
-  the body: the share window's iPhone builds are left out. Not for anything
-  a phone shows or runs; when unsure, leave it off. `AGENTS.md` has the rule.
+  file (`scripts/ci-scope.mjs`). To run the iPhone simulator on a branch it
+  skipped: `gh workflow run ios-simulator.yml --ref <branch>`.
 - Before opening it, run `node scripts/pr-questions.mjs`. It prints the
   questions past reviews taught, for the parts of the project your branch
   changed. Answer each for your change, and say what you checked in the Tests

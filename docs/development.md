@@ -644,8 +644,8 @@ person does. It builds with Xcode 27.1, as the TestFlight build does, and
 runs on the plain iPhone (an iPhone 17) of the newest iOS that has one. It
 runs every night on `main`, on a pull request that changes the phone app's
 own files (the flows, the Xcode project, the shell's code only a phone
-builds, the iPhone's workflows; `scripts/ci-scope.mjs`, `simulator`, says
-exactly) or is a release's (it adds `docs/releases/<version>.md`) once it's
+builds, this workflow and the scripts it runs; `scripts/ci-scope.mjs`,
+`simulator`, says exactly) or is a release's (it adds `docs/releases/<version>.md`) once it's
 out of draft (#933), and by hand. A change to the page or to what both apps
 build waits for the nightly run, which opens an issue when it fails (Matt,
 2026-11-24, after #955: the run is 35 to 60 minutes, and most of its

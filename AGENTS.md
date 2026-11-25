@@ -163,19 +163,6 @@ rewritten for it.
   minutes), runs on a pull request only when the phone app's own files
   changed or it's a release's; the nightly run on `main` runs it for the
   rest (#955).
-- **Label a pull request `desktop-only` when nothing in it can change what the
-  phone app does**, and it touches files both apps build: the page, or the
-  shared parts of the shell. The share window's iPhone builds are then left
-  out (`gh pr create --label desktop-only`; added later, it counts from the
-  next push, or from marking a draft ready). Use it for work on what only the desktop app has:
-  voice in the shell, the tray, the windows, updates, the Settings rows a
-  phone doesn't show. Don't use it for anything a phone shows or runs: the
-  list, a conversation, the message box, sign-in, servers, notifications, the
-  share window, a phone's voice (`pageVoice.ts`), or code the page shares that
-  those use. When you can't tell, leave it off: a Mac build is minutes, a
-  phone app that doesn't start is worse. It's ignored when files that are the phone
-  app's alone changed, and the nightly run is what catches a label that was
-  wrong, so say in the pull request why it's there.
 - **Before opening a pull request, run `node scripts/pr-questions.mjs`** and
   answer the questions it prints for your change: the kinds of mistake
   reviews have caught, for the parts of the project your branch changed. Say
@@ -323,11 +310,10 @@ docs-only change takes under a second. `--all` runs everything. Green here shoul
 file). A file only the desktop app builds doesn't start the iPhone builds
 in `share-window.yml`, a file only the phone app builds doesn't start the
 desktop installers, and a file both build (the page, `lib.rs`,
-`Cargo.toml`) starts both, unless the pull request is labelled
-`desktop-only`. The iPhone app in the simulator's flows start only for the
-phone app's own files and a release's pull request (#955). A draft pull
-request doesn't start the iPhone runs until it's marked ready (#933). The
-nightly run on main runs everything.
+`Cargo.toml`) starts both. The iPhone app in the simulator's flows start
+only for the phone app's own files and a release's pull request (#955). A
+draft pull request doesn't start the iPhone runs until it's marked ready
+(#933). The nightly run on main runs everything.
 
 The pieces:
 
