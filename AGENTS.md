@@ -462,7 +462,7 @@ M0 scaffold → M1 server REST → M2 gateway → M3 client shell
   → M13 ambient voice                                   ← V2, cut 2026-10-11
   → M15 the Buddy list client (#198)                    ← built, the app from 0.4.0
   → M16 screen sharing (#360)                ← V2, shipped in 0.5.2, check owed
-  → mobile (T-16xx), notifications (#830)  ← Android from 0.4.8, iPhone in TestFlight
+  → mobile (T-16xx), notifications (#830)  ← Android from 0.4.8, iPhone in the App Store
   → backburner: entrance sounds (T-901…T-903)
 ```
 

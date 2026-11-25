@@ -32,8 +32,9 @@ default.
 voice on the desktop.** The notes are `docs/releases/0.5.5.md`, and its one
 line is in `client/src/next/core/release-line.json`. Tagged 2026-11-24,
 straight after Matt had tried `main` on Linux, with fixes going into 0.5.6
-(Matt, 2026-11-24); the iPhone app goes to the App Store after the testers
-try it. What each change owes
+(Matt, 2026-11-24). No tester reported a problem with it, and the App Store
+approved that build: the iPhone app has been in the App Store since
+2026-11-25, and `main` is 0.5.6. What each change owes
 after it ships:
 - **Linger is for people 13 and older, and the phone app checks the store's
   age where a law asks for it** (#953). Some US states (Texas so far) make the
@@ -284,9 +285,9 @@ groups and the voice rework were #197, closed 2026-10-19. **M16, screen
 sharing (#360), shipped in 0.5.2** (2026-10-27); what's left of it, its real
 check (T-1908) included, is under
 [M16](#m16--screen-sharing-360-shipped-in-052). **Mobile is started**
-(2026-10-02): Android since 0.4.8, voice since 2026-10-19, and friends'
-iPhones through TestFlight since 0.5.1. Phone notifications are being built
-(#830, from 2026-11-12). It has [its own section](#mobile--started-2026-10-02).
+(2026-10-02): Android since 0.4.8, voice since 2026-10-19, friends'
+iPhones through TestFlight since 0.5.1, and the App Store since 0.5.5. Phone
+notifications came in 0.5.5 (#830, built from 2026-11-12). It has [its own section](#mobile--started-2026-10-02).
 
 Closed milestones are archived in `docs/tasks/` with every landing note and
 surprise intact. Tasks T-001…T-604 live there. Decisions that shaped the queue

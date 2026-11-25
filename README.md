@@ -126,8 +126,8 @@ This is not an attempt to build a better platform. It's an attempt to not need o
 - **Full export.** Anyone can export public rooms and their own DMs, with
   files, without asking the host. It opens in any web browser with a
   double-click.
-- **Linux, Windows and Android** (Tauri 2, not Electron). An iPhone app is in
-  testing with a small group, and macOS builds from source.
+- **Linux, Windows, Android and iPhone** (Tauri 2, not Electron). The
+  iPhone app is in the App Store, and macOS builds from source.
 
 **What it will never have:** XP, streaks or engagement metrics. Federation,
 bots, roles, threads, `@everyone`, algorithmic ordering, unread badges.
