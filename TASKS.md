@@ -707,7 +707,8 @@ macOS runners, or a friend's Mac.
 
 - 🟡 **T-1602 · The mobile shell** — effort: **high**
   *Android: accepted on Matt's Pixel (2026-10-03). iPhone: on friends'
-  iPhones through TestFlight since 0.5.1 (2026-10-20, `ios.yml`, #685).
+  iPhones through TestFlight since 0.5.1 (2026-10-20, `ios.yml`, #685), and
+  in the App Store since 0.5.5 (2026-11-25).
   Matt has no iPhone, so friends and contributors with iPhones do its
   checks.*
   *Started 2026-10-02 on `feat/t-1602-mobile-shell`.* **Done:** the crate
@@ -854,7 +855,9 @@ macOS runners, or a friend's Mac.
   Play"). Next: the first bundle on internal testing to set the key, the
   store listing and App content forms, then a closed test with 12 testers for
   14 days, then "Apply for production".
-  **The iPhone, started 2026-10-20 (#253):** Matt's Apple Developer Program
+  **The iPhone, in the App Store since 2026-11-25** (0.5.5, the TestFlight
+  build the testers had; #779 listed what Apple asked for first).
+  **Started 2026-10-20 (#253):** Matt's Apple Developer Program
   membership is active, and the App Store Connect API key (Admin) is in the
   `release` environment. `gen/apple` is `tauri ios init`'s, from GitHub's
   Mac, iPhone only. `ios.yml` builds on `main`, signs automatically through
@@ -870,15 +873,14 @@ macOS runners, or a friend's Mac.
   first time, so nobody is signed out (`src/secrets.rs`). The testers check
   that they're still signed in after updating, and that Linger shows next to
   nothing under the iPhone's iCloud backups; then #779's "Backups and the
-  Keychain" is ticked. Also **voice with the phone locked**: there's no
-  background audio mode yet, so locking may end a call. Check it on a real
-  iPhone first, with Matt's friend.
+  Keychain" is ticked. **Voice with the phone locked** came with the
+  background audio mode (#851).
   **A privacy policy link inside the app**, which Apple's guideline 5.1.1(i)
   wants as well as the one in App Store Connect: built 2026-10-31 (#779),
   **Privacy** under Settings → Account & App → This Phone (This Computer on
   a desktop), opening linger.im/privacy.
-  Android first, on Google Play, with Matt paying the $25; Apple only after it
-  has worked well there. The listing's privacy answers ("Data safety") must
+  The App Store came first (Matt, 2026-11-19): Google Play waits on the 12
+  testers its closed test needs. The listing's privacy answers ("Data safety") must
   say the app uses the microphone only to record a voice message the person
   chooses to send.
   Friends first, then the stores. Android: a signed APK on the GitHub release

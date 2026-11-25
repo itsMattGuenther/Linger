@@ -25,7 +25,7 @@ current installers are for 64-bit Intel/AMD computers (`x64`, `x86_64` and
 | Omarchy or Arch | Nothing to download → [Arch and Omarchy](#arch-and-omarchy) |
 | Any other Linux | File ending in `amd64.AppImage` → [AppImage](#linux-appimage) |
 | An Android phone | File ending in `android-arm64.apk`, on the phone → [Android](#android) |
-| An iPhone | Nothing to download: [Linger in the App Store](https://apps.apple.com/app/id6824955246), on the phone |
+| An iPhone | Nothing to download: [Linger in the App Store](https://apps.apple.com/app/id6824955246), on the phone → [Getting in](#getting-in) |
 
 You do **not** need `.sig`, `latest.json`, or the source-code ZIP/tar files.
 The `.msi` is an alternative Windows installer, not an extra required download.
@@ -1411,6 +1411,9 @@ You can ask for one an hour. If you ask again too soon the app tells you when
 you can come back.
 
 ## Updates
+
+**On an iPhone**, the App Store updates Linger, the way it updates your other
+apps. Everything below is about a computer.
 
 Linger updates itself. There's nothing to turn on, and nothing to do:
 
