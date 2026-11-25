@@ -98,16 +98,18 @@ commits that carry them (`scripts/lint-rules.sh`).
   check the link took:
   `gh pr view <n> --json closingIssuesReferences`.
 - Open the pull request as a draft (`gh pr create --draft`) and mark it
-  ready (`gh pr ready`) when it's done and `ci` is green: the 35 to 60
-  minute iPhone runs wait until then. They still have to pass before it
-  merges, and `all green` doesn't include them, so wait for them even if
-  they showed as skipped while it was a draft.
+  ready (`gh pr ready`) when it's done and `ci` is green: the iPhone runs on
+  a Mac wait until then. They still have to pass before it merges, and `all
+  green` doesn't include them, so wait for them even if they showed as
+  skipped while it was a draft. The 35 to 60 minute simulator run happens
+  only when the phone app's own files changed or it's a release's pull
+  request; the nightly run covers the rest.
 - CI runs only the checks your change can reach, by which app builds each
   file. If it touches files both apps build (the page, the shared parts of
   the shell) but can't change what the phone app does, open it with the
   `desktop-only` label (`gh pr create --label desktop-only`) and say why in
-  the body: the 40-minute iPhone run is left out. Not for anything a phone
-  shows or runs; when unsure, leave it off. `AGENTS.md` has the rule.
+  the body: the share window's iPhone builds are left out. Not for anything
+  a phone shows or runs; when unsure, leave it off. `AGENTS.md` has the rule.
 - Before opening it, run `node scripts/pr-questions.mjs`. It prints the
   questions past reviews taught, for the parts of the project your branch
   changed. Answer each for your change, and say what you checked in the Tests

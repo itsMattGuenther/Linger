@@ -6,10 +6,21 @@ import { appendFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 
-// `ios` is the iPhone app in the simulator (ios-simulator.yml): the app's
-// shell and page, and the flows and helpers that drive it. `relay` is the
-// push relay's Worker (push-relay/, #887), which reads the wire types too.
-const domains = ["rust", "s3", "web", "shell", "coturn", "packages", "ios", "relay"];
+// `ios` is what the phone app builds and runs: the app's shell and page, and
+// the flows and helpers that drive it (share-window.yml's iPhone builds).
+// `simulator` is the iPhone app in the simulator (ios-simulator.yml), a
+// narrower part of it (below). `relay` is the push relay's Worker
+// (push-relay/, #887), which reads the wire types too.
+const domains = ["rust", "s3", "web", "shell", "coturn", "packages", "ios", "simulator", "relay"];
+
+// The iPhone app in the simulator is 35 to 60 minutes on GitHub's Mac, and
+// most of its failures were GitHub's Mac or the flows, not the app (#955).
+// So on a pull request it runs only for the phone app's own files
+// (`phonesOwn`) and for a release's pull request, the one that adds its
+// notes; the nightly run on main runs it for everything (Matt, 2026-11-24).
+// A run by hand (`gh workflow run ios-simulator.yml --ref <branch>`) runs it
+// for a branch whatever it changed.
+const RELEASE_NOTES = /^docs\/releases\/\d+\.\d+\.\d+\.md$/;
 
 // Only the checks a change can reach run on its pull request (#914). Most of
 // the app is shared by the desktop app and the phone app, but not all of it,
@@ -155,11 +166,26 @@ function phonesOwn(path, read, before) {
 }
 
 /**
+ * Whether a file is a release's new notes, which only its release pull
+ * request adds (docs/releasing.md, step 1). Fixing an older release's notes
+ * isn't one. When whether it's new can't be told, it counts.
+ */
+function newReleaseNotes(path, before) {
+  if (!RELEASE_NOTES.test(path)) return false;
+  if (!before) return true;
+  // undefined: not there before, so new. null: Git can't say.
+  const was = before(path);
+  return was === undefined || was === null;
+}
+
+/**
  * The checks a change sets off. `labels` are the pull request's: with
- * `desktop-only`, the iPhone run is left out, unless a file that is the
- * phone app's alone changed, which the label can't be true of. `read` hands
- * back a file's text as it is now, and `before` as it was before the change
- * (`beforeAt`); without `before`, only what a file is now is known.
+ * `desktop-only`, share-window.yml's iPhone builds are left out, unless a
+ * file that is the phone app's alone changed, which the label can't be true
+ * of. The simulator's run is `simulator`: the phone app's own files, or a
+ * release's new notes. `read` hands back a file's text as it is now, and
+ * `before` as it was before the change (`beforeAt`); without `before`, only
+ * what a file is now is known.
  */
 export function classify(paths, { labels = [], read = fromDisk, before = null } = {}) {
   const selected = new Set();
@@ -193,7 +219,11 @@ export function classify(paths, { labels = [], read = fromDisk, before = null } 
     else if (path.startsWith("push-relay/")) add("relay");
     else add(...domains);
   }
-  if (labels.includes(DESKTOP_ONLY) && paths.length && !paths.some((path) => phonesOwn(path, read, before))) selected.delete("ios");
+  const phones = paths.some((path) => phonesOwn(path, read, before));
+  if (labels.includes(DESKTOP_ONLY) && paths.length && !phones) selected.delete("ios");
+  // The simulator's run: everything, the phone app's own files, or a release.
+  if (!paths.length || phones || paths.some((path) => newReleaseNotes(path, before))) selected.add("simulator");
+  else selected.delete("simulator");
   return Object.fromEntries(domains.map((name) => [name, selected.has(name)]));
 }
 
@@ -284,7 +314,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const scope = classify(paths, { labels, before });
     console.log(JSON.stringify({ paths, labels, scope }, null, 2));
     if (labels.includes(DESKTOP_ONLY) && paths.length)
-      console.log(scope.ios ? `The ${DESKTOP_ONLY} label is ignored: this changes files that are the phone app's alone.` : `Labelled ${DESKTOP_ONLY}: the iPhone app in the simulator isn't run. The nightly run on main still runs it.`);
+      console.log(scope.ios ? `The ${DESKTOP_ONLY} label is ignored: this changes files that are the phone app's alone.` : `Labelled ${DESKTOP_ONLY}: the iPhone builds in share-window.yml aren't run. The nightly run on main still runs them.`);
+    if (paths.length && !scope.simulator)
+      console.log("The iPhone app in the simulator isn't run: it runs for the phone app's own files and a release's pull request, and every night on main. To run it on this branch: gh workflow run ios-simulator.yml --ref <branch>");
     if (process.env.GITHUB_OUTPUT)
       appendFileSync(process.env.GITHUB_OUTPUT, Object.entries(scope).map(([key, value]) => `${key}=${value}\n`).join(""));
   }

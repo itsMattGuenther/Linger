@@ -261,9 +261,9 @@ videos and sound files (the Docker image has it); without it those uploads are
 refused, and the tests for them skip. The phone app needs Android
 Studio, Java 21 and the Rust Android targets; the steps are in its section
 there. The iPhone app needs a Mac, which you don't need to have: GitHub's
-build it, and on a pull request that touches the app one also runs it in
-the iPhone simulator and keeps a picture of each screen (the same doc, "The
-iPhone in the simulator"). **Run `scripts/check.sh` before
+build it, and every night (and on a pull request that changes the phone
+app's own files) one also runs it in the iPhone simulator and keeps a
+picture of each screen (the same doc, "The iPhone in the simulator"). **Run `scripts/check.sh` before
 pushing**; it runs what CI runs for your change, and
 [docs/testing-strategy.md](docs/testing-strategy.md) says what runs where.
 Before opening a pull request, `node scripts/pr-questions.mjs` asks what

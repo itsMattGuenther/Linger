@@ -10,8 +10,11 @@ import { cfgReach, classify, DESKTOP_ONLY, labelsFrom, localPaths, shellModules,
 const active = (paths) => Object.entries(classify(paths)).filter(([, value]) => value).map(([key]) => key);
 for (const paths of [["README.md"], ["docs/testing.md", "LICENSE"], ["docs/screenshots/example.png"]])
   test(`documentation only: ${paths}`, () => assert.deepEqual(active(paths), []));
-for (const paths of [[], ["unexpected.conf"], ["Cargo.lock"], [".github/workflows/ci.yml"], ["crates/linger-core/src/lib.rs"]])
-  test(`conservative fallback: ${paths}`, () => assert.equal(active(paths).length, 8));
+// Unknown files run everything but the iPhone app in the simulator, which a
+// pull request runs only for the phone app's own files and a release's.
+for (const paths of [["unexpected.conf"], ["Cargo.lock"], [".github/workflows/ci.yml"], ["crates/linger-core/src/lib.rs"]])
+  test(`conservative fallback: ${paths}`, () => assert.deepEqual(active(paths), ["rust", "s3", "web", "shell", "coturn", "packages", "ios", "relay"]));
+test("nothing to compare (the nightly run, a run by hand) runs everything, the simulator too", () => assert.equal(active([]).length, 9));
 test("UI changes test both browser and native packages and the iPhone app, not unrelated server jobs", () => {
   assert.deepEqual(active(["client/src/next/styles/app.css"]), ["web", "packages", "ios"]);
 });
@@ -28,7 +31,7 @@ test("browser assertions alone need no package rebuild", () => {
 test("the iPhone flows and what they run on run only the iPhone check", () => {
   for (const path of ["client/tests/ios/set-up.yaml", "client/tests/ios/seed.js", "scripts/https-front.mjs",
     "scripts/https-front.test.mjs", "scripts/share-window-ready.mjs", "scripts/test-certs.sh"])
-    assert.deepEqual(active([path]), ["ios"], path);
+    assert.deepEqual(active([path]), ["ios", "simulator"], path);
 });
 test("the iPhone check runs for the app's page and shell, and for its own workflow", () => {
   for (const path of ["client/src/next/core/phone.ts", "client/src-tauri/gen/apple/project.yml", "client/package.json",
@@ -74,9 +77,10 @@ test("the Tauri version check and the iPhone flows' own test run only in the rul
     "scripts/android-jni.mjs", "scripts/android-jni.test.mjs", "scripts/fixtures/dexdump-0.5.4.txt", "scripts/android-manifest.test.mjs",
     "scripts/installed-packages.mjs", "scripts/installed-packages.test.mjs",
     "scripts/maestro-driver.mjs", "scripts/maestro-driver.test.mjs", "scripts/fixtures/maestro-driver-died.log",
-    "scripts/app-at-rest.mjs", "scripts/app-at-rest.test.mjs",
     "scripts/browser-fakes.test.mjs"]), []);
-  assert.deepEqual(active(["client/tests/ios/link-open.yaml"]), ["ios"]);
+  // The at-rest check is a step of the simulator's run, so a change to it runs that too.
+  assert.deepEqual(active(["scripts/app-at-rest.mjs", "scripts/app-at-rest.test.mjs"]), ["simulator"]);
+  assert.deepEqual(active(["client/tests/ios/link-open.yaml"]), ["ios", "simulator"]);
 });
 test("the bundler's retry and its test start the package check, which runs the test in Git Bash (#916)", () => {
   assert.deepEqual(active(["scripts/bundle-retry.sh"]), ["packages"]);
@@ -139,14 +143,14 @@ test("local: the shell gets a count and one line per domain", (t) => {
   git("commit", "-q", "-am", "docs");
   const script = fileURLToPath(new URL("./ci-scope.mjs", import.meta.url));
   const out = execFileSync("node", [script, "--local", "main"], { cwd: dir, encoding: "utf8" });
-  assert.equal(out, "changed=1\nrust=false\ns3=false\nweb=false\nshell=false\ncoturn=false\npackages=false\nios=false\nrelay=false\n");
+  assert.equal(out, "changed=1\nrust=false\ns3=false\nweb=false\nshell=false\ncoturn=false\npackages=false\nios=false\nsimulator=false\nrelay=false\n");
 });
 test("local: no base to compare with selects everything", (t) => {
   const { dir } = branchRepo(t);
   const script = fileURLToPath(new URL("./ci-scope.mjs", import.meta.url));
   const out = execFileSync("node", [script, "--local", "no-such-ref"], { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
   assert.match(out, /^changed=0\nrust=true\n/);
-  assert.equal(out.match(/=true/g).length, 8);
+  assert.equal(out.match(/=true/g).length, 9);
 });
 
 // --- only the checks a change can reach (#914) ---
@@ -251,9 +255,9 @@ test("a file only the phone app builds doesn't start the desktop installers", ()
   for (const path of ["client/src-tauri/src/phone_scene.rs", "client/src-tauri/src/phone_keyboard.rs", "client/src-tauri/src/share_window.rs",
     "client/src-tauri/gen/apple/project.yml", "client/src-tauri/gen/apple/NotificationService/PushNote.swift",
     "client/src-tauri/Info.ios.plist", "client/src-tauri/tauri.ios.conf.json"])
-    assert.deepEqual(reached([path]), ["shell", "ios"], path);
+    assert.deepEqual(reached([path]), ["shell", "ios", "simulator"], path);
   const phone = shell({ "client/src-tauri/capabilities/phone.json": '{"platforms":["android","iOS"]}' });
-  assert.deepEqual(reached(["client/src-tauri/capabilities/phone.json"], { read: phone }), ["shell", "ios"]);
+  assert.deepEqual(reached(["client/src-tauri/capabilities/phone.json"], { read: phone }), ["shell", "ios", "simulator"]);
 });
 
 test("the shell's tests alone run only the shell's tests", () => {
@@ -286,17 +290,18 @@ test("a capability file moved from one app to the other starts both apps' checks
   const moved = (was, now, options = {}) =>
     reached([path], { read: shell({ [path]: now }), before: (asked) => (asked === path ? was : undefined), ...options });
   // Off the phone: it takes something from the phone app, though it reads as the desktop's now.
-  assert.deepEqual(moved(PHONE, DESKTOP), ["shell", "packages", "ios"]);
+  assert.deepEqual(moved(PHONE, DESKTOP), ["shell", "packages", "ios", "simulator"]);
   // And onto it.
-  assert.deepEqual(moved(DESKTOP, PHONE), ["shell", "packages", "ios"]);
+  assert.deepEqual(moved(DESKTOP, PHONE), ["shell", "packages", "ios", "simulator"]);
   // Changed, and the same app's before and after: that app's checks alone.
   assert.deepEqual(moved(DESKTOP, '{"platforms":["linux","macOS","windows"],"permissions":["x"]}'), ["shell", "packages"]);
-  assert.deepEqual(moved(PHONE, '{"platforms":["iOS"]}'), ["shell", "ios"]);
+  assert.deepEqual(moved(PHONE, '{"platforms":["iOS"]}'), ["shell", "ios", "simulator"]);
   // New in this change (it wasn't there before): what it is now.
   assert.deepEqual(moved(undefined, DESKTOP), ["shell", "packages"]);
-  assert.deepEqual(moved(undefined, PHONE), ["shell", "ios"]);
-  // Deleted by this change, or unreadable either side: both's.
-  assert.deepEqual(moved(PHONE, null), ["shell", "packages", "ios"]);
+  assert.deepEqual(moved(undefined, PHONE), ["shell", "ios", "simulator"]);
+  // Deleted by this change, or unreadable either side: both's. The
+  // simulator's run only for one that was the phone's.
+  assert.deepEqual(moved(PHONE, null), ["shell", "packages", "ios", "simulator"]);
   assert.deepEqual(moved(DESKTOP, null), ["shell", "packages", "ios"]);
   assert.deepEqual(moved(null, DESKTOP), ["shell", "packages", "ios"]);
   assert.deepEqual(moved("not json", DESKTOP), ["shell", "packages", "ios"]);
@@ -316,10 +321,10 @@ test("what can't be read is both's: no lib.rs, or one with nothing this recognis
 });
 
 test("a desktop-only change and a phone-only change together start both", () => {
-  assert.deepEqual(reached(["client/src-tauri/src/tray.rs", "client/src-tauri/src/phone_scene.rs"]), ["shell", "packages", "ios"]);
+  assert.deepEqual(reached(["client/src-tauri/src/tray.rs", "client/src-tauri/src/phone_scene.rs"]), ["shell", "packages", "ios", "simulator"]);
 });
 
-test("the desktop-only label leaves the iPhone run out for files both apps build", () => {
+test("the desktop-only label leaves share-window's iPhone builds out for files both apps build", () => {
   const labels = [DESKTOP_ONLY];
   // The page, the shared parts of the shell, and both with desktop-only files: today's voice work.
   assert.deepEqual(reached(["client/src/next/app/settings/SoundSection.tsx"], { labels }), ["web", "packages"]);
@@ -346,7 +351,7 @@ test("the label is ignored when a file that's the phone app's alone changed", ()
 });
 
 test("the label doesn't hold back a run of everything: nothing to compare, the nightly, a release", () => {
-  assert.equal(reached([], { labels: [DESKTOP_ONLY] }).length, 8);
+  assert.equal(reached([], { labels: [DESKTOP_ONLY] }).length, 9);
 });
 
 test("the pull request's labels are read from what the workflow hands over, and nothing readable is none", () => {
@@ -362,7 +367,7 @@ function outside(t) {
 }
 
 // As CI runs it: a pull request's two commits, its labels in PR_LABELS, and the answer in GITHUB_OUTPUT.
-test("in CI: a labelled pull request leaves the iPhone run out, an unlabelled one runs it, and it says which", (t) => {
+test("in CI: a labelled pull request leaves share-window's iPhone builds out, an unlabelled one runs them, and it says which", (t) => {
   const { dir, git } = branchRepo(t);
   const base = execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
   execFileSync("mkdir", ["-p", join(dir, "client/src/next"), join(dir, "client/src-tauri/src")]);
@@ -386,7 +391,7 @@ test("in CI: a labelled pull request leaves the iPhone run out, an unlabelled on
   const labelled = run('["bug","desktop-only"]');
   assert.equal(labelled.ios, "false");
   assert.equal(labelled.packages, "true");
-  assert.match(labelled.said, /Labelled desktop-only: the iPhone app in the simulator isn't run\. The nightly run on main still runs it\./);
+  assert.match(labelled.said, /Labelled desktop-only: the iPhone builds in share-window\.yml aren't run\. The nightly run on main still runs them\./);
   // With a file that's the phone's alone, the label is ignored, and that's said.
   writeFileSync(join(dir, "client/src-tauri/src/phone_scene.rs"), "b\n");
   git("add", "."); git("commit", "-q", "-m", "and the phone's scenes");
@@ -428,4 +433,62 @@ test("in CI: a capability file moved off the phone still runs the iPhone checks,
   writeFileSync(join(dir, "client/src-tauri/capabilities/tools.json"), '{"platforms":["linux","macOS","windows"]}\n');
   git("add", "."); git("commit", "-q", "-m", "a new one for the desktop");
   assert.deepEqual(run(), { ios: "false", packages: "true" });
+});
+
+// --- the iPhone app in the simulator: the phone's own files, a release, and the nightly run (#955) ---
+
+test("the simulator's run is left to the nightly run for files both apps build, the server and the wire types", () => {
+  for (const path of ["client/src/next/core/phone.ts", "client/src/lib/pageVoice.ts", "client/package.json", "client/src-tauri/src/lib.rs",
+    "client/src-tauri/Cargo.toml", "crates/linger-server/src/main.rs", "crates/linger-core/src/lib.rs", "Cargo.toml", "deploy/Dockerfile"]) {
+    assert(!reached([path]).includes("simulator"), path);
+  }
+  // What the phone app reaches still builds its share window and its Rust for the iPhone.
+  assert(reached(["client/src-tauri/src/lib.rs"]).includes("ios"));
+});
+
+test("a release's pull request runs the simulator: it adds the release's notes", () => {
+  const notes = "docs/releases/0.5.6.md";
+  const isNew = (asked) => (asked === notes ? undefined : "was there");
+  // With the version bumped in the same pull request, or already bumped on main (0.5.5's was).
+  assert.deepEqual(reached([notes], { before: isNew }), ["simulator"]);
+  const bump = ["Cargo.toml", "Cargo.lock", "client/package.json", "client/src-tauri/Cargo.toml", "client/src-tauri/Cargo.lock",
+    "client/src-tauri/tauri.conf.json", "client/src/next/core/release-line.json", "README.md", "TASKS.md"];
+  assert(reached([...bump, notes], { before: isNew }).includes("simulator"));
+  // Git can't say whether they're new, or there's no earlier commit to ask: it runs.
+  assert.deepEqual(reached([notes], { before: () => null }), ["simulator"]);
+  assert.deepEqual(reached([notes]), ["simulator"]);
+});
+
+test("the next version's bump after the App Store approves isn't a release, nor is fixing a release's notes", () => {
+  const bump = ["Cargo.toml", "Cargo.lock", "client/package.json", "client/src-tauri/Cargo.toml", "client/src-tauri/Cargo.lock",
+    "client/src-tauri/tauri.conf.json"];
+  assert(!reached(bump, { before: () => "was there" }).includes("simulator"));
+  // #958: 0.5.5's notes corrected after its release.
+  assert.deepEqual(reached(["docs/releases/0.5.5.md", "TASKS.md"], { before: () => "was there" }), []);
+  // Only a version's notes: other files under docs/releases aren't a release.
+  assert.deepEqual(reached(["docs/releases/README.md", "docs/releases/v0.2.0.md"], { before: () => undefined }), []);
+});
+
+test("in CI: a pull request adding a release's notes runs the simulator, one fixing them doesn't, and it says so", (t) => {
+  const { dir, git } = branchRepo(t);
+  const script = fileURLToPath(new URL("./ci-scope.mjs", import.meta.url));
+  const rev = () => execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
+  const run = (base, head) => {
+    const output = join(outside(t), "output");
+    writeFileSync(output, "");
+    const said = execFileSync("node", [script], { cwd: dir, encoding: "utf8",
+      env: { ...process.env, GITHUB_EVENT_NAME: "pull_request", BASE_SHA: base, HEAD_SHA: head, GITHUB_OUTPUT: output, CI_SCOPE_ALL: "", PR_LABELS: "[]" } });
+    return { said, simulator: /^simulator=(.*)$/m.exec(readFileSync(output, "utf8"))?.[1] };
+  };
+  const base = rev();
+  execFileSync("mkdir", ["-p", join(dir, "docs/releases")]);
+  writeFileSync(join(dir, "docs/releases/9.9.9.md"), "# 9.9.9\n");
+  git("add", "."); git("commit", "-q", "-m", "release 9.9.9");
+  const release = rev();
+  assert.equal(run(base, release).simulator, "true");
+  writeFileSync(join(dir, "docs/releases/9.9.9.md"), "# 9.9.9, fixed\n");
+  git("commit", "-q", "-am", "fix the notes");
+  const fixed = run(release, rev());
+  assert.equal(fixed.simulator, "false");
+  assert.match(fixed.said, /The iPhone app in the simulator isn't run: .* gh workflow run ios-simulator\.yml --ref <branch>/);
 });

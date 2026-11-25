@@ -19,8 +19,9 @@
 
 <!-- Desktop-only? If this touches files both apps build (the page, the shared
      parts of the shell) and can't change what the phone app does, label it
-     `desktop-only` and say why here: the iPhone run is left out (AGENTS.md,
-     "Pull requests and issues"). Not for anything a phone shows or runs. -->
+     `desktop-only` and say why here: share-window.yml's iPhone builds are
+     left out (AGENTS.md, "Pull requests and issues"). Not for anything a
+     phone shows or runs. -->
 
 ## Found along the way
 

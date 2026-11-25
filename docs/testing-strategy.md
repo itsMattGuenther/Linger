@@ -15,7 +15,7 @@ what CI adds on top.
 | Where | When | What | How long |
 |---|---|---|---|
 | Your machine | Before every push | `scripts/check.sh`: the checks for what the branch touched | Under a second for docs; about 3 minutes for a client change with WebKit, 1½ without, more when the branch edits browser tests (each runs ten times); a Rust change also rebuilds, which is slow in a fresh copy |
-| A pull request | Every push | `ci.yml`: the same selection, plus S3 against MinIO, the relay and a real server update in Docker, the WebKit browser tests, and the browser tests the PR added or edited ten times in both engines; `package-check.yml` builds the desktop packages on Linux and Windows; `ios-simulator.yml` builds the iPhone app for the simulator on a Mac and drives it with Maestro, when the PR touches the app and isn't a draft (it starts when the PR is marked ready, #933) | About 10 minutes; the packages 8 to 19; the iPhone 35 to 60 (#933) |
+| A pull request | Every push | `ci.yml`: the same selection, plus S3 against MinIO, the relay and a real server update in Docker, the WebKit browser tests, and the browser tests the PR added or edited ten times in both engines; `package-check.yml` builds the desktop packages on Linux and Windows; `ios-simulator.yml` builds the iPhone app for the simulator on a Mac and drives it with Maestro, when the PR changes the phone app's own files or is a release's (it adds `docs/releases/<version>.md`) and isn't a draft (it starts when the PR is marked ready, #933); for the page and what both apps build, the nightly run does it | About 10 minutes; the packages 8 to 19; the iPhone 35 to 60 (#933) |
 | A pull request that changes the iPhone app's Xcode project, the app's Rust that a phone builds, or the server (not Rust only the desktop app builds, and not one labelled `desktop-only`: "What a change sets off") | Every push; its jobs on a Mac only once it's out of draft, and when it's marked ready (#933) | `share-window.yml`: the iPhone's share extension and notification extension build for the iPhone Simulator on GitHub's Mac, the notification extension's tests open RFC 8291's example and what the server sends and read the keys as the app's Rust writes them (#889), the app's Rust builds for the iPhone (code only an iPhone compiles is built by nothing else on a pull request, #822), and the share window's sender (`ShareSender.swift`) runs on Linux against a real server (`scripts/share-sender-test.sh`, which needs Docker and runs the same locally) | About 10 minutes |
 | `main` | Every merge | `ci.yml` for what the merge changed. A run still waiting is cancelled when a newer merge lands, since the newer run covers it | As a PR |
 | `main`, nightly | 08:23 UTC | `nightly.yml`: every CI check, the package checks, the Windows and macOS shell builds, the iPhone app in the simulator, every browser test three times with no retries, and whether a fix Linger pins has come out upstream. A failure opens an issue | About 40 minutes |
@@ -85,13 +85,15 @@ in CI, rather than everything: `classify()` has them.
 the shell is read from the code: the `cfg` on its module in `lib.rs`, the
 `platforms` of a capability file, before the change and after it, so a file
 moved from one app to the other runs both apps' checks. What says nothing,
-or can't be read, is both apps'. A pull request labelled `desktop-only` leaves the iPhone runs out
-(the simulator's, and `share-window.yml`'s builds) for files both apps
-build, which is how a change to the page says it can't reach a phone
-(`AGENTS.md` has when to use it). The label is ignored when a
-file that's the phone app's alone changed, and never holds back a run of
-everything. The nightly run on main is the backstop for a label that was
-wrong: it runs the iPhone app in the simulator whatever changed.
+or can't be read, is both apps'. The iPhone app in the simulator is
+narrower (`simulator`): a pull request runs it only for the phone app's own
+files and a release's new notes, and the nightly run on main runs it for
+everything else (#955). A pull request labelled `desktop-only` leaves
+`share-window.yml`'s iPhone builds out for files both apps build, which is
+how a change to the page says it can't reach a phone (`AGENTS.md` has when
+to use it). The label is ignored when a file that's the phone app's alone
+changed, and never holds back a run of everything. The nightly run on main
+is the backstop for both: it runs every iPhone check whatever changed.
 
 Every run, locally and in CI, also runs the rules lint (`scripts/lint-rules.sh`:
 AI attribution, dropped vocabulary, file names only differing in case), the
