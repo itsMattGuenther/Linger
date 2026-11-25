@@ -273,7 +273,7 @@ export type Phone = "android" | "iphone";
  * Before the shell has said what kind of copy this is, neither.
  */
 function newerAppHow(check: UpdateCheck | null, phone: Phone | null): { button: boolean; detail: string | null } {
-  if (phone === "iphone") return { button: false, detail: "Update Linger from TestFlight." };
+  if (phone === "iphone") return { button: false, detail: "Update Linger from the App Store." };
   if (phone === "android") return { button: false, detail: "Update Linger from Google Play." };
   switch (check?.kind) {
     case "newer":

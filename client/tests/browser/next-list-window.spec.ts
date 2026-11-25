@@ -1636,9 +1636,9 @@ test.describe("a server that needs a newer app, on a phone (#793)", () => {
   test.describe("an iPhone", () => {
     test.use({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148" });
 
-    test("points it at TestFlight, with no button", async ({ page }) => {
+    test("points it at the App Store, with no button", async ({ page }) => {
       await open(page, "?tooold&shell=phone");
-      await expect(tooOld(page)).toContainText("Update Linger from TestFlight.");
+      await expect(tooOld(page)).toContainText("Update Linger from the App Store.");
       await expect(tooOld(page).getByRole("button")).toHaveCount(0);
     });
   });

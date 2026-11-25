@@ -869,7 +869,7 @@ away. The words start on the lines' edge.
   doesn't wait out the day an update otherwise waits. No button anywhere else:
   an Arch copy gets "It comes with your next system update (sudo pacman -Syu)."
   in `--text-muted`, a phone "Update Linger from Google Play." or "Update Linger
-  from TestFlight.", and a copy that can't update itself where to get a new one.
+  from the App Store.", and a copy that can't update itself where to get a new one.
   No ×: the server can't be used until Linger's updated, so there's nothing to
   put off. Several such servers share one block, named together ("Casa da
   Ribeira and Pinecone need a newer Linger"). While it shows, the ready and out

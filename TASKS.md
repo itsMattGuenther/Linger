@@ -32,8 +32,9 @@ default.
 voice on the desktop.** The notes are `docs/releases/0.5.5.md`, and its one
 line is in `client/src/next/core/release-line.json`. Tagged 2026-11-24,
 straight after Matt had tried `main` on Linux, with fixes going into 0.5.6
-(Matt, 2026-11-24); the iPhone app goes to the App Store after the testers
-try it. What each change owes
+(Matt, 2026-11-24). No tester reported a problem with it, and the App Store
+approved that build: the iPhone app has been in the App Store since
+2026-11-25, and `main` is 0.5.6. What each change owes
 after it ships:
 - **Linger is for people 13 and older, and the phone app checks the store's
   age where a law asks for it** (#953). Some US states (Texas so far) make the
@@ -284,9 +285,9 @@ groups and the voice rework were #197, closed 2026-10-19. **M16, screen
 sharing (#360), shipped in 0.5.2** (2026-10-27); what's left of it, its real
 check (T-1908) included, is under
 [M16](#m16--screen-sharing-360-shipped-in-052). **Mobile is started**
-(2026-10-02): Android since 0.4.8, voice since 2026-10-19, and friends'
-iPhones through TestFlight since 0.5.1. Phone notifications are being built
-(#830, from 2026-11-12). It has [its own section](#mobile--started-2026-10-02).
+(2026-10-02): Android since 0.4.8, voice since 2026-10-19, friends'
+iPhones through TestFlight since 0.5.1, and the App Store since 0.5.5. Phone
+notifications came in 0.5.5 (#830, built from 2026-11-12). It has [its own section](#mobile--started-2026-10-02).
 
 Closed milestones are archived in `docs/tasks/` with every landing note and
 surprise intact. Tasks T-001…T-604 live there. Decisions that shaped the queue
@@ -706,7 +707,8 @@ macOS runners, or a friend's Mac.
 
 - 🟡 **T-1602 · The mobile shell** — effort: **high**
   *Android: accepted on Matt's Pixel (2026-10-03). iPhone: on friends'
-  iPhones through TestFlight since 0.5.1 (2026-10-20, `ios.yml`, #685).
+  iPhones through TestFlight since 0.5.1 (2026-10-20, `ios.yml`, #685), and
+  in the App Store since 0.5.5 (2026-11-25).
   Matt has no iPhone, so friends and contributors with iPhones do its
   checks.*
   *Started 2026-10-02 on `feat/t-1602-mobile-shell`.* **Done:** the crate
@@ -853,7 +855,9 @@ macOS runners, or a friend's Mac.
   Play"). Next: the first bundle on internal testing to set the key, the
   store listing and App content forms, then a closed test with 12 testers for
   14 days, then "Apply for production".
-  **The iPhone, started 2026-10-20 (#253):** Matt's Apple Developer Program
+  **The iPhone, in the App Store since 2026-11-25** (0.5.5, the TestFlight
+  build the testers had; #779 listed what Apple asked for first).
+  **Started 2026-10-20 (#253):** Matt's Apple Developer Program
   membership is active, and the App Store Connect API key (Admin) is in the
   `release` environment. `gen/apple` is `tauri ios init`'s, from GitHub's
   Mac, iPhone only. `ios.yml` builds on `main`, signs automatically through
@@ -869,15 +873,14 @@ macOS runners, or a friend's Mac.
   first time, so nobody is signed out (`src/secrets.rs`). The testers check
   that they're still signed in after updating, and that Linger shows next to
   nothing under the iPhone's iCloud backups; then #779's "Backups and the
-  Keychain" is ticked. Also **voice with the phone locked**: there's no
-  background audio mode yet, so locking may end a call. Check it on a real
-  iPhone first, with Matt's friend.
+  Keychain" is ticked. **Voice with the phone locked** came with the
+  background audio mode (#851).
   **A privacy policy link inside the app**, which Apple's guideline 5.1.1(i)
   wants as well as the one in App Store Connect: built 2026-10-31 (#779),
   **Privacy** under Settings → Account & App → This Phone (This Computer on
   a desktop), opening linger.im/privacy.
-  Android first, on Google Play, with Matt paying the $25; Apple only after it
-  has worked well there. The listing's privacy answers ("Data safety") must
+  The App Store came first (Matt, 2026-11-19): Google Play waits on the 12
+  testers its closed test needs. The listing's privacy answers ("Data safety") must
   say the app uses the microphone only to record a voice message the person
   chooses to send.
   Friends first, then the stores. Android: a signed APK on the GitHub release

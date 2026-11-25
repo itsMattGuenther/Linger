@@ -398,6 +398,15 @@ App Store Connect takes a few minutes to process the build. It then shows
 under TestFlight, ready to give to testers, and on the app's page, ready to
 submit for review.
 
+**The App Store** has had Linger since 0.5.5 (2026-11-25). A release's build
+from its tag goes to TestFlight first; once the testers have tried it, add
+the version on the app's page in App Store Connect, with what's new, pick
+that build, set it to release itself once Apple approves (as 0.5.5 was), and
+submit it for review. iPhones get it from the App Store after that, so until
+Apple approves, iPhones are still on the version before: a server update a
+release asks for should still let that version in. Once it's approved,
+`main` moves to the next version (step 1).
+
 **Before a build goes to TestFlight,** the iPhone simulator check should be
 green on what it's built from: it runs every night on `main`, on the
 release's pull request (the one that adds `docs/releases/<version>.md`), and

@@ -1471,8 +1471,9 @@ of every bug still in it. It came back on 2026-10-02 as its own section of
 the same Tauri 2 crate. It started text only and with no push, got voice on
 2026-10-19 (#429), and gets notifications chosen by kind from 2026-11-12
 (#830): the server's side first (#886), then the relay (#887), Android (#888)
-and the iPhone (#889). It has been on Android since 0.4.8 and on friends'
-iPhones through TestFlight since 0.5.1. **M14 is now custom themes** (Matt,
+and the iPhone (#889). It has been on Android since 0.4.8, on friends'
+iPhones through TestFlight since 0.5.1, and in the App Store since 0.5.5
+(2026-11-25). **M14 is now custom themes** (Matt,
 2026-08-31), which is V3 rather than V2: SPEC §6 carries the scope line and
 `TASKS.md` M14 carries the three things that have to be decided before any of it
 starts. The short version is that a theme is a list of token values rather than

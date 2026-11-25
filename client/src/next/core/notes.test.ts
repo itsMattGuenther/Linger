@@ -165,7 +165,7 @@ describe("a server that needs a newer app (#793)", () => {
 
   it("points a phone at where it got Linger, with no button", () => {
     expect(tooOldNote([casa], true, null, "android", null)).toMatchObject({ button: false, detail: "Update Linger from Google Play." });
-    expect(tooOldNote([casa], true, null, "iphone", null)).toMatchObject({ button: false, detail: "Update Linger from TestFlight." });
+    expect(tooOldNote([casa], true, null, "iphone", null)).toMatchObject({ button: false, detail: "Update Linger from the App Store." });
   });
 
   it("tells a copy that can't update itself where a new one is, and says nothing of how before the shell has said", () => {

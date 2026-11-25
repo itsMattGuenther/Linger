@@ -8,7 +8,7 @@
 <a href="https://github.com/itsMattGuenther/Linger/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/itsMattGuenther/Linger?label=release&labelColor=131a28&color=2e3b54"></a>
 <a href="https://github.com/itsMattGuenther/Linger/actions/workflows/ci.yml?query=branch%3Amain"><img alt="CI on main" src="https://github.com/itsMattGuenther/Linger/actions/workflows/ci.yml/badge.svg?branch=main"></a>
 <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-2e3b54?labelColor=131a28"></a>
-<a href="#-installing-the-app"><img alt="Runs on Windows, Linux and Android" src="https://img.shields.io/badge/runs%20on-Windows%20%C2%B7%20Linux%20%C2%B7%20Android-2e3b54?labelColor=131a28"></a>
+<a href="#-installing-the-app"><img alt="Runs on Windows, Linux, Android and iPhone" src="https://img.shields.io/badge/runs%20on-Windows%20%C2%B7%20Linux%20%C2%B7%20Android%20%C2%B7%20iPhone-2e3b54?labelColor=131a28"></a>
 <a href="#-running-a-server"><img alt="Self-hosted" src="https://img.shields.io/badge/self--hosted-f3b55c"></a>
 <a href="#-privacy"><img alt="Zero telemetry" src="https://img.shields.io/badge/zero%20telemetry-7cc98f"></a>
 <a href="docs/development.md"><img alt="Built with Rust, Tauri and React" src="https://img.shields.io/badge/built%20with-Rust%20%C2%B7%20Tauri%20%C2%B7%20React-2e3b54?labelColor=131a28"></a>
@@ -126,8 +126,8 @@ This is not an attempt to build a better platform. It's an attempt to not need o
 - **Full export.** Anyone can export public rooms and their own DMs, with
   files, without asking the host. It opens in any web browser with a
   double-click.
-- **Linux, Windows and Android** (Tauri 2, not Electron). An iPhone app is in
-  testing with a small group, and macOS builds from source.
+- **Linux, Windows, Android and iPhone** (Tauri 2, not Electron). The
+  iPhone app is in the App Store, and macOS builds from source.
 
 **What it will never have:** XP, streaks or engagement metrics. Federation,
 bots, roles, threads, `@everyone`, algorithmic ordering, unread badges.
@@ -181,6 +181,7 @@ covers each step and what to do when something goes wrong.
 | **Fedora, openSUSE** | The `…x86_64.rpm`: `sudo dnf install` (or `zypper install`) it |
 | **Any other Linux** | The `…amd64.AppImage`: `chmod +x` it, then run it |
 | **An Android phone** | The `…android-arm64.apk`, downloaded and opened on the phone (from 0.4.8; Android asks you to allow installs from your browser) |
+| **An iPhone** | [Linger in the App Store](https://apps.apple.com/app/id6824955246) (from 0.5.5; iOS 15 or later). It updates through the App Store |
 
 ```bash
 # Omarchy and Arch: trusts Linger's signing key, adds its repository, installs

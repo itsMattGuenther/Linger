@@ -2508,7 +2508,7 @@ runs (no telemetry). An app older than it:
 - **says so in plain words**: the server's row dimmed with "needs a newer Linger",
   and at the list's foot "Casa da Ribeira needs a newer Linger" / "It works with
   Linger 0.5.4 or newer.", with Update now on a copy that updates itself, how the
-  new one comes on an Arch copy, and where on a phone (Google Play, TestFlight).
+  new one comes on an Arch copy, and where on a phone (Google Play, the App Store).
 - **says it before asking for a password** when adding a server or signing in:
   the paste box asks `/health` first, whatever was pasted.
 
