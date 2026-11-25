@@ -740,9 +740,16 @@ eGGnogSC's proposal on #253 over his own brainstorm of 2026-09-26, which had a
   wait with it. *Since then:* Matt's Apple Developer membership came through,
   and the iPhone app went to friends through TestFlight from 0.5.1
   (2026-10-20), beside Play's internal test. Friends with iPhones have tested
-  it since, swiping back and photos included (#697, #785). The App Store
-  itself still comes after Play (#779). Getting the app to other people (T-1604) waits until report
-  and block are done and Matt says go.
+  it since, swiping back and photos included (#697, #785). Getting the app
+  to other people (T-1604) waited until report and block were done and Matt
+  said go.
+  *Reversed for the stores (Matt, 2026-11-19):* the App Store comes first,
+  after 0.5.5 (#779). A new personal Play account must run a closed test
+  with at least 12 testers opted in for 14 days in a row before it can
+  publish, and Matt doesn't know 12 people on Android to ask. Apple has no
+  such wait. Play's closed test waits until he has the testers, and the
+  `.apk` on each GitHub release stays until then (#773). Apple approved 0.5.5,
+  and it has been in the App Store since 2026-11-25.
 - **Friends first, from the release page** (Matt, 2026-10-03). Report and
   block were done and every Pixel check had passed, so Matt said go, for the
   quick path first: a signed `.apk` on each GitHub release, which an Android
@@ -2324,3 +2331,31 @@ needed until something happens that Linger hasn't done:
 asking the store (Apple's answer says an 18+ app must still ask); asking
 everybody, everywhere (it would show Apple's and Google's sharing question to
 people no law covers).
+
+## Decided: the App Store listing (#779)
+
+**Matt, 2026-11-24**, while App Store Connect was filled in for the first
+submission (it carries 0.5.5; the age decision, #953, has its own section).
+
+- **Guideline 1.2's "method for filtering objectionable material" is
+  explained, not built.** Only people a host invited can post on a server at
+  all: there are no public servers, no directory and no random or anonymous
+  chat. The host and co-hosts delete messages and remove people, Report goes
+  to them, and Block hides a person. The notes for App Review say so. If
+  Apple rejects the app over it, the smallest filter Apple will take is built
+  then, not before.
+- **The App Privacy label is "Data Not Collected".** Apple counts data as
+  collected only when the developer or its partners can get at it; Linger
+  the project gets nothing (`docs/releasing.md`, "Google Play"). It matches
+  linger.im/privacy.
+- **Not a trader**, on both stores (the EU's Digital Services Act): Linger is
+  free, earns nothing and isn't a business, so no address or phone number is
+  published.
+- **Contact**: hello@linger.im, on linger.im's support and privacy pages; the
+  app's Report a problem stays GitHub's issue forms.
+- **Released by itself** once Apple approves (Matt, 2026-11-25, changed
+  from by hand before submitting): nothing waits on the release, which is
+  out already, and the website follows in its own pull request.
+- **Every country but mainland China**, which needs government filings, and
+  not on Macs or Vision Pro: the iPhone app is for phones, and the desktop
+  app is the computer's.

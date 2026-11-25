@@ -990,6 +990,15 @@ shell for Linux.
   only the Swift extension. *Changed:* the value is declared beside
   `kSecAttrAccessible`, and `share-window.yml` builds the app's Rust for the
   iPhone on every pull request that changes it.
+- **#954: the iPhone's Rust named a Swift function only the app has.** The
+  age check's Rust called `linger_age_check`, defined in the app's Swift, so
+  the Rust library, which is also linked on its own, couldn't link, and
+  neither could the simulator's app. Caught by Greptile and by the Mac jobs
+  the pull request starts when it's marked ready. *Missed because* the iPhone
+  Rust can't be built on Linux, and the Swift was checked alone in Swift's
+  Docker image. *Changed:* the app's `main.mm` hands Swift's function to the
+  Rust before the app starts (`linger_register_age_check`), so the library
+  names nothing of the app's.
 
 ## Two at once
 
