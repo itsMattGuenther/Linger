@@ -11,10 +11,11 @@ name: iphone simulator
 # report, and the app's and server's logs.
 #
 # A simulator build needs no Apple account and nothing is signed for a
-# phone, so this uses no secrets. On a pull request it runs only for the
-# phone app's own files (its flows, its Xcode project, the shell's code only
-# a phone builds, these workflows) and for a release's pull request, once
-# it's out of draft (#933); the nightly run on main runs it for everything
+# phone, so this uses no secrets. On a pull request it runs only for what it
+# builds, drives or runs (its flows, the Xcode project and the shell's code
+# only a phone builds, this workflow and the scripts it runs) and for a
+# release's pull request, once it's out of draft (#933); the nightly run on
+# main runs it for everything
 # else (scripts/ci-scope.mjs, `simulator`; Matt, 2026-11-24, after #955).
 # By hand, it runs on any branch: gh workflow run ios-simulator.yml --ref
 # <branch>. The signed build for TestFlight is ios.yml's.

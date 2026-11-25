@@ -155,7 +155,7 @@ if on web && [ "$webkit_here" = 0 ]; then
   extra+=("the WebKit browser tests, and this branch's new or edited ones ten times (scripts/webkit.sh runs them here, with Docker)")
 fi
 on packages && extra+=("the desktop packages on Linux and Windows")
-on simulator && extra+=("the iPhone app in the simulator, on a Mac (ios-simulator.yml), once the pull request is out of draft")
+on simulator && extra+=("the iPhone app in the simulator, on a Mac (ios-simulator.yml), once the pull request is out of draft, when it changes what that run builds, drives or runs or is a release's")
 if [ "${#extra[@]}" -gt 0 ]; then
   echo "== CI also runs =="
   printf '  %s\n' "${extra[@]}"

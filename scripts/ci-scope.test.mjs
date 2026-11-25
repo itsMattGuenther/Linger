@@ -32,8 +32,8 @@ test("the iPhone flows and what they run on run only the iPhone check", () => {
   for (const path of ["client/tests/ios/set-up.yaml", "client/tests/ios/seed.js", "scripts/https-front.mjs",
     "scripts/share-window-ready.mjs", "scripts/test-certs.sh"])
     assert.deepEqual(active([path]), ["ios", "simulator"], path);
-  // The front's own test runs on Linux: it can't change what the simulator does.
-  assert.deepEqual(active(["scripts/https-front.test.mjs"]), ["ios"]);
+  // The front's own test runs by name in the rules job, on Linux: it can't change what an iPhone does.
+  assert.deepEqual(active(["scripts/https-front.test.mjs"]), []);
 });
 test("the iPhone check runs for the app's page and shell, and for its own workflow", () => {
   for (const path of ["client/src/next/core/phone.ts", "client/src-tauri/gen/apple/project.yml", "client/package.json",
@@ -349,12 +349,14 @@ function outside(t) {
 // As CI runs it: a pull request's two commits, and the answer in GITHUB_OUTPUT.
 test("in CI: the page and the shared shell build the iPhone's parts but leave the simulator, and it says so; the phone's own file runs it", (t) => {
   const { dir, git } = branchRepo(t);
-  const base = execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
   execFileSync("mkdir", ["-p", join(dir, "client/src/next"), join(dir, "client/src-tauri/src")]);
-  writeFileSync(join(dir, "client/src/next/Settings.tsx"), "b\n");
   writeFileSync(join(dir, "client/src-tauri/src/lib.rs"), "#[cfg(desktop)]\nmod tray;\n#[cfg(any(mobile, test))]\nmod phone_scene;\n");
+  git("add", "."); git("commit", "-q", "-m", "the shell, on main");
+  const base = execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
+  writeFileSync(join(dir, "client/src/next/Settings.tsx"), "b\n");
+  writeFileSync(join(dir, "client/src-tauri/src/lib.rs"), "#[cfg(desktop)]\nmod tray;\n#[cfg(any(mobile, test))]\nmod phone_scene;\npub mod gateway;\n");
   writeFileSync(join(dir, "client/src-tauri/src/tray.rs"), "b\n");
-  git("add", "."); git("commit", "-q", "-m", "a page and the tray");
+  git("add", "."); git("commit", "-q", "-m", "a page, the tray and a module both build");
   const script = fileURLToPath(new URL("./ci-scope.mjs", import.meta.url));
   const run = () => {
     const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
@@ -464,4 +466,27 @@ test("in CI: a pull request adding a release's notes runs the simulator, one fix
   const fixed = run(release, rev());
   assert.equal(fixed.simulator, "false");
   assert.match(fixed.said, /The iPhone app in the simulator isn't run: .* gh workflow run ios-simulator\.yml --ref <branch>/);
+});
+
+test("a phone module deleted, or moved off the phone in lib.rs, runs the simulator; a module the desktop gains doesn't", () => {
+  const WAS = LIB;
+  const before = (asked) => (asked === "client/src-tauri/src/lib.rs" ? WAS : "was there");
+  // phone_scene.rs deleted, with its line in lib.rs.
+  const withoutScene = LIB.replace("#[cfg(any(target_os = \"ios\", test))]\nmod phone_scene;\n", "");
+  assert.notEqual(withoutScene, LIB);
+  const now = (files) => shell({ "client/src-tauri/src/lib.rs": withoutScene, ...files });
+  assert(reached(["client/src-tauri/src/phone_scene.rs", "client/src-tauri/src/lib.rs"], { read: now(), before }).includes("simulator"));
+  // The module's file alone, read against lib.rs as it was.
+  assert(reached(["client/src-tauri/src/phone_scene.rs"], { read: now(), before }).includes("simulator"));
+  // lib.rs alone, moving share_window from the phone to the desktop.
+  const moved = LIB.replace("#[cfg(any(mobile, test))]\nmod share_window;", "#[cfg(desktop)]\nmod share_window;");
+  assert.notEqual(moved, LIB);
+  assert(reached(["client/src-tauri/src/lib.rs"], { read: shell({ "client/src-tauri/src/lib.rs": moved }), before }).includes("simulator"));
+  // lib.rs gaining a desktop module, or changing nothing a phone builds: no simulator.
+  const gained = `${LIB}#[cfg(desktop)]\nmod updater_ui;\n`;
+  assert(!reached(["client/src-tauri/src/lib.rs"], { read: shell({ "client/src-tauri/src/lib.rs": gained }), before }).includes("simulator"));
+  assert(!reached(["client/src-tauri/src/lib.rs"], { before }).includes("simulator"));
+  // Git can't say what lib.rs was: it runs. Nothing known of before: what it is now is all there is.
+  assert(reached(["client/src-tauri/src/lib.rs"], { before: () => null }).includes("simulator"));
+  assert(!reached(["client/src-tauri/src/lib.rs"]).includes("simulator"));
 });

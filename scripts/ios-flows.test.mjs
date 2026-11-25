@@ -104,14 +104,26 @@ export function assertVisibleLines(text) {
   return text.split("\n").flatMap((line, i) => (command.test(uncommented(line)) ? [i + 1] : []));
 }
 
-/** A YAML line without its comment: a # at the start or after a space, outside quotes. */
+/**
+ * A YAML line without its comment: a # at the start or after a space,
+ * outside quotes. A quote opens only where a value can start (the line's
+ * start, or after -, :, {, [ or , and spaces), so the apostrophe in
+ * `Don't Allow` isn't one; a backslash escapes in double quotes, and '' is a
+ * quote inside single ones.
+ */
 function uncommented(line) {
   let quote = null;
   for (let i = 0; i < line.length; i++) {
     const c = line[i];
-    if (quote) {
-      if (c === quote && !(quote === '"' && line[i - 1] === "\\")) quote = null;
-    } else if (c === '"' || c === "'") quote = c;
+    if (quote === '"') {
+      if (c === "\\") i++;
+      else if (c === '"') quote = null;
+    } else if (quote === "'") {
+      if (c === "'") {
+        if (line[i + 1] === "'") i++;
+        else quote = null;
+      }
+    } else if ((c === '"' || c === "'") && /(?:^|[-:{[,])\s*$/.test(line.slice(0, i))) quote = c;
     else if (c === "#" && (i === 0 || /\s/.test(line[i - 1]))) return line.slice(0, i);
   }
   return line;
@@ -124,7 +136,9 @@ test("the check for assertVisible finds it at any depth, and not in a comment or
   assert.deepEqual(assertVisibleLines("- repeat:\n    times: 2\n    commands:\n        -   assertVisible: Send\n"), [4]);
   assert.deepEqual(assertVisibleLines("- {assertVisible: Send}\n- tapOn: {text: x, assertVisible: y}\n"), [1, 2]);
   // Quoted keys, and a # inside quotes, which isn't a comment.
-  assert.deepEqual(assertVisibleLines(`- "assertVisible": x\n- 'assertVisible': x\n- {tapOn: "Room #2", assertVisible: y}\n- {tapOn: 'a #b', "assertVisible": y}\n`), [1, 2, 3, 4]);
+  assert.deepEqual(assertVisibleLines(`- "assertVisible": x\n- 'assertVisible': x\n- {tapOn: "Room #2", assertVisible: y}\n- {tapOn: 'a #b', "assertVisible": y}\n- {tapOn: 'it''s #1', assertVisible: y}\n`), [1, 2, 3, 4, 5]);
+  // An apostrophe in a plain value, or an escaped backslash, opens or keeps no quote: the comment after is a comment.
+  assert.deepEqual(assertVisibleLines(`- tapOn: Don't Allow  # never assertVisible: it looks once\n- tapOn: "a\\\\" # assertVisible: no\n`), []);
   assert.deepEqual(assertVisibleLines('# never assertVisible: it looks once\n- extendedWaitUntil:\n    visible: "assertVisible"\n- assertNotVisible: "x"\n- tapOn: "#evenings" # no assertVisible: here\n'), []);
 });
 

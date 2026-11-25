@@ -156,9 +156,27 @@ function simulatorsOwn(path, read, before) {
   if (path.startsWith("client/tests/ios/") || path === ".github/workflows/ios-simulator.yml") return true;
   if (/^scripts\/(https-front\.mjs|share-window-ready\.mjs|test-certs\.sh|app-at-rest\.mjs|maestro-driver\.mjs)$/.test(path)) return true;
   if (!path.startsWith(SHELL)) return false;
+  const inside = path.slice(SHELL.length);
   // The phone's now, or the phone's before this change moved it.
-  if (CAPABILITY.test(path.slice(SHELL.length))) return capabilityReaches(path, read, before).includes("phone");
-  return shellReach(path, read) === "phone";
+  if (CAPABILITY.test(inside)) return capabilityReaches(path, read, before).includes("phone");
+  // lib.rs says which app builds each module: one the phone app built
+  // before or builds now, whose say changed (added, removed, moved), is a
+  // change to the phone app. Git not knowing lib.rs before counts.
+  if (inside === "src/lib.rs") {
+    if (!before) return false;
+    const was = before(path);
+    return was === null || phoneModuleMoved(shellModules(was ?? ""), shellModules(read(path) ?? ""));
+  }
+  // A module's file, by what lib.rs says now and said before: a phone
+  // module deleted or moved to the desktop still counts.
+  const then = before ? (asked) => before(asked) ?? null : null;
+  return shellReach(path, read) === "phone" || (then !== null && shellReach(path, then) === "phone");
+}
+
+/** Whether a module the phone app builds, on one side, is said differently on the other. */
+function phoneModuleMoved(was, now) {
+  return [...new Set([...Object.keys(was), ...Object.keys(now)])]
+    .some((name) => was[name] !== now[name] && (was[name] === "phone" || now[name] === "phone"));
 }
 
 /**
@@ -204,7 +222,9 @@ export function classify(paths, { read = fromDisk, before = null } = {}) {
     }
     else if (path.startsWith("client/tests/browser/")) add("web");
     else if (path.startsWith("client/tests/ios/")) add("ios");
-    else if (/^scripts\/(https-front(\.test)?\.mjs|share-window-ready\.mjs|test-certs\.sh)$/.test(path)) add("ios");
+    else if (/^scripts\/(https-front\.mjs|share-window-ready\.mjs|test-certs\.sh)$/.test(path)) add("ios");
+    // Its test runs by name in the rules job.
+    else if (path === "scripts/https-front.test.mjs") continue;
     else if (path.startsWith("client/")) add("web", "packages", "ios");
     else if (path.startsWith("assets/logo/")) add("web", "packages");
     else if (/^scripts\/(.*audio.*|.*icon.*|windows-update-check\.ps1|video-runtime-probe\.js|fixtures\/tone-h264-aac\.mp4|appimage-.*|bundle-retry(-test)?\.sh)$/.test(path)) add("packages");
@@ -293,7 +313,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     }
     const scope = classify(paths, { before });
     console.log(JSON.stringify({ paths, scope }, null, 2));
-    if (paths.length && !scope.simulator)
+    if (process.env.GITHUB_EVENT_NAME === "pull_request" && paths.length && !scope.simulator)
       console.log("The iPhone app in the simulator isn't run: it runs for what it builds, drives or runs and for a release's pull request, and every night on main. To run it on this branch: gh workflow run ios-simulator.yml --ref <branch>");
     if (process.env.GITHUB_OUTPUT)
       appendFileSync(process.env.GITHUB_OUTPUT, Object.entries(scope).map(([key, value]) => `${key}=${value}\n`).join(""));

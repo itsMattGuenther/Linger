@@ -160,9 +160,10 @@ rewritten for it.
   them; a Mac job skipped while it was a draft isn't one that doesn't apply.
   Push your fixes together, not one at a time: after it's ready, every push
   runs them again. The longest, the iPhone app in the simulator (35 to 60
-  minutes), runs on a pull request only when the phone app's own files
-  changed or it's a release's; the nightly run on `main` runs it for the
-  rest (#955).
+  minutes), runs on a pull request only when it changes what that run
+  builds, drives or runs (the flows, the shell's code and project only a
+  phone builds, its workflow and the scripts that runs) or it's a release's;
+  the nightly run on `main` runs it for the rest (#955).
 - **Before opening a pull request, run `node scripts/pr-questions.mjs`** and
   answer the questions it prints for your change: the kinds of mistake
   reviews have caught, for the parts of the project your branch changed. Say
@@ -311,7 +312,8 @@ file). A file only the desktop app builds doesn't start the iPhone builds
 in `share-window.yml`, a file only the phone app builds doesn't start the
 desktop installers, and a file both build (the page, `lib.rs`,
 `Cargo.toml`) starts both. The iPhone app in the simulator's flows start
-only for the phone app's own files and a release's pull request (#955). A
+only for what that run builds, drives or runs and for a release's pull
+request (#955). A
 draft pull request doesn't start the iPhone runs until it's marked ready
 (#933). The nightly run on main runs everything.
 
