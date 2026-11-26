@@ -9,10 +9,17 @@ extern "C" {
 // then needs nothing from the app.
 void linger_age_check(void (*answer)(int32_t));
 void linger_register_age_check(void (*check)(void (*answer)(int32_t)));
+// The Home Screen icon a person picks (#961): Swift's own
+// (linger-client_iOS/AppIcon.swift), handed over the same way
+// (src-tauri/src/phone_icon.rs).
+void linger_icon_current(int32_t number, void (*answer)(int32_t number, int32_t place));
+void linger_icon_set(int32_t look, int32_t number, void (*answer)(int32_t number, int32_t done));
+void linger_register_icon(void (*current)(int32_t, void (*)(int32_t, int32_t)), void (*set)(int32_t, int32_t, void (*)(int32_t, int32_t)));
 }
 
 int main(int argc, char * argv[]) {
 	linger_register_age_check(linger_age_check);
+	linger_register_icon(linger_icon_current, linger_icon_set);
 	ffi::start_app();
 	return 0;
 }

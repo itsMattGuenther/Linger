@@ -26,7 +26,15 @@ default.
 
 ## How to run a task
 
-**Next release: what its notes owe so far.** Nothing yet.
+**Next release: what its notes owe so far.**
+- **The door is the app icon, and phones pick one of six looks** (#961, SPEC
+  §4.15). The notes say: the icon is the door everywhere now, Settings ›
+  Appearance › App icon picks a look, and on Android the first change closes
+  Linger once (an icon on the home screen takes the new look). Owed after it
+  ships: the TestFlight testers pick each look and say iOS's message showed
+  and the Home Screen changed, and try the Dark and Tinted Home Screen looks;
+  Matt's Pixel through Play internal testing picks a look and back, and turns
+  on Themed icons. Google Play's listing icon goes up in Play Console.
 
 **0.5.5 release, prepared 2026-11-24: phone notifications, and a clearer
 voice on the desktop.** The notes are `docs/releases/0.5.5.md`, and its one
@@ -740,8 +748,9 @@ macOS runners, or a friend's Mac.
   0.5.1 (2026-10-20). Their first reports (2026-10-21 to 23: #686–#689,
   #697, #698, #703, #704) have fixes in TestFlight from 0.5.3, for them to
   confirm. Not reported on yet: the iPhone switching between Wi-Fi and
-  mobile data. The launcher icon is the porch artwork
-  (`scripts/app-icons.mjs`, checked in CI with the desktop icons). Setup is in `docs/development.md`.
+  mobile data. The launcher icon is the door, with five more looks a person
+  picks in Settings (#961, `scripts/app-icons.mjs`, checked in CI with the
+  desktop icons). Setup is in `docs/development.md`.
   Tauri 2 builds for iOS and Android from the same crate. What does not carry
   over: the OS keyring (phones have their own secure storage), the tray, the
   in-app updater (a phone app updates through its store), and, at first,

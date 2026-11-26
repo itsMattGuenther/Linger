@@ -1055,6 +1055,15 @@ it, or another program, runs at the same time.
   mark are one locked step (`OneAsk`, `LocalNetwork.kt`), with a test of
   sixteen threads claiming at once (`OneAskTest.kt`) that fails with the
   lock taken out.
+- **#962: the phone's yes to an older icon change could put the picker
+  back.** `changeIcon` checked for a newer change only when the phone said
+  no, so with two quick changes, the first one's yes showed its look while
+  the second was still on its way. Caught by Greptile. *Missed because*
+  the test of a newer change used a phone that refuses. *Changed:* a yes
+  counts only for the newest change too, and changes go to the phone one at
+  a time, in the order they came, so the newest is also the one the phone
+  ends on. Tests of two changes answered in either order, and of the asks
+  taking turns (`core/appIcon.test.ts`).
 
 ## Counted after the work it limits
 

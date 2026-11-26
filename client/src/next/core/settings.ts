@@ -144,6 +144,7 @@ export const HEADINGS = {
   theme: "Color Theme",
   size: "Interface Size",
   textSize: "Text Size",
+  appIcon: "App Icon",
   names: "Names",
   list: "Your List",
   reactions: "Reactions",

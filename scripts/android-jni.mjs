@@ -56,6 +56,20 @@ export const CROSSINGS = [
     type: "(Landroid/content/Context;)I",
     from: "client/src-tauri/src/phone_age.rs",
   },
+  {
+    // Rust calls it (phone_icon.rs): the look on the home screen (#961).
+    class: "io.github.itsmattguenther.linger.AppIcon",
+    method: "current",
+    type: "(Landroid/content/Context;)I",
+    from: "client/src-tauri/src/phone_icon.rs",
+  },
+  {
+    // Rust calls it (phone_icon.rs): putting a look on the home screen (#961).
+    class: "io.github.itsmattguenther.linger.AppIcon",
+    method: "set",
+    type: "(Landroid/content/Context;I)I",
+    from: "client/src-tauri/src/phone_icon.rs",
+  },
 ];
 
 /**

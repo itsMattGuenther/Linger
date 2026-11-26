@@ -1,6 +1,8 @@
 import { SCALE_OPTIONS, TEXT_SIZE_OPTIONS } from "../../../lib/interface";
+import { type AppIconShell, ICON_LOOKS, type IconLook, keepChoice } from "../../core/appIcon";
 import { HEADINGS } from "../../core/settings";
-import { Select, SettingRow, Switch } from "../../kit";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { Button, Select, SettingRow, Switch } from "../../kit";
 import { Block, Note, Plain } from "./parts";
 
 /** A setting that takes effect at once: its value and how to change it. */
@@ -10,6 +12,16 @@ export interface Live<T> {
 }
 
 export interface AppearanceProps {
+  /**
+   * The phone's home screen icon (#961): the look on it now, how to change
+   * it, and which phone, for the icons' shape and what a change does. Left
+   * out on a computer, and until the phone has said which look it shows.
+   */
+  appIcon?: Live<IconLook> & {
+    phone: AppIconShell["phone"];
+    /** The phone didn't make the last change, said under the looks. */
+    refused?: boolean;
+  };
   /**
    * Interface size, a percentage from `SCALE_OPTIONS` (LOOK-1). Left out on
    * the phone, which has Text size instead (SPEC §4.15), and where the
@@ -73,10 +85,73 @@ function SizePreview() {
   );
 }
 
-/** Appearance: how Linger looks on this computer or phone (LOOK-1, LOOK-2, NAME-4, #197, #690). */
-export function AppearanceSection({ scale, textSize, warmth, plainNames, oneLine, reactions, unsaved = null }: AppearanceProps) {
+/** Each look's picture: what scripts/app-icons.mjs makes the phones' icons from. */
+const PICTURES: Record<IconLook, string> = {
+  door: new URL("./app-icons/door.png", import.meta.url).href,
+  "after-dark": new URL("./app-icons/after-dark.png", import.meta.url).href,
+  "porch-light": new URL("./app-icons/porch-light.png", import.meta.url).href,
+  daylight: new URL("./app-icons/daylight.png", import.meta.url).href,
+  dusk: new URL("./app-icons/dusk.png", import.meta.url).href,
+  original: new URL("./app-icons/original.png", import.meta.url).href,
+};
+
+/**
+ * The home screen icon (#961): each look in the phone's own shape, the one in
+ * use picked to start. Picking only chooses, so arrow keys can look through
+ * them; Use this icon is what changes it, which on Android may close Linger.
+ * Radio buttons underneath, so arrows move between them and a screen reader
+ * hears a group.
+ */
+function IconPicker({ value, onChange, phone, refused, children }: NonNullable<AppearanceProps["appIcon"]> & { children: ReactNode }) {
+  const [picked, setPicked] = useState<IconLook>(value);
+  // The look in use moves the choice with it, unless the person had already
+  // chosen another meanwhile.
+  const shown = useRef(value);
+  useEffect(() => {
+    setPicked((now) => keepChoice(now, shown.current, value));
+    shown.current = value;
+  }, [value]);
   return (
     <>
+      <div className="nx-set-icons" role="radiogroup" aria-label="App icon" data-phone={phone}>
+        {ICON_LOOKS.map((look) => (
+          <label key={look.id} className="nx-set-icon">
+            <input type="radio" className="nx-set-icon-input" name="app-icon" value={look.id} checked={picked === look.id} onChange={() => setPicked(look.id)} />
+            <img className="nx-set-icon-picture" src={PICTURES[look.id]} alt="" draggable={false} />
+            <span className="nx-set-icon-name">{look.name}</span>
+          </label>
+        ))}
+      </div>
+      {children}
+      {/* Only while the picker still shows what was refused: a new choice is a new try. */}
+      {refused && picked === value ? <Note tone="problem">Your phone didn't change the icon.</Note> : null}
+      <div>
+        <Button variant="primary" disabled={picked === value} onClick={() => onChange(picked)}>
+          Use this icon
+        </Button>
+      </div>
+    </>
+  );
+}
+
+/** Appearance: how Linger looks on this computer or phone (LOOK-1, LOOK-2, NAME-4, #197, #690, #961). */
+export function AppearanceSection({ appIcon, scale, textSize, warmth, plainNames, oneLine, reactions, unsaved = null }: AppearanceProps) {
+  return (
+    <>
+      {appIcon ? (
+        <Block heading={HEADINGS.appIcon} lead={appIcon.phone === "iphone" ? "The icon on your Home Screen." : "The icon on your home screen."}>
+          <IconPicker {...appIcon}>
+            {appIcon.phone === "iphone" ? (
+              <Note>Your iPhone confirms each change with a short message.</Note>
+            ) : (
+              <>
+                <Note>The first time you change it, Linger closes, and leaves a call you're in. Open it again from your home screen.</Note>
+                <Note>Or turn on Themed icons in your phone's Wallpaper &amp; style, and the door takes your wallpaper's colors.</Note>
+              </>
+            )}
+          </IconPicker>
+        </Block>
+      ) : null}
       {/* Only when there's something to choose: a heading over nothing would look unfinished. */}
       {warmth ? (
         <Plain>

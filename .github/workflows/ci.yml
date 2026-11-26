@@ -532,6 +532,10 @@ jobs:
         # Asked for without being declared, Android says no at once and shows
         # nothing (#842).
         run: node --test scripts/android-manifest.test.mjs
+      - name: the app icon's looks are listed alike in Rust, Swift, Kotlin, the manifest, the iPhone project and the page
+        # A look crosses from the page by name and to the phone by its place
+        # in the list: one list out of order puts the wrong icon up (#961).
+        run: node --test scripts/app-icons.test.mjs
       - name: check.sh stops on packages installed from another lockfile
         # check.sh tests the installed packages and never installs; after a
         # lockfile change it tested the old ones (#852). CI installs afresh,

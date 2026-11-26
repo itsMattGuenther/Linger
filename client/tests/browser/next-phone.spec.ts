@@ -266,6 +266,81 @@ test("opens Settings over the list, as its sections and then one section, withou
   await expect(page.locator("[data-screen='list']")).toBeVisible();
 });
 
+// The home screen icon (#961): six looks, each in the phone's own shape, the
+// door to start. Outside the app the choice is kept in memory, so it can be
+// picked here; what each phone does with it is its own (AppIcon.swift,
+// AppIcon.kt).
+test.describe("the App icon picker (#961)", () => {
+  async function appearance(page: Page) {
+    await phone(page);
+    await list(page).getByRole("button", { name: "Settings", exact: true }).click();
+    const settings = page.locator(".nx-phone-over [data-screen='settings']");
+    await settings.getByRole("navigation", { name: "Settings" }).getByText("Appearance").click();
+    await expect(settings.locator(".nx-set-title")).toHaveText("Appearance");
+    return settings;
+  }
+
+  const LOOKS = ["The door", "After dark", "Porch light", "Daylight", "Dusk", "The original"];
+
+  test("on Android: six round looks, the door picked, and the first change says Linger closes", async ({ page }) => {
+    const settings = await appearance(page);
+    const icons = settings.getByRole("radiogroup", { name: "App icon" });
+    await expect(icons.getByRole("radio")).toHaveCount(LOOKS.length);
+    for (const look of LOOKS) await expect(icons.getByRole("radio", { name: look, exact: true })).toHaveCount(1);
+    await expect(icons.getByRole("radio", { name: "The door", exact: true })).toBeChecked();
+    await expect(settings.getByText("The first time you change it, Linger closes, and leaves a call you're in. Open it again from your home screen.")).toBeVisible();
+    await expect(settings.getByText(/turn on Themed icons/)).toBeVisible();
+    // Each picture is the phone's shape (round), and there.
+    for (const picture of await icons.locator("img").all()) {
+      expect(await picture.evaluate((img) => getComputedStyle(img).borderRadius)).toBe("999px");
+      expect(await picture.evaluate((img) => (img as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+    }
+    // Picking only chooses: arrow keys can look through them, and nothing
+    // changes until Use this icon, which on Android may close the app.
+    const use = settings.getByRole("button", { name: "Use this icon" });
+    await expect(use).toBeDisabled();
+    await icons.getByRole("radio", { name: "The door", exact: true }).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(icons.getByRole("radio", { name: "After dark", exact: true })).toBeChecked();
+    await icons.getByRole("radio", { name: "Dusk", exact: true }).check();
+    await expect(icons.getByRole("radio", { name: "Dusk", exact: true })).toBeChecked();
+    await expect(use).toBeEnabled();
+    await use.click();
+    // Changed: Dusk is the one in use, so there's nothing left to use.
+    await expect(icons.getByRole("radio", { name: "Dusk", exact: true })).toBeChecked();
+    await expect(use).toBeDisabled();
+    // Settings closed and opened again asks the phone, which has Dusk now.
+    await settings.getByRole("button", { name: "Back to Settings" }).click();
+    await settings.getByRole("button", { name: "Back", exact: true }).click();
+    await expect(page.locator(".nx-phone-over")).toHaveCount(0);
+    await list(page).getByRole("button", { name: "Settings", exact: true }).click();
+    const again = page.locator(".nx-phone-over [data-screen='settings']");
+    await again.getByRole("navigation", { name: "Settings" }).getByText("Appearance").click();
+    await expect(again.getByRole("radiogroup", { name: "App icon" }).getByRole("radio", { name: "Dusk", exact: true })).toBeChecked();
+  });
+
+  test.describe("on an iPhone", () => {
+    test.use({ userAgent: IPHONE });
+
+    test("six rounded-square looks, and the iPhone says each change itself", async ({ page }) => {
+      const settings = await appearance(page);
+      const icons = settings.getByRole("radiogroup", { name: "App icon" });
+      await expect(icons.getByRole("radio")).toHaveCount(LOOKS.length);
+      await expect(settings.getByText("The icon on your Home Screen.")).toBeVisible();
+      await expect(settings.getByText("Your iPhone confirms each change with a short message.")).toBeVisible();
+      await expect(settings.getByText(/Linger closes/)).toHaveCount(0);
+      // The iPhone's rounded square, not Android's circle. WebKit says 22.370001%.
+      const corner = await icons.locator("img").first().evaluate((img) => getComputedStyle(img).borderRadius);
+      expect(corner).toMatch(/%$/);
+      expect(Number.parseFloat(corner)).toBeCloseTo(22.37, 2);
+      await icons.getByRole("radio", { name: "Porch light", exact: true }).check();
+      await settings.getByRole("button", { name: "Use this icon" }).click();
+      await expect(icons.getByRole("radio", { name: "Porch light", exact: true })).toBeChecked();
+      await expect(settings.getByRole("button", { name: "Use this icon" })).toBeDisabled();
+    });
+  });
+});
+
 test("Account & App says which version this is, under This Phone, and never looks for an update", async ({ page }) => {
   await phone(page);
   await list(page).getByRole("button", { name: "Settings", exact: true }).click();

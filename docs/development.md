@@ -413,24 +413,36 @@ in the message box wants it.
 
 ## Icons and Windows packaging
 
-The desktop icon comes from the friend group's selected
-[porch artwork](<../assets/logo/Linger Pixel Porch Icon Set FINAL.png>).
-To regenerate the PNG, Windows ICO and macOS ICNS files after changing that
-source, run `node scripts/app-icons.mjs` from the repository root after
-`pnpm install` in `client`. It uses the pinned Tauri CLI and adds transparent
-padding to make the source square, without cropping or stretching the artwork.
-The same script writes the phone app's Android launcher icons into
-`client/src-tauri/gen/android/app/src/main/res`: the artwork over the window's
-color (`--night-2`), which Android cuts to the phone's own icon shape. The
-iPhone's icons come from a
-[square version](<../assets/logo/Linger Pixel Porch Icon Square.png>) of the
-same scene (#691): the iPhone cuts every icon to its own rounded square, and the
-round picture would sit inside it as a circle. The square is the round picture
-with its frame taken off and the scene carried on into the corners; edit it as
-artwork, don't remake it by cropping the round one, which cuts off the lamp, the
-plant pot and the cat.
+Every app icon is the door with its light on (#961), drawn by
+`node scripts/app-icons.mjs` with the shapes of `assets/logo/linger-door.svg`;
+run it from the repository root after `pnpm install` in `client`, after
+changing the artwork or the looks. It has the pinned Tauri CLI make the
+computer apps' PNG, Windows ICO and macOS ICNS files (the door in a rounded
+square), and the phones':
+
+- **Android**, into `client/src-tauri/gen/android/app/src/main/res`: a
+  launcher icon per look in `scripts/app-icon-looks.mjs`, in layers (the
+  ground, the door, and the one-color door Android colors to the wallpaper
+  when Themed icons is on), with a flat one for Android 7, which has no
+  layers. The manifest has a launcher entry per look, and one is on
+  (`AppIcon.kt`).
+- **The iPhone**, into `client/src-tauri/gen/apple/Assets.xcassets`: an icon
+  set per look, one 1024-pixel picture each, from which Xcode makes the
+  sizes. The door's has the Dark and Tinted versions iOS shows when a person
+  picks those for their Home Screen; the others are alternate icons
+  (`ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES`, `AppIcon.swift`).
+- **The picker** in Settings › Appearance: a small picture of each look, in
+  `client/src/next/app/settings/app-icons`.
+
+"The original" look is the pixel porch the app started with: the
+[round artwork](<../assets/logo/Linger Pixel Porch Icon Set FINAL.png>) on
+Android, and on the iPhone its
+[square version](<../assets/logo/Linger Pixel Porch Icon Square.png>) (#691),
+the round picture with its frame taken off and the scene carried on into the
+corners. A new look goes in `scripts/app-icon-looks.mjs` and the script's
+artwork, then in each list `scripts/app-icons.test.mjs` names.
 Use `node scripts/app-icons.mjs --check` to verify the committed files without
-changing them. The [desktop icon audit](app-icon-checks.md) explains the
+changing them. The [app icon audit](app-icon-checks.md) explains the
 package checks and remaining visual checks. Packaging changes run an unsigned
 Linux/Windows test build; these artifacts do not ship an update. Published
 v0.2.0 includes the porch icon; older v0.1.0 downloads have the previous icon.
@@ -490,8 +502,8 @@ with the same App Group ("Phone notifications on an iPhone", below). Anything th
 `Library/Caches` is marked to stay out of iCloud backups (SPEC §4.15), as the
 extension marks its folder (#792); on Android, `allowBackup="false"` covers
 it.
-`scripts/app-icons.mjs` writes the iPhone's icons too, from the square version
-of the porch artwork ("Icons and Windows packaging" above).
+`scripts/app-icons.mjs` writes the iPhone's icon sets too, the door's and
+the five other looks' ("Icons and Windows packaging" above).
 
 1. Install [Android Studio](https://developer.android.com/studio) (Arch: `yay
    -S android-studio`) and run its setup once (Standard). Then, in **SDK

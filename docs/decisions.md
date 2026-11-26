@@ -2359,3 +2359,31 @@ submission (it carries 0.5.5; the age decision, #953, has its own section).
 - **Every country but mainland China**, which needs government filings, and
   not on Macs or Vision Pro: the iPhone app is for phones, and the desktop
   app is the computer's.
+## Decided: the door is the app icon, and phones pick a look (#961)
+
+**Matt, 2026-11-26**, after mockups of the door as the app icon and of a
+picker for it. The door with its light on replaces the pixel porch as the
+app's icon everywhere: the computer apps, the iPhone and Android. One mark
+on the phone, the website and anything else is what makes it Linger's.
+
+- **The phones get a picker**, in Settings › Appearance: The door, After
+  dark, Porch light, Daylight, Dusk, and The original (the porch, kept for
+  whoever misses it). Each shows in the phone's own shape. The choice stays
+  on the phone.
+- **The phones' own looks come for free.** The iPhone's icon has the Dark
+  and Tinted versions iOS shows when a person picks those for their whole
+  Home Screen, and every Android look has the one-color layer Android colors
+  to the wallpaper when Themed icons is on. Daylight and Dusk are those
+  looks in fixed colors, for a person who wants them for Linger alone.
+- **Android does it the usual way**: a launcher entry per look, with one
+  on. Matt asked for it there too, after the first answer
+  leaned against it, and a restart is fine as long as the app says so. Android
+  ends an app when its first launcher entry is turned off, so the first
+  change away from the door closes Linger once, and the picker says so
+  beforehand; every change after that happens with Linger open. Checked in the
+  Android 17 emulator: an icon already on the home screen takes the new look
+  in place, and updating from 0.5.6's app keeps an icon on the home screen
+  or in the dock where it was, showing the door. Other phone makers'
+  launchers are untested.
+- **The App Store listing's icon is the app's own**, so it changes with the
+  next release. Google Play's listing icon is uploaded in Play Console.

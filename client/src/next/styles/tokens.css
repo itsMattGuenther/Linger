@@ -304,6 +304,8 @@
   --radius-lg: 10px;
   --radius-xl: 12px;
   --radius-pill: 999px;
+  /* An app icon as an iPhone cuts it (#961); Android's round one is --radius-pill. */
+  --radius-app-icon: 22.37%;
 
   /* Shadows: windows and floating things only. Never on a row or a control. */
   --shadow-window:

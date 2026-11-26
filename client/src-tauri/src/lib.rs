@@ -34,6 +34,9 @@ pub mod packaging;
 // how the page is told here too.
 #[cfg(any(mobile, test))]
 mod phone_age;
+// The Home Screen icon a person picks (#961). Tests read the looks here too.
+#[cfg(any(mobile, test))]
+mod phone_icon;
 // The iPhone's folders marked "don't back up" (#790). Tests read which ones here too.
 #[cfg(any(target_os = "ios", test))]
 mod phone_backup;
@@ -633,6 +636,8 @@ fn phone_app() -> tauri::Builder<tauri::Wry> {
             deep_link::link_offered,
             graphics::graphics_started,
             phone_age::phone_age_check,
+            phone_icon::phone_icon,
+            phone_icon::phone_icon_set,
             phone_call::phone_call_bar,
             phone_network::phone_local_network,
             phone_push::push_permission,

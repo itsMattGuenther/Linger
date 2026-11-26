@@ -47,6 +47,7 @@ import type { Following } from "../../core/mirror";
 import { inOrder, loadServerPrefs, prefsFrom, type ServerPrefs } from "../../core/serverPrefs";
 import { moveShown } from "../../core/servers";
 import { NOTIFY, type NotifyQuestion, type Outcome, PASSWORD, type PasswordQuestion, SERVER_PREFS, type ServerPrefsMessage } from "../../core/share";
+import { type AppIconShell, changeIcon, type IconLook } from "../../core/appIcon";
 import { CHIMES, type SettingsKey, settingsKeys } from "../../core/settings";
 import { presenceOf } from "../../core/chat/conversation";
 import { Button, Spinner } from "../../kit";
@@ -104,6 +105,8 @@ export interface SettingsHolder {
   server?: string;
   /** The phone app: no Windows, no microphones and no updates, and Notifications are the phone's (SPEC §4.15, #830). */
   phone: boolean;
+  /** The phone's home screen icon (#961): only the phone app has one to pick. */
+  appIcon?: AppIconShell;
 }
 
 /** Listen on the shell's events, and answer how to stop even before the listening has started. */
@@ -326,6 +329,25 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
   const [hideReactions, setHideReactions] = useState<boolean>(loadHideReactions);
   const [scale, setScale] = useState<number>(loadScale);
   const [textSize, setTextSize] = useState<number>(loadTextSize);
+  // The look on the phone's home screen (#961): the phone says which, and
+  // the picker shows once it has.
+  const appIcon = holder.appIcon;
+  const [icon, setIcon] = useState<IconLook | null>(null);
+  const [iconRefused, setIconRefused] = useState(false);
+  // Which change is the latest, so a slow one that failed puts back only its
+  // own, and none lands after Settings has closed.
+  const iconChange = useRef(0);
+  useEffect(() => {
+    if (!appIcon) return;
+    let live = true;
+    void appIcon.current().then((look) => {
+      if (live) setIcon(look);
+    });
+    return () => {
+      live = false;
+      iconChange.current++;
+    };
+  }, [appIcon]);
   // An Appearance choice storage refuses isn't made: the setting stays as it
   // was, and Settings says so under it (#782). One that saves goes to every window.
   const [unsaved, setUnsaved] = useState<AppearanceChoice | null>(null);
@@ -579,6 +601,28 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
         openGuide: host ? () => openExternal(HOST_UPDATE_GUIDE_URL) : undefined,
       }}
       appearance={{
+        appIcon:
+          appIcon && icon
+            ? {
+                value: icon,
+                phone: appIcon.phone,
+                // Shown at once; a phone that didn't change it goes back to
+                // the one it shows, unless another change came since
+                // (changeIcon). The first on Android closes the app before
+                // it answers.
+                onChange: (look) => {
+                  const change = ++iconChange.current;
+                  setIcon(look);
+                  setIconRefused(false);
+                  void changeIcon(appIcon, look, () => change === iconChange.current).then((answer) => {
+                    if (!answer) return;
+                    setIcon(answer.look);
+                    setIconRefused(answer.refused);
+                  });
+                },
+                refused: iconRefused,
+              }
+            : undefined,
         // A phone's window can't zoom, so it has Text size instead (SPEC §4.15).
         scale: phone
           ? undefined

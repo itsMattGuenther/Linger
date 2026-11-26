@@ -1,16 +1,25 @@
-# Desktop icon audit
+# App icon audit
 
-The approved artwork is `assets/logo/Linger Pixel Porch Icon Set FINAL.png`.
-Do not replace it or stretch it to a square. `scripts/app-icons.mjs` pads it
-transparently and generates the desktop formats with the pinned Tauri CLI.
+The approved artwork is the door with its light on (#961, 2026-11-26), the
+shapes of `assets/logo/linger-door.svg`, on its night ground.
+`scripts/app-icons.mjs` draws every icon from it and has the pinned Tauri CLI
+make each platform's formats: the computer apps' (the door in a rounded
+square), Android's launcher icons in layers, and the iPhone's icon sets. The
+phones carry six looks a person can pick in Settings, listed in
+`scripts/app-icon-looks.mjs`, whose test (`scripts/app-icons.test.mjs`) checks
+the Rust, Swift, Kotlin, manifest, Xcode project and page lists agree with it.
 
-The iPhone's icons come from `assets/logo/Linger Pixel Porch Icon Square.png`
-instead (#691), because the iPhone cuts every icon to a rounded square. It is
-the round artwork, pixel for pixel, inside the round frame; the frame is gone,
-and the corners carry on the wall, siding, steps and floor with pixels copied
-from the artwork itself, so it has no colors of its own. The script refuses a
-square file that isn't square or has see-through pixels, and `--check`
-compares the 18 iPhone icons with it pixel by pixel.
+"The original" look is the pixel porch the app had before: the round artwork,
+`assets/logo/Linger Pixel Porch Icon Set FINAL.png`, on Android, and its
+square version, `assets/logo/Linger Pixel Porch Icon Square.png` (#691), on
+the iPhone and in the picker. `--check` compares the PNGs the CLI makes with
+the committed ones by their pixels, each value within two steps, since zlib
+versions pack the same picture differently and another machine's CLI draws
+the vector artwork's edges a step apart (`scripts/app-icons-png.mjs`).
+Making them is exact, so a change to the artwork of a step or two still
+lands. It fails on a file the porch icons left behind.
+
+The findings below are from the porch icons, kept for the checks they set up.
 
 ## Finding, 2026-09-17
 
