@@ -59,6 +59,8 @@ const COMMANDS: &[&str] = &[
     "phone_voice_ended",
     "phone_text_scale",
     "phone_age_check",
+    "phone_icon",
+    "phone_icon_set",
     "phone_save",
     "push_permission",
     "push_address",

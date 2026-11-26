@@ -48,9 +48,10 @@
             android:label="@string/main_activity_title"
             android:name=".MainActivity"
             android:exported="true">
+            <!-- The phone's launcher opens it through an entry below, one
+                 per look of the icon (#961); this stays for Android TV. -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
                 <!-- AndroidTV support -->
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
@@ -90,6 +91,98 @@
                 <data android:mimeType="application/*" />
             </intent-filter>
         </activity>
+
+        <!-- The home screen icon (#961, SPEC §4.15): a launcher entry per look,
+             in the order of scripts/app-icon-looks.mjs, and one on. Only the
+             door's first is on here: Android ends the app when an entry on
+             here is turned off, so that happens once, and the door comes
+             back through its second entry, last (AppIcon.kt).
+             scripts/app-icons.mjs makes the icons. -->
+        <activity-alias
+            android:name=".IconDoor"
+            android:targetActivity=".MainActivity"
+            android:icon="@mipmap/ic_launcher"
+            android:label="@string/main_activity_title"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconAfterDark"
+            android:targetActivity=".MainActivity"
+            android:icon="@mipmap/ic_launcher_after_dark"
+            android:label="@string/main_activity_title"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconPorchLight"
+            android:targetActivity=".MainActivity"
+            android:icon="@mipmap/ic_launcher_porch_light"
+            android:label="@string/main_activity_title"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconDaylight"
+            android:targetActivity=".MainActivity"
+            android:icon="@mipmap/ic_launcher_daylight"
+            android:label="@string/main_activity_title"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconDusk"
+            android:targetActivity=".MainActivity"
+            android:icon="@mipmap/ic_launcher_dusk"
+            android:label="@string/main_activity_title"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".IconOriginal"
+            android:targetActivity=".MainActivity"
+            android:icon="@mipmap/ic_launcher_original"
+            android:label="@string/main_activity_title"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".IconDoorAgain"
+            android:targetActivity=".MainActivity"
+            android:icon="@mipmap/ic_launcher"
+            android:label="@string/main_activity_title"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
 
         <!-- The call bar (#429): runs only while in voice, and goes when
              the app is swiped away, since the call lived in its page. -->

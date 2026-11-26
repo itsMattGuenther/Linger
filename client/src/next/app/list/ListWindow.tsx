@@ -93,6 +93,7 @@ import {
 import { desktopOf, firstTimeInTray, loadCloseList, placeWords, trayNotice, type VoicePlace } from "../../core/closing";
 import { cardSafety } from "../../core/safety";
 import { BACKGROUND_GRACE_MS, onIPhone, onPhone, thisDevice, watchBackground, watchNetwork } from "../../core/phone";
+import { appIconShell, memoryIconShell } from "../../core/appIcon";
 import { type SettingsKey, settingsKeys } from "../../core/settings";
 import { Settings, type SettingsAsked, type SettingsHolder } from "../settings/SettingsWindow";
 import { useBackButton } from "../useBackButton";
@@ -142,6 +143,12 @@ import { myScreen, sharersIn, shareStoppedWords, watchersOf, watchingWords } fro
 import { hearBlackShares, startSharingHere, stopSharingEverywhere } from "../../core/screenStop";
 import { ApiError, PublicApi, TransportError } from "../../../lib/api";
 import type { User } from "../../../generated/User";
+
+/**
+ * The phone's home screen icon (#961), for Settings: the shell's in the app,
+ * kept in memory on a test page in a browser. A computer has none.
+ */
+const PHONE_ICON = onPhone() ? (isTauri() ? appIconShell : memoryIconShell)(onIPhone() ? "iphone" : "android") : undefined;
 
 /** The tabs beside the list and their order, on this computer (docs/design/architecture.md, "Remembering"). */
 const TABS_KEY = "linger.next.tabs";
@@ -909,6 +916,7 @@ function Servers({
       section: phoneSettings?.section,
       server: phoneSettings?.server,
       phone: true,
+      appIcon: PHONE_ICON,
     }),
     [intendHere, phoneSettings?.section, phoneSettings?.server],
   );

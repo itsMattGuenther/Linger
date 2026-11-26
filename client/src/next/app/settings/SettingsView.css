@@ -363,6 +363,66 @@
 }
 
 /* Appearance: the size preview beside its box. */
+/* The home screen icon's looks (#961): each in the phone's own shape, the
+   one in use ringed in the accent, the way a picked choice is. */
+.nx-set-icons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4) var(--space-2-5);
+}
+
+.nx-set-icon {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  cursor: pointer;
+}
+
+/* Still the radio button a screen reader and the arrow keys use, over the whole choice. */
+.nx-set-icon-input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.nx-set-icon-picture {
+  width: calc(var(--space-8) * 2);
+  height: calc(var(--space-8) * 2);
+  border-radius: 22.37%;
+  box-shadow: 0 0 0 1px var(--hairline);
+}
+
+.nx-set-icons[data-phone="android"] .nx-set-icon-picture {
+  border-radius: 50%;
+}
+
+.nx-set-icon:has(.nx-set-icon-input:checked) .nx-set-icon-picture {
+  box-shadow:
+    0 0 0 var(--space-0-5) var(--surface-window),
+    0 0 0 var(--space-1) var(--accent);
+}
+
+.nx-set-icon:has(.nx-set-icon-input:focus-visible) .nx-set-icon-picture {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: var(--space-1-5);
+}
+
+.nx-set-icon-name {
+  color: var(--text-muted);
+  font-size: var(--text-meta);
+  line-height: var(--leading-body);
+  text-align: center;
+}
+
+.nx-set-icon:has(.nx-set-icon-input:checked) .nx-set-icon-name {
+  color: var(--text-primary);
+}
+
 .nx-set-size {
   display: flex;
   flex-wrap: wrap;

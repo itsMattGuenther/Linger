@@ -20,7 +20,7 @@ const RELEASED = read("scripts/fixtures/dexdump-0.5.4.txt");
 /**
  * The same, with `update` where a release build that kept it has it, and the
  * crossings added since 0.5.4 (PushBridge #830, LocalNetwork #842, AgeCheck
- * #953): a build that kept everything Rust calls today.
+ * #953, AppIcon #961): a build that kept everything Rust calls today.
  */
 const KEPT = RELEASED.replace(
   /(Class descriptor\s*: 'Lio\/github\/itsmattguenther\/linger\/VoiceCallService;'[\s\S]*?Direct methods\s*-\n)/,
@@ -47,6 +47,18 @@ Class #11           -
     #0              : (in Lio/github/itsmattguenther/linger/AgeCheck;)
       name          : 'ask'
       type          : '(Landroid/content/Context;)I'
+      access        : 0x0019 (PUBLIC STATIC FINAL)
+  Virtual methods   -
+Class #12           -
+  Class descriptor  : 'Lio/github/itsmattguenther/linger/AppIcon;'
+  Direct methods    -
+    #0              : (in Lio/github/itsmattguenther/linger/AppIcon;)
+      name          : 'current'
+      type          : '(Landroid/content/Context;)I'
+      access        : 0x0019 (PUBLIC STATIC FINAL)
+    #1              : (in Lio/github/itsmattguenther/linger/AppIcon;)
+      name          : 'set'
+      type          : '(Landroid/content/Context;I)I'
       access        : 0x0019 (PUBLIC STATIC FINAL)
   Virtual methods   -
 `;

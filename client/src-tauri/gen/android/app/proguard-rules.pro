@@ -42,3 +42,8 @@
 # through JNI (src-tauri/src/phone_age.rs). scripts/android-jni.mjs checks a
 # release build keeps it.
 -keep class io.github.itsmattguenther.linger.AgeCheck { *; }
+
+# The home screen icon (#961): Rust calls AppIcon.current and AppIcon.set by
+# their Java names, through JNI (src-tauri/src/phone_icon.rs).
+# scripts/android-jni.mjs checks a release build keeps them.
+-keep class io.github.itsmattguenther.linger.AppIcon { *; }

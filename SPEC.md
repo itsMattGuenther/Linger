@@ -1221,6 +1221,22 @@ sideways, and an iPhone would zoom in by itself on the message box. A photo
 opened from a message zooms on its own instead, as a phone's photo viewer does:
 pinched, dragged, and double-tapped in and out.
 
+**Its icon** (#961, Matt, 2026-11-26) is the door with its light on, as on a
+computer, in place of the pixel porch it started with. Settings › Appearance ›
+App icon picks one of six looks for the home screen, each in the phone's own
+shape: The door, After dark, Porch light, Daylight, Dusk, and The original (the
+porch). The choice stays on the phone, which is what knows its icon. On an
+iPhone they're Apple's alternate icons, and iOS says each change in a message
+of its own; the door also has the Dark and Tinted versions iOS shows when the
+person picks those for their whole Home Screen. On Android each look is a
+launcher entry of its own, with one on, the way apps that change their icon do
+it there. Android ends an app when its first launcher entry is turned off, so
+the first change away from the door closes Linger, which the picker says
+beforehand; every change after that happens with Linger open. On the
+launchers tried so far, an icon already on the home screen takes the new look
+in place. Every look has the one-color
+layer Android colors to the wallpaper when the person turns on Themed icons.
+
 **Share to Linger from the phone's share sheet** (#785, #820). Linger appears
 in the phone's own share sheet for pictures, videos and files, the way each
 phone's messaging apps do there:

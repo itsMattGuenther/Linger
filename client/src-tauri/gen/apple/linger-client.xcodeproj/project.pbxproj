@@ -13,6 +13,7 @@
 		729C2A9DFFFB4295CF78A4E2 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AE705E4EC85B45B9E7500E7E /* LaunchScreen.storyboard */; };
 		8764638F0DA3D485CE2320FC /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9D3EBA43367D79352D60B3FF /* Metal.framework */; };
 		A6E1C0DE0953A6E1C0DE0002 /* AgeCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6E1C0DE0953A6E1C0DE0001 /* AgeCheck.swift */; };
+		D0012ED0961AD0012ED00002 /* AppIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0012ED0961AD0012ED00001 /* AppIcon.swift */; };
 		A6E1C0DE0953A6E1C0DE0004 /* DeclaredAgeRange.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A6E1C0DE0953A6E1C0DE0003 /* DeclaredAgeRange.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		A14031F750EEB638A2CAC97F /* main.mm in Sources */ = {isa = PBXBuildFile; fileRef = 1BC9B8D865020091F3C3B5F0 /* main.mm */; };
 		B2170E33D4D441A9524F0545 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = C08B70DAF7297FD94820976B /* assets */; };
@@ -77,6 +78,7 @@
 		16F899AE6D227E8412E2C458 /* main.rs */ = {isa = PBXFileReference; path = main.rs; sourceTree = "<group>"; };
 		19D92E253E3403136AC777B9 /* audio.rs */ = {isa = PBXFileReference; path = audio.rs; sourceTree = "<group>"; };
 		A6E1C0DE0953A6E1C0DE0001 /* AgeCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgeCheck.swift; sourceTree = "<group>"; };
+		D0012ED0961AD0012ED00001 /* AppIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIcon.swift; sourceTree = "<group>"; };
 		A6E1C0DE0953A6E1C0DE0003 /* DeclaredAgeRange.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = DeclaredAgeRange.framework; path = System/Library/Frameworks/DeclaredAgeRange.framework; sourceTree = SDKROOT; };
 		1BC9B8D865020091F3C3B5F0 /* main.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = main.mm; sourceTree = "<group>"; };
 		20BB3990A47FD9203959B7C2 /* notifications.rs */ = {isa = PBXFileReference; path = notifications.rs; sourceTree = "<group>"; };
@@ -239,6 +241,7 @@
 			isa = PBXGroup;
 			children = (
 				A6E1C0DE0953A6E1C0DE0001 /* AgeCheck.swift */,
+				D0012ED0961AD0012ED00001 /* AppIcon.swift */,
 				8E411DBF608BE5A22A2F0A9A /* Info.plist */,
 				FFF7964A17D426FD29114A57 /* linger-client_iOS.entitlements */,
 				F0BE2F6E3B8751E90FAD89C2 /* PrivacyInfo.xcprivacy */,
@@ -577,6 +580,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A6E1C0DE0953A6E1C0DE0002 /* AgeCheck.swift in Sources */,
+				D0012ED0961AD0012ED00002 /* AppIcon.swift in Sources */,
 				A14031F750EEB638A2CAC97F /* main.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -691,6 +695,7 @@
 					arm64,
 				);
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-AfterDark AppIcon-PorchLight AppIcon-Daylight AppIcon-Dusk AppIcon-Original";
 				CODE_SIGN_ENTITLEMENTS = "linger-client_iOS/linger-client_iOS.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				ENABLE_BITCODE = NO;
@@ -722,6 +727,7 @@
 					arm64,
 				);
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-AfterDark AppIcon-PorchLight AppIcon-Daylight AppIcon-Dusk AppIcon-Original";
 				CODE_SIGN_ENTITLEMENTS = "linger-client_iOS/linger-client_iOS.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				ENABLE_BITCODE = NO;
