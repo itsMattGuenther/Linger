@@ -4,12 +4,14 @@
 // wrong icon on somebody's home screen. Each is checked against
 // scripts/app-icon-looks.mjs here.
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { LOOKS } from "./app-icon-looks.mjs";
+import { alike, compare, png, PNG_SIGNATURE } from "./app-icons-png.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path) => readFileSync(join(ROOT, path), "utf8");
@@ -99,4 +101,40 @@ test("the page offers the same looks, by the same names, with a picture each", (
   const offered = [...page.matchAll(/\{ id: "([^"]+)", name: "([^"]+)" \}/g)].map((match) => [match[1], match[2]]);
   assert.deepEqual(offered, LOOKS.map((look) => [look.id, look.name]));
   for (const look of LOOKS) assert.ok(existsSync(join(ROOT, `client/src/next/app/settings/app-icons/${look.id}.png`)), look.id);
+});
+
+test("the icon check allows another machine's two steps, and no more (#961)", () => {
+  const picture = (values, extra = {}) => ({ width: 2, height: 1, channels: 3, keyed: false, pixels: Buffer.from(values), ...extra });
+  const committed = picture([10, 20, 30, 40, 50, 60]);
+  assert.equal(compare(picture([10, 20, 30, 40, 50, 60]), committed).same, true);
+  assert.equal(compare(picture([12, 18, 30, 41, 50, 60]), committed).same, true, "two steps is another machine");
+  const three = compare(picture([13, 20, 30, 40, 50, 60]), committed);
+  assert.equal(three.same, false, "three steps is a change");
+  assert.match(three.how, /1 of 6 values differ, by up to 3/);
+  assert.equal(compare(picture([11, 20, 30, 40, 50, 60]), committed, 0).same, false, "making them is exact");
+  const keyed = compare(picture([10, 20, 30, 40, 50, 60], { keyed: true }), committed);
+  assert.equal(keyed.same, false);
+  assert.match(keyed.how, /committed 2x1, 3 channels, made 2x1, 3 channels, keyed transparency/);
+  assert.equal(compare(picture([10, 20, 30, 40, 50, 60, 70, 80], { channels: 4 }), committed).same, false);
+});
+
+test("a committed PNG the check can't read isn't the same, and doesn't stop it (#961)", () => {
+  const folder = mkdtempSync(join(tmpdir(), "linger-icon-test-"));
+  try {
+    const made = join(folder, "made.png");
+    const committed = join(folder, "committed.png");
+    writeFileSync(made, png(1, 1, 3, Buffer.from([1, 2, 3])));
+    // A palette PNG, as an optimizer might save one: color type 3.
+    const palette = Buffer.from(png(1, 1, 3, Buffer.from([1, 2, 3])));
+    palette[PNG_SIGNATURE.length + 8 + 9] = 3;
+    writeFileSync(committed, palette);
+    const there = alike(made, committed);
+    assert.equal(there.same, false);
+    assert.notEqual(there.how, "");
+    writeFileSync(committed, png(1, 1, 3, Buffer.from([2, 3, 4])));
+    assert.equal(alike(made, committed).same, true);
+    assert.equal(alike(made, committed, 0).same, false);
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
 });
