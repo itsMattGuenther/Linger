@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
+import { oneAtATime } from "./shareWindow";
+
 /**
  * The home screen icon a person picks on a phone (#961, SPEC §4.15), in
  * Settings › Appearance: the door with its light on, which the app has to
@@ -42,25 +44,34 @@ export interface AppIconShell {
 
 type Call = (command: string, args?: Record<string, unknown>) => Promise<unknown>;
 
-/** The phone app's own (src-tauri/src/phone_icon.rs). Anything it can't answer is the door, unchanged. */
+/**
+ * The phone app's own (src-tauri/src/phone_icon.rs). Anything it can't
+ * answer is the door, unchanged. Its asks go one at a time, in the order they
+ * came: on Android each runs on a thread of its own, and two changes at once
+ * could finish the other way round, leaving the phone on the older look while
+ * the picker shows the newer.
+ */
 export function appIconShell(phone: AppIconShell["phone"], call: Call = invoke): AppIconShell {
+  const inTurn = oneAtATime();
   return {
     phone,
-    current: async () => {
-      try {
-        const look = await call("phone_icon");
-        return isIconLook(look) ? look : DEFAULT_LOOK;
-      } catch {
-        return DEFAULT_LOOK;
-      }
-    },
-    set: async (look) => {
-      try {
-        return (await call("phone_icon_set", { look })) === true;
-      } catch {
-        return false;
-      }
-    },
+    current: () =>
+      inTurn(async () => {
+        try {
+          const look = await call("phone_icon");
+          return isIconLook(look) ? look : DEFAULT_LOOK;
+        } catch {
+          return DEFAULT_LOOK;
+        }
+      }),
+    set: (look) =>
+      inTurn(async () => {
+        try {
+          return (await call("phone_icon_set", { look })) === true;
+        } catch {
+          return false;
+        }
+      }),
   };
 }
 
