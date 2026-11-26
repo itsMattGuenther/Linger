@@ -1,7 +1,7 @@
 import { SCALE_OPTIONS, TEXT_SIZE_OPTIONS } from "../../../lib/interface";
 import { type AppIconShell, ICON_LOOKS, type IconLook } from "../../core/appIcon";
 import { HEADINGS } from "../../core/settings";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Button, Select, SettingRow, Switch } from "../../kit";
 import { Block, Note, Plain } from "./parts";
 
@@ -17,7 +17,11 @@ export interface AppearanceProps {
    * it, and which phone, for the icons' shape and what a change does. Left
    * out on a computer, and until the phone has said which look it shows.
    */
-  appIcon?: Live<IconLook> & { phone: AppIconShell["phone"] };
+  appIcon?: Live<IconLook> & {
+    phone: AppIconShell["phone"];
+    /** The phone didn't make the last change, said under the looks. */
+    refused?: boolean;
+  };
   /**
    * Interface size, a percentage from `SCALE_OPTIONS` (LOOK-1). Left out on
    * the phone, which has Text size instead (SPEC §4.15), and where the
@@ -98,10 +102,15 @@ const PICTURES: Record<IconLook, string> = {
  * Radio buttons underneath, so arrows move between them and a screen reader
  * hears a group.
  */
-function IconPicker({ value, onChange, phone, children }: NonNullable<AppearanceProps["appIcon"]> & { children: ReactNode }) {
+function IconPicker({ value, onChange, phone, refused, children }: NonNullable<AppearanceProps["appIcon"]> & { children: ReactNode }) {
   const [picked, setPicked] = useState<IconLook>(value);
-  // The phone's own answer wins: after a change, or one it didn't make.
-  useEffect(() => setPicked(value), [value]);
+  // The look in use moves the choice with it, unless the person had already
+  // chosen another meanwhile.
+  const shown = useRef(value);
+  useEffect(() => {
+    setPicked((now) => (now === shown.current ? value : now));
+    shown.current = value;
+  }, [value]);
   return (
     <>
       <div className="nx-set-icons" role="radiogroup" aria-label="App icon" data-phone={phone}>
@@ -114,6 +123,7 @@ function IconPicker({ value, onChange, phone, children }: NonNullable<Appearance
         ))}
       </div>
       {children}
+      {refused ? <Note tone="problem">Your phone didn't change the icon.</Note> : null}
       <div>
         <Button variant="primary" disabled={picked === value} onClick={() => onChange(picked)}>
           Use this icon

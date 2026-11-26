@@ -309,10 +309,14 @@ test.describe("the App icon picker (#961)", () => {
     // Changed: Dusk is the one in use, so there's nothing left to use.
     await expect(icons.getByRole("radio", { name: "Dusk", exact: true })).toBeChecked();
     await expect(use).toBeDisabled();
-    // Settings opened again asks the phone, which has Dusk now.
+    // Settings closed and opened again asks the phone, which has Dusk now.
     await settings.getByRole("button", { name: "Back to Settings" }).click();
-    await settings.getByRole("navigation", { name: "Settings" }).getByText("Appearance").click();
-    await expect(settings.getByRole("radiogroup", { name: "App icon" }).getByRole("radio", { name: "Dusk", exact: true })).toBeChecked();
+    await settings.getByRole("button", { name: "Back", exact: true }).click();
+    await expect(page.locator(".nx-phone-over")).toHaveCount(0);
+    await list(page).getByRole("button", { name: "Settings", exact: true }).click();
+    const again = page.locator(".nx-phone-over [data-screen='settings']");
+    await again.getByRole("navigation", { name: "Settings" }).getByText("Appearance").click();
+    await expect(again.getByRole("radiogroup", { name: "App icon" }).getByRole("radio", { name: "Dusk", exact: true })).toBeChecked();
   });
 
   test.describe("on an iPhone", () => {

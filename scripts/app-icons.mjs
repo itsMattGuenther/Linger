@@ -148,6 +148,8 @@ function readPng(path) {
   let width = 0;
   let height = 0;
   let channels = 0;
+  // A tRNS chunk makes some of an RGB picture's pixels see-through.
+  let keyed = false;
   const compressed = [];
   for (let offset = 8; offset < data.length; ) {
     const size = data.readUInt32BE(offset);
@@ -160,6 +162,8 @@ function readPng(path) {
       if (body[8] !== 8 || channels === 0 || body[12] !== 0) throw new Error(`${path} isn't 8-bit, non-interlaced RGB or RGBA`);
     } else if (type === "IDAT") {
       compressed.push(body);
+    } else if (type === "tRNS") {
+      keyed = true;
     }
     offset += 12 + size;
   }
@@ -187,7 +191,7 @@ function readPng(path) {
       row[i] = (line[i] + predicted) & 0xff;
     }
   }
-  return { width, height, channels, pixels };
+  return { width, height, channels, pixels, keyed };
 }
 
 /** Pixels laid over `background`, as RGB with no alpha channel. */
@@ -339,7 +343,7 @@ try {
   // in it: padded or see-through, the iPhone would show a ground around it
   // (#691).
   const square = readPng(PORCH_SQUARE);
-  const opaque = square.channels === 3 || square.pixels.every((value, i) => i % 4 !== 3 || value === 255);
+  const opaque = !square.keyed && (square.channels === 3 || square.pixels.every((value, i) => i % 4 !== 3 || value === 255));
   if (square.width !== square.height || !opaque) throw new Error(`The porch's square artwork must be square and opaque: ${PORCH_SQUARE}`);
 
   // The computer apps.

@@ -333,6 +333,7 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
   // the picker shows once it has.
   const appIcon = holder.appIcon;
   const [icon, setIcon] = useState<IconLook | null>(null);
+  const [iconRefused, setIconRefused] = useState(false);
   // Which change is the latest, so a slow one that failed puts back only its
   // own, and none lands after Settings has closed.
   const iconChange = useRef(0);
@@ -611,13 +612,17 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
                 onChange: (look) => {
                   const change = ++iconChange.current;
                   setIcon(look);
+                  setIconRefused(false);
                   void appIcon.set(look).then((done) => {
                     if (done || change !== iconChange.current) return;
                     void appIcon.current().then((now) => {
-                      if (change === iconChange.current) setIcon(now);
+                      if (change !== iconChange.current) return;
+                      setIcon(now);
+                      setIconRefused(true);
                     });
                   });
                 },
+                refused: iconRefused,
               }
             : undefined,
         // A phone's window can't zoom, so it has Text size instead (SPEC §4.15).

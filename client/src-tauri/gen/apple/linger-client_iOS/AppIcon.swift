@@ -8,27 +8,29 @@
 // scripts/app-icon-looks.mjs, whose test checks they agree: 0 is the door,
 // the app's own icon. Asking answers the look in use; setting answers 1 when
 // iOS changed it and 0 when it didn't. iOS says so itself, in a short message
-// of its own, each time it does. Every path answers once: Rust waits for it.
+// of its own, each time it does. Every path answers once.
 
 import Foundation
 #if canImport(UIKit)
 import UIKit
 #endif
 
-/// How Rust is answered: once, from the main thread.
-public typealias LingerIconAnswer = @convention(c) (Int32) -> Void
+/// How Rust is answered: once, from the main thread, with the number the
+/// ask came with, then the answer. Rust waits for the answer with its own
+/// number, so one that comes too late answers nobody.
+public typealias LingerIconAnswer = @convention(c) (Int32, Int32) -> Void
 
 @_cdecl("linger_icon_current")
-public func lingerIconCurrent(_ answer: LingerIconAnswer) {
+public func lingerIconCurrent(_ number: Int32, _ answer: LingerIconAnswer) {
     Task { @MainActor in
-        answer(AppIcon.current())
+        answer(number, AppIcon.current())
     }
 }
 
 @_cdecl("linger_icon_set")
-public func lingerIconSet(_ look: Int32, _ answer: LingerIconAnswer) {
+public func lingerIconSet(_ look: Int32, _ number: Int32, _ answer: LingerIconAnswer) {
     Task { @MainActor in
-        answer(await AppIcon.set(look))
+        answer(number, await AppIcon.set(look))
     }
 }
 

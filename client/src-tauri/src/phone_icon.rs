@@ -58,14 +58,19 @@ pub async fn phone_icon_set(look: String) -> bool {
     }
 }
 
-/// Asks Swift for the look in use, and has it call back with its place.
+/// How Swift answers: the ask's number back, then the answer.
 #[cfg(target_os = "ios")]
-type AppleCurrent = extern "C" fn(extern "C" fn(i32));
+type AppleAnswer = extern "C" fn(i32, i32);
 
-/// Asks Swift to put a look on the Home Screen, and has it call back with 1
-/// once iOS has, 0 if it didn't.
+/// Asks Swift for the look in use, with the ask's number, and has it call
+/// back with its place.
 #[cfg(target_os = "ios")]
-type AppleSet = extern "C" fn(i32, extern "C" fn(i32));
+type AppleCurrent = extern "C" fn(i32, AppleAnswer);
+
+/// Asks Swift to put a look on the Home Screen, with the ask's number, and
+/// has it call back with 1 once iOS has, 0 if it didn't.
+#[cfg(target_os = "ios")]
+type AppleSet = extern "C" fn(i32, i32, AppleAnswer);
 
 /// The app's Swift (`gen/apple/linger-client_iOS/AppIcon.swift`), handed
 /// over by the app's `main.mm` before the app starts, as the age check's is
@@ -81,78 +86,107 @@ pub extern "C" fn linger_register_icon(current: AppleCurrent, set: AppleSet) {
     let _ = APPLE.set((current, set));
 }
 
+/// One ask at a time, answered later by a callback that sends its number
+/// back (the iPhone's Swift). One given up on is forgotten, so its late
+/// answer, with its old number, finds nobody and can't answer the next.
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
+struct Ask {
+    turn: tokio::sync::Mutex<()>,
+    waiting: std::sync::Mutex<Option<(i32, tokio::sync::oneshot::Sender<i32>)>>,
+    next: std::sync::atomic::AtomicI32,
+}
+
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
+impl Ask {
+    const fn new() -> Self {
+        Self {
+            turn: tokio::sync::Mutex::const_new(()),
+            waiting: std::sync::Mutex::new(None),
+            next: std::sync::atomic::AtomicI32::new(1),
+        }
+    }
+
+    /// Asks once the one before has its answer, or was given up on:
+    /// `start` gets this ask's number to hand over, and the answer waited
+    /// for is the one that comes back with it, for `within` at most.
+    async fn ask(&self, start: impl FnOnce(i32), within: std::time::Duration) -> Option<i32> {
+        let _turn = self.turn.lock().await;
+        let number = self.next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let (sender, answer) = tokio::sync::oneshot::channel();
+        *self
+            .waiting
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some((number, sender));
+        start(number);
+        let answered = tokio::time::timeout(within, answer).await;
+        let mut waiting = self
+            .waiting
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if waiting.as_ref().is_some_and(|(asked, _)| *asked == number) {
+            *waiting = None;
+        }
+        answered.ok()?.ok()
+    }
+
+    /// An answer: for the ask waiting with this number, or for nobody.
+    fn answer(&self, number: i32, value: i32) {
+        let mut waiting = self
+            .waiting
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if waiting.as_ref().is_some_and(|(asked, _)| *asked == number) {
+            if let Some((_, sender)) = waiting.take() {
+                let _ = sender.send(value);
+            }
+        }
+    }
+}
+
 #[cfg(target_os = "ios")]
 mod platform {
-    //! One ask at a time each way, answered by Swift calling back from the
-    //! main thread, which it does on every path (`AppIcon.swift`). Each ask
-    //! waits for its own answer, with no time limit: one given up on would
-    //! leave its answer to arrive late and answer the next ask instead.
+    //! Each way one ask at a time, answered by Swift calling back from the
+    //! main thread with the ask's number. One iOS never answers is given up
+    //! on, so a stuck one can't hold every later change.
 
-    use std::sync::{Mutex, PoisonError};
+    use std::time::Duration;
 
-    use tokio::sync::oneshot;
+    use super::{Ask, APPLE};
 
-    use super::APPLE;
-
-    struct Ask {
-        turn: tokio::sync::Mutex<()>,
-        waiting: Mutex<Option<oneshot::Sender<i32>>>,
-    }
-
-    impl Ask {
-        const fn new() -> Self {
-            Self {
-                turn: tokio::sync::Mutex::const_new(()),
-                waiting: Mutex::new(None),
-            }
-        }
-
-        async fn ask(&self, start: impl FnOnce()) -> Option<i32> {
-            let _turn = self.turn.lock().await;
-            let (sender, answer) = oneshot::channel();
-            *self.waiting.lock().unwrap_or_else(PoisonError::into_inner) = Some(sender);
-            start();
-            answer.await.ok()
-        }
-
-        fn answer(&self, value: i32) {
-            if let Some(waiting) = self
-                .waiting
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .take()
-            {
-                let _ = waiting.send(value);
-            }
-        }
-    }
+    const WITHIN: Duration = Duration::from_secs(15);
 
     static CURRENT: Ask = Ask::new();
     static SET: Ask = Ask::new();
 
-    extern "C" fn current_answered(place: i32) {
-        CURRENT.answer(place);
+    extern "C" fn current_answered(number: i32, place: i32) {
+        CURRENT.answer(number, place);
     }
 
-    extern "C" fn set_answered(done: i32) {
-        SET.answer(done);
+    extern "C" fn set_answered(number: i32, done: i32) {
+        SET.answer(number, done);
     }
 
     pub async fn current() -> Option<i32> {
         CURRENT
-            .ask(|| match APPLE.get() {
-                Some((current, _)) => current(current_answered),
-                // Not handed over: the app's own icon is all there is.
-                None => current_answered(0),
-            })
+            .ask(
+                |number| match APPLE.get() {
+                    Some((current, _)) => current(number, current_answered),
+                    // Not handed over: the app's own icon is all there is.
+                    None => current_answered(number, 0),
+                },
+                WITHIN,
+            )
             .await
     }
 
     pub async fn set(place: i32) -> Option<i32> {
-        SET.ask(|| match APPLE.get() {
-            Some((_, set)) => set(place, set_answered),
-            None => set_answered(0),
-        })
+        SET.ask(
+            |number| match APPLE.get() {
+                Some((_, set)) => set(place, number, set_answered),
+                None => set_answered(number, 0),
+            },
+            WITHIN,
+        )
         .await
     }
 }
@@ -211,7 +245,48 @@ mod platform {
 
 #[cfg(test)]
 mod tests {
-    use super::{look_at, place, LOOKS};
+    use std::cell::Cell;
+    use std::time::Duration;
+
+    use super::{look_at, place, Ask, LOOKS};
+
+    #[tokio::test]
+    async fn an_ask_gets_the_answer_that_comes_back_with_its_number() {
+        let ask = Ask::new();
+        let handed = Cell::new(0);
+        let (got, ()) = tokio::join!(
+            ask.ask(|number| handed.set(number), Duration::from_secs(5)),
+            async {
+                tokio::task::yield_now().await;
+                // Another number's answer first: not this ask's.
+                ask.answer(handed.get() + 7, 0);
+                ask.answer(handed.get(), 1);
+            }
+        );
+        assert_eq!(got, Some(1));
+    }
+
+    #[tokio::test]
+    async fn an_answer_that_comes_late_finds_nobody_and_the_next_ask_gets_its_own() {
+        let ask = Ask::new();
+        let first = Cell::new(0);
+        let gave_up = ask
+            .ask(|number| first.set(number), Duration::from_millis(20))
+            .await;
+        assert_eq!(gave_up, None, "given up on, and the turn let go");
+        let second = Cell::new(0);
+        let (got, ()) = tokio::join!(
+            ask.ask(|number| second.set(number), Duration::from_secs(5)),
+            async {
+                tokio::task::yield_now().await;
+                // The first ask's answer, late, while the second waits.
+                ask.answer(first.get(), 1);
+                ask.answer(second.get(), 0);
+            }
+        );
+        assert_ne!(first.get(), second.get());
+        assert_eq!(got, Some(0), "the second's own answer, not the first's");
+    }
 
     #[test]
     fn every_look_has_its_place_and_back() {
