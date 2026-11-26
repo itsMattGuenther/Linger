@@ -88,11 +88,11 @@ export function keepChoice(chosen: IconLook, shown: IconLook, inUse: IconLook): 
 /**
  * Asks the phone for `look`, and answers the look to show and whether the
  * phone refused it: when it says no, the look it shows instead, and refused
- * only if that isn't the one asked for. Null once `latest` says a newer
- * change came, whose answer is the one that counts.
+ * only if that isn't the one asked for. Null, yes or no, once `latest` says
+ * a newer change came, whose answer is the one that counts.
  */
 export async function changeIcon(shell: AppIconShell, look: IconLook, latest: () => boolean): Promise<{ look: IconLook; refused: boolean } | null> {
-  if (await shell.set(look)) return { look, refused: false };
+  if (await shell.set(look)) return latest() ? { look, refused: false } : null;
   if (!latest()) return null;
   const now = await shell.current();
   if (!latest()) return null;

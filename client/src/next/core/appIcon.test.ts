@@ -79,5 +79,21 @@ describe("the app icon (#961)", () => {
       expect(await changeIcon(slow, "dusk", () => !newer)).toBeNull();
       expect(await changeIcon(refusing("door"), "dusk", () => false)).toBeNull();
     });
+
+    it("doesn't put the picker back on an older change the phone said yes to", async () => {
+      // The first of two quick changes, answered once the second has started.
+      let change = 0;
+      let answer: (yes: boolean) => void = () => {};
+      const waiting: AppIconShell = {
+        phone: "android",
+        set: () => new Promise((resolve) => (answer = resolve)),
+        current: () => Promise.resolve("dusk"),
+      };
+      const first = ++change;
+      const older = changeIcon(waiting, "dusk", () => first === change);
+      ++change;
+      answer(true);
+      expect(await older).toBeNull();
+    });
   });
 });
