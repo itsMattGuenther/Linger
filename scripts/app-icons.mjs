@@ -335,6 +335,13 @@ function iconSet(name, variants) {
 }
 
 try {
+  // The porch's square version has to be a square with nothing see-through
+  // in it: padded or see-through, the iPhone would show a ground around it
+  // (#691).
+  const square = readPng(PORCH_SQUARE);
+  const opaque = square.channels === 3 || square.pixels.every((value, i) => i % 4 !== 3 || value === 255);
+  if (square.width !== square.height || !opaque) throw new Error(`The porch's square artwork must be square and opaque: ${PORCH_SQUARE}`);
+
   // The computer apps.
   const desktop = tauri("desktop", { "icon.svg": DESKTOP }, "icon.svg");
   for (const name of DESKTOP_ICONS) keep(join(desktop, name), join(ICONS, name), "Desktop icon");

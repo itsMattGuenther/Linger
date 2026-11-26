@@ -393,12 +393,12 @@
 .nx-set-icon-picture {
   width: calc(var(--space-8) * 2);
   height: calc(var(--space-8) * 2);
-  border-radius: 22.37%;
+  border-radius: var(--radius-app-icon);
   box-shadow: 0 0 0 1px var(--hairline);
 }
 
 .nx-set-icons[data-phone="android"] .nx-set-icon-picture {
-  border-radius: 50%;
+  border-radius: var(--radius-pill);
 }
 
 .nx-set-icon:has(.nx-set-icon-input:checked) .nx-set-icon-picture {

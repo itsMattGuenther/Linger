@@ -288,16 +288,31 @@ test.describe("the App icon picker (#961)", () => {
     await expect(icons.getByRole("radio")).toHaveCount(LOOKS.length);
     for (const look of LOOKS) await expect(icons.getByRole("radio", { name: look, exact: true })).toHaveCount(1);
     await expect(icons.getByRole("radio", { name: "The door", exact: true })).toBeChecked();
-    await expect(settings.getByText("The first time you change it, Linger closes. Open it again from your home screen.")).toBeVisible();
+    await expect(settings.getByText("The first time you change it, Linger closes, and leaves a call you're in. Open it again from your home screen.")).toBeVisible();
     await expect(settings.getByText(/turn on Themed icons/)).toBeVisible();
-    // Each picture is the phone's shape, and there.
+    // Each picture is the phone's shape (round), and there.
     for (const picture of await icons.locator("img").all()) {
-      expect(await picture.evaluate((img) => getComputedStyle(img).borderRadius)).toBe("50%");
+      expect(await picture.evaluate((img) => getComputedStyle(img).borderRadius)).toBe("999px");
       expect(await picture.evaluate((img) => (img as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
     }
+    // Picking only chooses: arrow keys can look through them, and nothing
+    // changes until Use this icon, which on Android may close the app.
+    const use = settings.getByRole("button", { name: "Use this icon" });
+    await expect(use).toBeDisabled();
+    await icons.getByRole("radio", { name: "The door", exact: true }).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(icons.getByRole("radio", { name: "After dark", exact: true })).toBeChecked();
     await icons.getByRole("radio", { name: "Dusk", exact: true }).check();
     await expect(icons.getByRole("radio", { name: "Dusk", exact: true })).toBeChecked();
-    await expect(icons.getByRole("radio", { name: "The door", exact: true })).not.toBeChecked();
+    await expect(use).toBeEnabled();
+    await use.click();
+    // Changed: Dusk is the one in use, so there's nothing left to use.
+    await expect(icons.getByRole("radio", { name: "Dusk", exact: true })).toBeChecked();
+    await expect(use).toBeDisabled();
+    // Settings opened again asks the phone, which has Dusk now.
+    await settings.getByRole("button", { name: "Back to Settings" }).click();
+    await settings.getByRole("navigation", { name: "Settings" }).getByText("Appearance").click();
+    await expect(settings.getByRole("radiogroup", { name: "App icon" }).getByRole("radio", { name: "Dusk", exact: true })).toBeChecked();
   });
 
   test.describe("on an iPhone", () => {
@@ -310,9 +325,11 @@ test.describe("the App icon picker (#961)", () => {
       await expect(settings.getByText("The icon on your Home Screen.")).toBeVisible();
       await expect(settings.getByText("Your iPhone confirms each change with a short message.")).toBeVisible();
       await expect(settings.getByText(/Linger closes/)).toHaveCount(0);
-      expect(await icons.locator("img").first().evaluate((img) => getComputedStyle(img).borderRadius)).not.toBe("50%");
+      expect(await icons.locator("img").first().evaluate((img) => getComputedStyle(img).borderRadius)).toBe("22.37%");
       await icons.getByRole("radio", { name: "Porch light", exact: true }).check();
+      await settings.getByRole("button", { name: "Use this icon" }).click();
       await expect(icons.getByRole("radio", { name: "Porch light", exact: true })).toBeChecked();
+      await expect(settings.getByRole("button", { name: "Use this icon" })).toBeDisabled();
     });
   });
 });

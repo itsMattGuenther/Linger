@@ -1,7 +1,8 @@
 import { SCALE_OPTIONS, TEXT_SIZE_OPTIONS } from "../../../lib/interface";
 import { type AppIconShell, ICON_LOOKS, type IconLook } from "../../core/appIcon";
 import { HEADINGS } from "../../core/settings";
-import { Select, SettingRow, Switch } from "../../kit";
+import { type ReactNode, useEffect, useState } from "react";
+import { Button, Select, SettingRow, Switch } from "../../kit";
 import { Block, Note, Plain } from "./parts";
 
 /** A setting that takes effect at once: its value and how to change it. */
@@ -92,20 +93,33 @@ const PICTURES: Record<IconLook, string> = {
 
 /**
  * The home screen icon (#961): each look in the phone's own shape, the one in
- * use picked. Radio buttons underneath, so arrows move between them and a
- * screen reader hears a group.
+ * use picked to start. Picking only chooses, so arrow keys can look through
+ * them; Use this icon is what changes it, which on Android may close Linger.
+ * Radio buttons underneath, so arrows move between them and a screen reader
+ * hears a group.
  */
-function IconPicker({ value, onChange, phone }: NonNullable<AppearanceProps["appIcon"]>) {
+function IconPicker({ value, onChange, phone, children }: NonNullable<AppearanceProps["appIcon"]> & { children: ReactNode }) {
+  const [picked, setPicked] = useState<IconLook>(value);
+  // The phone's own answer wins: after a change, or one it didn't make.
+  useEffect(() => setPicked(value), [value]);
   return (
-    <div className="nx-set-icons" role="radiogroup" aria-label="App icon" data-phone={phone}>
-      {ICON_LOOKS.map((look) => (
-        <label key={look.id} className="nx-set-icon">
-          <input type="radio" className="nx-set-icon-input" name="app-icon" value={look.id} checked={value === look.id} onChange={() => onChange(look.id)} />
-          <img className="nx-set-icon-picture" src={PICTURES[look.id]} alt="" draggable={false} />
-          <span className="nx-set-icon-name">{look.name}</span>
-        </label>
-      ))}
-    </div>
+    <>
+      <div className="nx-set-icons" role="radiogroup" aria-label="App icon" data-phone={phone}>
+        {ICON_LOOKS.map((look) => (
+          <label key={look.id} className="nx-set-icon">
+            <input type="radio" className="nx-set-icon-input" name="app-icon" value={look.id} checked={picked === look.id} onChange={() => setPicked(look.id)} />
+            <img className="nx-set-icon-picture" src={PICTURES[look.id]} alt="" draggable={false} />
+            <span className="nx-set-icon-name">{look.name}</span>
+          </label>
+        ))}
+      </div>
+      {children}
+      <div>
+        <Button variant="primary" disabled={picked === value} onClick={() => onChange(picked)}>
+          Use this icon
+        </Button>
+      </div>
+    </>
   );
 }
 
@@ -115,15 +129,16 @@ export function AppearanceSection({ appIcon, scale, textSize, warmth, plainNames
     <>
       {appIcon ? (
         <Block heading={HEADINGS.appIcon} lead={appIcon.phone === "iphone" ? "The icon on your Home Screen." : "The icon on your home screen."}>
-          <IconPicker {...appIcon} />
-          {appIcon.phone === "iphone" ? (
-            <Note>Your iPhone confirms each change with a short message.</Note>
-          ) : (
-            <>
-              <Note>The first time you change it, Linger closes. Open it again from your home screen.</Note>
-              <Note>Or turn on Themed icons in your phone's Wallpaper &amp; style, and the door takes your wallpaper's colors.</Note>
-            </>
-          )}
+          <IconPicker {...appIcon}>
+            {appIcon.phone === "iphone" ? (
+              <Note>Your iPhone confirms each change with a short message.</Note>
+            ) : (
+              <>
+                <Note>The first time you change it, Linger closes, and leaves a call you're in. Open it again from your home screen.</Note>
+                <Note>Or turn on Themed icons in your phone's Wallpaper &amp; style, and the door takes your wallpaper's colors.</Note>
+              </>
+            )}
+          </IconPicker>
         </Block>
       ) : null}
       {/* Only when there's something to choose: a heading over nothing would look unfinished. */}

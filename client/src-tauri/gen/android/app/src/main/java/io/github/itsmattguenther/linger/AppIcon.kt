@@ -11,7 +11,7 @@ import android.content.pm.PackageManager.DONT_KILL_APP
  * The home screen icon a person picks (#961, SPEC §4.15), in Settings ›
  * Appearance. Each look is a launcher entry of its own in the manifest (an
  * `activity-alias` of MainActivity, with that look's icon), and one is on:
- * the way apps that let you change their icon do it on Android. Rust
+ * the usual way to change an app's icon on Android. Rust
  * (src-tauri/src/phone_icon.rs) asks for a look by its place in [ENTRIES],
  * the same order as scripts/app-icon-looks.mjs, whose test checks they agree.
  *
@@ -65,7 +65,14 @@ object AppIcon {
     return steps
   }
 
-  private fun entry(context: Context, name: String) = ComponentName(context.packageName, "${context.packageName}.$name")
+  /**
+   * Where the manifest's `.IconDoor` and the rest live: the code's own
+   * package, which a build with an app id of its own (a `.debug` suffix)
+   * doesn't change.
+   */
+  private val CODE = AppIcon::class.java.name.substringBeforeLast('.')
+
+  private fun entry(context: Context, name: String) = ComponentName(context.packageName, "$CODE.$name")
 
   private fun states(context: Context): Map<String, Int> {
     val packages = context.packageManager

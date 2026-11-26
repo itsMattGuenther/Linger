@@ -84,16 +84,15 @@ pub extern "C" fn linger_register_icon(current: AppleCurrent, set: AppleSet) {
 #[cfg(target_os = "ios")]
 mod platform {
     //! One ask at a time each way, answered by Swift calling back from the
-    //! main thread. One that never answers is given up on.
+    //! main thread, which it does on every path (`AppIcon.swift`). Each ask
+    //! waits for its own answer, with no time limit: one given up on would
+    //! leave its answer to arrive late and answer the next ask instead.
 
     use std::sync::{Mutex, PoisonError};
-    use std::time::Duration;
 
     use tokio::sync::oneshot;
 
     use super::APPLE;
-
-    const WITHIN: Duration = Duration::from_secs(10);
 
     struct Ask {
         turn: tokio::sync::Mutex<()>,
@@ -113,7 +112,7 @@ mod platform {
             let (sender, answer) = oneshot::channel();
             *self.waiting.lock().unwrap_or_else(PoisonError::into_inner) = Some(sender);
             start();
-            tokio::time::timeout(WITHIN, answer).await.ok()?.ok()
+            answer.await.ok()
         }
 
         fn answer(&self, value: i32) {

@@ -8,7 +8,7 @@
 // scripts/app-icon-looks.mjs, whose test checks they agree: 0 is the door,
 // the app's own icon. Asking answers the look in use; setting answers 1 when
 // iOS changed it and 0 when it didn't. iOS says so itself, in a short message
-// of its own, each time it does.
+// of its own, each time it does. Every path answers once: Rust waits for it.
 
 import Foundation
 #if canImport(UIKit)

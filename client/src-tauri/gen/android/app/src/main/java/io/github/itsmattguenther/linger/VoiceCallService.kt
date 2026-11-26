@@ -102,8 +102,13 @@ class VoiceCallService : Service() {
 
     private fun bar(context: Context, place: String, muted: Boolean, deafened: Boolean): android.app.Notification {
       channel(context)
-      val open = context.packageManager.getLaunchIntentForPackage(context.packageName)
-        ?.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+      // MainActivity itself, not the launcher's entry: that's whichever look
+      // of the icon is on (#961, AppIcon.kt), and one picked mid-call would
+      // leave the bar opening one that's off.
+      val open = Intent(context, MainActivity::class.java)
+        .setAction(Intent.ACTION_MAIN)
+        .addCategory(Intent.CATEGORY_LAUNCHER)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
       val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
       fun action(what: String, code: Int) =
         PendingIntent.getBroadcast(context, code, Intent(what).setPackage(context.packageName), flags)
@@ -119,7 +124,7 @@ class VoiceCallService : Service() {
         .setShowWhen(false)
         .setPriority(NotificationCompat.PRIORITY_LOW)
         .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-        .setContentIntent(open?.let { PendingIntent.getActivity(context, 0, it, flags) })
+        .setContentIntent(PendingIntent.getActivity(context, 0, open, flags))
         .addAction(0, if (muted) "Unmute" else "Mute", action(if (muted) UNMUTE else MUTE, 1))
         .addAction(0, "Leave", action(LEAVE, 2))
         .build()

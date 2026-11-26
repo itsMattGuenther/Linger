@@ -2375,8 +2375,8 @@ on the phone, the website and anything else is what makes it Linger's.
   Home Screen, and every Android look has the one-color layer Android colors
   to the wallpaper when Themed icons is on. Daylight and Dusk are those
   looks in fixed colors, for a person who wants them for Linger alone.
-- **Android does it the way X, Reddit and Snapchat do**: a launcher entry
-  per look, with one on. Matt asked for it there too, after the first answer
+- **Android does it the usual way**: a launcher entry per look, with one
+  on. Matt asked for it there too, after the first answer
   leaned against it, and a restart is fine as long as the app says so. Android
   ends an app when its first launcher entry is turned off, so the first
   change away from the door closes Linger once, and the picker says so

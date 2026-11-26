@@ -333,6 +333,9 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
   // the picker shows once it has.
   const appIcon = holder.appIcon;
   const [icon, setIcon] = useState<IconLook | null>(null);
+  // Which change is the latest, so a slow one that failed puts back only its
+  // own, and none lands after Settings has closed.
+  const iconChange = useRef(0);
   useEffect(() => {
     if (!appIcon) return;
     let live = true;
@@ -341,6 +344,7 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
     });
     return () => {
       live = false;
+      iconChange.current++;
     };
   }, [appIcon]);
   // An Appearance choice storage refuses isn't made: the setting stays as it
@@ -601,12 +605,17 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
             ? {
                 value: icon,
                 phone: appIcon.phone,
-                // Picked at once; a phone that didn't change it goes back to
-                // the one it shows. On Android the app restarts first.
+                // Shown at once; a phone that didn't change it goes back to
+                // the one it shows, unless another change came since. The
+                // first on Android closes the app before it answers.
                 onChange: (look) => {
+                  const change = ++iconChange.current;
                   setIcon(look);
                   void appIcon.set(look).then((done) => {
-                    if (!done) void appIcon.current().then(setIcon);
+                    if (done || change !== iconChange.current) return;
+                    void appIcon.current().then((now) => {
+                      if (change === iconChange.current) setIcon(now);
+                    });
                   });
                 },
               }
