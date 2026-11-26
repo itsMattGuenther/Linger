@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appIconShell, DEFAULT_LOOK, ICON_LOOKS, isIconLook, memoryIconShell } from "./appIcon";
+import { type AppIconShell, appIconShell, changeIcon, DEFAULT_LOOK, ICON_LOOKS, type IconLook, isIconLook, keepChoice, memoryIconShell } from "./appIcon";
 
 describe("the app icon (#961)", () => {
   it("knows its six looks, the door first", () => {
@@ -42,5 +42,42 @@ describe("the app icon (#961)", () => {
     expect(await shell.current()).toBe("door");
     expect(await shell.set("daylight")).toBe(true);
     expect(await shell.current()).toBe("daylight");
+  });
+
+  it("moves the picker's choice with the look in use, unless the person chose another meanwhile", () => {
+    expect(keepChoice("door", "door", "dusk")).toBe("dusk");
+    expect(keepChoice("daylight", "door", "dusk")).toBe("daylight");
+    // A change put back: the choice that was the change goes back too.
+    expect(keepChoice("dusk", "dusk", "door")).toBe("door");
+  });
+
+  describe("changing it", () => {
+    const refusing = (shows: IconLook): AppIconShell => ({ phone: "iphone", set: () => Promise.resolve(false), current: () => Promise.resolve(shows) });
+
+    it("is the look asked for when the phone takes it", async () => {
+      expect(await changeIcon(memoryIconShell("android"), "dusk", () => true)).toEqual({ look: "dusk", refused: false });
+    });
+
+    it("puts back the look the phone shows when it refuses, and says so", async () => {
+      expect(await changeIcon(refusing("door"), "dusk", () => true)).toEqual({ look: "door", refused: true });
+    });
+
+    it("isn't a refusal when the phone shows the look asked for after all", async () => {
+      expect(await changeIcon(refusing("dusk"), "dusk", () => true)).toEqual({ look: "dusk", refused: false });
+    });
+
+    it("leaves the picker to a newer change", async () => {
+      let newer = false;
+      const slow: AppIconShell = {
+        phone: "iphone",
+        set: () => Promise.resolve(false),
+        current: () => {
+          newer = true;
+          return Promise.resolve("door");
+        },
+      };
+      expect(await changeIcon(slow, "dusk", () => !newer)).toBeNull();
+      expect(await changeIcon(refusing("door"), "dusk", () => false)).toBeNull();
+    });
   });
 });

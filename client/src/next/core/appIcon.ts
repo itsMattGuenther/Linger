@@ -33,8 +33,9 @@ export interface AppIconShell {
   /** The look on the home screen now. */
   current(): Promise<IconLook>;
   /**
-   * Puts a look on the home screen: true once the phone has it. On an
-   * iPhone, iOS then says so itself; on Android the app restarts first.
+   * Puts a look on the home screen: true once the phone has taken it. On an
+   * iPhone, iOS then makes the change and says so itself; on Android, the
+   * first change closes the app first.
    */
   set(look: IconLook): Promise<boolean>;
 }
@@ -74,4 +75,26 @@ export function memoryIconShell(phone: AppIconShell["phone"], start: IconLook = 
       return Promise.resolve(true);
     },
   };
+}
+
+/**
+ * What the picker has chosen once the look in use changes from `shown` to
+ * `inUse`: the new look in use, unless the person had already chosen another.
+ */
+export function keepChoice(chosen: IconLook, shown: IconLook, inUse: IconLook): IconLook {
+  return chosen === shown ? inUse : chosen;
+}
+
+/**
+ * Asks the phone for `look`, and answers the look to show and whether the
+ * phone refused it: when it says no, the look it shows instead, and refused
+ * only if that isn't the one asked for. Null once `latest` says a newer
+ * change came, whose answer is the one that counts.
+ */
+export async function changeIcon(shell: AppIconShell, look: IconLook, latest: () => boolean): Promise<{ look: IconLook; refused: boolean } | null> {
+  if (await shell.set(look)) return { look, refused: false };
+  if (!latest()) return null;
+  const now = await shell.current();
+  if (!latest()) return null;
+  return { look: now, refused: now !== look };
 }

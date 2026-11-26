@@ -1,5 +1,5 @@
 import { SCALE_OPTIONS, TEXT_SIZE_OPTIONS } from "../../../lib/interface";
-import { type AppIconShell, ICON_LOOKS, type IconLook } from "../../core/appIcon";
+import { type AppIconShell, ICON_LOOKS, type IconLook, keepChoice } from "../../core/appIcon";
 import { HEADINGS } from "../../core/settings";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Button, Select, SettingRow, Switch } from "../../kit";
@@ -108,7 +108,7 @@ function IconPicker({ value, onChange, phone, refused, children }: NonNullable<A
   // chosen another meanwhile.
   const shown = useRef(value);
   useEffect(() => {
-    setPicked((now) => (now === shown.current ? value : now));
+    setPicked((now) => keepChoice(now, shown.current, value));
     shown.current = value;
   }, [value]);
   return (
@@ -123,7 +123,8 @@ function IconPicker({ value, onChange, phone, refused, children }: NonNullable<A
         ))}
       </div>
       {children}
-      {refused ? <Note tone="problem">Your phone didn't change the icon.</Note> : null}
+      {/* Only while the picker still shows what was refused: a new choice is a new try. */}
+      {refused && picked === value ? <Note tone="problem">Your phone didn't change the icon.</Note> : null}
       <div>
         <Button variant="primary" disabled={picked === value} onClick={() => onChange(picked)}>
           Use this icon

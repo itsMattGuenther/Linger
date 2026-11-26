@@ -6,9 +6,12 @@
 //
 // A look crosses as its place in `AppIcon.sets`, the same order as
 // scripts/app-icon-looks.mjs, whose test checks they agree: 0 is the door,
-// the app's own icon. Asking answers the look in use; setting answers 1 when
-// iOS changed it and 0 when it didn't. iOS says so itself, in a short message
-// of its own, each time it does. Every path answers once.
+// the app's own icon. Asking answers the look in use. Setting answers at
+// once, 1 when the look is one this phone can show and 0 when it isn't, and
+// iOS then makes the change, one at a time, since it refuses a change asked
+// for while another is under way. iOS says each change itself, in a short
+// message of its own. Rust never waits on iOS: every answer comes straight
+// from the main thread.
 
 import Foundation
 #if canImport(UIKit)
@@ -30,7 +33,7 @@ public func lingerIconCurrent(_ number: Int32, _ answer: LingerIconAnswer) {
 @_cdecl("linger_icon_set")
 public func lingerIconSet(_ look: Int32, _ number: Int32, _ answer: LingerIconAnswer) {
     Task { @MainActor in
-        answer(number, await AppIcon.set(look))
+        answer(number, AppIcon.take(look))
     }
 }
 
@@ -65,18 +68,23 @@ enum AppIcon {
         #endif
     }
 
+    /// The change iOS is making now, which the next one waits for.
+    @MainActor private static var making: Task<Void, Never>?
+
+    /// Takes a look to put up: 1 once it's on its way, after any change
+    /// still under way, and 0 for a look this phone can't show.
     @MainActor
-    static func set(_ look: Int32) async -> Int32 {
+    static func take(_ look: Int32) -> Int32 {
         #if canImport(UIKit)
         guard known(look), UIApplication.shared.supportsAlternateIcons else { return 0 }
         let wanted = name(of: look)
-        if UIApplication.shared.alternateIconName == wanted { return 1 }
-        do {
-            try await UIApplication.shared.setAlternateIconName(wanted)
-            return 1
-        } catch {
-            return 0
+        let before = making
+        making = Task { @MainActor in
+            await before?.value
+            guard UIApplication.shared.alternateIconName != wanted else { return }
+            try? await UIApplication.shared.setAlternateIconName(wanted)
         }
+        return 1
         #else
         return 0
         #endif

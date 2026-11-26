@@ -47,7 +47,7 @@ import type { Following } from "../../core/mirror";
 import { inOrder, loadServerPrefs, prefsFrom, type ServerPrefs } from "../../core/serverPrefs";
 import { moveShown } from "../../core/servers";
 import { NOTIFY, type NotifyQuestion, type Outcome, PASSWORD, type PasswordQuestion, SERVER_PREFS, type ServerPrefsMessage } from "../../core/share";
-import type { AppIconShell, IconLook } from "../../core/appIcon";
+import { type AppIconShell, changeIcon, type IconLook } from "../../core/appIcon";
 import { CHIMES, type SettingsKey, settingsKeys } from "../../core/settings";
 import { presenceOf } from "../../core/chat/conversation";
 import { Button, Spinner } from "../../kit";
@@ -607,19 +607,17 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
                 value: icon,
                 phone: appIcon.phone,
                 // Shown at once; a phone that didn't change it goes back to
-                // the one it shows, unless another change came since. The
-                // first on Android closes the app before it answers.
+                // the one it shows, unless another change came since
+                // (changeIcon). The first on Android closes the app before
+                // it answers.
                 onChange: (look) => {
                   const change = ++iconChange.current;
                   setIcon(look);
                   setIconRefused(false);
-                  void appIcon.set(look).then((done) => {
-                    if (done || change !== iconChange.current) return;
-                    void appIcon.current().then((now) => {
-                      if (change !== iconChange.current) return;
-                      setIcon(now);
-                      setIconRefused(true);
-                    });
+                  void changeIcon(appIcon, look, () => change === iconChange.current).then((answer) => {
+                    if (!answer) return;
+                    setIcon(answer.look);
+                    setIconRefused(answer.refused);
                   });
                 },
                 refused: iconRefused,

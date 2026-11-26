@@ -317,7 +317,7 @@ function keepPixels(from, to, what, { opaque, ground = NIGHT } = {}) {
   }
   if (!existsSync(to)) throw new Error(`${what} is missing: ${to.slice(ROOT.length + 1)}`);
   const committed = readPng(to);
-  if (opaque && committed.channels !== 3) throw new Error(`${what} has an alpha channel, which the App Store refuses: ${to.slice(ROOT.length + 1)}`);
+  if (opaque && (committed.channels !== 3 || committed.keyed)) throw new Error(`${what} has see-through pixels, which the App Store refuses: ${to.slice(ROOT.length + 1)}`);
   if (committed.width !== picture.width || committed.channels !== channels || !committed.pixels.equals(pixels)) {
     throw new Error(`${what} differs from the approved artwork: ${to.slice(ROOT.length + 1)}`);
   }
