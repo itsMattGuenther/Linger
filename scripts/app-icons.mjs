@@ -281,12 +281,37 @@ function tauri(name, pictures, input, args = []) {
   return output;
 }
 
+/**
+ * Whether two files are the same: a PNG by its pixels, each channel within
+ * `SLACK` of the other's, since the vector artwork's edges come out a step
+ * apart on another machine's CLI; anything else byte for byte. Says how a
+ * picture differs, for the error.
+ */
+const SLACK = 2;
+function alike(a, b) {
+  if (extname(a) !== ".png") return { same: same(a, b), how: "" };
+  const left = readPng(a);
+  const right = readPng(b);
+  if (left.width !== right.width || left.height !== right.height || left.channels !== right.channels || left.keyed !== right.keyed) {
+    return { same: false, how: ` (${right.width}x${right.height}, ${right.channels} channels, against ${left.width}x${left.height}, ${left.channels})` };
+  }
+  let off = 0;
+  let most = 0;
+  for (let i = 0; i < left.pixels.length; i++) {
+    const by = Math.abs(left.pixels[i] - right.pixels[i]);
+    if (by > 0) off++;
+    if (by > most) most = by;
+  }
+  return { same: most <= SLACK, how: ` (${off} of ${left.pixels.length} values differ, by up to ${most})` };
+}
+
 /** Copies a file the CLI made over the committed one, or checks they match. */
 function keep(from, to, what) {
   made++;
+  const there = existsSync(to) ? alike(from, to) : { same: false, how: " (missing)" };
   if (values.check) {
-    if (!existsSync(to) || !same(from, to)) throw new Error(`${what} differs from the approved artwork: ${to.slice(ROOT.length + 1)}`);
-  } else if (!existsSync(to) || !same(from, to)) {
+    if (!there.same) throw new Error(`${what} differs from the approved artwork: ${to.slice(ROOT.length + 1)}${there.how}`);
+  } else if (!there.same) {
     mkdirSync(dirname(to), { recursive: true });
     copyFileSync(from, to);
   }

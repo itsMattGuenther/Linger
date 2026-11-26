@@ -13,8 +13,10 @@ the Rust, Swift, Kotlin, manifest, Xcode project and page lists agree with it.
 `assets/logo/Linger Pixel Porch Icon Set FINAL.png`, on Android, and its
 square version, `assets/logo/Linger Pixel Porch Icon Square.png` (#691), on
 the iPhone and in the picker. `--check` compares the PNGs the CLI makes with
-the committed ones, by their pixels where zlib versions may pack the same
-picture differently, and fails on a file the porch icons left behind.
+the committed ones by their pixels, each value within two steps, since zlib
+versions pack the same picture differently and another machine's CLI draws
+the vector artwork's edges a step apart. It fails on a file the porch icons
+left behind.
 
 The findings below are from the porch icons, kept for the checks they set up.
 

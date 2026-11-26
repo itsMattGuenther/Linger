@@ -329,7 +329,10 @@ test.describe("the App icon picker (#961)", () => {
       await expect(settings.getByText("The icon on your Home Screen.")).toBeVisible();
       await expect(settings.getByText("Your iPhone confirms each change with a short message.")).toBeVisible();
       await expect(settings.getByText(/Linger closes/)).toHaveCount(0);
-      expect(await icons.locator("img").first().evaluate((img) => getComputedStyle(img).borderRadius)).toBe("22.37%");
+      // The iPhone's rounded square, not Android's circle. WebKit says 22.370001%.
+      const corner = await icons.locator("img").first().evaluate((img) => getComputedStyle(img).borderRadius);
+      expect(corner).toMatch(/%$/);
+      expect(Number.parseFloat(corner)).toBeCloseTo(22.37, 2);
       await icons.getByRole("radio", { name: "Porch light", exact: true }).check();
       await settings.getByRole("button", { name: "Use this icon" }).click();
       await expect(icons.getByRole("radio", { name: "Porch light", exact: true })).toBeChecked();
