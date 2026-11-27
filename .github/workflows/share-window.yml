@@ -34,6 +34,8 @@ on:
       - scripts/share-sender-test.sh
       - crates/**
       - .github/workflows/share-window.yml
+  # nightly.yml runs it on main every night, so main keeps its build caches,
+  # which a pull request doesn't save (#971).
   workflow_call:
   workflow_dispatch:
 

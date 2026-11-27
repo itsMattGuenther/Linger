@@ -142,13 +142,15 @@ test("the simulator's run is gated on the simulator scope ci-scope.mjs gives, wh
 export function tagsOf(text) {
   // A tag is a plain word, or one in matching quotes; a comment may follow.
   const word = (raw) => /^(?:"([\w-]+)"|'([\w-]+)'|([\w-]+))$/.exec(raw.trim())?.slice(1).find(Boolean);
-  const end = text.search(/^---$/m);
+  // A Windows checkout's line endings are read as Linux's.
+  const flat = text.replace(/\r/g, "");
+  const end = flat.search(/^---$/m);
   if (end < 0) return [];
-  const header = text.slice(0, end).replace(/[ \t]+#.*$/gm, "");
+  const header = flat.slice(0, end).replace(/[ \t]+#.*$/gm, "");
   const inline = /^tags:[ \t]*\[([^\]]*)\][ \t]*$/m.exec(header);
   if (inline) return inline[1].split(",").filter((raw) => raw.trim()).map((raw) => word(raw) ?? assert.fail(`can't read the tag ${raw.trim()}`));
   const at = header.search(/^tags:[ \t]*$/m);
-  if (at < 0) return [];
+  if (at < 0) return /^tags:/m.test(header) ? assert.fail("can't read the tags under tags:") : [];
   const tags = [];
   for (const line of header.slice(at).split("\n").slice(1)) {
     if (!line.trim() || /^ *#/.test(line)) continue;
@@ -156,6 +158,8 @@ export function tagsOf(text) {
     if (!item) break;
     tags.push(word(item[1]) ?? assert.fail(`can't read the tag ${item[1]}`));
   }
+  // A tags: key with nothing read under it is a form this doesn't know.
+  if (!tags.length) assert.fail("can't read the tags under tags:");
   return tags;
 }
 
@@ -186,7 +190,9 @@ test("a flow's tags are read from its header only", () => {
   assert.deepEqual(tagsOf("tags:\n  - start # needs no server\nappId: a\n---\n"), ["start"]);
   assert.deepEqual(tagsOf("tags: [start] # a note\nappId: a\n---\n"), ["start"]);
   assert.throws(() => tagsOf("tags:\n  - \"start'\nappId: a\n---\n"), /can't read the tag/);
-  assert.deepEqual(tagsOf("tags:\n\t- start\nappId: a\n---\n"), [], "a tab isn't YAML's indent");
+  assert.throws(() => tagsOf("tags:\n\t- start\nappId: a\n---\n"), /can't read the tags/, "a tab isn't YAML's indent");
+  assert.deepEqual(tagsOf("tags:\r\n  - start\r\nappId: a\r\n---\r\n"), ["start"], "a Windows checkout");
+  assert.throws(() => tagsOf("tags: [start,\n  other]\nappId: a\n---\n"), /can't read the tags/);
   assert.deepEqual(tagsOf("tags: [start]\t# a note\nappId: a\n---\n"), ["start"]);
   assert.deepEqual(tagsOf("tags:\t\n- start\nappId: a\n---\n"), ["start"], "a list at the key's own indent");
   assert.deepEqual(tagsOf("tags:\n  - start\n"), [], "no header without ---");
