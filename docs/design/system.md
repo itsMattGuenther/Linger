@@ -163,9 +163,10 @@ one.
 | The original | `original` | `#011333` | The pixel porch's night blue, with wood and brick in the title bar, the lines, cards and menus; filled controls and a hovered or selected row stay blue, so nothing calm looks new; the lamp's washes deeper and 1.45 times as strong |
 
 - **The door is `:root`.** Every other theme is one block of values under
-  `[data-theme="<id>"]`, in `tokens.css` like every other color, so no file
-  but `tokens.css` holds a color literal. A theme block sets nothing The
-  door lacks.
+  `[data-theme="<id>"]`, in `tokens.css` like every other color. The one
+  other place a theme's color is written is `next.html`, which paints each
+  theme's window color before the styles load; `contrast.test.ts` holds it to
+  `tokens.css`. A theme block sets nothing The door lacks.
 - **Every primitive.** A theme sets all the night, ink, hairline, lamp, sign
   and status colors and their see-through layers, even one the same as The
   door's, so a theme on one element takes none of its colors from the

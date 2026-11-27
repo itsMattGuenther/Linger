@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { ThemeId } from "../core/theme";
 import { Icon, type IconName } from "./Icon";
 import "./ChoiceCard.css";
 
@@ -13,7 +14,7 @@ export interface Choice<V extends string> {
    * id, put on the picture as `data-theme` (#964, styles/tokens.css), so it
    * shows that theme whatever the page's is.
    */
-  theme?: string;
+  theme?: ThemeId;
 }
 
 /**
