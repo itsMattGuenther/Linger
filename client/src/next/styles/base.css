@@ -15,6 +15,13 @@ body {
   height: 100%;
 }
 
+/* The page's own ground, past the body too (behind a phone's keyboard, or
+   where a page overscrolls), in the theme (#964). `next.html` paints the
+   same color before these styles have loaded. */
+html {
+  background: var(--surface-window);
+}
+
 body {
   background: var(--surface-window);
   color: var(--text-primary);

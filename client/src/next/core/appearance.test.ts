@@ -8,6 +8,8 @@ const shell = vi.hoisted(() => ({
   least: null as { width: number; height: number } | null,
   label: "main",
   broadcast: [] as unknown[],
+  /** What each window hears on the bus, by event. */
+  heard: new Map<string, (message: { v: number }) => void>(),
 }));
 vi.mock("@tauri-apps/api/core", () => ({ isTauri: () => true, invoke: async () => undefined }));
 vi.mock("@tauri-apps/api/webview", () => ({
@@ -38,7 +40,11 @@ vi.mock("@tauri-apps/api/window", () => ({
 }));
 vi.mock("./bus", () => ({
   PROTOCOL: 1,
-  tauriBus: () => ({ broadcast: async (event: string, payload: unknown) => void shell.broadcast.push([event, payload]), listen: async () => () => undefined }),
+  tauriBus: () => ({ broadcast: async (event: string, payload: unknown) => void shell.broadcast.push([event, payload]), listen: async (event: string, handler: (message: { v: number }) => void) => {
+      shell.heard.set(event, handler);
+      return () => undefined;
+    },
+  }),
 }));
 
 const storage = new Map<string, string>();
@@ -49,6 +55,7 @@ beforeEach(() => {
   shell.least = null;
   shell.label = "main";
   shell.broadcast = [];
+  shell.heard.clear();
   vi.stubGlobal("window", {
     location: { search: "" },
     screen: { availWidth: 1920, availHeight: 1040 },
@@ -184,11 +191,49 @@ describe("how the new client looks, in every window", () => {
     expect(root.dataset.normalize).toBe("true");
   });
 
+  it("applies the theme from what's saved, before what a window draws from these choices hears of it (#964)", async () => {
+    vi.resetModules();
+    const { applyAppearance, onAppearance } = await import("./appearance");
+    const { saveTheme } = await import("./theme");
+    const root = document.documentElement as unknown as { dataset: Record<string, string> };
+    await applyAppearance();
+    expect(root.dataset.theme).toBe("door");
+    expect(saveTheme("dusk")).toBe(true);
+    const heard: Array<string | undefined> = [];
+    onAppearance(() => heard.push(root.dataset.theme));
+    await applyAppearance();
+    expect(root.dataset.theme).toBe("dusk");
+    expect(heard).toEqual(["dusk"]);
+  });
+
+  it("takes the theme Settings chose in another window when Settings announces it (#964)", async () => {
+    vi.resetModules();
+    const { APPEARANCE, applyAppearance, followAppearance } = await import("./appearance");
+    const { saveTheme } = await import("./theme");
+    const root = document.documentElement as unknown as { dataset: Record<string, string> };
+    // A window that opened in The door.
+    followAppearance();
+    await applyAppearance();
+    expect(root.dataset.theme).toBe("door");
+    const hear = shell.heard.get(APPEARANCE);
+    if (!hear) throw new Error("the window isn't listening");
+    // Settings, another window, saves After dark and tells every window.
+    expect(saveTheme("after-dark")).toBe(true);
+    expect(root.dataset.theme).toBe("door");
+    // Another version of the app's message isn't this one's to act on.
+    hear({ v: 2 });
+    expect(root.dataset.theme).toBe("door");
+    hear({ v: 1 });
+    await vi.waitFor(() => expect(root.dataset.theme).toBe("after-dark"));
+  });
+
   it("changes nothing when storage refuses a choice, and says so, for Settings to tell (#782)", async () => {
     vi.resetModules();
     const { applyAppearance, loadHideReactions, loadOneLine, loadScale, saveHideReactions, saveOneLine, saveScale } = await import("./appearance");
     const { loadNormalize, saveNormalize } = await import("../../lib/normalize");
+    const { loadTheme, saveTheme } = await import("./theme");
     // Chosen while storage worked.
+    expect(saveTheme("porch-light")).toBe(true);
     expect(saveScale(125)).toBe(125);
     expect(saveOneLine(true)).toBe(true);
     expect(saveHideReactions(true)).toBe(true);
@@ -198,17 +243,20 @@ describe("how the new client looks, in every window", () => {
     local.setItem = () => {
       throw new Error("QuotaExceededError");
     };
+    expect(saveTheme("dusk")).toBe(false);
     expect(saveScale(150)).toBeNull();
     expect(saveOneLine(false)).toBe(false);
     expect(saveHideReactions(false)).toBe(false);
     expect(saveNormalize(false)).toBe(false);
     // Every window applies what was chosen before.
-    expect([loadScale(), loadOneLine(), loadHideReactions(), loadNormalize()]).toEqual([125, true, true, true]);
+    expect([loadTheme(), loadScale(), loadOneLine(), loadHideReactions(), loadNormalize()]).toEqual(["porch-light", 125, true, true, true]);
     await applyAppearance();
     expect(shell.zoom).toBe(1.25);
     expect((document.documentElement as unknown as { dataset: Record<string, string> }).dataset.normalize).toBe("true");
+    expect((document.documentElement as unknown as { dataset: Record<string, string> }).dataset.theme).toBe("porch-light");
     // Gone altogether: refused the same way.
     vi.stubGlobal("window", {});
+    expect(saveTheme("dusk")).toBe(false);
     expect(saveScale(150)).toBeNull();
     expect(saveOneLine(false)).toBe(false);
     expect(saveHideReactions(false)).toBe(false);

@@ -34,6 +34,7 @@ Not in M15:
 | Path | What it is |
 |---|---|
 | `client/next.html` | The entry page for every new-client window. The window's role and conversation come from the URL. |
+| `client/public/` | Files served as they are: `theme.js`, which puts the theme on before the page draws (#964). |
 | `client/src/next/styles/` | Design tokens and base styles (`system.md`). |
 | `client/src/next/kit/` | The kit of parts: every button, row, marker, tab, title bar and field. Screens build only from these. |
 | `client/src/next/core/` | New logic with no UI: window roles, the catch-up protocol, borrowed tokens, intents, view models. Pure where possible, and unit-tested. |
@@ -352,8 +353,9 @@ as well, as the phone has one window.
 **The theme has to be there before the page draws** (#964). A window opened
 later would otherwise show The door's colors for a moment, until the app's
 code had loaded and put its theme on. So a small plain script in
-`next.html`'s head reads the saved theme and puts `data-theme` on `<html>`
-first, and the color the page shows before its styles load follows it too.
+`next.html`'s head (`client/public/theme.js`) reads the saved theme and puts
+`data-theme` on `<html>` first, and the color the page shows before its
+styles load follows it too.
 It's a file of Linger's own rather than a script written into the page,
 because the page's content security policy runs nothing else
 (`script-src 'self'`).

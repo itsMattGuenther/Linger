@@ -7,26 +7,26 @@
  * `design/buddy-list` branch),
  * adjusted only where `styles/contrast.test.ts` required it.
  *
- * Three layers, in order:
+ * Four layers, in order:
  *
  *   1. Primitives: named colors, no meaning. Nothing outside this file uses them.
  *   2. Semantic roles: what a color is *for*. Components use only these.
  *   3. Scales: spacing, control heights, icon boxes, rows, radii, type, motion.
+ *   4. Themes (#964): another set of values for the colors of layers 1 and 2.
  *
- * Dark only. A light theme was dropped (2026-09-28, docs/decisions.md).
  * Components still use only layer 2, never layer 1, so a color changes in
- * one place.
+ * one place, and a theme changes it everywhere.
  *
  * Names are not colored here. A person's color is a palette key on the wire
  * (AGENTS rules 8 and 12) and becomes a color only in
  * `src/generated/palette.generated.css`.
  */
 
-:root {
-  color-scheme: dark;
-
-  /* --- 1. primitives ------------------------------------------------------ */
-
+/* --- 1. primitives ---------------------------------------------------------
+   The door, the default theme. `[data-theme="door"]` too, so The door can be
+   shown inside a page in another theme, as the Theme picker does. */
+:root,
+[data-theme="door"] {
   /* The night, from the logo: darkest to lightest. */
   --night-0: #0a101d; /* behind everything */
   --night-1: #0f1522; /* sunken: inputs, sidebars, footers */
@@ -88,8 +88,18 @@
   --black-a70: rgb(0 0 0 / 0.7);
   /* Masks read only alpha; this is "fully shown". */
   --mask-solid: rgb(0 0 0);
+}
 
-  /* --- 2. semantic roles -------------------------------------------------- */
+/* --- 2. semantic roles ------------------------------------------------------
+   Declared on `:root` and again on every element with a theme, so each role
+   is worked out from that element's own primitives. A custom property that
+   refers to another is resolved where it's declared, so without this a
+   preview in another theme would inherit the page's roles, already worked
+   out in the page's colors. Only colors here: sizes and the focus ring are
+   the page's (layer 3), and a theme set on one element never changes them. */
+:root,
+[data-theme] {
+  color-scheme: dark;
 
   /* Surfaces text can sit on. `contrast.test.ts` checks every text role and
      all 16 name colors against each of these. */
@@ -171,10 +181,6 @@
 
   /* Keyboard focus: the lamp, 2px, offset 2px. Every focusable thing. */
   --focus: var(--lamp-1);
-  /* The ring itself, which only the keyboard lights (#375, below). */
-  --focus-ring: var(--focus);
-  --focus-width: 2px;
-  --focus-offset: 2px;
 
   /* The focused window's edge, from the logo's sign. */
   --window-focus-edge: var(--sign-a38);
@@ -183,6 +189,29 @@
   /* The band that crosses a shimmering name (SPEC §4.5). `lib/names.ts`
      and `kit/Name.css` read it. */
   --name-shimmer: rgb(255 255 255 / 0.6);
+
+  /* Shadows: windows and floating things only. Never on a row or a control. */
+  --shadow-window:
+    0 30px 70px -20px var(--black-a60),
+    0 10px 24px -8px var(--black-a45),
+    inset 0 1px 0 var(--white-a04);
+  --shadow-window-focused:
+    0 0 0 1px var(--sign-a10),
+    0 0 28px -6px var(--sign-a28),
+    0 34px 80px -20px var(--black-a70),
+    0 10px 24px -8px var(--black-a45),
+    inset 0 1px 0 var(--white-a04);
+  --shadow-popover: 0 24px 60px -16px var(--black-a70);
+  --shadow-notice: 0 16px 40px -12px var(--black-a60);
+}
+
+/* --- 3. scales and the rest ------------------------------------------------ */
+:root {
+  /* The ring itself, which only the keyboard lights (#375, below). */
+  --focus-ring: var(--focus);
+  --focus-width: 2px;
+  --focus-offset: 2px;
+
   /* How far a glowing name's light reaches, in the name's own ems, so a glow
      looks the same on a message (8px at 14.5px) and on a card (#272). */
   --name-glow: 0.55em;
@@ -191,8 +220,6 @@
      far on the name's side, so the light fades out rather than stopping at
      the line (#287). */
   --name-glow-reach: calc(var(--name-glow) * 2);
-
-  /* --- 3. scales ------------------------------------------------------------ */
 
   /* Spacing: a 4px base, with half steps for the tight places. */
   --space-0-5: 2px;
@@ -307,20 +334,6 @@
   /* An app icon as an iPhone cuts it (#961); Android's round one is --radius-pill. */
   --radius-app-icon: 22.37%;
 
-  /* Shadows: windows and floating things only. Never on a row or a control. */
-  --shadow-window:
-    0 30px 70px -20px var(--black-a60),
-    0 10px 24px -8px var(--black-a45),
-    inset 0 1px 0 var(--white-a04);
-  --shadow-window-focused:
-    0 0 0 1px var(--sign-a10),
-    0 0 28px -6px var(--sign-a28),
-    0 34px 80px -20px var(--black-a70),
-    0 10px 24px -8px var(--black-a45),
-    inset 0 1px 0 var(--white-a04);
-  --shadow-popover: 0 24px 60px -16px var(--black-a70);
-  --shadow-notice: 0 16px 40px -12px var(--black-a60);
-
   /* Type. Sans for everything people read; mono for times and small metadata;
      Departure Mono for labels; Silkscreen only for the small mark. */
   --font-ui: "Geist Sans", "IBM Plex Sans", system-ui, sans-serif;
@@ -388,6 +401,221 @@
   /* How tall a window's page is: the whole window on a computer. The phone
      takes its own bars off it (styles/phone.css). */
   --window-height: 100vh;
+}
+
+/* --- 4. themes ---------------------------------------------------------------
+   Each theme is a set of values for the color tokens above, and nothing else
+   (SPEC §5.3, docs/design/system.md "Themes", #963). It sets only tokens The
+   door has, mostly primitives; a role only where a mix needs another
+   strength. Every theme keeps the 16 name colors. `contrast.test.ts` lays each
+   block over The door and checks it at the same floors, and `core/theme.ts`
+   lists the ones Settings offers.
+
+   A see-through token's number is The door's strength. A theme may lay the
+   lamp on thicker than `--lamp-a08` says, make it from a deeper amber, or tint
+   `--white-aNN` and `--black-aNN` toward its own ground.
+
+   The values are the mockups Matt approved on 2026-11-26, written as OKLCH
+   and turned into hex. */
+
+/* After dark: near-black, from the After dark icon's #08090c, for late nights
+   and OLED phones. Text, lines, the lamp, the sign and the status colors a
+   step dimmer than The door's; amber still the brightest thing. */
+[data-theme="after-dark"] {
+  --night-0: #030304;
+  --night-1: #060608;
+  --night-2: #090a0d;
+  --night-3: #0c0d10;
+  --night-4: #101215;
+  --night-5: #0f1014;
+  --night-6: #101215;
+  --night-7: #16181d;
+  --night-8: #22252b;
+  --night-9: #31353e;
+
+  --ink-1: #ded8cf;
+  --ink-2: #b0b4bc;
+  --ink-3: #888c95;
+  --ink-4: #676c75;
+  --ink-warm: #d5c9b4;
+  --ink-warm-2: #e6ddce;
+
+  --hair-1: #17191e;
+  --hair-2: #23252b;
+  --hair-3: #383d47;
+
+  --lamp-1: #ecad59;
+  --lamp-2: #f8bf6f;
+  --sign-1: #2eaed5;
+  --red-1: #e26b6a;
+  --red-ink: #fdc9c6;
+  --green-1: #77ba87;
+
+  --lamp-a06: rgb(236 173 89 / 0.06);
+  --lamp-a08: rgb(236 173 89 / 0.08);
+  --lamp-a12: rgb(236 173 89 / 0.12);
+  --lamp-a16: rgb(236 173 89 / 0.16);
+  --lamp-a28: rgb(236 173 89 / 0.28);
+  --lamp-a45: rgb(236 173 89 / 0.45);
+  --warm-a06: rgb(213 201 180 / 0.06);
+  --warm-a24: rgb(213 201 180 / 0.24);
+  --red-a16: rgb(226 107 106 / 0.16);
+  --red-a42: rgb(226 107 106 / 0.42);
+  --sign-a10: rgb(46 174 213 / 0.1);
+  --sign-a28: rgb(46 174 213 / 0.28);
+  --sign-a38: rgb(46 174 213 / 0.38);
+
+  /* Your own reaction's blue, mixed into a near-black control, is faint at
+     The door's 22%. */
+  --react-mine-wash: color-mix(in oklab, var(--name-azure) 32%, var(--surface-control));
+}
+
+/* Porch light: warm darks. Brownish charcoal grounds, warmer off-white text
+   and warm lines, low in color and toward umber, so the lamp is still the
+   only amber thing. The lamp's washes are 1.35 times The door's, so an unread
+   row stands apart from the warm selected one. */
+[data-theme="porch-light"] {
+  --night-0: #110e0b;
+  --night-1: #171310;
+  --night-2: #1c1714;
+  --night-3: #201b17;
+  --night-4: #251f1b;
+  --night-5: #27221d;
+  --night-6: #27211c;
+  --night-7: #2e2722;
+  --night-8: #3c342d;
+  --night-9: #4f443c;
+
+  --ink-1: #f3eadb;
+  --ink-2: #d0c6ba;
+  --ink-3: #a2988d;
+  --ink-4: #7f746a;
+  --ink-warm: #ead2ae;
+  --ink-warm-2: #f6e6cb;
+
+  --hair-1: #312a24;
+  --hair-2: #403731;
+  --hair-3: #5c5047;
+
+  --lamp-a06: rgb(243 181 92 / 0.081);
+  --lamp-a08: rgb(243 181 92 / 0.108);
+  --lamp-a12: rgb(243 181 92 / 0.162);
+  --lamp-a16: rgb(243 181 92 / 0.216);
+  --lamp-a28: rgb(243 181 92 / 0.378);
+  --lamp-a45: rgb(243 181 92 / 0.608);
+  --warm-a06: rgb(234 210 174 / 0.06);
+  --warm-a24: rgb(234 210 174 / 0.24);
+  --white-a02: rgb(255 246 232 / 0.02);
+  --white-a04: rgb(255 246 232 / 0.04);
+  --white-a06: rgb(255 246 232 / 0.06);
+  --white-a07: rgb(255 246 232 / 0.07);
+  --white-a09: rgb(255 246 232 / 0.09);
+  --white-a10: rgb(255 246 232 / 0.1);
+
+  /* Your own reaction's blue, mixed into a warm control, comes out grey at
+     The door's 22%: more blue, so it still reads as yours. */
+  --react-mine-wash: color-mix(in oklab, var(--name-azure) 42%, var(--surface-control));
+}
+
+/* Dusk: a lifted deep blue, like the Dusk icon (#2b3a67, ink #dbe2f5). The
+   16 names keep 4.5:1 only up to about that blue, so it is the lightest
+   ground (a hovered row) and the window sits a little darker. Amber laid
+   over blue turns grey, so the lamp's washes are made from a deeper, more
+   orange amber, 1.75 times as strong. */
+[data-theme="dusk"] {
+  --night-0: #142044;
+  --night-1: #1c2850;
+  --night-2: #212f58;
+  --night-3: #23315b;
+  --night-4: #1e2b53;
+  --night-5: #273560;
+  --night-6: #24325d;
+  --night-7: #2b3a67;
+  --night-8: #3a4b79;
+  --night-9: #4c5e8f;
+
+  --ink-1: #ebf0fd;
+  --ink-2: #d0d9ee;
+  --ink-3: #aeb9d3;
+  --ink-4: #8b98b8;
+  --ink-warm: #f1dfc0;
+  --ink-warm-2: #f9edd9;
+
+  --hair-1: #32416c;
+  --hair-2: #3e4e79;
+  --hair-3: #586a9b;
+
+  --lamp-1: #f9bc66;
+  --lamp-2: #ffcc7f;
+  --red-1: #fc8987;
+  --red-ink: #ffd3ce;
+  --green-1: #87d299;
+
+  --lamp-a06: rgb(255 156 46 / 0.105);
+  --lamp-a08: rgb(255 156 46 / 0.14);
+  --lamp-a12: rgb(255 156 46 / 0.21);
+  --lamp-a16: rgb(255 156 46 / 0.28);
+  --lamp-a28: rgb(255 156 46 / 0.49);
+  --lamp-a45: rgb(255 156 46 / 0.787);
+  --warm-a06: rgb(241 223 192 / 0.06);
+  --warm-a24: rgb(241 223 192 / 0.24);
+  --red-a16: rgb(252 137 135 / 0.16);
+  --red-a42: rgb(252 137 135 / 0.42);
+  --black-a45: rgb(5 9 26 / 0.45);
+  --black-a60: rgb(5 9 26 / 0.6);
+  --black-a70: rgb(5 9 26 / 0.7);
+}
+
+/* The original: the pixel porch picture's colors. Its deep night blue (the
+   wall's #01112f and #032655) for the grounds, and the warm wood and brick of
+   the chair, the door frame and the floorboards (#612f32, #422023, #653324,
+   #a74a30) in the title bar, the lines, cards and menus. Filled controls and
+   a hovered or selected row stay blue, fill and edge: a warm control on a
+   blue ground draws the eye the way only something new should. Amber over
+   saturated blue greys out, as in Dusk: a deeper amber, 1.45 times as
+   strong. */
+[data-theme="original"] {
+  --night-0: #000920;
+  --night-1: #000e2a;
+  --night-2: #011333;
+  --night-3: #29160f;
+  --night-4: #311d1a;
+  --night-5: #331c14;
+  --night-6: #2f1c19;
+  --night-7: #08244b;
+  --night-8: #1f375a;
+  --night-9: #2c4c79;
+
+  --ink-1: #f5ead9;
+  --ink-2: #bdcadd;
+  --ink-3: #8ba0be;
+  --ink-4: #667da0;
+  --ink-warm: #edd7bb;
+  --ink-warm-2: #f7e9d5;
+
+  --hair-1: #3f221f;
+  --hair-2: #572f29;
+  /* The edge of a hovered or selected row: the wall's lit blue (#044889),
+     not brick, so it can't be taken for an unread row's amber edge. */
+  --hair-3: #2c5080;
+
+  --lamp-a06: rgb(255 156 46 / 0.087);
+  --lamp-a08: rgb(255 156 46 / 0.116);
+  --lamp-a12: rgb(255 156 46 / 0.174);
+  --lamp-a16: rgb(255 156 46 / 0.232);
+  --lamp-a28: rgb(255 156 46 / 0.406);
+  --lamp-a45: rgb(255 156 46 / 0.652);
+  --warm-a06: rgb(237 215 187 / 0.06);
+  --warm-a24: rgb(237 215 187 / 0.24);
+  --white-a02: rgb(255 242 228 / 0.02);
+  --white-a04: rgb(255 242 228 / 0.04);
+  --white-a06: rgb(255 242 228 / 0.06);
+  --white-a07: rgb(255 242 228 / 0.07);
+  --white-a09: rgb(255 242 228 / 0.09);
+  --white-a10: rgb(255 242 228 / 0.1);
+  --black-a45: rgb(0 4 15 / 0.45);
+  --black-a60: rgb(0 4 15 / 0.6);
+  --black-a70: rgb(0 4 15 / 0.7);
 }
 
 /* The phone (SPEC §4.15, styles/phone.css): rows and the title bar a thumb

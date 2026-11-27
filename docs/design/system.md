@@ -179,9 +179,13 @@ one.
   its own colors with tokens alone. Sizes and the focus ring are declared on
   `:root` only.
 - **The theme is on `<html>` before anything draws**, in every window and on
-  the phone: a window opened later never shows another theme's colors for a
-  moment. A change in Settings applies in every open window at once, through
-  the same announcement as the interface size.
+  the phone: `client/public/theme.js`, a plain script `next.html` runs before
+  anything else, reads the choice and puts `data-theme` on, and `next.html`
+  paints each theme's window color before the styles load. A window opened
+  later never shows another theme's colors for a moment. A change in
+  Settings applies in every open window at once, through the same
+  announcement as the interface size (`core/theme.ts`,
+  `core/appearance.ts`).
 - **Contrast holds in every theme.** `contrast.test.ts` lays each theme's
   block over `:root` and runs every list on this page against it, at the
   same floors. A theme that misses one is fixed in its values, never in the

@@ -270,6 +270,8 @@ linger/
 │  │                          #   styles/ tokens (docs/design/architecture.md)
 │  ├─ src/lib/                # logic the windows share (.ts only)
 │  ├─ src/generated/          # wire types from linger-core, never edited by hand
+│  ├─ public/                 # served as it is: theme.js, which puts the theme
+│  │                          #   on before the page draws (#964)
 │  ├─ tests/browser/          # the browser tests (Playwright)
 │  └─ tests/ios/              # the iPhone app's flows (Maestro), run in the
 │                             #   iOS Simulator by ios-simulator.yml
