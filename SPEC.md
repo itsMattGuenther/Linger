@@ -1690,10 +1690,38 @@ dark-mode Discord reskin.
 
 ### 5.3 Color
 
-Dark only. There is no light theme and none is planned (decided 2026-09-28). Every color is a token in
-`client/src/next/styles/tokens.css`; `system.md` lists them with their contrast. Text
-meets 4.5:1 on every background it sits on, icons 3:1, and the test suite checks it.
-Evening warmth waits for an evening version of these colors.
+Every color is a token in `client/src/next/styles/tokens.css`; `system.md` lists them
+with their contrast. Text meets 4.5:1 on every background it sits on, icons 3:1, and
+the test suite checks it.
+
+**Themes** (#963). Five, each named after one of the app icon's looks (#961), picked in
+Settings › Appearance › Theme on the desktop and on phones:
+
+| Theme | What it is |
+|---|---|
+| **The door** | The night from the logo: today's colors, and the default |
+| **After dark** | Near-black and a little dimmer, for late nights and OLED phones |
+| **Porch light** | Warm charcoal grounds and warm white text |
+| **Dusk** | A lifted deep blue, like the Dusk icon |
+| **The original** | The pixel porch's deep night blue, with wood-toned bars, cards and menus |
+
+What bounds them:
+
+- **Per device**, like the interface size. The choice isn't sent to the server or
+  synced between devices.
+- **Only colors change.** A theme is a set of values for the same color tokens. Layout,
+  fonts, sizes and §5.1's rules are the same in every theme.
+- **Amber still means something new for you**, in every theme. A theme changes grounds,
+  text and lines and, only where readability needs it, the exact shade of a semantic
+  color, never what a color means.
+- **Contrast holds in every theme**, at the same floors, and the test suite checks each
+  one. All five keep the 16 name colors of §5.4.
+- **Linger's own.** Themes people make and share themselves are still "V3 or never"
+  (§6).
+
+All five are dark, as decided on 2026-09-28. Daylight, a light theme, is planned
+(#965), and reverses that decision when it ships. Evening warmth still waits for an
+evening version of these colors: Porch light is the warm look, chosen by hand.
 
 ### 5.4 The 16-color name palette
 

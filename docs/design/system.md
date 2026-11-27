@@ -98,8 +98,8 @@ Tokens come in three layers. **Primitives** are named colors with no meaning;
 only `tokens.css` uses them. **Semantic roles** say what a color is *for*;
 components use only these. **Scales** set spacing, sizes, type and motion.
 
-The app is dark only. A light theme was dropped (2026-09-28,
-`docs/decisions.md`), so there is one set of semantic roles.
+The semantic roles are defined once. A theme (below, "Themes") is a set of
+values for the same color tokens, never a second set of roles.
 
 ### Colors
 
@@ -146,6 +146,48 @@ only for marks that are not text.
 Names are never colored by a token. A person's color is a palette key on the
 wire (AGENTS rules 8 and 12). It becomes a color only in the generated
 `palette.generated.css`, and all 16 keys pass 4.5:1 on every surface.
+
+### Themes
+
+Five themes, all dark (#963, #964), picked per device in Settings ›
+Appearance › Theme (SPEC §5.3). Each is a set of values for the color
+tokens above, and nothing else: no size, face, radius or rule changes with
+one.
+
+| Theme | id | A window | What changes |
+|---|---|---|---|
+| The door | `door` | `#131a28` | Nothing: the values above, and the default |
+| After dark | `after-dark` | `#090a0d` | Near-black grounds; text, lines, the lamp, the sign and the status colors a step dimmer; your own reaction's blue mixed in at 32% |
+| Porch light | `porch-light` | `#1c1714` | Warm charcoal grounds, warm white text and warm lines; the lamp's washes 1.35 times as strong, so an unread row stands apart from the warm selected one; your own reaction's blue at 42% |
+| Dusk | `dusk` | `#212f58` | A lifted deep blue, a little darker than the Dusk icon's `#2b3a67`, where some of the 16 names fall under 4.5:1; the lamp's washes made from a deeper, more orange amber, 1.75 times as strong, since amber over blue turns grey; the menu a step darker than the window |
+| The original | `original` | `#011333` | The pixel porch's night blue, with wood and brick in the title bar, the lines, cards and menus; filled controls and a hovered or selected row stay blue, so nothing calm looks new; the lamp's washes deeper and 1.45 times as strong |
+
+- **The door is `:root`.** Every other theme is one block of values under
+  `[data-theme="<id>"]`, in `tokens.css` like every other color, so no file
+  but `tokens.css` holds a color literal. A theme block sets only tokens The
+  door already has.
+- **Mostly primitives.** A theme sets the night, ink, hairline, lamp, sign
+  and status colors and their see-through layers; the roles follow. It sets
+  a role only where a mix needs another strength, as `--react-mine-wash`
+  does in After dark and Porch light.
+- **A see-through token's number is The door's strength.** A theme may lay
+  the lamp on thicker than `--lamp-a08` says, make it from a deeper amber,
+  or tint `--white-aNN` and `--black-aNN` toward its own ground.
+- **A theme works on any element, not only the page.** The roles are
+  declared again wherever `data-theme` is, so each resolves from that
+  element's own primitives. That's how the Theme picker shows each choice in
+  its own colors with tokens alone. Sizes and the focus ring are declared on
+  `:root` only.
+- **The theme is on `<html>` before anything draws**, in every window and on
+  the phone: a window opened later never shows another theme's colors for a
+  moment. A change in Settings applies in every open window at once, through
+  the same announcement as the interface size.
+- **Contrast holds in every theme.** `contrast.test.ts` lays each theme's
+  block over `:root` and runs every list on this page against it, at the
+  same floors. A theme that misses one is fixed in its values, never in the
+  test.
+- **The 16 name colors are the same in every dark theme.** A theme that
+  needs others (Daylight, #965) gets them from `linger-core::PALETTE`.
 
 ### Scales
 
@@ -1386,7 +1428,7 @@ it catches, and nowhere else (AGENTS.md hard rule 4).
 | `src/next` imports nothing in `src/` but `src/lib`, `src/generated` and `src/fonts`; `src/lib` holds logic (`.ts`) only and imports nothing but itself and those two | `discipline.test.ts` › src/next shares only the core; the shared core stands on its own |
 | Kit components take no `className` or `style` prop | `discipline.test.ts` › takes no className or style prop |
 | A conversation that can't be drawn says so in its place, and the list, the tabs and the other conversations carry on; a window that can't says so under its title bar with Reload, and sends nothing anywhere; a time a date can't hold draws as no time | `next-side.spec.ts` › a conversation that can't be drawn says so in its place…, and › …from a time no date can hold draw with no time…; `next-boundary.spec.ts`; `lib/time.test.ts` › a time no date can hold |
-| Text roles reach 4.5:1 and icons, accent and focus 3:1 on every surface; all 16 name colors reach 4.5:1, also on a card washed in any of them where the wash is strongest; an offline name's grey, read from `kit/Name.css`, on the list and on a hovered or selected row; text on the accent and washes, and switch parts, pass | `contrast.test.ts` |
+| Text roles reach 4.5:1 and icons, accent and focus 3:1 on every surface; all 16 name colors reach 4.5:1, also on a card washed in any of them where the wash is strongest; an offline name's grey, read from `kit/Name.css`, on the list and on a hovered or selected row; text on the accent and washes, and switch parts, pass; all of it in every theme, each laid over The door (#964) | `contrast.test.ts` |
 
 Every rule was proven by planting the bug it forbids and watching it fail. The
 geometry spec also saves a review sheet of each gallery section to

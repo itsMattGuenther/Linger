@@ -25,7 +25,9 @@ Not in M15:
 - **No voice forwarding** (#197, shipped separately in 0.4.1) and **no voice
   encryption** (#200).
 - **No macOS build.**
-- **No light theme.** Decided 2026-09-28: the app is dark only, for good.
+- **No light theme.** Decided 2026-09-28: the app is dark only. (Themes came
+  later, #963: five dark ones, #964, and Daylight, a light one, planned in
+  #965.)
 
 ## Where the code lives
 
@@ -333,8 +335,8 @@ answered with the problem, and nothing plays.
   the list window carries out, still sound in the list window. Joining still
   sounds there too, when the server's frame seats you.
 
-**How it looks is the same in every window.** Plain names and interface size
-are kept on this computer; Settings saves a change and announces it
+**How it looks is the same in every window.** The theme, plain names and
+interface size are kept on this computer; Settings saves a change and announces it
 (`next:appearance`), and every window applies it (`core/appearance.ts`).
 Interface size zooms the page and grows the window by the same ratio, because
 the new client's sizes are fixed pixels and a larger base font would grow
@@ -346,6 +348,15 @@ refuses (full, or switched off) isn't made: Settings says "Couldn't save that
 here." under it, and the setting stays as it was (#782), since every window
 applies what it reads from storage. The phone's Text size is kept in memory
 as well, as the phone has one window.
+
+**The theme has to be there before the page draws** (#964). A window opened
+later would otherwise show The door's colors for a moment, until the app's
+code had loaded and put its theme on. So a small plain script in
+`next.html`'s head reads the saved theme and puts `data-theme` on `<html>`
+first, and the color the page shows before its styles load follows it too.
+It's a file of Linger's own rather than a script written into the page,
+because the page's content security policy runs nothing else
+(`script-src 'self'`).
 
 **Sound preferences need no message.** Mute, quiet hours, the chime switches
 and the sound volume are kept on this computer (`linger.sound.*`, `lib/sound.ts`).
@@ -850,8 +861,8 @@ real-app check before the next step leans on it.
 
 ## Open decisions for Matt
 
-- **Light theme.** Decided (2026-09-28): dark only. No light version is
-  planned.
+- **Light theme.** Decided (2026-09-28): dark only. Daylight, a light
+  theme, is planned since 2026-11-26 (#965) and reverses it when it ships.
 - **The host time zone** for "4:52 AM there". It needs one small server
   setting. Build it in M15.8, or drop the line?
 - The rest are listed, with what each blocks, in `parity.md` ("Decisions

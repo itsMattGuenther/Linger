@@ -82,6 +82,8 @@ This is not an attempt to build a better platform. It's an attempt to not need o
 - **Styled names and statuses**: your own font, color, gradient and glow; a
   status with up to three short fields you label yourself, links included;
   away messages; and, if you turn it on, your local time on your card.
+- **Five color themes**, named after the app icon's looks: The door, After
+  dark, Porch light, Dusk and The original. Each computer or phone keeps its own.
 - **Files and media.** 500 MB uploads, with where a photo or video was taken
   always stripped. Media, a tab
   beside your list, keeps everything ever shared; star things to keep them forever.
