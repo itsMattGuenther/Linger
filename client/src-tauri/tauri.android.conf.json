@@ -5,7 +5,8 @@
     "windows": [
       {
         "title": "Linger",
-        "url": "next.html?shell=phone"
+        "url": "next.html?shell=phone",
+        "backgroundColor": "#131a28"
       }
     ]
   }

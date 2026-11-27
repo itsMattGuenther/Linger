@@ -75,7 +75,7 @@ export const CROSSINGS = [
     // on a light theme and light on a dark one (#965).
     class: "io.github.itsmattguenther.linger.SystemBars",
     method: "follow",
-    type: "(Landroid/content/Context;Z)V",
+    type: "(Z)V",
     from: "client/src-tauri/src/theme.rs",
   },
 ];

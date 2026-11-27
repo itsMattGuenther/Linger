@@ -1,6 +1,12 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
+    <!-- Base application theme. Linger opens on The door's navy whatever the
+         phone's own light or dark mode (#965, src/theme.rs): the starting
+         window and Android 12's launch screen, with light bar icons on
+         them, until its page says its theme. -->
     <style name="Theme.linger_client" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <!-- Customize your theme here. -->
+        <item name="android:windowBackground">@color/door</item>
+        <item name="android:windowSplashScreenBackground" tools:targetApi="31">@color/door</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">false</item>
     </style>
 </resources>

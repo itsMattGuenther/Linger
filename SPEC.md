@@ -1736,9 +1736,10 @@ the theme's window color, so none shows another theme's for a moment before its 
 draws; at start the list waits, hidden, until its page has said which theme it's in
 (but after an update restarts Linger by itself behind other windows, which mustn't take the focus).
 On a phone the status bar's and navigation bar's icons are dark on Daylight and
-light on the dark themes, whatever the phone's own dark mode says. An iPhone opens on The
+light on the dark themes, whatever the phone's own dark mode says. A phone opens on The
 door's navy, its launch screen and the page's ground before it draws, with light icons,
-whatever the phone's own mode and the theme: Apple allows one fixed launch screen.
+whatever the phone's own mode and the theme (an iPhone allows one fixed launch screen),
+until the page draws its theme.
 
 Evening warmth still waits for an evening version of these colors: Porch light is the
 warm look, chosen by hand.

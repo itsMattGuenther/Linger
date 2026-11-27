@@ -35,7 +35,6 @@ const THEMES: [(&str, [u8; 3], bool); 6] = [
 struct Look {
     #[cfg_attr(mobile, allow(dead_code))]
     id: &'static str,
-    #[cfg_attr(target_os = "android", allow(dead_code))]
     window: [u8; 3],
     #[cfg_attr(not(mobile), allow(dead_code))]
     light: bool,
@@ -216,38 +215,41 @@ mod desktop {
 }
 
 /// The page puts a theme on: the phone's bars take its icons, dark on a
-/// light theme and light on a dark one.
+/// light theme and light on a dark one, and the page's ground takes its
+/// window color. A phone opens on The door's navy whatever the theme (its
+/// launch screen, and the ground before the page draws), with light icons
+/// on it, so that's what the ground leaves: nothing navy shows under
+/// Daylight's paper once the page has said.
 #[cfg(mobile)]
 #[tauri::command]
 pub async fn app_theme(webview: tauri::Webview, theme: String) {
-    platform::follow(&webview, look(&theme)).await;
+    let theme = look(&theme);
+    let [r, g, b] = theme.window;
+    let _ = webview.set_background_color(Some(tauri::window::Color(r, g, b, 255)));
+    platform::follow(&webview, theme.light).await;
 }
 
 #[cfg(target_os = "android")]
 mod platform {
     //! `SystemBars.kt`, asked from a thread kept for blocking work, which
-    //! redraws the bars on the app's own thread and keeps the answer for
-    //! the next start (`MainActivity.kt`).
+    //! redraws the bars on the app's own thread. Nothing is kept for the
+    //! next start: Linger opens on The door's navy (`themes.xml`, and the
+    //! page's ground in `tauri.android.conf.json`), so `MainActivity.kt`
+    //! starts with light icons.
 
     use jni::objects::JValue;
 
     use crate::phone_sound::android::{app_class, with_env};
 
-    pub async fn follow(_webview: &tauri::Webview, theme: super::Look) {
-        let light = theme.light;
+    pub async fn follow(_webview: &tauri::Webview, light: bool) {
         crate::off_thread(move || bars(light), || None).await;
     }
 
     fn bars(light: bool) -> Option<()> {
         with_env(|env, app| {
             let class = app_class(env, app, "io.github.itsmattguenther.linger.SystemBars")?;
-            env.call_static_method(
-                &class,
-                "follow",
-                "(Landroid/content/Context;Z)V",
-                &[JValue::Object(app), JValue::Bool(u8::from(light))],
-            )
-            .ok()?;
+            env.call_static_method(&class, "follow", "(Z)V", &[JValue::Bool(u8::from(light))])
+                .ok()?;
             Some(())
         })
     }
@@ -261,21 +263,16 @@ mod platform {
     //! the window's style is all it takes. The keyboard and the share sheet
     //! follow it too, so they match the page.
     //!
-    //! Nothing is kept here, unlike Android: an iPhone always opens on The
-    //! door's navy, its launch screen (`LaunchScreen.storyboard`) and the
-    //! page's ground before it draws (`tauri.ios.conf.json`), and starts
-    //! dark (`UIUserInterfaceStyle` in `Info.plist`), so its icons are
-    //! light on it until the page says its theme. The page's ground then
-    //! takes the theme's window color, so nothing navy shows under
-    //! Daylight's paper.
+    //! Nothing is kept for the next start: an iPhone opens on The door's
+    //! navy, its launch screen (`LaunchScreen.storyboard`, Apple allows
+    //! one fixed one) and the page's ground before it draws
+    //! (`tauri.ios.conf.json`), and starts dark (`UIUserInterfaceStyle` in
+    //! `Info.plist`), so its icons are light on it until the page says.
 
     use objc2::MainThreadMarker;
     use objc2_ui_kit::{UIUserInterfaceStyle, UIViewController};
 
-    pub async fn follow(webview: &tauri::Webview, theme: super::Look) {
-        let [r, g, b] = theme.window;
-        let _ = webview.set_background_color(Some(tauri::window::Color(r, g, b, 255)));
-        let light = theme.light;
+    pub async fn follow(webview: &tauri::Webview, light: bool) {
         let _ = webview.with_webview(move |shown| {
             if MainThreadMarker::new().is_none() {
                 return;
@@ -357,17 +354,23 @@ mod tests {
         assert!(!look("door").light);
     }
 
-    /// An iPhone opens on The door's navy before its page draws: the launch
-    /// screen, the page's ground, and a dark start so the status bar's
-    /// icons are light on it (`platform` on iOS). Every copy is The door's.
+    /// A phone opens on The door's navy before its page draws, whatever the
+    /// theme: the launch screen, the page's ground, and a start with light
+    /// bar icons on it (`app_theme` on a phone). Every copy is The door's.
     #[test]
-    fn an_iphone_opens_on_the_doors_navy() {
+    fn a_phone_opens_on_the_doors_navy() {
         let [r, g, b] = look("door").window;
-        let config = include_str!("../tauri.ios.conf.json");
-        assert!(
-            config.contains(&format!("\"backgroundColor\": \"#{r:02x}{g:02x}{b:02x}\"")),
-            "tauri.ios.conf.json's page ground isn't The door's"
-        );
+        let hex = format!("#{r:02x}{g:02x}{b:02x}");
+        for config in [
+            include_str!("../tauri.ios.conf.json"),
+            include_str!("../tauri.android.conf.json"),
+        ] {
+            assert!(
+                config.contains(&format!("\"backgroundColor\": \"{hex}\"")),
+                "a phone's page ground isn't The door's"
+            );
+        }
+        // iPhone: the launch screen, and a dark start.
         let launch = include_str!("../gen/apple/LaunchScreen.storyboard");
         let at = launch
             .find("<color key=\"backgroundColor\"")
@@ -390,6 +393,29 @@ mod tests {
         assert!(plist.contains("<key>UIUserInterfaceStyle</key>\n\t<string>Dark</string>"));
         let project = include_str!("../gen/apple/project.yml");
         assert!(project.contains("UIUserInterfaceStyle: Dark"));
+        // Android: the starting window and Android 12's launch screen, in
+        // light mode and dark, with light bar icons.
+        let colors = include_str!("../gen/android/app/src/main/res/values/colors.xml");
+        assert!(colors.contains(&format!(
+            "<color name=\"door\">#FF{}</color>",
+            hex[1..].to_uppercase()
+        )));
+        for theme in [
+            include_str!("../gen/android/app/src/main/res/values/themes.xml"),
+            include_str!("../gen/android/app/src/main/res/values-night/themes.xml"),
+        ] {
+            for item in [
+                "<item name=\"android:windowBackground\">@color/door</item>",
+                "<item name=\"android:windowSplashScreenBackground\" tools:targetApi=\"31\">@color/door</item>",
+                "<item name=\"android:windowLightStatusBar\">false</item>",
+            ] {
+                assert!(theme.contains(item), "themes.xml lacks {item}");
+            }
+        }
+        let activity = include_str!(
+            "../gen/android/app/src/main/java/io/github/itsmattguenther/linger/MainActivity.kt"
+        );
+        assert!(activity.contains("SystemBars.draw(this, false)"));
     }
 
     #[test]

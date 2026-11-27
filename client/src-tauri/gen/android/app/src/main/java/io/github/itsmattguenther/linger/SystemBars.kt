@@ -1,6 +1,5 @@
 package io.github.itsmattguenther.linger
 
-import android.content.Context
 import android.graphics.Color
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -15,15 +14,13 @@ import java.lang.ref.WeakReference
  * dark icons on The door's night.
  *
  * Rust (src-tauri/src/theme.rs) calls [follow] each time the page puts a
- * theme on. The answer is kept, so the next start draws its first frame
- * with the right icons (MainActivity) before the page has said anything.
+ * theme on. Nothing is kept for the next start: Linger always opens on The
+ * door's navy (themes.xml), so MainActivity starts with light icons, and
+ * the page says its theme as it loads.
  * The bars stay see-through over the page's own ground, but for Android's
  * backing behind three-button navigation.
  */
 object SystemBars {
-  private const val PREFS = "linger.systemBars"
-  private const val LIGHT = "light"
-
   /**
    * See-through dark, androidx's own default: behind the navigation bar's
    * light buttons before Android 8, which can't draw dark ones, so they
@@ -43,10 +40,6 @@ object SystemBars {
   /** The app's screen, while it has one. */
   var activity: WeakReference<ComponentActivity>? = null
 
-  /** Whether the last theme the page put on was light: a dark one until it says. */
-  fun light(context: Context): Boolean =
-    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(LIGHT, false)
-
   /**
    * The bars for a light theme's page, or a dark one's. On the screen's own
    * thread. The navigation bar keeps the backing the plain
@@ -65,10 +58,9 @@ object SystemBars {
     screen.enableEdgeToEdge(status, navigation)
   }
 
-  /** Rust's call: keep it for the next start, and redraw the bars now if there's a screen. */
+  /** Rust's call: redraw the bars now, if there's a screen. */
   @JvmStatic
-  fun follow(context: Context, light: Boolean) {
-    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(LIGHT, light).apply()
+  fun follow(light: Boolean) {
     val screen = activity?.get() ?: return
     screen.runOnUiThread { draw(screen, light) }
   }
