@@ -8,9 +8,9 @@ commit. They are large: read the sections your change touches, not whole files.
 
 ## Start every session by reading
 
-1. Your task: the GitHub issue, or the `TASKS.md` entry it points at. Open
-   `TASKS.md` only when the task is there. It is large, and so are its
-   archives in `docs/tasks/`.
+1. Your task: the GitHub issue. `TASKS.md` holds only the next release's
+   notes and work not yet planned. The archives in `docs/tasks/` are large:
+   read one only when your change touches its area.
 2. `SPEC.md` §2 (design thesis) and §6 (scope), so you know what Linger
    refuses to be.
 3. The sections of `SPEC.md`, `ARCHITECTURE.md` and `PROTOCOL.md` your
@@ -114,8 +114,8 @@ rewritten for it.
 **Commits**
 - Conventional-ish: `feat(gateway): resume with sequence replay`
 - One logical change per commit. Docs updated in the same commit as the behavior change.
-- Branches are `feat/t-xxx-short-slug` (or `docs/…`, `fix/…`). Pushing the branch
-  is how a task is claimed — see `TASKS.md` §"How to run a task".
+- Branches are `feat/<issue>-short-slug` (or `docs/…`, `fix/…`, `test/…`).
+  Assigning yourself the issue is how it's claimed (*Pull requests and issues*).
 - **A `docs/…` branch carries docs only.** Greptile skips it (a filter in its
   dashboard, since each review costs a credit), so a script, a test or a code
   comment goes on a `fix/…`, `feat/…` or `test/…` branch, where it gets
@@ -127,100 +127,81 @@ rewritten for it.
   listed with why. Run it after a merge; `--dry-run` shows what would go.
 
 **Pull requests and issues**
-- Before starting an issue, check its linked pull requests and who is assigned,
-  so an existing proposed fix is not duplicated. If somebody else is assigned,
-  ask on the issue before starting.
-- Then claim it, so everybody can see it's taken before a pull request exists:
-  assign yourself (`gh issue edit <number> --add-assignee @me`). GitHub lets
-  only people with access to the repository assign anyone, themselves
-  included, so if it refuses, comment on the issue that you're working on it
-  and Matt assigns you. A branch on a fork doesn't count: nobody else can see it.
+- **Before starting an issue**, check its linked pull requests and who is
+  assigned, so a proposed fix isn't duplicated. If somebody else is assigned,
+  ask on the issue before starting. Then claim it, so everybody can see it's
+  taken before a pull request exists: `gh issue edit <number> --add-assignee
+  @me`. GitHub lets only people with access to the repository assign anyone,
+  so if it refuses, comment on the issue that you're working on it and Matt
+  assigns you. A branch on a fork doesn't count: nobody else can see it.
 - **Don't open new issues while you work on one**, unless the person you
   work for asks. A nearby bug, a gap a review showed, a check worth adding,
   a test that failed at random: each goes under **Found along the way** in
-  the pull request, and Matt sorts that list after it merges. Issues opened
-  mid-task became the next task, and one bug became four (#933).
+  the pull request, and Matt sorts that list after it merges (#933).
 - **One job per issue**: one piece of work that one pull request, or one
   decision, finishes. Checkboxes in an issue are its finish line ("Done
-  when"), never a list of separate jobs. Jobs that belong together are a
-  parent issue labelled `tracking`, with each job a sub-issue of it. That
-  way each job is assigned and claimed on its own and closes when its pull
-  request merges, and GitHub shows on the parent how many are done. A
-  `tracking` issue isn't one to pick up: pick one of its sub-issues (#779).
+  when"), never a list of separate jobs. Jobs that belong together are
+  sub-issues of a parent labelled `tracking`, which isn't one to pick up
+  (#779).
 - **Link every issue a PR resolves** with a `Fixes #<number>` or
   `Closes #<number>` line in its description, from the moment it opens (a
   bare mention or a commit message doesn't link), and check it took:
   `gh pr view <number> --json closingIssuesReferences`. Linked issues close
   on merge, so finish their acceptance checks before merging.
 - **Open a pull request as a draft** (`gh pr create --draft`), and mark it
-  ready (`gh pr ready`) once the work is done and `ci` is green. While it's a
-  draft, a push runs `ci` (about 10 minutes) but not the iPhone runs on
-  GitHub's Mac: they start when it's marked ready, and still have to pass
-  before it merges (#933). `all green` doesn't include them, so wait for
-  them; a Mac job skipped while it was a draft isn't one that doesn't apply.
-  Push your fixes together, not one at a time: after it's ready, every push
-  runs them again. The longest, the iPhone app in the simulator, runs on a
-  pull request only when it changes what that run builds, drives or runs
-  (the flows, the shell's code and project only a phone builds, its
-  workflow and the scripts it runs) or it's a release's; the nightly run on
-  `main` runs it for the rest (#955). On a pull request it runs only the
-  start flows, which need no server (about 20 minutes); the nightly run, a
-  release's pull request and a change to the run's own flows or workflow
-  run every flow (about 40, #971).
+  ready (`gh pr ready`) once the work is done and `ci` is green (about 10
+  minutes). The iPhone runs on GitHub's Mac start only when it's marked
+  ready, aren't part of `all green`, and still have to pass before it
+  merges, so wait for them: a Mac job skipped while it was a draft isn't one
+  that doesn't apply. Push your fixes together: after it's ready,
+  every push runs them again (#933). Which iPhone runs a pull request gets
+  is in `docs/testing-strategy.md` (#955, #971).
 - **Before opening a pull request, run `node scripts/pr-questions.mjs`** and
   answer the questions it prints for your change: the kinds of mistake
   reviews have caught, for the parts of the project your branch changed. Say
   what you checked in the pull request's Tests section, in a line or two.
 - **A fresh review runs by itself before a pull request opens, is marked
-  ready, or merges** (#917). Whoever writes a change also writes its tests
-  and answers those questions, so all three share the same blind spots, and
-  most of what Greptile caught was exactly that. In Claude Code, a hook in
-  `.claude/settings.json` runs `scripts/review-gate.mjs` before `gh pr
-  create`, `gh pr ready` and `gh pr merge`: `/code-review` (high) in a
-  separate Claude process, on the commits being proposed or merged, given
-  the questions for them. Nobody starts it, and it takes a few minutes.
-  Each commit is reviewed once. With findings, the command stops and they
-  come back to you: fix what's real and run it again, and a new commit gets
-  a review of what it adds since the newest reviewed commit it still holds
-  (the whole change when a rebase or amend left none, or it took in main,
-  #933: fix with a new commit). The
-  same commit passes the second time, so a finding you judge wrong doesn't
-  hold you up; say why in the pull request, and say in its Tests section
-  what the review found and what you did. Docs-only changes aren't
-  reviewed. Run the command on its own, with only `cd <folder> &&` in
-  front (and, before `gh pr create`, `git push … &&`), and the number
-  right after `gh pr merge`; push before a merge, never in the
-  same command, and don't use `--auto`, since either would merge a commit
-  the review never saw. Don't put a merge in the background, and pipe it
-  only into what reads (`| tail`, `| tee log`); a body goes in
-  `--body-file` or a plain `"$(cat file)"`. The gate reads the command as
-  bash does and stops what it can't read rather than guess.
-  At a merge it never runs the pull request's own code: the questions come
-  from the gate's copy, and the reviewer loads only your own Claude
-  settings. With another tool, run `node scripts/review-gate.mjs` before
-  opening (it needs the `claude` command, or `LINGER_REVIEWER` set to it,
-  which Windows needs when Claude Code came from npm), or your tool's own
-  review in a fresh session.
+  ready, or merges** (#917): whoever writes a change also writes its tests
+  and answers those questions, so all three share the same blind spots. In
+  Claude Code, a hook in `.claude/settings.json` runs
+  `scripts/review-gate.mjs` before `gh pr create`, `gh pr ready` and
+  `gh pr merge`: `/code-review` (high) in a separate Claude process,
+  on the commits being proposed or merged, given the questions for them. It
+  takes a few minutes, and each commit is reviewed once. With findings, the
+  command stops: fix what's real and run it again. A new commit is reviewed
+  for what it adds, so fix with a new commit (a rebase, an amend or taking
+  in main makes it review the whole change). The same commit passes the
+  second time, so a finding you judge wrong doesn't hold you up: say why in
+  the pull request, and say in its Tests section what the review found and
+  what you did. Docs-only changes aren't reviewed.
+  Run the command on its own, with only `cd <folder> &&` in front (and,
+  before `gh pr create`, `git push … &&`), and the number right after
+  `gh pr merge`.
+  Push before a merge, never in the same command, and don't use `--auto`:
+  either would merge a commit the review never saw. Don't put a merge in
+  the background, pipe it only into what reads (`| tail`, `| tee log`), and
+  put a body in `--body-file` or a plain `"$(cat file)"`. The gate stops
+  what it can't read rather than guess. With
+  another tool, run `node scripts/review-gate.mjs` before opening (it needs
+  the `claude` command, or `LINGER_REVIEWER` set to it, which Windows needs
+  when Claude Code came from npm), or your tool's own review in a fresh
+  session.
 - **Three review rounds, then stop.** The reviewer always finds something
-  (84 reviews in one day, every one with findings, #933), so the rounds end
-  only when you end them. If the same kind of finding comes back a third
-  time, the design is wrong: stop patching, rethink it, and tell the person
-  you work for. After the third round, only a real bug in what the pull
-  request changes holds it up; the rest goes under *Found along the way*,
-  and the same commit passes.
+  (#933). If the same kind of finding comes back a third time, the design is
+  wrong: stop patching, rethink it, and tell the person you work for. After
+  the third round, only a real bug in what the pull request changes holds it
+  up; the rest goes under *Found along the way*, and the same commit passes.
 - **A real review catch is fixed and logged, not turned into more process.**
   When a reviewer (Greptile, which reviews every pull request but a `docs/…`
   branch's, or a person) finds a real problem, fix it with its test, and add
   one entry to `docs/review-catches.md` under the gap it fits. Don't build a
   new check, question or rule for it in the same pull request: suggest it
-  under *Found along the way*, and Matt picks the ones worth building. Every
-  catch used to add process, and nothing came off (#933). The one exception
-  is a gap the record has never had: it needs a question in
-  `docs/pr-questions.md`, which its test checks. When a check is picked,
-  **automate first**: a check in CI costs no tokens, a question costs every
-  pull request a read. `node scripts/review-catches.mjs` counts real catches
-  per pull request, week by week. A comment that's wrong gets a reply saying
-  why, and a line there too. Never take a reviewer's fix with GitHub's
+  under *Found along the way*, and Matt picks the ones worth building
+  (#933). The one exception is a gap the record has never had: it needs a
+  question in `docs/pr-questions.md`, which its test checks. A picked check
+  is automated first: a check in CI costs no tokens, a question costs every
+  pull request a read. A comment that's wrong gets a reply saying why, and a
+  line in the record too. Never take a reviewer's fix with GitHub's
   one-click "commit suggestion": it makes the bot a co-author (hard rule 1).
 - **Merge when every check that applies is green.** The admin override that
   merges a pull request skips `all green` too, so wait for it, and for the
@@ -231,11 +212,11 @@ rewritten for it.
   doesn't hold up the merge, and the pull request says why.
 - `agents/skills/` holds two skills for people's own agents (#147):
   `linger-report` turns a problem into a well-formed, private-safe issue, and
-  `linger-contribute` is the short path from a fix to a PR under these rules. They
-  restate rules from this file. When a rule here changes (the hard rules, branch
-  names, `scripts/check.sh`, PR linking, review catches), change them in the same commit. The
-  `.github/ISSUE_TEMPLATE/` forms ask for what `linger-report` collects; keep the
-  two in step too.
+  `linger-contribute` is the short path from a fix to a PR under these rules.
+  They restate rules from this file, so when a rule here changes (the hard
+  rules, branch names, `scripts/check.sh`, PR linking, review catches),
+  change them in the same commit. Keep the `.github/ISSUE_TEMPLATE/` forms
+  in step with what `linger-report` collects.
 
 **The README**
 
@@ -275,9 +256,8 @@ pull request reads them, and they go stale first. These are the overview docs:
 - `ARCHITECTURE.md` §1 (the drawing), §2 (stack choices), §3 (repository
   layout), §5 (schema), §9 (deployment) and §10 (milestones).
 - The README's layout, under Development.
-- Milestone status, which lives in three places that must agree: *Build order*
-  in this file, `ARCHITECTURE.md` §10, and `TASKS.md`'s *Status* and section
-  headings.
+- Milestone status, which lives in two places that must agree: *Build order*
+  in this file and `ARCHITECTURE.md` §10.
 
 Change them in the same commit as the change that makes them wrong:
 
@@ -286,7 +266,7 @@ Change them in the same commit as the change that makes them wrong:
 - **A migration**: §5, every table and column it adds, drops or renames.
 - **What runs where**: a new process, container or port, or a job moved
   between the server, the shell and the page: §1, §2 and §9.
-- **A milestone started, shipped, closed or cut**: all three status places at
+- **A milestone started, shipped, closed or cut**: both status places at
   once.
 
 `scripts/overview-docs.test.mjs` fails CI when a crate, a top-level directory,
@@ -308,17 +288,10 @@ change adds the desktop-shell pass; `deploy/` adds the update script's test. A
 docs-only change takes under a second. `--all` runs everything. Green here should mean green there, and
 `docs/testing-strategy.md` has what runs where and which test a change needs.
 
-**Only the checks a change can reach run on its pull request** (#914).
-`scripts/ci-scope.mjs` reads which app builds each file from the code itself
-(`#[cfg(desktop)]` on a module in `lib.rs`, `platforms` in a capability
-file). A file only the desktop app builds doesn't start the iPhone builds
-in `share-window.yml`, a file only the phone app builds doesn't start the
-desktop installers, and a file both build (the page, `lib.rs`,
-`Cargo.toml`) starts both. The iPhone app in the simulator's flows start
-only for what that run builds, drives or runs and for a release's pull
-request (#955). A
-draft pull request doesn't start the iPhone runs until it's marked ready
-(#933). The nightly run on main runs everything.
+**Only the checks a change can reach run on its pull request** (#914):
+`scripts/ci-scope.mjs` reads which app builds each file from the code itself,
+and the nightly run on `main` runs everything. `docs/testing-strategy.md` has
+which runs start for what.
 
 The pieces:
 
@@ -464,24 +437,24 @@ M0 scaffold → M1 server REST → M2 gateway → M3 client shell
   → M12 voice                                                        ← V2, built
   → M13 ambient voice                                   ← V2, cut 2026-10-11
   → M15 the Buddy list client (#198)                    ← built, the app from 0.4.0
-  → M16 screen sharing (#360)                ← V2, shipped in 0.5.2, check owed
+  → M16 screen sharing (#360)                           ← V2, shipped in 0.5.2
   → mobile (T-16xx), notifications (#830)  ← Android from 0.4.8, iPhone in the App Store
   → backburner: entrance sounds (T-901…T-903)
 ```
 
 Everything above the backburner line is built, but **M13 (ambient voice),
-which is cut** (`docs/decisions.md`): don't build toward it. M16's real check
-(T-1908) is still owed. **The phone app** (iPhone and Android, from the same
-Tauri 2 crate) and **phone notifications** (#830; read SPEC §4.15 first) are
-being built; their tasks are `TASKS.md` §Mobile. Before touching message
-loading, read `docs/tasks/m10.md`: M10 changed how the client holds history.
+which is cut** (`docs/decisions.md`): don't build toward it. **The phone app**
+(iPhone and Android, from the same Tauri 2 crate) and **phone notifications**
+(read SPEC §4.15 first) go on in issues, tracked by #253 and #830. Before
+touching message loading, read `docs/tasks/m10.md`: M10 changed how the client
+holds history. Before touching the gateway's fan-out, or any query that lists
+messages, files or search results, read `docs/tasks/m11.md`: DMs put a
+membership check in every one. Before touching voice, `docs/tasks/m12.md`.
 The release checks' steps are in `docs/tasks/release-checks.md`, for
-re-running when their area changes. Close a milestone's checks before
-starting the next.
+re-running when their area changes.
 
 **The app is the Buddy list client, in `client/src/next/` (M15, #198).** Read
-`docs/design/architecture.md` before touching it; what's left of M15 is in
-`TASKS.md`.
+`docs/design/architecture.md` before touching it.
 - **Visual rules:** `docs/design/system.md` governs, and the kit's tests
   enforce it.
 - **Shared logic:** `client/src/lib/` is the logic the windows share (`.ts`

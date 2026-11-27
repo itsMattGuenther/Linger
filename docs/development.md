@@ -471,7 +471,7 @@ including uninstall cleanup. See [the update check](windows-update-checks.md).
 ## The phone app (Android)
 
 The phone app is built from the same `client/src-tauri` crate (SPEC §4.15,
-`TASKS.md` §Mobile). Desktop-only code is behind `#[cfg(desktop)]`, phone
+`docs/tasks/mobile.md`). Desktop-only code is behind `#[cfg(desktop)]`, phone
 builds register only what `phone_app` in `src/lib.rs` lists, and
 `capabilities/phone.json` is the phone's one capability file. The Android
 project Tauri generated is `client/src-tauri/gen/android`; the phone

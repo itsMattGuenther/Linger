@@ -2482,3 +2482,28 @@ building the server from nothing, 11 building the app, and 9 on the flows.
   (#901) looks at the app signed out,** on its first screen, since no server
   is set up; signed in and connected, it runs every night and for a pull
   request that runs every flow.
+
+## Decided: GitHub's issues are the work queue, and the owed checks are closed
+
+**Matt, 2026-11-27**: "a lot of our workflows come from issues that we
+open." `TASKS.md` had grown to 1,560 lines, with many tasks still marked
+started or claimed: "A lot of them were checks that I wasn't able to do
+manually. But we've had the app out for so long since some of those were
+created that it's very obvious these are non-issues."
+
+- **Work is picked from GitHub's issues.** `TASKS.md` keeps only the lines
+  the next release's notes owe and a short list of work that is written
+  down but not planned. It no longer holds milestone status: that is
+  `ARCHITECTURE.md` §10 and *Build order* in `AGENTS.md`.
+- **The real-world checks marked owed on shipped work are closed**, by daily
+  use rather than by running them: the Buddy list client's desktop tries
+  (M15), the phone tasks' checks on a Pixel and by TestFlight testers, the
+  four people on four networks for an hour (T-1402), the desktop microphone's
+  and Linux devices' checks (#904, #905), and every screen-sharing check,
+  T-1908 included. So **M15 and M16 are closed**: what they never built is
+  on `TASKS.md`'s list. A problem anybody finds now is an issue like any
+  other.
+- **Nothing was lost.** Each section moved to `docs/tasks/` as it stood
+  (`m15.md`, `mobile.md`, `m16.md`, and the ends of `v1-polish.md` and
+  `m12.md`), and the rest went to `queue-2026-11-27.md`, with its marks
+  unchanged.

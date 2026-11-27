@@ -845,7 +845,7 @@ fixed gets a test at that layer.
 | Several windows | catch-up, borrowed tokens and every intent end to end: two copies of the store in one test sharing an in-memory bus (`core/share.test.ts`), a conversation's own window against a faked shell, owner and server (`tests/fixtures/next-chat-window.html`), and the tabs beside the list in the real list window, with its size faked (`next-side.spec.ts`) | vitest; Playwright | local and CI |
 | Real WebKitGTK and WebView2 | the packaged app starts and draws its list at every interface size, and plays sound | `scripts/linux-next-check.mjs`, `client/scripts/windows-next-check.mjs`, the packaged audio checks (`docs/packaged-audio-checks.md`) | CI's package check |
 | Real windows, signed in | real windows and title bars, fonts, typing latency, scrolling, several windows at once, against a real server | a `tauri-driver` desktop check under Xvfb (T-1820, not built yet) | local, before a release |
-| Real world | the parity checklist, then the release checks on real computers and networks | people | before the switch |
+| Real world | the release checks on real computers and networks (`docs/tasks/release-checks.md`) | people | when their area changes |
 
 **Performance budgets**, measured in the real Linux app:
 
@@ -855,30 +855,3 @@ fixed gets a test at that layer.
 - Memory per extra window is recorded, not guessed.
 
 Numbers go in `system.md` once they have been measured.
-
-## Build order (M15)
-
-Each step lands on `feat/198-buddy-list` with its tests. Each step also has a
-real-app check before the next step leans on it.
-
-| Step | Done when |
-|---|---|
-| M15.0 Foundations | These docs, the tokens, the kit, the gallery, and the discipline, contrast and geometry tests all pass. |
-| M15.1 The switch and the owner | The shell opens the list window. It signs in with the existing sessions and shows real rooms, DMs and people, drawn only from the kit. |
-| M15.2 The chat window | Opening a room opens the `chat` window with a tab. Catch-up and borrowed tokens work, and a conversation reads, sends and loads history. |
-| M15.3 Voice | The voice bar in the list, the strips in rooms, and "move voice here" as an intent. Switching or closing tabs never leaves voice. |
-| M15.4 People and DMs | The person card with Message and Knock, the new-message picker, away and away messages. |
-| M15.5 Settings | Every setting in the parity list, in the Settings window. |
-| M15.6 Media, search and uploads | Media, search and uploads, as the design places them. |
-| M15.7 Windows mode | Separate windows, pop-out and back, positions remembered, the tray. |
-| M15.8 Several servers | Folding server sections, the time there, quiet, and a server in its own window. |
-| M15.9 Parity and the switch | Every item in `parity.md` is proved. The switch becomes the default (0.4.0), the old client stays behind as a fallback, then it is deleted (#306), and SPEC §3/§5 are rewritten from `system.md`. |
-
-## Open decisions for Matt
-
-- **Light theme.** Decided (2026-09-28): dark only. Reversed on 2026-11-26:
-  Daylight, a light theme, is one of the six (#965).
-- **The host time zone** for "4:52 AM there". It needs one small server
-  setting. Build it in M15.8, or drop the line?
-- The rest are listed, with what each blocks, in `parity.md` ("Decisions
-  still needed").

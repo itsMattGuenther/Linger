@@ -117,7 +117,8 @@ produces a green release that no installed copy will accept.
   ("You're on Linger 0.5.4"). A line still naming the previous version is
   shown nowhere, and the release job warns.
 - Point the README's release-notes line and `docs/testing-strategy.md` at the
-  new notes, and record the release in `TASKS.md`.
+  new notes, and move the lines `TASKS.md` collected for this release into
+  its notes, leaving that list empty.
 - **Run the GPU check** on a Linux computer with a graphics card, with Docker
   installed. CI's runners have no GPU, and 0.5.2 shipped with watching a
   screen broken wherever NVIDIA's or VA-API's hardware decoders were installed
@@ -296,7 +297,7 @@ paste the release's highlights as its notes.
 **Once, when Play App Signing is first set up**, Play must be given our key
 rather than make its own. If it made its own, Play's copy wouldn't install
 over the `.apk` people already have from GitHub, and they'd have to uninstall,
-which signs them out (TASKS T-1604). On the first release's page, choose
+which signs them out (T-1604, `docs/tasks/mobile.md`). On the first release's page, choose
 **Use a different key**, then **Export and upload a key from Java keystore**,
 and download the encryption public key it offers. Then run the workflow with
 that key's text as well:
@@ -539,4 +540,4 @@ this project does not have, which is why Windows shows a warning. macOS is
 deliberately not built at all yet. Both are decisions, not gaps; see
 [docs/decisions.md](decisions.md).
 
-The current work queue lives in [TASKS.md](../TASKS.md).
+The work queue is GitHub's issues.

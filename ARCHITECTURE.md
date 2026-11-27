@@ -255,7 +255,7 @@ would otherwise shadow the package's own launcher
 ```
 linger/
 ├─ SPEC.md, ARCHITECTURE.md, PROTOCOL.md  # the source of truth
-├─ AGENTS.md, CONTRIBUTING.md, TASKS.md   # how to work here, and the queue
+├─ AGENTS.md, CONTRIBUTING.md, TASKS.md   # how to work here; the queue is issues
 ├─ Cargo.toml                 # workspace: the three crates below
 ├─ crates/
 │  ├─ linger-core/            # the wire contract: shared types, IDs, palette, fonts
@@ -281,7 +281,7 @@ linger/
 │                             #   Worker (#887), deployed by hand, not by CI
 ├─ packaging/arch/            # the Arch and Omarchy package and its repository
 ├─ assets/                    # logos and fonts' licenses; sounds/ waits for
-│                             #   entrance sounds (TASKS.md, Backburner)
+│                             #   entrance sounds (TASKS.md)
 ├─ agents/                    # skills for contributors' own agents (#147)
 ├─ docs/                      # guides, decisions, design, release notes;
 │                             #   docs/tasks/ archives closed milestones
@@ -1448,8 +1448,8 @@ networks. **M13 ambient voice is cut** (Matt, 2026-10-11, `docs/decisions.md`)
 without having been started. The order below is not SPEC §6's listing order: knock and search
 are small and self-contained, and voice is the largest and riskiest thing in the
 project. All nine release checks (V1's and those of M9, M11 and M12) closed
-on 2026-09-25 from real use of the published app (`TASKS.md`, *Release
-checks*; steps in `docs/tasks/release-checks.md`). M12's full four-people,
+on 2026-09-25 from real use of the published app (steps and results in
+`docs/tasks/release-checks.md`). M12's full four-people,
 four-networks hour was not run; it moves to #197, which rebuilt voice for
 large rooms through the host's server (0.4.1). The mesh that came before it
 is gone (#306).
@@ -1461,25 +1461,26 @@ is gone (#306).
 | **M11** | DMs and group DMs | Two people hold a conversation no other member can see in *any* surface — stream, media, search, export, notifications | 4–6 days — **built 2026-08-31.** Its check passed surface by surface against a running server, and on separate computers in real use 2026-09-25 (HC-7) |
 | **M12** | Voice rooms | Four people, four networks, one hour, no drops | 1–2 weeks — **the audio path and the surface landed 2026-09-01 and 2026-09-04 (T-1401, T-1402, T-1404): frames, peer connections, ICE, microphone → Opus → RTP → speakers, and join / mute / push-to-talk / who is talking / per-person volume / a device picker. and a coturn relay in the deploy with short-lived passwords the server signs (T-1403). In real use across separate networks since 2026-09-17; HC-8 and HC-9 closed 2026-09-25, without the four-person hour (see #197)** |
 | **M13** | Ambient voice | A room left running all day costs almost no CPU, and nobody joined anything | **Cut 2026-10-11, never started** (`docs/decisions.md`). What voice work built toward it stays as voice: silence isn't sent (#430), being in a room's voice is being in the room (#420). Notes in `docs/tasks/m13.md` |
-| **M15** | The Buddy list client (#198) | The new client does everything in `docs/design/parity.md` and becomes the default; the old client is deleted | Several weeks — **the app from 0.4.0; the old client deleted after 0.4.3 (#306).** What's left is in `TASKS.md`; plan in `docs/design/architecture.md` |
-| **M16** | Screen sharing (SPEC §4.20, #360) | A Windows share is watched at 30 and 60 frames a second on Linux, Windows, Android and an iPhone through a real server for half an hour | Days — **started 2026-10-25, shipped in 0.5.2 (2026-10-27).** Its real check (T-1908) is still owed, so it isn't closed (`TASKS.md` M16) |
-| **M14** | Custom themes | Somebody makes a colour scheme, it survives a restart, and a file carries it to another computer | **V3, not V2.** Three decisions come first — see `TASKS.md` *Parking lot* |
+| **M15** | The Buddy list client (#198) | The new client does everything in `docs/design/parity.md` and becomes the default; the old client is deleted | Several weeks — **the app from 0.4.0; the old client deleted after 0.4.3 (#306).** Closed 2026-11-27 (`docs/decisions.md`); its notes are in `docs/tasks/m15.md`, the plan in `docs/design/architecture.md` |
+| **M16** | Screen sharing (SPEC §4.20, #360) | A Windows share is watched at 30 and 60 frames a second on Linux, Windows, Android and an iPhone through a real server for half an hour | Days — **started 2026-10-25, shipped in 0.5.2 (2026-10-27).** Closed 2026-11-27 by daily use, without T-1908 run as written (`docs/decisions.md`); notes in `docs/tasks/m16.md` |
+| **M14** | Custom themes | Somebody makes a colour scheme, it survives a restart, and a file carries it to another computer | **V3, not V2.** Built-in themes shipped (#964, #965); a person's own theme waits on three decisions (`docs/tasks/queue-2026-11-27.md`, M14) |
 
 **A mobile client is not in this sequence** (Matt, 2026-08-28). It was going to
-be M14 and went to `TASKS.md`'s *Backburner*, because the desktop app had to be
+be M14 and went to the backburner, because the desktop app had to be
 finished and used by real people before a second platform doubled the surface
-of every bug still in it. It came back on 2026-10-02 as its own section of
-`TASKS.md` (T-16xx), not a milestone: a phone app for iPhone and Android from
+of every bug still in it. It came back on 2026-10-02 as its own work (T-16xx,
+now tracked by #253), not a milestone: a phone app for iPhone and Android from
 the same Tauri 2 crate. It started text only and with no push, got voice on
 2026-10-19 (#429), and gets notifications chosen by kind from 2026-11-12
 (#830): the server's side first (#886), then the relay (#887), Android (#888)
 and the iPhone (#889). It has been on Android since 0.4.8, on friends'
 iPhones through TestFlight since 0.5.1, and in the App Store since 0.5.5
 (2026-11-25). **M14 is now custom themes** (Matt,
-2026-08-31), which is V3 rather than V2: SPEC §6 carries the scope line and
-`TASKS.md` M14 carries the three things that have to be decided before any of it
-starts. The short version is that a theme is a list of token values rather than
-a stylesheet, §5.1's visual rules are not themeable, and if a theme can repaint
+2026-08-31), which is V3 rather than V2: SPEC §6 carries the scope line, and
+three things have to be decided before any of it starts (written up in
+`docs/tasks/queue-2026-11-27.md`, M14). Six built-in themes shipped first
+(#964, #965), as color token values only. The short version is that a theme
+is a list of token values rather than a stylesheet, §5.1's visual rules are not themeable, and if a theme can repaint
 the 16 name colours then the 4.5:1 contrast test has to move out of CI and into
 the app.
 
@@ -1506,7 +1507,7 @@ out early what a thing costs is how you get to decide whether to build it.
 
 **Entrance sounds moved to the end of the queue** (Matt, 2026-08-21). They are still
 V1 (SPEC §6, item 4) — they are simply the last thing built, after M8, and M4's check
-no longer waits on them. `TASKS.md` holds them under *Backburner* as T-901…T-903
+no longer waits on them. `TASKS.md` lists them as T-901…T-903
 (they were T-403, T-404, T-408).
 
 **Activity detection is cut** (Matt, 2026-08-28 — `docs/decisions.md`). Parked on

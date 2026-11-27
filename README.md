@@ -276,8 +276,8 @@ past reviews caught in the parts your branch changed.
 
 Start with [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md). The
 docs ([SPEC](SPEC.md), [ARCHITECTURE](ARCHITECTURE.md),
-[PROTOCOL](PROTOCOL.md)) are the source of truth; the queue is
-[TASKS.md](TASKS.md).
+[PROTOCOL](PROTOCOL.md)) are the source of truth; the work queue
+is GitHub's issues.
 
 ## 🙏 Thanks
 
