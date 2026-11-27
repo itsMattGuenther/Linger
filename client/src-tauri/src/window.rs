@@ -41,7 +41,12 @@ pub fn create(app: &App) -> tauri::Result<()> {
         std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").as_deref(),
         std::env::var_os("XDG_CURRENT_DESKTOP").as_deref(),
     );
-    let come_back = crate::updates::take_come_back(app);
+    let back = crate::updates::take_come_back(app);
+    // A restart to update hands over the theme it was showing (#965).
+    if let Some(theme) = back.theme.as_deref() {
+        crate::theme::start_in(theme);
+    }
+    let come_back = back.come_back;
     for config in &app.config().app.windows {
         // The list holds the message box beside it (#337): on Linux its
         // dropped files come through the shell (`dropped.rs`, #673).
@@ -83,7 +88,9 @@ enum ListStart {
     /// later can take the focus however it was built: Windows shows it with
     /// the focus (tao forgets "not focused" once a window is built), as a
     /// Wayland desktop may and as macOS does within an app it brought in
-    /// front at launch. So until its page draws it shows The door's color.
+    /// front at launch. So it's built in the theme the last run was showing,
+    /// which the restart handed over (`updates::Back`); only if that was
+    /// lost does it show The door's color until its page draws.
     Behind,
 }
 

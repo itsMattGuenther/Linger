@@ -52,7 +52,7 @@ fn look(id: &str) -> Look {
 }
 
 #[cfg(desktop)]
-pub use desktop::{wait_for_theme, waiting, window_color};
+pub use desktop::{shown_id, start_in, wait_for_theme, waiting, window_color};
 
 /// The list window puts a theme on: every window takes its color, and so
 /// does every window opened after, and a list waiting to be shown at start
@@ -125,6 +125,23 @@ mod desktop {
     fn color(look: Look) -> Color {
         let [r, g, b] = look.window;
         Color(r, g, b, 255)
+    }
+
+    /// The theme shown now, by its id: what a restart to update hands the
+    /// next start (`updates.rs`).
+    pub fn shown_id() -> &'static str {
+        *SHOWN
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// Start in the theme the last run was showing when it restarted to
+    /// update (`updates::Back`), so a list shown at once is built in it.
+    /// One this Linger doesn't know is The door.
+    pub fn start_in(id: &str) {
+        *SHOWN
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = look(id).id;
     }
 
     /// The color a window is built in: the theme's, so it never shows another
@@ -202,6 +219,21 @@ mod desktop {
             assert!(!wait.waiting(), "after it, a show asked for shows it");
             assert!(!wait.end(), "the deadline after it shows nothing");
             assert!(!wait.end(), "nor a second word");
+        }
+
+        /// A restart to update hands over its theme (`updates::Back`); the
+        /// next start builds its windows in it, and in The door for one it
+        /// doesn't know. The only test that sets the shown theme.
+        #[test]
+        fn a_start_builds_in_the_theme_it_was_handed() {
+            super::start_in("daylight");
+            let daylight = (super::shown_id(), super::window_color());
+            super::start_in("sunrise");
+            let stray = super::shown_id();
+            super::start_in("door");
+            assert_eq!(daylight.0, "daylight");
+            assert_eq!(daylight.1, super::color(crate::theme::look("daylight")));
+            assert_eq!(stray, "door");
         }
 
         #[test]

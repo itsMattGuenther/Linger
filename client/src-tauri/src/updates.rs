@@ -348,17 +348,59 @@ fn forget(dir: &Path) {
     }
 }
 
-/// Say how the next start shows the list: a marker for the tray or for
-/// coming back behind, none for as usual.
-fn mark(dir: &Path, come_back: ComeBack) {
+/// What a restart to update leaves the next start: how the list comes back,
+/// and the theme it was showing (#965). A list that comes back behind other
+/// windows is shown at once, before its page can say its theme, so it's
+/// built in this one. Written moments before the restart and taken at the
+/// next start, so it can't fall behind the page's choice: nobody has used
+/// Linger for half an hour when it restarts by itself.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Back {
+    pub come_back: ComeBack,
+    #[serde(default)]
+    pub theme: Option<String>,
+}
+
+/// A marker as it may be on disk: a run before 0.5.6 left the plain word,
+/// with no theme.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum Said {
+    Back(Back),
+    Plain(ComeBack),
+}
+
+/// Say how the next start shows the list, in `theme`: a marker for the tray
+/// or for coming back behind, none for as usual (a usual start waits for its
+/// page's theme).
+fn mark(dir: &Path, come_back: ComeBack, theme: &str) {
     let marker = dir.join(COME_BACK);
     if come_back == ComeBack::Shown {
         let _ = std::fs::remove_file(marker);
         return;
     }
-    if let Ok(said) = serde_json::to_vec(&come_back) {
+    let back = Back {
+        come_back,
+        theme: Some(theme.to_owned()),
+    };
+    if let Ok(said) = serde_json::to_vec(&back) {
         let _ = std::fs::create_dir_all(dir);
         let _ = std::fs::write(marker, said);
+    }
+}
+
+/// A marker's words: as usual, with no theme, when they can't be read.
+fn read_back(said: &[u8]) -> Back {
+    match serde_json::from_slice(said) {
+        Ok(Said::Back(back)) => back,
+        Ok(Said::Plain(come_back)) => Back {
+            come_back,
+            theme: None,
+        },
+        Err(_) => Back {
+            come_back: ComeBack::Shown,
+            theme: None,
+        },
     }
 }
 
@@ -405,7 +447,8 @@ impl Store {
     }
 
     async fn come_back(&self, come_back: ComeBack) {
-        let _ = self.run(move |dir| mark(dir, come_back)).await;
+        let theme = crate::theme::shown_id();
+        let _ = self.run(move |dir| mark(dir, come_back, theme)).await;
     }
 }
 
@@ -533,19 +576,23 @@ async fn install(
     app.restart()
 }
 
-/// How this start shows the list: as usual, unless the last run restarted to
-/// update and said otherwise. Asked once, when the windows are built, before
-/// anything else runs.
-pub fn take_come_back(app: &tauri::App) -> ComeBack {
+/// How this start shows the list, and in which theme: as usual, unless the
+/// last run restarted to update and said otherwise. Asked once, when the
+/// windows are built, before anything else runs.
+pub fn take_come_back(app: &tauri::App) -> Back {
+    let usual = Back {
+        come_back: ComeBack::Shown,
+        theme: None,
+    };
     let Ok(dir) = app.path().app_cache_dir() else {
-        return ComeBack::Shown;
+        return usual;
     };
     let marker = dir.join(FOLDER).join(COME_BACK);
     let Ok(said) = std::fs::read(&marker) else {
-        return ComeBack::Shown;
+        return usual;
     };
     let _ = std::fs::remove_file(marker);
-    serde_json::from_slice(&said).unwrap_or_default()
+    read_back(&said)
 }
 
 /// Look for a newer release. A copy that installs updates starts downloading
@@ -969,14 +1016,48 @@ mod tests {
     #[test]
     fn how_linger_comes_back_is_said_once_and_as_usual_is_no_marker() {
         let dir = scratch("come-back");
-        mark(&dir, ComeBack::Tray);
-        let said: ComeBack =
-            serde_json::from_slice(&std::fs::read(dir.join(COME_BACK)).expect("marker"))
-                .expect("read");
-        assert_eq!(said, ComeBack::Tray);
-        mark(&dir, ComeBack::Shown);
+        mark(&dir, ComeBack::Tray, "dusk");
+        let said = read_back(&std::fs::read(dir.join(COME_BACK)).expect("marker"));
+        assert_eq!(said.come_back, ComeBack::Tray);
+        mark(&dir, ComeBack::Shown, "dusk");
         assert!(!dir.join(COME_BACK).exists());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A restart behind other windows hands the theme it was showing to the
+    /// next start (#965), which builds the list in it. A marker from before
+    /// 0.5.6 is the plain word, and one that can't be read is as usual.
+    #[test]
+    fn a_restart_hands_its_theme_to_the_next_start() {
+        let dir = scratch("come-back-theme");
+        mark(&dir, ComeBack::Behind, "daylight");
+        let said = read_back(&std::fs::read(dir.join(COME_BACK)).expect("marker"));
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(
+            said,
+            Back {
+                come_back: ComeBack::Behind,
+                theme: Some("daylight".into())
+            }
+        );
+        assert_eq!(
+            read_back(br#""behind""#),
+            Back {
+                come_back: ComeBack::Behind,
+                theme: None
+            }
+        );
+        assert_eq!(
+            read_back(br#"{"come_back":"tray"}"#),
+            Back {
+                come_back: ComeBack::Tray,
+                theme: None
+            }
+        );
+        for unreadable in [&b""[..], b"{", b"\"sideways\"", b"{\"theme\":\"dusk\"}"] {
+            assert_eq!(read_back(unreadable).come_back, ComeBack::Shown);
+            assert_eq!(read_back(unreadable).theme, None);
+        }
     }
 
     /// The frontend matches on these strings. If one changes here, the page
