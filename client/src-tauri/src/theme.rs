@@ -121,18 +121,32 @@ mod desktop {
     }
 
     fn read(dir: &Path) -> Option<Look> {
+        Some(look(&said(dir)?))
+    }
+
+    /// The kept file's words as written, a theme this Linger doesn't know
+    /// included.
+    fn said(dir: &Path) -> Option<String> {
         let said = std::fs::read_to_string(dir.join(KEPT)).ok()?;
-        Some(look(said.trim()))
+        Some(said.trim().to_string())
     }
 
     /// Write the theme for the next start. Says whether it was written. It's
     /// written beside the kept file and moved over it, so a write cut short
     /// leaves the old theme, never an empty file.
     fn keep(dir: &Path, theme: Look) -> bool {
+        let kept = dir.join(KEPT);
         let next = dir.join(format!("{KEPT}.next"));
-        std::fs::create_dir_all(dir).is_ok()
-            && std::fs::write(&next, theme.id).is_ok()
-            && std::fs::rename(&next, dir.join(KEPT)).is_ok()
+        if std::fs::create_dir_all(dir).is_err() {
+            return false;
+        }
+        if std::fs::write(&next, theme.id).is_ok() && std::fs::rename(&next, &kept).is_ok() {
+            return true;
+        }
+        // Windows won't replace a file another program has open (a virus
+        // scan, say): written in place then, as a plain write would be.
+        let _ = std::fs::remove_file(&next);
+        std::fs::write(&kept, theme.id).is_ok()
     }
 
     /// Keep the theme shown now, in turn with any other write.
@@ -148,7 +162,7 @@ mod desktop {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let theme = newest();
-        read(dir) == Some(theme) || keep(dir, theme)
+        said(dir).as_deref() == Some(theme.id) || keep(dir, theme)
     }
 
     /// `app_theme` on a computer.
@@ -167,9 +181,9 @@ mod desktop {
         for open in app.webview_windows().values() {
             let _ = open.set_background_color(Some(color(now)));
         }
-        // Written each time the list says, so a write that failed is made
-        // again: the page hears the refusal and tells again at the next look
-        // it applies (`followThemeInShell`).
+        // Written whenever the kept file says another theme, so a write that
+        // failed is made again: the page hears the refusal and tells again at
+        // the next look it applies (`followThemeInShell`).
         let Ok(dir) = app.path().app_config_dir() else {
             return Ok(());
         };
@@ -181,7 +195,7 @@ mod desktop {
 
     #[cfg(test)]
     mod tests {
-        use super::{keep, keep_in_turn, read};
+        use super::{keep, keep_in_turn, read, said};
         use crate::theme::look;
 
         #[test]
@@ -211,25 +225,40 @@ mod desktop {
             assert!(!kept);
         }
 
-        /// A write keeps the theme shown when its turn comes, not the one it
-        /// was asked for, so writes finishing out of order can't leave an
-        /// older theme for the next start.
+        /// The newest theme is written whole and once: nothing left beside
+        /// it, no write when the file already says it, and a theme this
+        /// Linger doesn't know isn't taken for The door.
         #[test]
-        fn a_write_keeps_the_theme_shown_when_it_runs() {
+        fn the_theme_is_written_whole_and_once() {
             let dir =
-                std::env::temp_dir().join(format!("linger-theme-shown-{}", std::process::id()));
+                std::env::temp_dir().join(format!("linger-theme-once-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&dir);
-            let kept = keep_in_turn(&dir, || look("dusk")).then(|| read(&dir));
-            let unchanged =
-                std::fs::metadata(dir.join(super::KEPT)).and_then(|file| file.modified());
-            let again = keep_in_turn(&dir, || look("dusk"));
-            let still = std::fs::metadata(dir.join(super::KEPT)).and_then(|file| file.modified());
+            let first = keep_in_turn(&dir, || look("dusk"));
+            let written = said(&dir);
             let left = dir.join(format!("{}.next", super::KEPT)).exists();
+            // Another Linger's theme: The door is still written over it.
+            std::fs::write(dir.join(super::KEPT), "sunrise").unwrap();
+            let door = keep_in_turn(&dir, || look("door")).then(|| said(&dir));
+            // With nothing writable, the theme the file already says still
+            // counts as kept, since no write is tried.
+            #[cfg(unix)]
+            let again = {
+                use std::os::unix::fs::PermissionsExt;
+                let file = dir.join(super::KEPT);
+                std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o444)).unwrap();
+                std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o555)).unwrap();
+                let again = keep_in_turn(&dir, || look("door"));
+                std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+                std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o644)).unwrap();
+                again
+            };
             let _ = std::fs::remove_dir_all(&dir);
-            assert_eq!(kept, Some(Some(look("dusk"))));
-            assert!(again, "the same theme again is kept");
-            assert_eq!(unchanged.ok(), still.ok(), "and not written again");
+            assert!(first);
+            assert_eq!(written.as_deref(), Some("dusk"));
             assert!(!left, "nothing left beside it");
+            assert_eq!(door, Some(Some("door".to_string())));
+            #[cfg(unix)]
+            assert!(again, "not written again");
         }
     }
 }
