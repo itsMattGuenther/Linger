@@ -191,7 +191,9 @@ one.
   same floors. A theme that misses one is fixed in its values, never in the
   test.
 - **The 16 name colors are the same in every dark theme.** A theme that
-  needs others (Daylight, #965) gets them from `linger-core::PALETTE`.
+  needs others (Daylight, #965) gets them from `linger-core::PALETTE`, as a
+  block of its own in the generated palette, which `contrast.test.ts` reads
+  too.
 
 ### Scales
 

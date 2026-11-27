@@ -76,9 +76,14 @@ const DOOR = rootVars(TOKENS);
 const NAMES = rootVars(PALETTE);
 const THEME_RULE = /^\[data-theme="([\w-]+)"\]$/;
 
-/** Each theme in `tokens.css` and what it declares itself, The door's being `:root`'s. */
+/**
+ * Each theme and what it declares itself, The door's being `:root`'s: from
+ * `tokens.css`, and from the generated palette, where a theme that needs its
+ * own name colors gets them (Daylight, #965; every dark theme keeps The
+ * door's).
+ */
 const OWN = new Map<string, Vars>();
-for (const rule of RULES) {
+for (const rule of [...RULES, ...topRules(PALETTE)]) {
   for (const selector of rule.selectors) {
     const id = THEME_RULE.exec(selector)?.[1];
     if (id === undefined) continue;
@@ -89,9 +94,9 @@ for (const rule of RULES) {
 }
 const THEME_IDS = [...OWN.keys()];
 
-/** A theme's tokens as the page has them: its own laid over The door's. */
+/** A theme's tokens as the page has them, names included: its own laid over The door's. */
 function themeVars(id: string): Vars {
-  return new Map([...DOOR, ...(OWN.get(id) ?? [])]);
+  return new Map([...NAMES, ...DOOR, ...(OWN.get(id) ?? [])]);
 }
 
 const CARD = readFileSync(resolve(HERE, "../kit/Card.css"), "utf8");
@@ -121,7 +126,7 @@ function tokenIn(css: string, selector: string, property: string, sheet: string)
 }
 
 function resolveVar(vars: Vars, name: string, seen = new Set<string>()): string {
-  const value = vars.get(name) ?? NAMES.get(name);
+  const value = vars.get(name);
   if (value === undefined) throw new Error(`${name} is not defined in tokens.css`);
   const ref = /^var\((--[\w-]+)\)$/.exec(value);
   if (!ref?.[1]) return value;
@@ -206,7 +211,7 @@ describe("the themes in tokens.css (#964)", () => {
   });
 
   it("set only tokens The door has, so a theme can't add a color nothing else knows", () => {
-    const strays = [...OWN].flatMap(([id, vars]) => [...vars.keys()].filter((name) => !DOOR.has(name)).map((name) => `${id}: ${name}`));
+    const strays = [...OWN].flatMap(([id, vars]) => [...vars.keys()].filter((name) => !DOOR.has(name) && !NAMES.has(name)).map((name) => `${id}: ${name}`));
     expect(strays, strays.join("\n")).toEqual([]);
   });
 
