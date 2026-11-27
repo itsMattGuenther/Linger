@@ -192,7 +192,8 @@ test("a flow's tags are read from its header only", () => {
   assert.throws(() => tagsOf("tags:\n  - \"start'\nappId: a\n---\n"), /can't read the tag/);
   assert.throws(() => tagsOf("tags:\n\t- start\nappId: a\n---\n"), /can't read the tags/, "a tab isn't YAML's indent");
   assert.deepEqual(tagsOf("tags:\r\n  - start\r\nappId: a\r\n---\r\n"), ["start"], "a Windows checkout");
-  assert.throws(() => tagsOf("tags: [start,\n  other]\nappId: a\n---\n"), /can't read the tags/);
+  assert.deepEqual(tagsOf("tags: [start,\n  other]\nappId: a\n---\n"), ["start", "other"], "a list that wraps");
+  assert.throws(() => tagsOf("tags: start\nappId: a\n---\n"), /can't read the tags/, "a form this doesn't read");
   assert.deepEqual(tagsOf("tags: [start]\t# a note\nappId: a\n---\n"), ["start"]);
   assert.deepEqual(tagsOf("tags:\t\n- start\nappId: a\n---\n"), ["start"], "a list at the key's own indent");
   assert.deepEqual(tagsOf("tags:\n  - start\n"), [], "no header without ---");
