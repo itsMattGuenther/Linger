@@ -537,7 +537,9 @@ Discord is simultaneously low-density and visually noisy. Fix both.
 
 **Aging.** Message opacity steps down with age: <1h at 100%, <1d at 88%, older at 78%,
 and it stops there — see §5.6 for the steps and the floor. Scrolling up feels like
-walking into the past. One CSS custom property computed from the timestamp.
+walking into the past. One CSS custom property computed from the timestamp. On a light
+theme (Daylight, §5.3) fading washes out rather than dims, so the steps go two thirds
+as far, 92% and 85%, which takes the words about as much contrast as night's do.
 
 **Sessions, not a stream.** Group consecutive messages by the same author; break the
 group on a 10-minute gap. Break the *session* on a 3-hour gap, which inserts real
@@ -1694,7 +1696,7 @@ Every color is a token in `client/src/next/styles/tokens.css`; `system.md` lists
 with their contrast. Text meets 4.5:1 on every background it sits on, icons 3:1, and
 the test suite checks it.
 
-**Themes** (#963). Five, each named after one of the app icon's looks (#961), picked in
+**Themes** (#963). Six, each named after one of the app icon's looks (#961), picked in
 Settings › Appearance › Theme on the desktop and on phones:
 
 | Theme | What it is |
@@ -1704,6 +1706,7 @@ Settings › Appearance › Theme on the desktop and on phones:
 | **Porch light** | Warm charcoal grounds and warm white text |
 | **Dusk** | A lifted deep blue, like the Dusk icon |
 | **The original** | The pixel porch's deep night blue, with wood-toned bars, cards and menus |
+| **Daylight** | The light one: paper grounds with a little of the Daylight icon's blue, and navy text |
 
 What bounds them:
 
@@ -1715,13 +1718,26 @@ What bounds them:
   text and lines and, only where readability needs it, the exact shade of a semantic
   color, never what a color means.
 - **Contrast holds in every theme**, at the same floors, and the test suite checks each
-  one. All five keep the 16 name colors of §5.4.
+  one. The five dark themes keep the 16 name colors of §5.4; Daylight draws the same 16
+  keys in a darker set from the same palette, so they read on paper.
 - **Linger's own.** Themes people make and share themselves are still "V3 or never"
   (§6).
 
-All five are dark, as decided on 2026-09-28. Daylight, a light theme, is planned
-(#965), and reverses that decision when it ships. Evening warmth still waits for an
-evening version of these colors: Porch light is the warm look, chosen by hand.
+**Daylight** (#965) reverses the decision of 2026-09-28 that Linger is dark only. On
+paper every color flips: lines, see-through layers and shadows are dark on light, and the
+lamp is a deep ochre for words and marks with a bright amber for its washes, so amber
+still means new. The effects made for night have their own amounts there: a Shimmer
+name's band darkens the letters it crosses instead of lifting them nearly into the paper,
+a glow's light is a pale mix of the name's color rather than a dark smudge of it, and
+older messages fade less (§4.7).
+
+**The app around the page follows the theme too.** On a computer every window opens in
+the theme's window color, so none shows another theme's for a moment before its page
+draws. On a phone the status bar's and navigation bar's icons are dark on Daylight and
+light on the dark themes, whatever the phone's own dark mode says.
+
+Evening warmth still waits for an evening version of these colors: Porch light is the
+warm look, chosen by hand.
 
 ### 5.4 The 16-color name palette
 
@@ -1737,6 +1753,14 @@ cyan 200   sky 230    azure 255  indigo 275
 violet 295 orchid 320 rose 350   slate 250*
 ```
 *(numbers are OKLCH hue; slate uses chroma 0.02, the rest 0.13)*
+
+**Daylight's set** (#965). The light theme draws the same 16 keys darker, so they read
+on paper: lightness 0.50 in place of 0.76, the same hues. Where the screen can't show a
+hue at chroma 0.13 that dark it gets the most it can, so the hue stays true rather than
+clipping toward a neighbour (amber into rust): amber 0.109, brass 0.102, lime 0.116,
+mint 0.109, teal 0.09, cyan 0.085, sky 0.099. Slate is 0.025. A key is the same person's
+color in both sets; only the shade a theme draws it in changes, and it travels as the
+key either way.
 
 ```
 oklch(0.76 0.13 <hue>)
@@ -1764,7 +1788,8 @@ holds. The values are tokens (`system.md`, "Scales"); the geometry tests measure
 ### 5.6 Behavior
 
 - **Message aging** applies to the message *body only*, never the name or time.
-  Steps: under an hour 100%, under a day 88%, older 78%. Do not go lower.
+  Steps: under an hour 100%, under a day 88%, older 78%. Do not go lower. A light
+  theme takes two thirds of each step (92%, 85%), the same contrast lost (§4.7).
 - **Message presentation:** a comfortable sans body, names inline once per run of
   messages from one person, and bodies as wide as the window allows, up to the
   time column (#334). One layout, no density modes.

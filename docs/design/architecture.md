@@ -26,8 +26,8 @@ Not in M15:
   encryption** (#200).
 - **No macOS build.**
 - **No light theme.** Decided 2026-09-28: the app is dark only. (Themes came
-  later, #963: five dark ones, #964, and Daylight, a light one, planned in
-  #965.)
+  later, #963: five dark ones, #964, and Daylight, a light one, #965, which
+  reversed it.)
 
 ## Where the code lives
 
@@ -359,6 +359,18 @@ styles load follows it too.
 It's a file of Linger's own rather than a script written into the page,
 because the page's content security policy runs nothing else
 (`script-src 'self'`).
+
+**And before the window draws** (#965). Before the page there is the
+window itself, which the shell draws: a Daylight window opened dark until its
+page painted, and a phone's status bar drew its icons for the phone's own
+dark mode, not for the page under it. So the list window tells the shell the
+theme each time it puts one on (`followThemeInShell`, `core/theme.ts`), by its
+id (`src-tauri/src/theme.rs`). On a computer every window is built in the
+theme's window color and every open one takes a new one; the shell keeps the
+theme for the next start, when the list is built before any page runs. On a
+phone the status and navigation bars take dark icons on Daylight and light
+ones otherwise (`SystemBars.kt` on Android, which keeps the answer for the
+next start too; the window's light or dark style on an iPhone).
 
 **Sound preferences need no message.** Mute, quiet hours, the chime switches
 and the sound volume are kept on this computer (`linger.sound.*`, `lib/sound.ts`).
@@ -863,8 +875,8 @@ real-app check before the next step leans on it.
 
 ## Open decisions for Matt
 
-- **Light theme.** Decided (2026-09-28): dark only. Daylight, a light
-  theme, is planned since 2026-11-26 (#965) and reverses it when it ships.
+- **Light theme.** Decided (2026-09-28): dark only. Reversed on 2026-11-26:
+  Daylight, a light theme, is one of the six (#965).
 - **The host time zone** for "4:52 AM there". It needs one small server
   setting. Build it in M15.8, or drop the line?
 - The rest are listed, with what each blocks, in `parity.md` ("Decisions

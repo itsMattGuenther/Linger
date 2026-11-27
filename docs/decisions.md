@@ -421,9 +421,11 @@ version left as an open question (parity decision 2, 2026-09-26). It's closed
 now: "We can scrap the light theme from the spec. I think we're going to pass
 on that." The app is dark only, and no light version is planned.
 
-**Since 2026-11-26** a light theme is planned again: Daylight (#965), one of
-the app themes (#963, "app themes named after the icon looks" below). This
-stands until it ships.
+**Reversed, 2026-11-26.** Matt saw Daylight, a light theme, mocked up with
+the other app themes and said all six "should all be in" (#963, "app themes
+named after the icon looks" below). It shipped in #965, so Linger is no
+longer dark only: Daylight is one of six themes, picked per device, and the
+other five are dark.
 
 The previous client (`LINGER_CLASSIC=1`) had its dark, light and
 follow-the-system choice, and `linger-core`'s palette carried the light
@@ -2405,10 +2407,12 @@ the desktop and on phones.
 - **Five dark themes first** (#964): The door (today's colors, the
   default), After dark, Porch light, Dusk and The original. All five keep
   the 16 name colors, so nothing in `linger-core` changes.
-- **Daylight comes after** (#965). It's a light theme, so it reverses
-  "dark only, no light theme" (2026-09-28), needs a darker set of name
-  colors from `linger-core::PALETTE`, and needs native work for the phones'
-  status bars. Until it ships, Linger is dark only.
+- **Daylight came after** (#965). It's a light theme, so it reverses
+  "dark only, no light theme" (2026-09-28). It has a darker set of the 16
+  name colors from `linger-core::PALETTE` (lightness 0.50, with the
+  chroma of seven hues capped so none clips into its neighbour), its own
+  amounts for the shimmer, the glow and the age fade, which were made for
+  night, and the phones' status and navigation bars follow the theme.
 - **The choice is per device**, like the interface size. It isn't sent to
   the server or synced between devices.
 - **Amber still means something new for you**, in every theme
