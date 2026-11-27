@@ -4,9 +4,11 @@
 //! on (`followThemeInShell` in core/theme.ts), by its id.
 //!
 //! - **On a computer**, the color a window shows before its page draws:
-//!   every open window takes it at once, a window opened later is built in
-//!   it, and it's kept for the next start, when the list is built before any
-//!   page runs. Without it a window opened dark under Daylight's paper.
+//!   every open window takes it at once, and a window opened later is built
+//!   in it. Without it a window opened dark under Daylight's paper. At start
+//!   the list is built before any page runs, so it waits, hidden, until its
+//!   page says (#965): the page's own saved choice is the only copy, and
+//!   nothing the shell keeps can fall behind it.
 //! - **On a phone**, the status bar's and navigation bar's icons: dark on
 //!   Daylight's paper, light on every dark theme. The page is drawn under
 //!   both bars, so their icons have to read on its ground rather than follow
@@ -50,25 +52,27 @@ fn look(id: &str) -> Look {
 }
 
 #[cfg(desktop)]
-pub use desktop::{take_kept, window_color};
+pub use desktop::{wait_for_theme, waiting, window_color};
 
 /// The list window puts a theme on: every window takes its color, and so
-/// does every window opened after, and the next start. Only the list says;
-/// another window's word is refused.
+/// does every window opened after, and a list waiting to be shown at start
+/// is shown in it. Only the list says; another window's word is refused.
+/// Not `async`, so it runs on the app's main thread, one at a time in the
+/// order the list said them.
 #[cfg(desktop)]
 #[tauri::command]
-pub async fn app_theme(
+pub fn app_theme(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
     theme: String,
 ) -> Result<(), String> {
-    desktop::put_on(&app, &window, &theme).await
+    desktop::put_on(&app, &window, &theme)
 }
 
 #[cfg(desktop)]
 mod desktop {
-    use std::path::Path;
     use std::sync::Mutex;
+    use std::time::Duration;
 
     use tauri::window::Color;
     use tauri::{AppHandle, Manager, WebviewWindow};
@@ -76,106 +80,99 @@ mod desktop {
     use super::{look, Look};
 
     /// The theme the list last told, which windows opened from now on are
-    /// built in. The door until a start reads the one kept, or the list says.
+    /// built in. The door until the list says.
     static SHOWN: Mutex<&str> = Mutex::new("door");
 
-    /// One write of the kept theme at a time, each writing what's shown when
-    /// its turn comes: whichever write is last writes the newest theme, in
-    /// whatever order they were asked for.
-    static WRITING: Mutex<()> = Mutex::new(());
+    /// Whether the list is hidden at start until its page says its theme.
+    static WAIT: Wait = Wait::new();
 
-    /// Where the theme is kept for the next start, in the app's config
-    /// folder, beside the windows' remembered sizes.
-    const KEPT: &str = "theme";
+    /// How long the list waits for its page before it's shown anyway. Only a
+    /// page that failed to load runs into it, so it's generous: a slow
+    /// computer's first start still has its page say first.
+    const DEADLINE: Duration = Duration::from_secs(10);
+
+    /// A window waiting to be shown until its page has said its theme.
+    /// Ended once, by whichever comes first: the page's word or the
+    /// deadline. The window is shown at the end, so only once.
+    pub(super) struct Wait(Mutex<bool>);
+
+    impl Wait {
+        pub(super) const fn new() -> Self {
+            Self(Mutex::new(false))
+        }
+
+        fn held(&self) -> std::sync::MutexGuard<'_, bool> {
+            self.0
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+        }
+
+        pub(super) fn start(&self) {
+            *self.held() = true;
+        }
+
+        pub(super) fn waiting(&self) -> bool {
+            *self.held()
+        }
+
+        /// End the wait. Says whether this ended it, and so whether to show
+        /// the window now: a second end, or one with no wait, shows nothing.
+        pub(super) fn end(&self) -> bool {
+            std::mem::replace(&mut *self.held(), false)
+        }
+    }
 
     fn color(look: Look) -> Color {
         let [r, g, b] = look.window;
         Color(r, g, b, 255)
     }
 
-    fn shown() -> Look {
-        look(
-            &SHOWN
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner),
-        )
-    }
-
     /// The color a window is built in: the theme's, so it never shows another
     /// theme's for a moment before its page draws.
     pub fn window_color() -> Color {
-        color(shown())
-    }
-
-    /// Read the theme the last run kept, once, as the windows are first
-    /// built, so the list opens in it before its page has said anything.
-    pub fn take_kept(app: &tauri::App) {
-        let Ok(dir) = app.path().app_config_dir() else {
-            return;
-        };
-        if let Some(kept) = read(&dir) {
-            *SHOWN
+        color(look(
+            &SHOWN
                 .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner) = kept.id;
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        ))
+    }
+
+    /// The list was built hidden at start (`window::create`): it's shown
+    /// when its page says its theme, in that theme's color, so it never
+    /// shows another theme's first. Nothing is kept for this: the page's
+    /// own saved choice is the only copy, and it tells first thing
+    /// (`followThemeInShell`). A page that never says is shown at the
+    /// deadline, so Linger never starts with nothing on screen.
+    pub fn wait_for_theme(app: &AppHandle) {
+        WAIT.start();
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(DEADLINE).await;
+            let shell = app.clone();
+            let _ = app.run_on_main_thread(move || show_if_waiting(&shell));
+        });
+    }
+
+    /// Whether the list is still waiting for its page's theme. Showing it
+    /// any other way meanwhile (the tray, a second start, a link) is left
+    /// to the page's word, moments away, so it isn't shown in the wrong
+    /// color first (`tray::show_list`).
+    pub fn waiting() -> bool {
+        WAIT.waiting()
+    }
+
+    fn show_if_waiting(app: &AppHandle) {
+        if WAIT.end() {
+            if let Some(list) = app.get_webview_window(crate::window::OWNER) {
+                let _ = list.show();
+            }
         }
     }
 
-    fn read(dir: &Path) -> Option<Look> {
-        Some(look(&said(dir)?))
-    }
-
-    /// The kept file's words as written, a theme this Linger doesn't know
-    /// included.
-    fn said(dir: &Path) -> Option<String> {
-        let said = std::fs::read_to_string(dir.join(KEPT)).ok()?;
-        Some(said.trim().to_string())
-    }
-
-    /// Write the theme for the next start. Says whether it was written. It's
-    /// written beside the kept file and moved over it, so a write cut short
-    /// leaves the old theme, never an empty file. A write that fails leaves
-    /// the old theme too, and the page tells again.
-    fn keep(dir: &Path, theme: Look) -> bool {
-        let kept = dir.join(KEPT);
-        let next = dir.join(format!("{KEPT}.next"));
-        if std::fs::create_dir_all(dir).is_err() || std::fs::write(&next, theme.id).is_err() {
-            let _ = std::fs::remove_file(&next);
-            return false;
-        }
-        if std::fs::rename(&next, &kept).is_ok() {
-            return true;
-        }
-        // Windows won't replace a file another program has open (a virus
-        // scan, say). The new words are whole beside it, so there they're
-        // written in place, as a plain write would be; elsewhere the old
-        // theme stays.
-        let written = cfg!(windows) && std::fs::write(&kept, theme.id).is_ok();
-        let _ = std::fs::remove_file(&next);
-        written
-    }
-
-    /// Keep the theme shown now, in turn with any other write.
-    fn keep_shown(dir: &Path) -> bool {
-        keep_in_turn(dir, shown)
-    }
-
-    /// Keep the newest theme, read when this write's turn comes, so the last
-    /// write is the newest whatever order they were asked in. Nothing is
-    /// written when the file already holds it, as at most starts.
-    fn keep_in_turn(dir: &Path, newest: fn() -> Look) -> bool {
-        let _turn = WRITING
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let theme = newest();
-        said(dir).as_deref() == Some(theme.id) || keep(dir, theme)
-    }
-
-    /// `app_theme` on a computer.
-    pub async fn put_on(
-        app: &AppHandle,
-        window: &WebviewWindow,
-        theme: &str,
-    ) -> Result<(), String> {
+    /// `app_theme` on a computer, on the app's main thread: the color goes
+    /// on every window before a waiting list is shown, so its first frame
+    /// is in it.
+    pub fn put_on(app: &AppHandle, window: &WebviewWindow, theme: &str) -> Result<(), String> {
         if window.label() != crate::window::OWNER {
             return Err("only the list window says the theme".into());
         }
@@ -186,84 +183,32 @@ mod desktop {
         for open in app.webview_windows().values() {
             let _ = open.set_background_color(Some(color(now)));
         }
-        // Written whenever the kept file says another theme, so a write that
-        // failed is made again: the page hears the refusal and tells again at
-        // the next look it applies (`followThemeInShell`).
-        let Ok(dir) = app.path().app_config_dir() else {
-            return Ok(());
-        };
-        if !crate::off_thread(move || keep_shown(&dir), || false).await {
-            return Err("couldn't keep the theme for the next start".into());
-        }
+        show_if_waiting(app);
         Ok(())
     }
 
     #[cfg(test)]
     mod tests {
-        use super::{keep, keep_in_turn, read, said};
-        use crate::theme::look;
+        use super::Wait;
 
         #[test]
-        fn the_theme_is_kept_for_the_next_start() {
-            let dir = std::env::temp_dir().join(format!("linger-theme-{}", std::process::id()));
-            let _ = std::fs::remove_dir_all(&dir);
-            assert_eq!(read(&dir), None, "nothing kept yet");
-            assert!(keep(&dir, look("daylight")));
-            assert_eq!(read(&dir), Some(look("daylight")));
-            assert!(keep(&dir, look("dusk")));
-            assert_eq!(read(&dir), Some(look("dusk")));
-            // Kept by a later Linger that has a theme this one doesn't.
-            std::fs::write(dir.join(super::KEPT), "sunrise").unwrap();
-            assert_eq!(read(&dir), Some(look("door")));
-            let _ = std::fs::remove_dir_all(&dir);
+        fn a_waiting_window_is_shown_once() {
+            let wait = Wait::new();
+            wait.start();
+            assert!(wait.waiting());
+            assert!(wait.end(), "the page's word shows it");
+            assert!(!wait.waiting());
+            assert!(!wait.end(), "the deadline after it shows nothing");
+            assert!(!wait.end(), "nor a second word");
         }
 
-        /// A write that fails says so, and `put_on` hands the refusal to the
-        /// page, which tells again.
         #[test]
-        fn a_theme_that_could_not_be_kept_says_so() {
-            let file =
-                std::env::temp_dir().join(format!("linger-theme-file-{}", std::process::id()));
-            std::fs::write(&file, "a file where the folder would go").unwrap();
-            let kept = keep(&file, look("daylight"));
-            let _ = std::fs::remove_file(&file);
-            assert!(!kept);
-        }
-
-        /// The newest theme is written whole and once: nothing left beside
-        /// it, no write when the file already says it, and a theme this
-        /// Linger doesn't know isn't taken for The door.
-        #[test]
-        fn the_theme_is_written_whole_and_once() {
-            let dir =
-                std::env::temp_dir().join(format!("linger-theme-once-{}", std::process::id()));
-            let _ = std::fs::remove_dir_all(&dir);
-            let first = keep_in_turn(&dir, || look("dusk"));
-            let written = said(&dir);
-            let left = dir.join(format!("{}.next", super::KEPT)).exists();
-            // Another Linger's theme: The door is still written over it.
-            std::fs::write(dir.join(super::KEPT), "sunrise").unwrap();
-            let door = keep_in_turn(&dir, || look("door")).then(|| said(&dir));
-            // With nothing writable, the theme the file already says still
-            // counts as kept, since no write is tried.
-            #[cfg(unix)]
-            let again = {
-                use std::os::unix::fs::PermissionsExt;
-                let file = dir.join(super::KEPT);
-                std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o444)).unwrap();
-                std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o555)).unwrap();
-                let again = keep_in_turn(&dir, || look("door"));
-                std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
-                std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o644)).unwrap();
-                again
-            };
-            let _ = std::fs::remove_dir_all(&dir);
-            assert!(first);
-            assert_eq!(written.as_deref(), Some("dusk"));
-            assert!(!left, "nothing left beside it");
-            assert_eq!(door, Some(Some("door".to_string())));
-            #[cfg(unix)]
-            assert!(again, "not written again");
+        fn a_window_that_never_waited_is_never_shown_by_the_end_of_one() {
+            // A start into the tray (#772): the list stays hidden there,
+            // whatever the page says or the deadline.
+            let wait = Wait::new();
+            assert!(!wait.waiting());
+            assert!(!wait.end());
         }
     }
 }

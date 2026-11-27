@@ -45,15 +45,16 @@ pub fn create(app: &App) -> tauri::Result<()> {
     // without taking the focus after a restart nobody pressed.
     let come_back = crate::updates::take_come_back(app);
     let in_tray = come_back == crate::updates::ComeBack::Tray;
-    // In the theme the last run kept (#965), before its page can say.
-    crate::theme::take_kept(app);
     for config in &app.config().app.windows {
         // The list holds the message box beside it (#337): on Linux its
         // dropped files come through the shell (`dropped.rs`, #673).
         let mut config = config.clone();
         config.drag_drop_enabled = crate::dropped::THROUGH_THE_SHELL;
         let hide = in_tray && config.label == OWNER;
-        if hide {
+        // Shown once its page says its theme, so its first frame is in it
+        // (#965, `theme.rs`); a list going back to the tray stays hidden.
+        let wait = !hide && config.label == OWNER && config.visible;
+        if hide || wait {
             config.visible = false;
         }
         if come_back == crate::updates::ComeBack::Behind && config.label == OWNER {
@@ -65,6 +66,9 @@ pub fn create(app: &App) -> tauri::Result<()> {
             .build()?;
         if hide {
             page_seen(app.handle(), OWNER, false);
+        }
+        if wait {
+            crate::theme::wait_for_theme(app.handle());
         }
     }
     Ok(())
@@ -692,7 +696,6 @@ mod tests {
             colored, built,
             "a window built here isn't in the theme's color"
         );
-        assert!(source.contains("crate::theme::take_kept(app);"));
     }
 
     /// Tauri's own drop handling keeps dropped files from the page on

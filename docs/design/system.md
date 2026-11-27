@@ -228,8 +228,11 @@ size, face, radius or rule changes with one.
   each theme it puts on (`followThemeInShell`, `core/theme.ts`), by its
   id. On a computer every window is built in the theme's window color and
   every open one takes a new one, so none shows another theme's for a
-  moment before its page draws, and the color is kept for the next start
-  (`src-tauri/src/theme.rs`). On a phone the status and navigation bars
+  moment before its page draws. At start the list is built before its
+  page runs, so it's shown only once the page has told the shell its
+  theme (or after ten seconds, for a page that failed to load): nothing
+  is kept for the next start, so no second copy of the choice can fall
+  behind the page's (`src-tauri/src/theme.rs`). On a phone the status and navigation bars
   draw their icons dark on Daylight and light on the dark themes
   (`SystemBars.kt` on Android, the window's light or dark style on an
   iPhone).
@@ -1480,7 +1483,7 @@ it catches, and nowhere else (AGENTS.md hard rule 4).
 | Kit components take no `className` or `style` prop | `discipline.test.ts` › takes no className or style prop |
 | A conversation that can't be drawn says so in its place, and the list, the tabs and the other conversations carry on; a window that can't says so under its title bar with Reload, and sends nothing anywhere; a time a date can't hold draws as no time | `next-side.spec.ts` › a conversation that can't be drawn says so in its place…, and › …from a time no date can hold draw with no time…; `next-boundary.spec.ts`; `lib/time.test.ts` › a time no date can hold |
 | The themes (#964, #965): the six Settings offers, each setting only tokens The door has, Daylight alone light and alone with its own 16 names, from the palette; `next.html`'s color before the styles load is each theme's window color; the choice kept on this computer or phone, The door for anything else, and a refused save changing nothing; a window, including one opened later, takes the theme Settings announces; picked in Settings › Appearance (arrow keys too) it changes the page at once and is still chosen when Settings opens again, on the desktop and the phone; each card's picture in its own theme's colors whatever the page's; a window opened afterwards, and the phone's page, start in it before the app's code has run, Daylight too; Daylight puts the page on paper with the darker names and says it's light, an old message's words fade two thirds as far there, and a glow's light is a paler mix of the name's color; the list tells the shell the theme it starts in and each one picked, once, one at a time, and again after one the shell didn't take; the app's own page tells it from the list window, on a computer and a phone, and Settings doesn't | `contrast.test.ts`, `core/theme.test.ts`, `core/appearance.test.ts`, `next-themes.spec.ts`, `next-settings-window.spec.ts` |
-| The shell and the theme (#965): every window the desktop builds is in the theme's window color, which is the one `next.html` paints for it; only a theme `tokens.css` calls light is light to the shell; a theme it doesn't know is The door; the theme is kept for the next start | `src-tauri/src/theme.rs`, `src-tauri/src/window.rs` |
+| The shell and the theme (#965): every window the desktop builds is in the theme's window color, which is the one `next.html` paints for it; only a theme `tokens.css` calls light is light to the shell; a theme it doesn't know is The door; at start the list is shown once, when its page first says its theme or at the deadline, and never by either when it starts in the tray | `src-tauri/src/theme.rs`, `src-tauri/src/window.rs` |
 | Text roles reach 4.5:1 and icons, accent and focus 3:1 on every surface; all 16 name colors reach 4.5:1, also on a card washed in any of them where the wash is strongest; an offline name's grey, read from `kit/Name.css`, on the list and on a hovered or selected row; text on the accent and washes, and switch parts, pass; every name under a shimmer's band at 4.5:1; each age step takes about as much of the words' contrast as The door's does; all of it in every theme, each laid over The door (#964, #965) | `contrast.test.ts` |
 | The light set of names (#965): all 16 at 4.5:1 on Daylight's window and hovered row, each on the screen unclipped, each capped hue at the most the screen can show, and the set the one Matt approved | `crates/linger-core/src/palette.rs` |
 

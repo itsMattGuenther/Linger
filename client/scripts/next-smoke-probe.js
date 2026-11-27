@@ -24,6 +24,12 @@
       throw new Error(`no sign-in screen at ${location.href}: ${(document.body?.innerText ?? "").slice(0, 200)}`);
     }
     const checks = { page: location.pathname };
+    // The list is on screen (#965): at start it waits, hidden, until its
+    // page has told the shell its theme, and must then be shown. WebKitGTK
+    // says so here; WebView2 says "visible" whatever the window is, so on
+    // Windows windows-hidden-check.mjs looks at the window itself.
+    for (let tries = 0; tries < 200 && document.visibilityState !== "visible"; tries++) await wait(50);
+    if (document.visibilityState !== "visible") throw new Error(`the list window was never shown: ${document.visibilityState}`);
     const background = getComputedStyle(signin).backgroundColor;
     if (background !== "rgb(19, 26, 40)") throw new Error(`the stylesheet isn't applied: background ${background}`);
     if (!signin.querySelector("input")) throw new Error("no box to paste into");

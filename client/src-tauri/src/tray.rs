@@ -248,6 +248,11 @@ fn build(app: &App) -> tauri::Result<()> {
 /// Bring the list back: shown, restored and focused, and its page told it's
 /// seen again (#594).
 pub fn show_list(app: &AppHandle) {
+    // At start the list waits for its page to say its theme and is shown
+    // then, moments away (#965, `theme.rs`), rather than now in another's.
+    if crate::theme::waiting() {
+        return;
+    }
     if let Some(list) = app.get_webview_window("main") {
         let _ = list.show();
         let _ = list.unminimize();

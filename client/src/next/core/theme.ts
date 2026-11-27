@@ -69,16 +69,17 @@ type Call = (command: string, args?: Record<string, unknown>) => Promise<unknown
  * Tell the shell the theme on this page now, and again whenever it changes
  * (#965), so what the shell draws itself follows it: on a computer the
  * color every window shows before its page draws (`src-tauri/src/theme.rs`),
- * which a light theme can't leave dark; on a phone the status bar's and
+ * which a light theme can't leave dark, and at start the list is shown only
+ * once the first word comes; on a phone the status bar's and
  * navigation bar's icons, dark on Daylight's paper and light on every dark
  * theme. Only the window that owns the shell's state calls it: the list,
  * on a computer and a phone. `hear` is how the page hears it has applied
  * the look (`onAppearance`); a shell that can't take the theme changes
  * nothing, and is told again at the next change. One theme is told at a
- * time, each after the shell has answered the one before: the shell does
- * each on a thread of its own, and two at once (the arrow keys moving
- * through the picker) could land the other way round, leaving the bars or
- * the kept theme on the older one.
+ * time, each after the shell has answered the one before: a phone's shell
+ * does each on a thread of its own, and two at once (the arrow keys moving
+ * through the picker) could land the other way round, leaving the bars on
+ * the older one.
  */
 export function followThemeInShell(hear: (listener: () => void) => () => void, call: Call): () => void {
   let told: ThemeId | null = null;
