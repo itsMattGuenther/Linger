@@ -599,8 +599,8 @@ function Quote({
  * message face (NAME-3), which is only ever one of the four sans faces
  * (`messageFontVar`); nothing else about a message is styleable (SPEC §4.5).
  */
-function bodyStyle(opacity: number, author: User | undefined): CSSProperties {
-  return { opacity, "--msg-font": messageFontVar(author?.style.msg_font_key) } as CSSProperties;
+function bodyStyle(age: number, author: User | undefined): CSSProperties {
+  return { "--age": age, "--msg-font": messageFontVar(author?.style.msg_font_key) } as CSSProperties;
 }
 
 /**

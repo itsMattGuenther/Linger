@@ -292,6 +292,15 @@
   filter: drop-shadow(0 0 var(--name-glow) var(--person-name, var(--text-primary)));
 }
 
+/* The light mixed as the theme says (`--name-glow-mix`): the name's own
+   color on night, a pale mix of it on paper (#965). An engine without
+   color-mix keeps the rule above, rather than losing the glow. */
+@supports (color: color-mix(in srgb, currentcolor, transparent)) {
+  :root:not([data-normalize="true"]) .name[data-name-effect="glow"] {
+    filter: drop-shadow(0 0 var(--name-glow) color-mix(in srgb, var(--person-name, var(--text-primary)), var(--name-glow-mix)));
+  }
+}
+
 /* As specific as the rule that draws it, and after it, so it wins. */
 @media (prefers-reduced-motion: reduce) {
   :root:not([data-normalize="true"]) .name[data-name-effect="glow"] {
@@ -334,6 +343,12 @@
 
 :root .name.name-raw[data-name-effect="glow"] {
   filter: drop-shadow(0 0 var(--name-glow) var(--person-name, var(--text-primary)));
+}
+
+@supports (color: color-mix(in srgb, currentcolor, transparent)) {
+  :root .name.name-raw[data-name-effect="glow"] {
+    filter: drop-shadow(0 0 var(--name-glow) color-mix(in srgb, var(--person-name, var(--text-primary)), var(--name-glow-mix)));
+  }
 }
 
 /* The lights off (#274, #301): idle, away or offline in the list, a dim

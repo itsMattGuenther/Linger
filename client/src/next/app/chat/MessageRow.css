@@ -116,11 +116,15 @@
   font-size: var(--text-body);
 }
 
+/* Older words fade (SPEC §4.7, §5.6): `--age` is the step for the message's
+   age (lib/time.ts's ageOpacity, set on the body), and the theme says how
+   much of it to take (`--age-fade`): all on night, less on paper (#965). */
 .nx-msg-body {
   grid-area: body;
   min-width: 0;
   padding-block: var(--space-0-5);
   padding-inline-start: var(--message-indent);
+  opacity: calc(1 - (1 - var(--age, 1)) * var(--age-fade));
 }
 
 /* Whatever a message starts with (words, a picture, a card) starts on its line. */

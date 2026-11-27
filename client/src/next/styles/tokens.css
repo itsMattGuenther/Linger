@@ -97,8 +97,9 @@
    is worked out from that element's own primitives. A custom property that
    refers to another is resolved where it's declared, so without this a
    preview in another theme would inherit the page's roles, already worked
-   out in the page's colors. Only colors here: sizes and the focus ring are
-   the page's (layer 3), and a theme set on one element never changes them. */
+   out in the page's colors. Only colors here, and how strongly an effect
+   lays them on: sizes and the focus ring are the page's (layer 3), and a
+   theme set on one element never changes them. */
 :root,
 [data-theme] {
   color-scheme: dark;
@@ -189,8 +190,19 @@
   --window-edge: var(--ink-a07);
 
   /* The band that crosses a shimmering name (SPEC §4.5). `lib/names.ts`
-     and `kit/Name.css` read it. */
+     and `kit/Name.css` read it. It moves the letters it crosses toward the
+     ink, white on night, so they never drop under 4.5:1 while it passes
+     (`contrast.test.ts`). */
   --name-shimmer: rgb(255 255 255 / 0.6);
+  /* What a glowing name's light is mixed with (`kit/Name.css`): nothing on
+     night, where the name's own color is a light. On paper (#965) the same
+     color is a dark smudge, so there it's mixed toward white. */
+  --name-glow-mix: transparent 0%;
+  /* How much of the age fade a message's words take (SPEC §5.6,
+     `app/chat/MessageRow.css`): all of it on night, where fading dims. On
+     paper fading washes out instead, and takes more contrast at each step,
+     so a light theme takes less of it (`contrast.test.ts`). */
+  --age-fade: 1;
 
   /* Shadows: windows and floating things only. Never on a row or a control. */
   --shadow-window:
@@ -760,6 +772,17 @@
     inset 0 1px 0 rgb(255 255 255 / 0.6);
   --shadow-popover: 0 24px 60px -16px rgb(29 37 56 / 0.28);
   --shadow-notice: 0 16px 40px -12px rgb(29 37 56 / 0.24);
+
+  /* The effects, on paper. A shimmer's band in white would lift L 0.50
+     letters almost into the paper (under 2:1), so it's navy, at night's
+     strength: the letters it crosses darken toward the ink, as night's
+     lighten toward it. A glow's light is a pale mix of the name's color
+     rather than the color itself. Old messages fade two thirds as far
+     (0.92 and 0.85 for 0.88 and 0.78), which takes about as much contrast
+     from the words as night's steps do. */
+  --name-shimmer: rgb(29 37 56 / 0.6);
+  --name-glow-mix: rgb(255 255 255) 40%;
+  --age-fade: 0.67;
 }
 
 /* The phone (SPEC §4.15, styles/phone.css): rows and the title bar a thumb

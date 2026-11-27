@@ -190,6 +190,66 @@ test.describe("on a computer", () => {
   });
 });
 
+// The effects made for night, on paper (#965): older words fade two thirds
+// as far, since fading on paper washes out rather than dims, and a glow's
+// light is a pale mix of the name's color rather than a dark smudge of it.
+// The amounts are tokens (`--age-fade`, `--name-glow-mix`), which
+// contrast.test.ts holds to their reasons; this is the page using them.
+test.describe("the effects on paper", () => {
+  const put = (page: Page, theme: Theme) => page.evaluate((chosen) => (document.documentElement.dataset.theme = chosen), theme);
+
+  test("an old message's words fade less in Daylight than on night", async ({ page }) => {
+    await page.goto("/tests/fixtures/next-chat.html");
+    const bodies = page.getByRole("log").locator(".nx-msg-body");
+    await expect(bodies.first()).toBeVisible();
+    const faded = () =>
+      bodies.evaluateAll((all) =>
+        all.map((body) => ({ age: Number((body as HTMLElement).style.getPropertyValue("--age")), opacity: Number(getComputedStyle(body).opacity) })),
+      );
+    const night = await faded();
+    expect(night.some(({ age }) => age < 1)).toBe(true);
+    for (const { age, opacity } of night) expect(opacity).toBeCloseTo(age, 3);
+
+    await put(page, "daylight");
+    const paper = await faded();
+    expect(paper.map(({ age }) => age)).toEqual(night.map(({ age }) => age));
+    for (const { age, opacity } of paper) expect(opacity).toBeCloseTo(1 - (1 - age) * 0.67, 3);
+  });
+
+  test("a glowing name's light is its own color on night, and a paler mix of it in Daylight", async ({ page }) => {
+    await page.goto("/tests/fixtures/kit.html");
+    const name = page.locator("[data-section='names'] .name[data-name-effect='glow']").first();
+    await expect(name).toBeVisible();
+    // The glow's color and the name's, each drawn on a canvas and read back,
+    // whatever way the engine writes them out.
+    const colors = () =>
+      name.evaluate((node) => {
+        const style = getComputedStyle(node);
+        const glow = /drop-shadow\(((?:rgba?|color|oklch|oklab)\([^)]*\))/.exec(style.filter)?.[1] ?? "";
+        const pixel = (value: string) => {
+          const canvas = document.createElement("canvas");
+          canvas.width = canvas.height = 1;
+          const context = canvas.getContext("2d", { willReadFrequently: true });
+          if (!context || !value) return null;
+          context.fillStyle = value;
+          context.fillRect(0, 0, 1, 1);
+          return [...context.getImageData(0, 0, 1, 1).data];
+        };
+        return { glow: pixel(glow), name: pixel(style.getPropertyValue("--person-name").trim()) };
+      });
+    const lightness = ([r = 0, g = 0, b = 0]: number[]) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
+
+    const night = await colors();
+    expect(night.glow).not.toBeNull();
+    for (const [at, channel] of (night.name ?? []).entries()) expect(Math.abs(channel - (night.glow?.[at] ?? -9))).toBeLessThanOrEqual(1);
+
+    await put(page, "daylight");
+    const paper = await colors();
+    expect(paper.glow).not.toBeNull();
+    expect(lightness(paper.glow ?? [])).toBeGreaterThan(lightness(paper.name ?? []) + 40);
+  });
+});
+
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 411, height: 914 } });
 
