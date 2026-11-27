@@ -205,8 +205,8 @@ test("the server's name or color saved here has the list window ask the server a
 
 test("interface size and plain names are saved here and take effect at once", async ({ page }) => {
   await open(page, "?section=appearance");
-  // No theme or warmth to choose while the new client has one set of colors.
-  await expect(page.getByRole("radio", { name: /Light/ })).toHaveCount(0);
+  // No light theme yet (Daylight is #965), and no evening warmth: the colors have no evening version.
+  await expect(page.getByRole("group", { name: "Theme" }).getByRole("radio", { name: "Daylight" })).toHaveCount(0);
   await expect(page.getByRole("switch", { name: "Evening warmth" })).toHaveCount(0);
   await page.getByRole("combobox", { name: "Interface size" }).selectOption("125");
   await expect.poll(() => page.evaluate(() => window.localStorage.getItem("linger.interface.scale"))).toBe("125");
@@ -239,10 +239,18 @@ test("an Appearance choice storage won't save says so under it, and the setting 
   const unsaved = page.getByRole("tabpanel").getByRole("status").filter({ hasText: "Couldn't save that here." });
   const under = (control: Locator) => page.locator(".nx-set-block", { has: control }).getByRole("status");
 
+  // The theme (#964): picked, refused, and still The door, on the page too.
+  const themes = page.getByRole("group", { name: "Theme" });
+  await themes.getByRole("radio", { name: "Dusk", exact: true }).click();
+  await expect(under(themes)).toHaveText("Couldn't save that here.");
+  await expect(themes.getByRole("radio", { name: "The door", exact: true })).toBeChecked();
+  await expect(themes.getByRole("radio", { name: "Dusk", exact: true })).not.toBeChecked();
+
   const size = page.getByRole("combobox", { name: "Interface size" });
   await size.selectOption("125");
   await expect(under(size)).toHaveText("Couldn't save that here.");
   await expect(size).toHaveValue("100");
+  await expect(unsaved).toHaveCount(1);
   for (const name of ["Use plain names and message fonts", "Show reactions", "One line per person"]) {
     const choice = page.getByRole("switch", { name });
     const was = (await choice.getAttribute("aria-checked")) ?? "";
@@ -252,9 +260,10 @@ test("an Appearance choice storage won't save says so under it, and the setting 
     // Said once, under the latest.
     await expect(unsaved).toHaveCount(1);
   }
-  // Nothing was applied: the page never zoomed, and names are as they were.
+  // Nothing was applied: the page never zoomed, and names and colors are as they were.
   expect((await did(page)).filter((line) => line.startsWith("zoom:"))).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.dataset.normalize)).toBeUndefined();
+  expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe("door");
 
   // Storage working again: the next choice is made, and the words go.
   await page.evaluate(() => (window as unknown as { storageBack: () => void }).storageBack());

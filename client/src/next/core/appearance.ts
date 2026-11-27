@@ -1,9 +1,9 @@
 /**
- * How the new client looks on this computer, the same in every window: plain
- * names (NAME-4), interface size (LOOK-1) and one line per person in the
- * list (#197). Settings saves a change and
- * announces it; every window applies it at once, and each applies what's
- * saved when it opens.
+ * How the new client looks on this computer, the same in every window: the
+ * theme (#964, `core/theme.ts`), plain names (NAME-4), interface size
+ * (LOOK-1) and one line per person in the list (#197). Settings saves a
+ * change and announces it; every window applies it at once, and each
+ * applies what's saved when it opens.
  *
  * A change storage refuses (full, or switched off) isn't made: Settings says
  * it couldn't save it, and the setting stays as it was (#782). Only the
@@ -29,6 +29,7 @@ import { applyNormalize, loadNormalize } from "../../lib/normalize";
 import { PROTOCOL, tauriBus } from "./bus";
 import { onPhone } from "./phone";
 import { pageScreen } from "./screen";
+import { applyTheme, loadTheme } from "./theme";
 
 /** Settings changed how things look; every window applies it. */
 export const APPEARANCE = "next:appearance";
@@ -231,6 +232,7 @@ export function applyAppearance(): Promise<void> {
 }
 
 async function applyOnce(): Promise<void> {
+  applyTheme(loadTheme());
   applyNormalize(loadNormalize());
   for (const listener of listeners) listener();
   const scale = loadScale();

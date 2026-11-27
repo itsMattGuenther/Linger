@@ -52,6 +52,7 @@ import { CHIMES, type SettingsKey, settingsKeys } from "../../core/settings";
 import { presenceOf } from "../../core/chat/conversation";
 import { Button, Spinner } from "../../kit";
 import { announceAppearance, loadHideReactions, loadOneLine, loadScale, loadTextSize, saveHideReactions, saveOneLine, saveScale, saveTextSize } from "../../core/appearance";
+import { loadTheme, saveTheme, type ThemeId } from "../../core/theme";
 import { type Reporter, startReporting, windowTarget } from "../../core/report";
 import { useFollowing } from "../useFollowing";
 import { hostOf, useServerInfos } from "../useServerInfos";
@@ -324,6 +325,7 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
   // This computer's preferences: read once, saved as they change.
   const [sound, setSound] = useState<SoundPrefs>(loadSoundPrefs);
   const [voice, setVoice] = useState<VoicePrefs>(loadVoicePrefs);
+  const [theme, setTheme] = useState<ThemeId>(loadTheme);
   const [plain, setPlain] = useState<boolean>(loadNormalize);
   const [oneLine, setOneLine] = useState<boolean>(loadOneLine);
   const [hideReactions, setHideReactions] = useState<boolean>(loadHideReactions);
@@ -601,6 +603,13 @@ export function Settings({ holder }: { holder: SettingsHolder }) {
         openGuide: host ? () => openExternal(HOST_UPDATE_GUIDE_URL) : undefined,
       }}
       appearance={{
+        // Applied as it's picked, here and in every other window (#964).
+        theme: {
+          value: theme,
+          onChange: (value) => {
+            if (appearanceSaved("theme", saveTheme(value))) setTheme(value);
+          },
+        },
         appIcon:
           appIcon && icon
             ? {

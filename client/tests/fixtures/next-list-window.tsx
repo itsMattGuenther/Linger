@@ -526,6 +526,13 @@ mockIPC((cmd, args) => {
       return null;
     case "push_opened":
       return null;
+    case "share_window_list_save": {
+      // The iPhone share window's list (#820): the background it was last
+      // written with, for its colors following a theme (#964).
+      const list = JSON.parse(String(a.list)) as { theme: { background: string } };
+      document.body.dataset.sharelist = list.theme.background;
+      return null;
+    }
     default:
       return null;
   }

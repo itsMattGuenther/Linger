@@ -1263,6 +1263,11 @@ changes** returns to your saved look; **Save your look** publishes it.
 
 Also in settings:
 
+- **Theme**: Settings › Appearance › Theme. Five color themes, each shown as
+  a small window in its own colors: The door (the usual), After dark, Porch
+  light, Dusk and The original. Only the colors change. The choice is kept on
+  this computer or phone and isn't sent anywhere, so each device can have its
+  own.
 - **Interface Size**: enlarge text and controls from 100% to 200%. The default
   layout is comfortable, and conversations have no density modes to choose
   between.
@@ -1275,8 +1280,8 @@ Also in settings:
   two, so more fit. Point at somebody to read their status. Off unless you turn
   it on; the phone always keeps two lines.
 
-Linger is dark only; there is no light theme. The evening warmth of earlier
-versions comes back once the new look has an evening version of its own.
+Every theme is dark. The evening warmth of earlier versions comes back once
+the new look has an evening version of its own.
 
 ## Being interrupted, or not
 

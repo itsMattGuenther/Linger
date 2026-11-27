@@ -55,6 +55,7 @@ import {
   type MenuAnchor,
   type TabItem,
 } from "../../src/next/kit";
+import { THEMES, type ThemeId } from "../../src/next/core/theme";
 import "../../src/next/styles/app.css";
 import "./kit.css";
 
@@ -394,6 +395,7 @@ function Gallery() {
   const [open, setOpen] = useState({ offline: false, away: true, rooms: true });
   const [swatch, setSwatch] = useState<string>("azure");
   const [theme, setTheme] = useState<"dark" | "light" | "system">("dark");
+  const [look, setLook] = useState<ThemeId>("door");
   const [scale, setScale] = useState("100");
   const [mic, setMic] = useState("");
   const [place, setPlace] = useState<"profile" | "appearance" | "sound" | "rooms" | "people">("appearance");
@@ -854,6 +856,17 @@ function Gallery() {
               { value: "light", title: "Light", description: "For bright rooms and daylight.", art: "sun" },
               { value: "system", title: "System", description: "Follow your desktop's choice, light by day and dark at night.", art: "windows" },
             ]}
+          />
+        </div>
+        {/* The Theme picker's cards (#964): each a window in its theme's own colors. */}
+        <div className="g-compact" data-testid="themes">
+          <ChoiceCards
+            legend="Theme"
+            name="look"
+            compact
+            value={look}
+            onChange={setLook}
+            choices={THEMES.map((each) => ({ value: each.id, title: each.name, theme: each.id }))}
           />
         </div>
       </Section>

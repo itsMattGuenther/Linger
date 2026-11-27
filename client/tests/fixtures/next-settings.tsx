@@ -58,6 +58,7 @@ import { DEFAULT_VOICE_PREFS, type VoicePrefs } from "../../src/lib/voice";
 import { serverVersionLine, type ServerVersion, type UpdateCheck } from "../../src/lib/updates";
 import { MIC_TEST_IDLE, type MicTest } from "../../src/next/core/micTest";
 import { type SettingsKey } from "../../src/next/core/settings";
+import type { ThemeId } from "../../src/next/core/theme";
 import { SettingsView } from "../../src/next/app/settings/SettingsView";
 import type { CloseList, ConversationMode } from "../../src/next/app/settings/WindowsSection";
 import "../../src/next/styles/app.css";
@@ -154,6 +155,7 @@ function Fixture() {
   const [reactions, setReactions] = useState(true);
   const [scale, setScale] = useState(100);
   const [warmth, setWarmth] = useState(true);
+  const [theme, setTheme] = useState<ThemeId>("door");
   const [mode, setMode] = useState<ConversationMode>("tabs");
   const [closing, setClosing] = useState<CloseList>("tray");
   const [sound, setSound] = useState<SoundPrefs>(DEFAULT_SOUND_PREFS);
@@ -267,6 +269,7 @@ function Fixture() {
         openGuide: query.has("member") ? undefined : () => note("open-update-guide"),
       }}
       appearance={{
+        theme: { value: theme, onChange: (value) => (note(`theme:${value}`), setTheme(value)) },
         scale: { value: scale, onChange: (value) => (note(`scale:${value}`), setScale(value)) },
         warmth: { value: warmth, onChange: (value) => (note(`warmth:${value}`), setWarmth(value)) },
         plainNames: { value: plain, onChange: (value) => (note(`plain:${value}`), setPlain(value)) },

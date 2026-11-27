@@ -421,6 +421,10 @@ version left as an open question (parity decision 2, 2026-09-26). It's closed
 now: "We can scrap the light theme from the spec. I think we're going to pass
 on that." The app is dark only, and no light version is planned.
 
+**Since 2026-11-26** a light theme is planned again: Daylight (#965), one of
+the app themes (#963, "app themes named after the icon looks" below). This
+stands until it ships.
+
 The previous client (`LINGER_CLASSIC=1`) had its dark, light and
 follow-the-system choice, and `linger-core`'s palette carried the light
 lightness it used. Both went when that client was deleted (#306). Evening
@@ -2387,3 +2391,36 @@ on the phone, the website and anything else is what makes it Linger's.
   launchers are untested.
 - **The App Store listing's icon is the app's own**, so it changes with the
   next release. Google Play's listing icon is uploaded in Play Console.
+
+---
+
+## Decided: app themes named after the icon looks (#963)
+
+**Matt, 2026-11-26**, after seeing six color themes mocked up on the app's
+own test pages, each one passing the app's readability rules: "I think they
+all look great and should all be in." Linger gets color themes named after
+the app icon's six looks (#961), picked in Settings › Appearance › Theme on
+the desktop and on phones.
+
+- **Five dark themes first** (#964): The door (today's colors, the
+  default), After dark, Porch light, Dusk and The original. All five keep
+  the 16 name colors, so nothing in `linger-core` changes.
+- **Daylight comes after** (#965). It's a light theme, so it reverses
+  "dark only, no light theme" (2026-09-28), needs a darker set of name
+  colors from `linger-core::PALETTE`, and needs native work for the phones'
+  status bars. Until it ships, Linger is dark only.
+- **The choice is per device**, like the interface size. It isn't sent to
+  the server or synced between devices.
+- **Amber still means something new for you**, in every theme
+  (`docs/design/system.md`). A theme changes grounds, text and lines and,
+  only where readability needs it, the exact shade of a semantic color,
+  never what a color means.
+- **Only colors change.** Each theme is a set of values for the existing
+  color tokens. Layout, fonts, sizes and the design system's rules are the
+  same in every theme.
+- **Readability holds in every theme**, at the same floors as today: text
+  4.5:1 on every surface, icons and marks 3:1, and all 16 name colors 4.5:1.
+  The contrast test checks each theme.
+- **Not part of this:** themes people make themselves (still "V3 or never",
+  SPEC §6), and evening warmth that follows the clock. Porch light is the
+  warm look, chosen by hand.

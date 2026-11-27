@@ -64,7 +64,7 @@ dropped. The prototype it started from is on the `design/buddy-list` branch.
 - **Drafts** are kept per conversation, across closing a tab and restarts
   (decision 11). **Clicking a banner** opens its conversation at the message
   (decision 20).
-- **Dark only** for now (decision 2). **Message fading** stays (decision 10);
+- **Dark only** for now (decision 2; five dark themes since #964). **Message fading** stays (decision 10);
   the 80ch line width went in #334, and a message's words now run to its time
   column. **Window sizes** stay as built (decision 19).
 - **Empty places** get one quiet sentence each (decision 17).
@@ -397,7 +397,8 @@ regrouped, plus the new choices this design needs:
     two blended, effect, and your message font, with a live preview. Saving
     changes your name in the list and in every conversation.
 - **Appearance:**
-  - color theme (dark, light, or follow the system);
+  - the theme: The door, After dark, Porch light, Dusk or The original,
+    each with a small preview in its own colors (#964);
   - interface size, with a preview;
   - evening warmth;
   - use plain names and message fonts (this one works in the prototype);

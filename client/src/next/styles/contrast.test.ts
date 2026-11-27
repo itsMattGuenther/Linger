@@ -6,39 +6,97 @@
  * out of the generated palette and converted from OKLCH, must reach 4.5:1 on
  * every surface a name can sit on. The test reads `tokens.css`, so changing a
  * value re-checks it; the fix for a failure is a token, never this file.
+ *
+ * In every theme (#964): The door is what `:root` declares, and each other
+ * theme is its `[data-theme="<id>"]` block laid over that, as the page does.
+ * Every check below runs against each, at the same floors.
  */
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { THEMES } from "../core/theme";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const TOKENS = readFileSync(resolve(HERE, "tokens.css"), "utf8");
 const PALETTE = readFileSync(resolve(HERE, "../../generated/palette.generated.css"), "utf8");
+const PAGE = readFileSync(resolve(HERE, "../../../next.html"), "utf8");
 
 type Rgb = [number, number, number];
 type Rgba = [number, number, number, number];
+type Vars = Map<string, string>;
 
-/** Custom properties declared in the first `:root { … }` block of a sheet. */
-function rootVars(css: string): Map<string, string> {
+/**
+ * A sheet's top-level rules: each one's selectors and the custom properties
+ * it declares. A rule inside an at-rule (`@media`) isn't one: it applies only
+ * sometimes, and none of them sets a color.
+ */
+function topRules(css: string): Array<{ selectors: string[]; vars: Vars }> {
   const clean = css.replace(/\/\*[\s\S]*?\*\//g, "");
-  const start = clean.indexOf(":root");
-  const open = clean.indexOf("{", start);
-  let depth = 0;
-  let end = open;
-  for (let i = open; i < clean.length; i += 1) {
-    if (clean[i] === "{") depth += 1;
-    if (clean[i] === "}") depth -= 1;
-    if (depth === 0) {
-      end = i;
-      break;
+  const rules: Array<{ selectors: string[]; vars: Vars }> = [];
+  let at = 0;
+  while (at < clean.length) {
+    const open = clean.indexOf("{", at);
+    if (open < 0) break;
+    const head = clean.slice(at, open).trim();
+    let depth = 0;
+    let end = open;
+    for (let i = open; i < clean.length; i += 1) {
+      if (clean[i] === "{") depth += 1;
+      if (clean[i] === "}") depth -= 1;
+      if (depth === 0) {
+        end = i;
+        break;
+      }
     }
+    if (!head.startsWith("@")) {
+      const vars: Vars = new Map();
+      for (const found of clean.slice(open + 1, end).matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) {
+        if (found[1] && found[2]) vars.set(found[1], found[2].trim());
+      }
+      rules.push({ selectors: head.split(",").map((selector) => selector.trim()), vars });
+    }
+    at = end + 1;
   }
-  const vars = new Map<string, string>();
-  for (const found of clean.slice(open + 1, end).matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) {
-    if (found[1] && found[2]) vars.set(found[1], found[2].trim());
+  return rules;
+}
+
+/** Custom properties a sheet declares on a bare `:root`, from every such rule in order. */
+function rootVars(css: string): Vars {
+  const vars: Vars = new Map();
+  for (const rule of topRules(css)) {
+    if (rule.selectors.includes(":root")) for (const [name, value] of rule.vars) vars.set(name, value);
   }
   return vars;
+}
+
+const RULES = topRules(TOKENS);
+/** The door: everything `:root` declares. */
+const DOOR = rootVars(TOKENS);
+const NAMES = rootVars(PALETTE);
+const THEME_RULE = /^\[data-theme="([\w-]+)"\]$/;
+
+/**
+ * Each theme and what it declares itself, The door's being `:root`'s: from
+ * `tokens.css`, and from the generated palette, where a theme that needs its
+ * own name colors gets them (Daylight, #965; every dark theme keeps The
+ * door's).
+ */
+const OWN = new Map<string, Vars>();
+for (const rule of [...RULES, ...topRules(PALETTE)]) {
+  for (const selector of rule.selectors) {
+    const id = THEME_RULE.exec(selector)?.[1];
+    if (id === undefined) continue;
+    const vars = OWN.get(id) ?? new Map<string, string>();
+    if (!rule.selectors.includes(":root")) for (const [name, value] of rule.vars) vars.set(name, value);
+    OWN.set(id, vars);
+  }
+}
+const THEME_IDS = [...OWN.keys()];
+
+/** A theme's tokens as the page has them, names included: its own laid over The door's. */
+function themeVars(id: string): Vars {
+  return new Map([...NAMES, ...DOOR, ...(OWN.get(id) ?? [])]);
 }
 
 const CARD = readFileSync(resolve(HERE, "../kit/Card.css"), "utf8");
@@ -67,17 +125,14 @@ function tokenIn(css: string, selector: string, property: string, sheet: string)
   return rule[1];
 }
 
-const VARS = rootVars(TOKENS);
-const NAMES = rootVars(PALETTE);
-
-function resolveVar(name: string, seen = new Set<string>()): string {
-  const value = VARS.get(name) ?? NAMES.get(name);
+function resolveVar(vars: Vars, name: string, seen = new Set<string>()): string {
+  const value = vars.get(name);
   if (value === undefined) throw new Error(`${name} is not defined in tokens.css`);
   const ref = /^var\((--[\w-]+)\)$/.exec(value);
   if (!ref?.[1]) return value;
   if (seen.has(ref[1])) throw new Error(`${name} refers to itself`);
   seen.add(ref[1]);
-  return resolveVar(ref[1], seen);
+  return resolveVar(vars, ref[1], seen);
 }
 
 /** sRGB channel (0–1) to linear light. */
@@ -117,8 +172,6 @@ function parseColor(value: string): Rgba {
   throw new Error(`cannot read the color "${value}"`);
 }
 
-const color = (name: string) => parseColor(resolveVar(name));
-
 /** A translucent color laid over an opaque one. */
 function over(top: Rgba, under: Rgba): Rgba {
   const a = top[3];
@@ -150,20 +203,59 @@ const TEXT = ["--text-primary", "--text-secondary", "--text-muted", "--text-away
 const NON_TEXT = ["--icon-default", "--icon-muted", "--icon-faint", "--accent", "--focus", "--danger", "--success"];
 const PALETTE_KEYS = [...NAMES.keys()].filter((key) => key.startsWith("--name-"));
 
-function failures(foregrounds: string[], backgrounds: string[], floor: number): string[] {
-  const out: string[] = [];
-  for (const fg of foregrounds) {
-    for (const bg of backgrounds) {
-      const value = ratio(color(fg), color(bg));
-      if (value < floor) out.push(`${fg} on ${bg}: ${value.toFixed(2)}:1, needs ${floor}:1`);
-    }
-  }
-  return out;
-}
+describe("the themes in tokens.css (#964)", () => {
+  it("are the ones Settings offers, The door on :root", () => {
+    expect([...THEME_IDS].sort()).toEqual(THEMES.map((theme) => theme.id).sort());
+    const door = RULES.find((rule) => rule.selectors.includes('[data-theme="door"]'));
+    expect(door?.selectors).toContain(":root");
+  });
 
-describe("contrast of the new client's tokens", () => {
+  // A theme on one element (the Theme picker's previews) takes any primitive
+  // its block leaves out from the page's theme, not from The door.
+  it("set every primitive The door's block does, so none comes from the page's theme", () => {
+    const door = RULES.find((rule) => rule.selectors.includes('[data-theme="door"]'));
+    const primitives = [...(door?.vars.keys() ?? [])];
+    expect(primitives.length).toBeGreaterThan(40);
+    const missing = [...OWN].flatMap(([id, vars]) => (id === "door" ? [] : primitives.filter((name) => !vars.has(name)).map((name) => `${id}: ${name}`)));
+    expect(missing, missing.join("\n")).toEqual([]);
+  });
+
+  it("set only tokens The door has, so a theme can't add a color nothing else knows", () => {
+    const strays = [...OWN].flatMap(([id, vars]) => [...vars.keys()].filter((name) => !DOOR.has(name) && !NAMES.has(name)).map((name) => `${id}: ${name}`));
+    expect(strays, strays.join("\n")).toEqual([]);
+  });
+
+  // `next.html` paints the page before its styles load, so a window never
+  // flashes white; in each theme it has to be that theme's window color, or
+  // it flashes another one.
+  it("paint the page before its styles load in each theme's own window color (next.html)", () => {
+    const style = /<style>([\s\S]*?)<\/style>/.exec(PAGE)?.[1] ?? "";
+    const painted = new Map<string, string>();
+    for (const found of style.matchAll(/html(?:\[data-theme="([\w-]+)"\])?\s*\{\s*background:\s*(#[0-9a-f]{6});\s*\}/gi)) {
+      painted.set(found[1] ?? "door", (found[2] ?? "").toLowerCase());
+    }
+    const wanted = new Map(THEME_IDS.map((id) => [id, resolveVar(themeVars(id), "--surface-window").toLowerCase()]));
+    expect(painted).toEqual(wanted);
+  });
+});
+
+describe.each(THEME_IDS)("contrast of the new client's tokens, in %s", (theme) => {
+  const vars = themeVars(theme);
+  const color = (name: string) => parseColor(resolveVar(vars, name));
+
+  function failures(foregrounds: string[], backgrounds: string[], floor: number): string[] {
+    const out: string[] = [];
+    for (const fg of foregrounds) {
+      for (const bg of backgrounds) {
+        const value = ratio(color(fg), color(bg));
+        if (value < floor) out.push(`${fg} on ${bg}: ${value.toFixed(2)}:1, needs ${floor}:1`);
+      }
+    }
+    return out;
+  }
+
   it("reads the tokens and all 16 names", () => {
-    expect(SURFACES.every((s) => VARS.has(s))).toBe(true);
+    expect(SURFACES.every((s) => vars.has(s))).toBe(true);
     expect(PALETTE_KEYS).toHaveLength(16);
   });
 
@@ -248,8 +340,7 @@ describe("contrast of the new client's tokens", () => {
   // Somebody offline has their name drawn in a dim grey in the list, with
   // none of their own color (#274). Dim, but still text: it must read at
   // 4.5:1 on the list and on a row that's hovered or has its card open. The
-  // colors are read from the stylesheets that paint them. Dark is the only
-  // theme (docs/decisions.md, 2026-09-28).
+  // colors are read from the stylesheets that paint them.
   it("keeps an offline name at 4.5:1 on the list, and on a hovered or selected row", () => {
     const offline = tokenIn(NAME, ':root .name.k-name[data-dim="yes"]', "color", "kit/Name.css");
     const behind: Array<[string, string]> = [

@@ -10,10 +10,18 @@
     <title>Linger</title>
     <!-- The Buddy list client (M15, docs/design/architecture.md). Every one of
          its windows loads this page; the window's role comes from the URL.
-         Paint the window surface before CSS loads, so no white flash: this is
-         --surface-window from src/next/styles/tokens.css. -->
+         The theme chosen here goes on first, before anything draws (#964,
+         public/theme.js). -->
+    <script src="/theme.js"></script>
+    <!-- Paint the window surface before CSS loads, so no white flash: this is
+         --surface-window from src/next/styles/tokens.css, in each theme.
+         contrast.test.ts checks the two agree. -->
     <style>
       html { background: #131a28; }
+      html[data-theme="after-dark"] { background: #090a0d; }
+      html[data-theme="porch-light"] { background: #1c1714; }
+      html[data-theme="dusk"] { background: #212f58; }
+      html[data-theme="original"] { background: #011333; }
     </style>
   </head>
   <body>
