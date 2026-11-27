@@ -251,7 +251,7 @@ pub fn show_list(app: &AppHandle) {
     // At start the list waits for its page to say its theme and comes
     // forward then, moments away (#965, `theme.rs`), rather than now in
     // another theme's color.
-    if crate::theme::ask_to_come_forward() {
+    if crate::theme::waiting() {
         return;
     }
     if let Some(list) = app.get_webview_window("main") {

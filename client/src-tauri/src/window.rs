@@ -47,8 +47,7 @@ pub fn create(app: &App) -> tauri::Result<()> {
         // dropped files come through the shell (`dropped.rs`, #673).
         let mut config = config.clone();
         config.drag_drop_enabled = crate::dropped::THROUGH_THE_SHELL;
-        let start =
-            (config.label == OWNER).then(|| list_start(come_back, config.visible, cfg!(windows)));
+        let start = (config.label == OWNER).then(|| list_start(come_back, config.visible));
         if let Some(start) = start {
             let built = start.built();
             config.visible = built.visible;
@@ -60,7 +59,7 @@ pub fn create(app: &App) -> tauri::Result<()> {
             .build()?;
         match start {
             Some(ListStart::InTray) => page_seen(app.handle(), OWNER, false),
-            Some(ListStart::Waiting { .. }) => crate::theme::wait_for_theme(app.handle()),
+            Some(ListStart::Waiting) => crate::theme::wait_for_theme(app.handle()),
             _ => {}
         }
     }
@@ -70,21 +69,21 @@ pub fn create(app: &App) -> tauri::Result<()> {
 /// How the list starts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ListStart {
-    /// Hidden until its page says its theme, then shown, so its first frame
-    /// is in that theme (#965, `theme.rs`). Without the focus after a
-    /// restart nobody pressed (#772), so it can't take the keys from
-    /// whatever somebody is doing.
-    Waiting { focus: bool },
+    /// A start somebody made: hidden until its page says its theme, then
+    /// shown and focused, so its first frame is in that theme (#965,
+    /// `theme.rs`).
+    Waiting,
     /// Hidden: back in the tray after a restart to update from there
     /// (#772), or hidden by the config.
     InTray,
-    /// Shown at once without the focus, after a restart nobody pressed
-    /// (#772), on Windows. It can't wait there: Windows shows a hidden
-    /// window with the focus whatever it was built with (tao forgets "not
-    /// focused" once the window is built), and the shell may not call
-    /// Windows' window functions itself (`privacy.test.ts`). So until its
-    /// page draws it shows The door's color, after half an hour with nobody
-    /// using Linger.
+    /// A restart to update nobody pressed (#772), after half an hour with
+    /// nobody using Linger: shown at once behind other windows without the
+    /// focus, as it always was, so it can't take the keys from whatever
+    /// somebody is doing. It doesn't wait, because a hidden window shown
+    /// later can take the focus however it was built: Windows shows it with
+    /// the focus (tao forgets "not focused" once a window is built), as a
+    /// Wayland desktop may and as macOS does within an app it brought in
+    /// front at launch. So until its page draws it shows The door's color.
     Behind,
 }
 
@@ -98,11 +97,7 @@ struct Built {
 impl ListStart {
     fn built(self) -> Built {
         match self {
-            Self::Waiting { focus } => Built {
-                visible: false,
-                focus,
-            },
-            Self::InTray => Built {
+            Self::Waiting | Self::InTray => Built {
                 visible: false,
                 focus: true,
             },
@@ -115,19 +110,14 @@ impl ListStart {
 }
 
 /// How the list starts: from how the last run asked it to come back, and
-/// whether the config shows it at all. On Linux a hidden window built
-/// without the focus is shown without it (GTK takes none until it's
-/// drawn), and on macOS showing a window doesn't bring Linger in front of
-/// the app somebody is in; on Windows it does, so a quiet restart there
-/// doesn't wait (`ListStart::Behind`).
-fn list_start(come_back: crate::updates::ComeBack, visible: bool, on_windows: bool) -> ListStart {
+/// whether the config shows it at all.
+fn list_start(come_back: crate::updates::ComeBack, visible: bool) -> ListStart {
     use crate::updates::ComeBack;
     match come_back {
         _ if !visible => ListStart::InTray,
-        ComeBack::Shown => ListStart::Waiting { focus: true },
+        ComeBack::Shown => ListStart::Waiting,
         ComeBack::Tray => ListStart::InTray,
-        ComeBack::Behind if on_windows => ListStart::Behind,
-        ComeBack::Behind => ListStart::Waiting { focus: false },
+        ComeBack::Behind => ListStart::Behind,
     }
 }
 
@@ -736,38 +726,26 @@ mod tests {
         assert_eq!(unseen.into_iter().collect::<Vec<_>>(), ["chat-1"]);
     }
 
-    /// The list waits for its page's theme, hidden (#965), but in the tray
-    /// and, on Windows, after a restart nobody pressed, which is shown at
-    /// once without the focus (#772); elsewhere that restart waits without
-    /// the focus. A config that hides the list is kept.
+    /// A start somebody made waits for its page's theme, hidden (#965); a
+    /// restart to update comes back in the tray, or behind other windows at
+    /// once without the focus, as it always did (#772). A config that hides
+    /// the list is kept.
     #[test]
-    fn the_list_waits_for_its_theme_but_where_it_would_take_the_focus() {
-        let waits = Built {
+    fn only_a_start_somebody_made_waits_for_its_theme() {
+        assert_eq!(list_start(ComeBack::Shown, true), ListStart::Waiting);
+        assert_eq!(list_start(ComeBack::Tray, true), ListStart::InTray);
+        assert_eq!(list_start(ComeBack::Behind, true), ListStart::Behind);
+        for come_back in [ComeBack::Shown, ComeBack::Tray, ComeBack::Behind] {
+            assert_eq!(list_start(come_back, false), ListStart::InTray);
+        }
+        let hidden = Built {
             visible: false,
             focus: true,
         };
-        let quietly = Built {
-            visible: false,
-            focus: false,
-        };
-        for on_windows in [false, true] {
-            let built = |come_back| list_start(come_back, true, on_windows).built();
-            assert_eq!(built(ComeBack::Shown), waits, "{on_windows}");
-            assert_eq!(
-                list_start(ComeBack::Tray, true, on_windows),
-                ListStart::InTray
-            );
-            for come_back in [ComeBack::Shown, ComeBack::Tray, ComeBack::Behind] {
-                assert_eq!(list_start(come_back, false, on_windows), ListStart::InTray);
-            }
-        }
+        assert_eq!(ListStart::Waiting.built(), hidden);
+        assert_eq!(ListStart::InTray.built(), hidden);
         assert_eq!(
-            list_start(ComeBack::Behind, true, false),
-            ListStart::Waiting { focus: false }
-        );
-        assert_eq!(list_start(ComeBack::Behind, true, false).built(), quietly);
-        assert_eq!(
-            list_start(ComeBack::Behind, true, true).built(),
+            ListStart::Behind.built(),
             Built {
                 visible: true,
                 focus: false
