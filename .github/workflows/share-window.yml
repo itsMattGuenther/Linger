@@ -41,7 +41,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: share-window-${{ github.event.pull_request.number || github.ref }}
+  # A called run belongs to its caller (the nightly run, #971): `github.workflow`
+  # is the caller's name there, so it doesn't queue behind a run by hand on main.
+  group: share-window-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:

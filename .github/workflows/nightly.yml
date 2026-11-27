@@ -138,6 +138,7 @@ jobs:
           | Packages on Linux and Windows | ${{ needs.packages.result }} |
           | Shell builds on Windows and macOS, and the phone app's | ${{ needs.desktop.result }} |
           | The iPhone app in the simulator | ${{ needs.iphone.result }} |
+          | The share window's and extensions' builds | ${{ needs.share-window.result }} |
           | Every browser test, three times | ${{ needs.repeat.result }} |
           | Pinned fixes, asked upstream | ${{ needs.upstream.result }} |
 
