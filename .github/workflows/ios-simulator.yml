@@ -159,7 +159,9 @@ jobs:
           # oldest, and each pull request's copies of every build cache (3
           # GB or so) pushed main's out, so the next pull request built the
           # app and the server from nothing. A pull request restores main's.
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          # And only a run of every flow, which builds the server, so the
+          # cache keeps the server's release dependencies (below).
+          save-if: ${{ github.ref == 'refs/heads/main' && env.FLOWS == 'all' }}
       # The same Xcode as ios.yml, for the reasons there (#779, #839), unless
       # run by hand with Xcode 26.6 (above).
       - name: Xcode ${{ inputs.xcode || '27.1' }}
@@ -183,13 +185,12 @@ jobs:
       # dependencies, but its own three crates were compiled again every
       # run: 11 to 14 minutes, the longest step, on pull requests that mostly
       # never touch the server. Keyed on everything its release build reads
-      # (the crates, the workspace's Cargo files and config), on how it's
-      # built (`release-nolto`: change it when "build the server" changes),
-      # on the compiler, and on the Xcode, whose Mac it was built on; no
-      # restore-keys, so a change to any of them builds it again. Not on
-      # this whole file, as it was: any edit to the workflow built it again.
-      # Kept straight after a build that worked, not at the job's end, so a
-      # flow failing doesn't lose it.
+      # (the crates, the workspace's Cargo files and config), on this file,
+      # which says how it's built, on the compiler, and on the Xcode, whose
+      # Mac it was built on; no restore-keys, so a change to any of them
+      # builds it again. Kept from main only, as the Rust cache is, straight
+      # after a build that worked, not at the job's end, so a flow failing
+      # doesn't lose it.
       #
       # On main, still built whenever the Rust cache had no exact match (the
       # app's own Cargo.lock changed, say): that cache is saved again at the
@@ -210,7 +211,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: target/release/linger-server
-          key: linger-server-release-nolto-xcode-${{ inputs.xcode || '27.1' }}-${{ runner.os }}-${{ runner.arch }}-rustc-${{ steps.toolchain.outputs.cachekey }}-${{ hashFiles('crates/**', 'Cargo.toml', 'Cargo.lock', '.cargo/config.toml') }}
+          key: linger-server-xcode-${{ inputs.xcode || '27.1' }}-${{ runner.os }}-${{ runner.arch }}-rustc-${{ steps.toolchain.outputs.cachekey }}-${{ hashFiles('crates/**', 'Cargo.toml', 'Cargo.lock', '.cargo/config.toml', '.github/workflows/ios-simulator.yml') }}
       # The plain iPhone (not a Pro, Plus, Max, Air or Duo), the size most
       # people have and the one share-photo.yaml's taps inside the share
       # window were measured on, on the newest iOS that has one. Not just the
@@ -263,7 +264,7 @@ jobs:
           CARGO_PROFILE_RELEASE_LTO: "false"
         run: cargo build --locked --release -p linger-server
       - name: keep the server
-        if: env.FLOWS == 'all' && steps.server.outputs.cache-hit != 'true'
+        if: env.FLOWS == 'all' && steps.server.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: target/release/linger-server
@@ -458,16 +459,29 @@ jobs:
       # The start flows run with no Linger server, but plain-http.yaml says
       # the app refuses a plain http address "even one on this machine": with
       # nothing there, it couldn't reach it whatever it allowed. So something
-      # answers plain http where the server would, and the app must still
-      # refuse to reach it.
+      # answers plain http where the server would, letting the page's
+      # requests through as the server's CORS does (a 404 for everything, in
+      # no format Linger reads), so an app that allowed plain http would get
+      # an answer and say something else, and the flow would fail.
       - name: something answering plain http, for plain-http.yaml
         if: env.FLOWS == 'start'
         run: |
           set -euo pipefail
           mkdir -p "$OUT/server"
-          nohup python3 -m http.server "$SERVER_PORT" --bind 127.0.0.1 > "$OUT/server/plain-http.log" 2>&1 &
+          nohup node -e '
+            const port = Number(process.argv[1]);
+            require("node:http").createServer((request, response) => {
+              console.log(request.method, request.url);
+              response.writeHead(request.method === "OPTIONS" ? 204 : 404, {
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "*",
+                "Access-Control-Allow-Headers": "*",
+              });
+              response.end();
+            }).listen(port, "127.0.0.1");
+          ' "$SERVER_PORT" > "$OUT/server/plain-http.log" 2>&1 &
           deadline=$((SECONDS + 30))
-          until curl -fsS -o /dev/null "http://127.0.0.1:$SERVER_PORT/"; do
+          until curl -sS -o /dev/null "http://127.0.0.1:$SERVER_PORT/"; do
             [ "$SECONDS" -lt "$deadline" ] || { cat "$OUT/server/plain-http.log"; echo "::error::nothing answered plain http on $SERVER_PORT"; exit 1; }
             sleep 1
           done

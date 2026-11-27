@@ -2471,7 +2471,12 @@ building the server from nothing, 11 building the app, and 9 on the flows.
   shows; the nightly run does, the next morning, and opens an issue. The
   page those flows drive runs in the browser tests on every pull request,
   and the share window's screens in `share-window.yml`.
-- **Only `main` saves build caches.** GitHub keeps 10 GB of caches a
-  repository and drops the oldest; each pull request's own copies (about 3
-  GB) pushed `main`'s out, so the next pull request built everything from
-  nothing. A pull request now starts from `main`'s.
+- **Only `main` saves the Rust build caches** of the workflows the nightly
+  run runs (`ci.yml`, `package-check.yml`, `ios-simulator.yml`, and the
+  simulator's server). GitHub keeps 10 GB of caches a repository and drops
+  the oldest; each pull request's own copies (about 3 GB) pushed `main`'s
+  out, so the next pull request built everything from nothing. A pull
+  request now starts from `main`'s.
+- **On a pull request the at-rest check (#901) looks at the app signed
+  out,** on its first screen, since no server is set up; signed in and
+  connected, it runs every night.

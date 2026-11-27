@@ -7,7 +7,9 @@
 // processor for as long as the app was open, which on a phone is heat and
 // battery, and on GitHub's Mac was one of its three processors gone for
 // every flow. No flow fails on that, so this looks at it: the app is started
-// again (signed in by then, connected to its server), given half a minute to
+// again (signed in by then, connected to its server, after every flow; on
+// its first screen, signed out, after the start flows a pull request runs
+// alone, #971), given half a minute to
 // finish starting, and looked at for twenty seconds, up to three times. One
 // quiet look passes it, since a busy Mac can make an idle app late but can't
 // make it work. Measured there: 0.04 to 0.05 s of processor in twenty at

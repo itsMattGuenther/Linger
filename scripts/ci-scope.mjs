@@ -147,6 +147,12 @@ export function shellReach(path, read = fromDisk, before = null) {
   return (lib === null ? {} : shellModules(lib))[module] ?? "both";
 }
 
+/** Whether a file is the simulator run's own: its flows, its workflow, and the scripts it runs. */
+function theRunsOwn(path) {
+  return path.startsWith("client/tests/ios/") || path === ".github/workflows/ios-simulator.yml"
+    || /^scripts\/(https-front\.mjs|share-window-ready\.mjs|test-certs\.sh|app-at-rest\.mjs|maestro-driver\.mjs)$/.test(path);
+}
+
 /**
  * Whether a file is part of what the simulator's run builds, drives or runs:
  * the code and project only the phone app builds, the flows, the workflow,
@@ -154,8 +160,7 @@ export function shellReach(path, read = fromDisk, before = null) {
  * so a test alone isn't.
  */
 function simulatorsOwn(path, read, before) {
-  if (path.startsWith("client/tests/ios/") || path === ".github/workflows/ios-simulator.yml") return true;
-  if (/^scripts\/(https-front\.mjs|share-window-ready\.mjs|test-certs\.sh|app-at-rest\.mjs|maestro-driver\.mjs)$/.test(path)) return true;
+  if (theRunsOwn(path)) return true;
   if (!path.startsWith(SHELL)) return false;
   const inside = path.slice(SHELL.length);
   // The phone's now, or the phone's before this change moved it.
@@ -236,9 +241,7 @@ export function classify(paths, { read = fromDisk, before = null } = {}) {
  */
 export function simulatorFlows(paths, { before = null } = {}) {
   if (!paths.length) return "all";
-  const ownRun = (path) => path.startsWith("client/tests/ios/") || path === ".github/workflows/ios-simulator.yml"
-    || /^scripts\/(https-front\.mjs|share-window-ready\.mjs|test-certs\.sh|app-at-rest\.mjs|maestro-driver\.mjs)$/.test(path);
-  return paths.some((path) => ownRun(path) || newReleaseNotes(path, before)) ? "all" : "start";
+  return paths.some((path) => theRunsOwn(path) || newReleaseNotes(path, before)) ? "all" : "start";
 }
 
 /** The commit a change is measured from: where the branch left `base`, for a pull request. */

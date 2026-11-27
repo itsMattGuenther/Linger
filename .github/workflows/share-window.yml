@@ -170,10 +170,6 @@ jobs:
           targets: aarch64-apple-ios
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Saved from main only, never a pull request's (#971): GitHub
-          # keeps 10 GB of caches and drops the oldest, and pull requests'
-          # copies pushed main's out (ios-simulator.yml says more).
-          save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: client/src-tauri
           # Build scripts' output, kept in the cache, names the Xcode they ran
           # with, and restored under another Xcode the link fails (#835).
@@ -213,7 +209,5 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: the sender's tests, in Swift's image, against linger-server
         run: scripts/share-sender-test.sh

@@ -141,12 +141,14 @@ test("the simulator's run is gated on the simulator scope ci-scope.mjs gives, wh
 /** A flow's tags, from its header (above the `---`), as Maestro reads them. */
 export function tagsOf(text) {
   const header = text.slice(0, text.search(/^---$/m));
+  const inline = /^tags:\s*\[([^\]]*)\]\s*$/m.exec(header);
+  if (inline) return inline[1].split(",").map((tag) => tag.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
   const at = header.search(/^tags:\s*$/m);
   if (at < 0) return [];
   const tags = [];
   for (const line of header.slice(at).split("\n").slice(1)) {
     if (!line.trim() || /^\s*#/.test(line)) continue;
-    const item = /^ {2}- (\w[\w-]*)\s*$/.exec(line);
+    const item = /^\s+- ["']?([\w-]+)["']?\s*$/.exec(line);
     if (!item) break;
     tags.push(item[1]);
   }
@@ -174,6 +176,9 @@ test("a flow's tags are read from its header only", () => {
   assert.deepEqual(tagsOf("appId: a\n---\ntags:\n  - start\n"), []);
   assert.deepEqual(tagsOf("tags:\n  - start\n  # a note\n  - other\nappId: a\n---\n"), ["start", "other"]);
   assert.deepEqual(tagsOf("appId: a\n---\n"), []);
+  assert.deepEqual(tagsOf("tags: [start, \"other\"]\nappId: a\n---\n"), ["start", "other"]);
+  assert.deepEqual(tagsOf("tags:\n    - start\nappId: a\n---\n"), ["start"]);
+  assert.deepEqual(tagsOf("tags:\n  - 'start'\nappId: a\n---\n"), ["start"]);
 });
 
 test("docs/development.md lists the flows in config.yaml's order", () => {
