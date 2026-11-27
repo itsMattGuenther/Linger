@@ -80,7 +80,7 @@ export function ChoiceCards<V extends string>({
  * inside `data-theme`, so each is that theme's own. A picture only: the
  * choice's title names it.
  */
-function ThemeSample({ theme }: { theme: string }) {
+function ThemeSample({ theme }: { theme: ThemeId }) {
   return (
     <span className="k-choice-sample" data-theme={theme} aria-hidden="true">
       <span className="k-choice-sample-bar" />

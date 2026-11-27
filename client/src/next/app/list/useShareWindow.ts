@@ -124,12 +124,16 @@ export function useShareSignIns(on: boolean, sessions: Sessions): ReadonlyMap<st
  * the list, a server's sign-in or the look changes, a moment after, so a
  * burst of changes is written once. The look is in it because the window
  * draws in the colors the list carries, read from the page: a theme picked
- * in Settings (#964) has to reach it without waiting for the list to change. `signedIn` is every server signed in here, in the
- * list's order, those still being reached and waiting for a newer app too:
- * one the app isn't connected to right now is written as it last was, and
- * only signing out takes one off (`shareWindowServers`, #825). The list on
- * file is read back first, so a server not connected to yet since the app
- * started keeps what it had.
+ * in Settings (#964) has to reach it without waiting for the list to change.
+ * Every change of look writes it, a text size too: the write is small, and
+ * the colors are what's read, not which choice changed.
+ *
+ * `signedIn` is every server signed in here, in the list's order, those
+ * still being reached and waiting for a newer app too: one the app isn't
+ * connected to right now is written as it last was, and only signing out
+ * takes one off (`shareWindowServers`, #825). The list on file is read back
+ * first, so a server not connected to yet since the app started keeps what
+ * it had.
  */
 export function useShareWindowList(
   on: boolean,
