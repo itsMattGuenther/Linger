@@ -188,9 +188,10 @@ jobs:
       # (the crates, the workspace's Cargo files and config), on this file,
       # which says how it's built, on the compiler, and on the Xcode, whose
       # Mac it was built on; no restore-keys, so a change to any of them
-      # builds it again. Kept from main only, as the Rust cache is, straight
-      # after a build that worked, not at the job's end, so a flow failing
-      # doesn't lose it.
+      # builds it again. Kept from a pull request too, unlike the Rust cache
+      # (it's 7 MB): one that edits this file builds it once, not on every
+      # push. Kept straight after a build that worked, not at the job's end,
+      # so a flow failing doesn't lose it.
       #
       # On main, still built whenever the Rust cache had no exact match (the
       # app's own Cargo.lock changed, say): that cache is saved again at the
@@ -264,7 +265,7 @@ jobs:
           CARGO_PROFILE_RELEASE_LTO: "false"
         run: cargo build --locked --release -p linger-server
       - name: keep the server
-        if: env.FLOWS == 'all' && steps.server.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
+        if: env.FLOWS == 'all' && steps.server.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: target/release/linger-server

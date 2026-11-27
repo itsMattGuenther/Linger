@@ -953,6 +953,15 @@ on a world that has changed.
   Windows once the new words are whole; a refusal goes back to the page.
   Later rounds kept finding rarer failures, so it stopped there and the rest
   is under the pull request's *Found along the way*.
+- **#971: a stand-in that failed the same way as the bug.** With no Linger
+  server, the plain-http flow needed something answering plain http, so an
+  app that allowed it would reach it. A plain file server sends no CORS
+  headers, so the page's request would fail there too, with the same
+  "Couldn't reach" the flow waits for, and the flow would pass either way.
+  Caught by the fresh review. *Missed because* the stand-in was checked for
+  answering, not for answering the way the real server does. *Changed:* it
+  answers every request with the server's CORS headers, so an app that
+  allowed plain http would get an answer and say something else.
 
 ## A copy in another language, tested where the two agree
 

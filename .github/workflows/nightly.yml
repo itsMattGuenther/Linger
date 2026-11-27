@@ -3,7 +3,9 @@ name: nightly
 # Everything, on main, every night (docs/testing-strategy.md): the checks a
 # pull request only runs for what it touched, the package checks, the Windows
 # and macOS shell builds that otherwise run by hand, the iPhone app in the
-# simulator, and every browser test
+# simulator, the share window's and extensions' builds (so main keeps their
+# build caches too, which a pull request no longer saves, #971), and every
+# browser test
 # three times over with no retries. Separately green PRs can disagree once
 # merged, and a test that fails one run in twenty rarely shows on one PR; this
 # is where both surface. A failure opens an issue, or comments on the one
@@ -40,6 +42,9 @@ jobs:
     uses: ./.github/workflows/ios-simulator.yml
     with:
       all: true
+
+  share-window:
+    uses: ./.github/workflows/share-window.yml
 
   repeat:
     # Every browser test three times, in parts at once so each part takes
@@ -110,7 +115,7 @@ jobs:
         run: node scripts/upstream-fixes.mjs
 
   report:
-    needs: [tests, packages, desktop, iphone, repeat, upstream]
+    needs: [tests, packages, desktop, iphone, share-window, repeat, upstream]
     if: ${{ failure() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
