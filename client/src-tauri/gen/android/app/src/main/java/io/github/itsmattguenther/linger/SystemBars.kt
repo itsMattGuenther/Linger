@@ -17,9 +17,10 @@ import java.lang.ref.WeakReference
  * theme on. Nothing is kept for the next start: Linger always opens on The
  * door's navy (themes.xml), so a cold start draws light icons, and the page
  * says its theme as it loads. The last answer is held while the app runs
- * ([last]): Android rebuilds the screen for a change the manifest doesn't
- * take itself (the phone's font or display size), keeping the page, which
- * doesn't say its theme again.
+ * ([last]) for a screen Android rebuilds, for a change the manifest doesn't
+ * take itself (the phone's font or display size): it keeps the page, which
+ * doesn't say its theme again. A new screen (opened again after Back) loads
+ * the page afresh, so it starts light like a cold start.
  * The bars stay see-through over the page's own ground, but for Android's
  * backing behind three-button navigation.
  */

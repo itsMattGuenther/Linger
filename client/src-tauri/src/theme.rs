@@ -317,7 +317,17 @@ mod tests {
         let activity = include_str!(
             "../gen/android/app/src/main/java/io/github/itsmattguenther/linger/MainActivity.kt"
         );
-        assert!(activity.contains("SystemBars.draw(this, SystemBars.last)"));
+        assert!(
+            activity
+                .contains("SystemBars.draw(this, savedInstanceState != null && SystemBars.last)"),
+            "only a rebuilt screen takes the page's last answer; a new one starts light"
+        );
+        let registered = activity.find("SystemBars.activity = WeakReference(this)");
+        let drawn = activity.find("SystemBars.draw(this,");
+        assert!(
+            registered < drawn,
+            "registered before it reads the last answer"
+        );
         let bars = include_str!(
             "../gen/android/app/src/main/java/io/github/itsmattguenther/linger/SystemBars.kt"
         );

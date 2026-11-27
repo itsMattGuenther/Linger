@@ -27,8 +27,6 @@ public static class LingerWindowProbe {
   [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr hdc, uint flags);
   public delegate bool ChildProc(IntPtr h, IntPtr l);
   [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr parent, ChildProc f, IntPtr l);
-  // How many windows inside this one (WebView2's own, here) are shown, and
-  // how many there are. Only counted: nothing about them is read.
   [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] public static extern IntPtr GetWindowLongPtr(IntPtr h, int index);
   [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr h, uint cmd);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(IntPtr h, System.Text.StringBuilder s, int n);
