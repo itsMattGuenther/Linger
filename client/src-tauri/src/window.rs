@@ -674,12 +674,6 @@ mod tests {
         assert_eq!(unseen.into_iter().collect::<Vec<_>>(), ["chat-1"]);
     }
 
-    /// Tauri's own drop handling keeps dropped files from the page on
-    /// Windows (COMP-11), so every window decides with `with_drops`: off,
-    /// and the page refuses stray drops itself (`lib/drops.ts`), except on
-    /// Linux for a window with a message box, whose page asks for its drops
-    /// (`dropped.rs`, #673). The config's windows are off, and `create`
-    /// turns the list's on for Linux.
     /// A window shows its own color until its page draws: every window
     /// Linger builds, the list from the config included, is built in the
     /// theme's (#965, `theme.rs`), so none opens in another theme's.
@@ -701,6 +695,12 @@ mod tests {
         assert!(source.contains("crate::theme::take_kept(app);"));
     }
 
+    /// Tauri's own drop handling keeps dropped files from the page on
+    /// Windows (COMP-11), so every window decides with `with_drops`: off,
+    /// and the page refuses stray drops itself (`lib/drops.ts`), except on
+    /// Linux for a window with a message box, whose page asks for its drops
+    /// (`dropped.rs`, #673). The config's windows are off, and `create`
+    /// turns the list's on for Linux.
     #[test]
     fn every_window_says_who_takes_dropped_files() {
         let source = include_str!("window.rs");

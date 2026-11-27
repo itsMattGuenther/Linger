@@ -17,7 +17,8 @@ import java.lang.ref.WeakReference
  * Rust (src-tauri/src/theme.rs) calls [follow] each time the page puts a
  * theme on. The answer is kept, so the next start draws its first frame
  * with the right icons (MainActivity) before the page has said anything.
- * The bars themselves stay see-through: the page's own ground is under them.
+ * The bars stay see-through over the page's own ground, but for Android's
+ * backing behind three-button navigation.
  */
 object SystemBars {
   private const val PREFS = "linger.systemBars"
@@ -30,6 +31,9 @@ object SystemBars {
    */
   private val OLD_ANDROID_SCRIM = Color.argb(0x80, 0x1b, 0x1b, 0x1b)
 
+  /** Behind three-button navigation on a light page, as androidx's own default. */
+  private val LIGHT_SCRIM = Color.argb(0xe6, 0xff, 0xff, 0xff)
+
   /** The app's screen, while it has one. */
   var activity: WeakReference<ComponentActivity>? = null
 
@@ -37,14 +41,21 @@ object SystemBars {
   fun light(context: Context): Boolean =
     context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(LIGHT, false)
 
-  /** The bars for a light theme's page, or a dark one's. On the screen's own thread. */
+  /**
+   * The bars for a light theme's page, or a dark one's. On the screen's own
+   * thread. The navigation bar keeps Android's own backing behind three
+   * buttons (an "auto" style, which lets the system keep their contrast, as
+   * the plain `enableEdgeToEdge()` did), told the theme rather than the
+   * phone's dark mode; gesture navigation stays see-through.
+   */
   fun draw(screen: ComponentActivity, light: Boolean) {
-    val style = if (light) {
+    val status = if (light) {
       SystemBarStyle.light(Color.TRANSPARENT, OLD_ANDROID_SCRIM)
     } else {
       SystemBarStyle.dark(Color.TRANSPARENT)
     }
-    screen.enableEdgeToEdge(style, style)
+    val navigation = SystemBarStyle.auto(LIGHT_SCRIM, OLD_ANDROID_SCRIM) { !light }
+    screen.enableEdgeToEdge(status, navigation)
   }
 
   /** Rust's call: keep it for the next start, and redraw the bars now if there's a screen. */

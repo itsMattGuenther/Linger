@@ -79,6 +79,11 @@ mod desktop {
     /// built in. The door until a start reads the one kept, or the list says.
     static SHOWN: Mutex<&str> = Mutex::new("door");
 
+    /// The theme the file holds, as far as this run knows: read at start,
+    /// then each one written. Kept apart from `SHOWN`, so a write that
+    /// failed is tried again at the next word from the list.
+    static SAVED: Mutex<Option<&str>> = Mutex::new(None);
+
     /// Where the theme is kept for the next start, in the app's config
     /// folder, beside the windows' remembered sizes.
     const KEPT: &str = "theme";
@@ -112,6 +117,9 @@ mod desktop {
             *SHOWN
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner) = kept.id;
+            *SAVED
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(kept.id);
         }
     }
 
@@ -120,9 +128,9 @@ mod desktop {
         Some(look(said.trim()))
     }
 
-    fn keep(dir: &Path, theme: Look) {
-        let _ = std::fs::create_dir_all(dir);
-        let _ = std::fs::write(dir.join(KEPT), theme.id);
+    /// Write the theme for the next start. Says whether it was written.
+    fn keep(dir: &Path, theme: Look) -> bool {
+        std::fs::create_dir_all(dir).is_ok() && std::fs::write(dir.join(KEPT), theme.id).is_ok()
     }
 
     /// `app_theme` on a computer.
@@ -135,18 +143,22 @@ mod desktop {
             return Err("only the list window says the theme".into());
         }
         let now = look(theme);
-        let before = std::mem::replace(
-            &mut *SHOWN
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner),
-            now.id,
-        );
+        *SHOWN
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = now.id;
         for open in app.webview_windows().values() {
             let _ = open.set_background_color(Some(color(now)));
         }
-        if before != now.id {
+        let saved = *SAVED
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if saved != Some(now.id) {
             if let Ok(dir) = app.path().app_config_dir() {
-                crate::off_thread(move || keep(&dir, now), || ()).await;
+                if crate::off_thread(move || keep(&dir, now), || false).await {
+                    *SAVED
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(now.id);
+                }
             }
         }
         Ok(())
@@ -162,14 +174,25 @@ mod desktop {
             let dir = std::env::temp_dir().join(format!("linger-theme-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&dir);
             assert_eq!(read(&dir), None, "nothing kept yet");
-            keep(&dir, look("daylight"));
+            assert!(keep(&dir, look("daylight")));
             assert_eq!(read(&dir), Some(look("daylight")));
-            keep(&dir, look("dusk"));
+            assert!(keep(&dir, look("dusk")));
             assert_eq!(read(&dir), Some(look("dusk")));
             // Kept by a later Linger that has a theme this one doesn't.
             std::fs::write(dir.join(super::KEPT), "sunrise").unwrap();
             assert_eq!(read(&dir), Some(look("door")));
             let _ = std::fs::remove_dir_all(&dir);
+        }
+
+        /// A write that fails says so, so `put_on` tries again next time
+        /// rather than taking the file as written.
+        #[test]
+        fn a_theme_that_could_not_be_kept_says_so() {
+            let file =
+                std::env::temp_dir().join(format!("linger-theme-file-{}", std::process::id()));
+            std::fs::write(&file, "a file where the folder would go").unwrap();
+            assert!(!keep(&file, look("daylight")));
+            let _ = std::fs::remove_file(&file);
         }
     }
 }
@@ -218,6 +241,10 @@ mod platform {
     //! Linger's view controller (tao's) asks for that default, so setting
     //! the window's style is all it takes. The keyboard and the share sheet
     //! follow it too, so they match the page.
+    //!
+    //! Nothing is kept here, unlike Android: at a cold start the bars follow
+    //! the phone's own light or dark mode until the page says, a moment
+    //! after it loads.
 
     use objc2::MainThreadMarker;
     use objc2_ui_kit::{UIUserInterfaceStyle, UIViewController};

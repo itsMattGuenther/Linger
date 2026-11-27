@@ -198,8 +198,10 @@ pub fn css_light_variables() -> String {
 
 /// The whole generated stylesheet, one file: every key on `:root`, as the
 /// dark themes draw them, and again on `[data-theme="daylight"]`, as the
-/// light one does (#965). A theme on one element, as in the Theme picker,
-/// takes its block too.
+/// light one does (#965). Names follow the page's theme, not one element's:
+/// a dark theme's small picture inside a Daylight page would take
+/// Daylight's names, so the Theme picker's pictures draw none
+/// (`docs/design/system.md`).
 ///
 /// The client imports the result as `palette.generated.css`.
 #[must_use]
