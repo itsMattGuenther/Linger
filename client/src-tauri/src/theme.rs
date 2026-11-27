@@ -161,11 +161,12 @@ mod desktop {
         WAIT.waiting()
     }
 
+    /// Shown, restored and focused as the tray's Show Linger does, which
+    /// is also what a start built visible and focused did, and what a
+    /// second start or a link asked for meanwhile wanted.
     fn show_if_waiting(app: &AppHandle) {
         if WAIT.end() {
-            if let Some(list) = app.get_webview_window(crate::window::OWNER) {
-                let _ = list.show();
-            }
+            crate::tray::show_list(app);
         }
     }
 

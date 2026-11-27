@@ -41,37 +41,56 @@ pub fn create(app: &App) -> tauri::Result<()> {
         std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").as_deref(),
         std::env::var_os("XDG_CURRENT_DESKTOP").as_deref(),
     );
-    // Restarted to update (#772): back in the tray if the list was there, or
-    // without taking the focus after a restart nobody pressed.
-    let come_back = crate::updates::take_come_back(app);
-    let in_tray = come_back == crate::updates::ComeBack::Tray;
+    let start = list_start(crate::updates::take_come_back(app));
     for config in &app.config().app.windows {
         // The list holds the message box beside it (#337): on Linux its
         // dropped files come through the shell (`dropped.rs`, #673).
         let mut config = config.clone();
         config.drag_drop_enabled = crate::dropped::THROUGH_THE_SHELL;
-        let hide = in_tray && config.label == OWNER;
-        // Shown once its page says its theme, so its first frame is in it
-        // (#965, `theme.rs`); a list going back to the tray stays hidden.
-        let wait = !hide && config.label == OWNER && config.visible;
-        if hide || wait {
-            config.visible = false;
-        }
-        if come_back == crate::updates::ComeBack::Behind && config.label == OWNER {
-            config.focus = false;
+        let list = config.label == OWNER;
+        if list {
+            config.visible = start == ListStart::Behind;
+            config.focus = start != ListStart::Behind;
         }
         WebviewWindowBuilder::from_config(app, &config)?
             .decorations(config.decorations && decorated)
             .background_color(crate::theme::window_color())
             .build()?;
-        if hide {
-            page_seen(app.handle(), OWNER, false);
-        }
-        if wait {
-            crate::theme::wait_for_theme(app.handle());
+        match start {
+            ListStart::InTray if list => page_seen(app.handle(), OWNER, false),
+            ListStart::Waiting if list => crate::theme::wait_for_theme(app.handle()),
+            _ => {}
         }
     }
     Ok(())
+}
+
+/// How the list starts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ListStart {
+    /// Hidden until its page says its theme, then shown and focused, so its
+    /// first frame is in that theme (#965, `theme.rs`).
+    Waiting,
+    /// Back in the tray, hidden, after a restart to update from there (#772).
+    InTray,
+    /// Shown at once without the focus, after a restart nobody pressed
+    /// (#772), so it can't take the keys from whatever somebody is doing.
+    /// It can't wait: on Windows a hidden window is shown with the focus
+    /// whatever it was built with (tao forgets "not focused" once the window
+    /// is built), and the shell may not reach Windows' own windows calls
+    /// (`privacy.test.ts`). So until its page draws it shows the color of
+    /// The door, which comes back only after half an hour with nobody using
+    /// Linger.
+    Behind,
+}
+
+/// How the list starts, from how the last run asked it to come back.
+fn list_start(come_back: crate::updates::ComeBack) -> ListStart {
+    match come_back {
+        crate::updates::ComeBack::Shown => ListStart::Waiting,
+        crate::updates::ComeBack::Tray => ListStart::InTray,
+        crate::updates::ComeBack::Behind => ListStart::Behind,
+    }
 }
 
 /// Who takes a file dropped on a window. The page, everywhere but Linux: Tauri's
@@ -627,7 +646,8 @@ fn on_hyprland(
 
 #[cfg(test)]
 mod tests {
-    use super::{note_seen, seen_by};
+    use super::{list_start, note_seen, seen_by, ListStart};
+    use crate::updates::ComeBack;
     use std::collections::BTreeSet;
     use tauri::{PhysicalSize, WindowEvent};
 
@@ -676,6 +696,16 @@ mod tests {
         assert!(note_seen(&mut unseen, "main", true));
         assert!(!note_seen(&mut unseen, "main", true));
         assert_eq!(unseen.into_iter().collect::<Vec<_>>(), ["chat-1"]);
+    }
+
+    /// A usual start waits for the page's theme; a restart to update comes
+    /// back in the tray, or behind other windows without waiting, as asked
+    /// (#772, #965).
+    #[test]
+    fn the_list_waits_for_its_theme_only_at_a_usual_start() {
+        assert_eq!(list_start(ComeBack::Shown), ListStart::Waiting);
+        assert_eq!(list_start(ComeBack::Tray), ListStart::InTray);
+        assert_eq!(list_start(ComeBack::Behind), ListStart::Behind);
     }
 
     /// A window shows its own color until its page draws: every window
