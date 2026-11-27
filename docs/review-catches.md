@@ -359,6 +359,15 @@ on a world that has changed.
   frame from another; the test switches with eight frames still queued, and
   fails with the old read (they gained −3 dB against 26 dB learned).
 
+- **#966: the iPhone share window kept the old theme's colors.** Its list
+  carries the colors it draws in, read from the page when the list is
+  written, and a theme picked in Settings didn't write it. Caught by the
+  fresh review. *Missed because* the colors were read when the list was
+  asked for, and nothing asked when the look changed. *Changed:* the list is
+  written again whenever the window applies the look
+  (`useShareWindowList`), with a test that picks a theme on an iPhone and
+  fails without it (`next-themes.spec.ts`).
+
 ## A check nobody could run before it mattered
 
 - **#911: the iPhone app's at-rest check was shell in the workflow.** The

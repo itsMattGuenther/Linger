@@ -45,6 +45,24 @@ const NAMES: Record<Theme, string> = {
 const themeOf = (page: Page) => page.evaluate(() => document.documentElement.dataset.theme ?? null);
 /** The page's own ground: what shows where nothing else is drawn. */
 const ground = (page: Page) => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+/** What an iPhone's web view says it is (next-back-to-newest.spec.ts). */
+const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
+/** The page's popover color now, as `#rrggbbaa`: the share window's background (`core/shareWindow.ts`). */
+const popover = (page: Page) =>
+  page.evaluate(() => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--surface-popover)";
+    document.body.append(probe);
+    const canvas = document.createElement("canvas");
+    canvas.width = 1;
+    canvas.height = 1;
+    const paint = canvas.getContext("2d");
+    if (!paint) throw new Error("no canvas");
+    paint.fillStyle = getComputedStyle(probe).color;
+    probe.remove();
+    paint.fillRect(0, 0, 1, 1);
+    return `#${[...paint.getImageData(0, 0, 1, 1).data].map((value) => value.toString(16).padStart(2, "0")).join("")}`;
+  });
 const themes = (page: Page) => page.getByRole("group", { name: "Theme" });
 const choice = (page: Page, theme: Theme) => themes(page).getByRole("radio", { name: NAMES[theme], exact: true });
 
@@ -165,6 +183,25 @@ test.describe("on a phone", () => {
     await appearance(page);
     await expect(choice(page, "porch-light")).toBeChecked();
     expect(await themeOf(page)).toBe("porch-light");
+  });
+
+  test.describe("on an iPhone", () => {
+    test.use({ userAgent: IPHONE });
+
+    test("the share window's colors follow a theme picked in Settings", async ({ page }) => {
+      await page.goto("/tests/fixtures/next-list-window.html?one&shell=phone");
+      await expect(page.locator("[data-screen='list']")).toBeVisible();
+      const written = () => page.evaluate(() => document.body.dataset.sharelist ?? null);
+      await expect.poll(written).toBe(await popover(page));
+      const before = await written();
+
+      await appearance(page);
+      await choice(page, "dusk").check();
+      await expect.poll(() => themeOf(page)).toBe("dusk");
+      // Nothing else changed: the list is written again for the look alone.
+      await expect.poll(written).toBe(await popover(page));
+      expect(await written()).not.toBe(before);
+    });
   });
 
   test("the phone's page starts in the theme chosen, before the app's code has run", async ({ page }) => {

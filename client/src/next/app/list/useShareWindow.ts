@@ -19,6 +19,7 @@ import {
   shareWindowServers,
   writtenServers,
 } from "../../core/shareWindow";
+import { onAppearance } from "../../core/appearance";
 
 /** The shell's half (`share_window.rs`). */
 const shell: ShareShell = {
@@ -120,8 +121,10 @@ export function useShareSignIns(on: boolean, sessions: Sessions): ReadonlyMap<st
 
 /**
  * On an iPhone, write the list the share window picks from (#820) whenever
- * the list or a server's sign-in changes, a moment after, so a burst of
- * changes is written once. `signedIn` is every server signed in here, in the
+ * the list, a server's sign-in or the look changes, a moment after, so a
+ * burst of changes is written once. The look is in it because the window
+ * draws in the colors the list carries, read from the page: a theme picked
+ * in Settings (#964) has to reach it without waiting for the list to change. `signedIn` is every server signed in here, in the
  * list's order, those still being reached and waiting for a newer app too:
  * one the app isn't connected to right now is written as it last was, and
  * only signing out takes one off (`shareWindowServers`, #825). The list on
@@ -136,6 +139,16 @@ export function useShareWindowList(
 ): void {
   const last = useRef<ShareWindowServer[] | null>(null);
   const [read, setRead] = useState(false);
+  // Counts each time this window applies the look, so the list is written
+  // again in its colors.
+  const [look, setLook] = useState(0);
+  useEffect(() => {
+    if (!on) return undefined;
+    const stop = onAppearance(() => setLook((count) => count + 1));
+    return () => {
+      stop();
+    };
+  }, [on]);
   useEffect(() => {
     if (!on) return undefined;
     let live = true;
@@ -165,5 +178,5 @@ export function useShareWindowList(
       }
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [on, read, signedIn, listings, status]);
+  }, [on, read, signedIn, listings, status, look]);
 }
