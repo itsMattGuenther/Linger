@@ -35,7 +35,7 @@ const THEMES: [(&str, [u8; 3], bool); 6] = [
 struct Look {
     #[cfg_attr(mobile, allow(dead_code))]
     id: &'static str,
-    #[cfg_attr(mobile, allow(dead_code))]
+    #[cfg_attr(target_os = "android", allow(dead_code))]
     window: [u8; 3],
     #[cfg_attr(not(mobile), allow(dead_code))]
     light: bool,
@@ -220,7 +220,7 @@ mod desktop {
 #[cfg(mobile)]
 #[tauri::command]
 pub async fn app_theme(webview: tauri::Webview, theme: String) {
-    platform::follow(&webview, look(&theme).light).await;
+    platform::follow(&webview, look(&theme)).await;
 }
 
 #[cfg(target_os = "android")]
@@ -233,7 +233,8 @@ mod platform {
 
     use crate::phone_sound::android::{app_class, with_env};
 
-    pub async fn follow(_webview: &tauri::Webview, light: bool) {
+    pub async fn follow(_webview: &tauri::Webview, theme: super::Look) {
+        let light = theme.light;
         crate::off_thread(move || bars(light), || None).await;
     }
 
@@ -260,14 +261,21 @@ mod platform {
     //! the window's style is all it takes. The keyboard and the share sheet
     //! follow it too, so they match the page.
     //!
-    //! Nothing is kept here, unlike Android: at a cold start the bars follow
-    //! the phone's own light or dark mode until the page says, a moment
-    //! after it loads.
+    //! Nothing is kept here, unlike Android: an iPhone always opens on The
+    //! door's navy, its launch screen (`LaunchScreen.storyboard`) and the
+    //! page's ground before it draws (`tauri.ios.conf.json`), and starts
+    //! dark (`UIUserInterfaceStyle` in `Info.plist`), so its icons are
+    //! light on it until the page says its theme. The page's ground then
+    //! takes the theme's window color, so nothing navy shows under
+    //! Daylight's paper.
 
     use objc2::MainThreadMarker;
     use objc2_ui_kit::{UIUserInterfaceStyle, UIViewController};
 
-    pub async fn follow(webview: &tauri::Webview, light: bool) {
+    pub async fn follow(webview: &tauri::Webview, theme: super::Look) {
+        let [r, g, b] = theme.window;
+        let _ = webview.set_background_color(Some(tauri::window::Color(r, g, b, 255)));
+        let light = theme.light;
         let _ = webview.with_webview(move |shown| {
             if MainThreadMarker::new().is_none() {
                 return;
@@ -347,6 +355,41 @@ mod tests {
         }
         assert!(look("daylight").light);
         assert!(!look("door").light);
+    }
+
+    /// An iPhone opens on The door's navy before its page draws: the launch
+    /// screen, the page's ground, and a dark start so the status bar's
+    /// icons are light on it (`platform` on iOS). Every copy is The door's.
+    #[test]
+    fn an_iphone_opens_on_the_doors_navy() {
+        let [r, g, b] = look("door").window;
+        let config = include_str!("../tauri.ios.conf.json");
+        assert!(
+            config.contains(&format!("\"backgroundColor\": \"#{r:02x}{g:02x}{b:02x}\"")),
+            "tauri.ios.conf.json's page ground isn't The door's"
+        );
+        let launch = include_str!("../gen/apple/LaunchScreen.storyboard");
+        let at = launch
+            .find("<color key=\"backgroundColor\"")
+            .expect("the launch screen's color");
+        let line = &launch[at..at + launch[at..].find("/>").expect("its end")];
+        let part = |name: &str| -> f64 {
+            let from = line.find(&format!("{name}=\"")).expect(name) + name.len() + 2;
+            line[from..from + line[from..].find('"').expect("quote")]
+                .parse()
+                .expect("a number")
+        };
+        for (name, byte) in [("red", r), ("green", g), ("blue", b)] {
+            assert!(
+                (part(name) * 255.0 - f64::from(byte)).abs() < 0.01,
+                "the launch screen's {name} isn't The door's"
+            );
+        }
+        assert!(line.contains("customColorSpace=\"sRGB\""));
+        let plist = include_str!("../gen/apple/linger-client_iOS/Info.plist");
+        assert!(plist.contains("<key>UIUserInterfaceStyle</key>\n\t<string>Dark</string>"));
+        let project = include_str!("../gen/apple/project.yml");
+        assert!(project.contains("UIUserInterfaceStyle: Dark"));
     }
 
     #[test]

@@ -240,7 +240,12 @@ size, face, radius or rule changes with one.
   take the focus however it was built (`window.rs`). On a phone the status and navigation bars
   draw their icons dark on Daylight and light on the dark themes
   (`SystemBars.kt` on Android, the window's light or dark style on an
-  iPhone).
+  iPhone). An iPhone opens on The door's navy whatever the theme, since
+  Apple allows one fixed launch screen: `LaunchScreen.storyboard`, the
+  page's ground before it draws (`tauri.ios.conf.json`), and a dark start
+  (`UIUserInterfaceStyle` in `Info.plist`) so its icons are light on it.
+  Once the page says its theme, its ground takes the theme's window
+  color.
 
 ### Scales
 

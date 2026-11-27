@@ -41,6 +41,10 @@ targets:
       properties:
         LSRequiresIPhoneOS: true
         UILaunchStoryboardName: LaunchScreen
+        # It opens on The door's navy (LaunchScreen.storyboard, the page's
+        # ground in tauri.ios.conf.json), so it starts dark: light status
+        # bar icons, until the page says its theme (src/theme.rs).
+        UIUserInterfaceStyle: Dark
         UIRequiredDeviceCapabilities: [arm64, metal]
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
