@@ -22,8 +22,6 @@ final class ShareViewController: UIViewController {
 
   override func viewDidLoad() {
     super.viewDidLoad()
-    // Linger is dark only (docs/decisions.md).
-    overrideUserInterfaceStyle = .dark
     let copies = copies
     let model = ShareModel(
       finish: { [weak self] in
@@ -37,6 +35,9 @@ final class ShareViewController: UIViewController {
       hold: { [weak self] holding in self?.isModalInPresentation = holding }
     )
     self.model = model
+    // Light or dark as the app's theme is (#965): the window's own parts,
+    // the keyboard among them, match the sheet's colours.
+    overrideUserInterfaceStyle = model.colors.light ? .light : .dark
     let window = UIHostingController(rootView: ShareView(model: model))
     window.view.backgroundColor = .clear
     addChild(window)
