@@ -72,6 +72,90 @@
   color: var(--accent);
 }
 
+/* A theme in miniature (#964): every color a role, worked out inside the
+   sample's own `data-theme` (styles/tokens.css), so it shows that theme
+   whatever the page's is. */
+.k-choice-sample {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-0-5);
+  width: var(--theme-sample-w);
+  height: var(--theme-sample-h);
+  overflow: hidden;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-window);
+}
+
+.k-choice-sample-bar {
+  flex: none;
+  height: var(--space-2);
+  margin-bottom: var(--space-0-5);
+  border-bottom: 1px solid var(--hairline);
+  background: linear-gradient(var(--surface-titlebar), var(--surface-titlebar-end));
+}
+
+.k-choice-sample-row {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+  height: var(--space-2-5);
+  margin: 0 var(--space-1);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+}
+
+.k-choice-sample-dot {
+  flex: none;
+  width: var(--marker-sm);
+  height: var(--marker-sm);
+  border-radius: var(--radius-pill);
+}
+
+.k-choice-sample-line {
+  height: var(--space-1);
+  border-radius: var(--radius-pill);
+}
+
+/* Something new for you: lit in the lamp, as an unread DM's row is. */
+.k-choice-sample-row[data-row="lit"] {
+  background: var(--lit-wash);
+  box-shadow: inset 0 0 0 1px var(--lit-edge);
+}
+
+.k-choice-sample-row[data-row="lit"] .k-choice-sample-dot {
+  background: var(--accent);
+}
+
+.k-choice-sample-row[data-row="lit"] .k-choice-sample-line {
+  width: calc(var(--space-8) + var(--space-1));
+  background: var(--text-primary);
+}
+
+.k-choice-sample-row[data-row="selected"] {
+  background: var(--surface-hover);
+}
+
+.k-choice-sample-row[data-row="selected"] .k-choice-sample-dot {
+  background: var(--success);
+}
+
+.k-choice-sample-row[data-row="selected"] .k-choice-sample-line {
+  width: var(--space-7);
+  background: var(--text-secondary);
+}
+
+.k-choice-sample-row[data-row="plain"] .k-choice-sample-dot {
+  background: var(--icon-faint);
+}
+
+.k-choice-sample-row[data-row="plain"] .k-choice-sample-line {
+  width: var(--space-5);
+  background: var(--text-muted);
+}
+
 .k-choice-text {
   display: flex;
   flex-direction: column;

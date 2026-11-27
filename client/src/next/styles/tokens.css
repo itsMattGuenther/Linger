@@ -319,6 +319,9 @@
   --slider-track: 4px;
   --slider-thumb: 14px;
   --swatch: 24px;
+  /* A theme in the Theme picker (#964): a window in miniature. */
+  --theme-sample-w: 72px;
+  --theme-sample-h: 48px;
 
   /* Settings (docs/design/buddy-list.md, "Settings"). */
   --settings-nav: 196px; /* the sidebar of sections */

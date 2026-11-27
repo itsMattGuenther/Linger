@@ -141,7 +141,7 @@ export const HEADINGS = {
   status: "Your Status",
   clock: "Your Local Time",
   look: "Make Yourself at Home",
-  theme: "Color Theme",
+  theme: "Theme",
   size: "Interface Size",
   textSize: "Text Size",
   appIcon: "App Icon",

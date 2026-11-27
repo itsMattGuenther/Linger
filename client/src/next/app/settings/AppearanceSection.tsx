@@ -1,8 +1,9 @@
 import { SCALE_OPTIONS, TEXT_SIZE_OPTIONS } from "../../../lib/interface";
 import { type AppIconShell, ICON_LOOKS, type IconLook, keepChoice } from "../../core/appIcon";
 import { HEADINGS } from "../../core/settings";
+import { THEMES, type ThemeId } from "../../core/theme";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { Button, Select, SettingRow, Switch } from "../../kit";
+import { Button, ChoiceCards, Select, SettingRow, Switch } from "../../kit";
 import { Block, Note, Plain } from "./parts";
 
 /** A setting that takes effect at once: its value and how to change it. */
@@ -12,6 +13,11 @@ export interface Live<T> {
 }
 
 export interface AppearanceProps {
+  /**
+   * The theme (#964, SPEC §5.3): applied as it's picked, in every window, and
+   * kept on this computer or phone.
+   */
+  theme: Live<ThemeId>;
   /**
    * The phone's home screen icon (#961): the look on it now, how to change
    * it, and which phone, for the icons' shape and what a change does. Left
@@ -60,7 +66,7 @@ export interface AppearanceProps {
 }
 
 /** The choices a save can refuse. The phone's Text size never says so: it's kept until the app closes. */
-export type AppearanceChoice = "scale" | "plainNames" | "reactions" | "oneLine";
+export type AppearanceChoice = "theme" | "scale" | "plainNames" | "reactions" | "oneLine";
 
 /** Said under a choice storage refused (#782). */
 function Unsaved() {
@@ -134,10 +140,25 @@ function IconPicker({ value, onChange, phone, refused, children }: NonNullable<A
   );
 }
 
-/** Appearance: how Linger looks on this computer or phone (LOOK-1, LOOK-2, NAME-4, #197, #690, #961). */
-export function AppearanceSection({ appIcon, scale, textSize, warmth, plainNames, oneLine, reactions, unsaved = null }: AppearanceProps) {
+/** Appearance: how Linger looks on this computer or phone (LOOK-1, LOOK-2, NAME-4, #197, #690, #961, #964). */
+export function AppearanceSection({ theme, appIcon, scale, textSize, warmth, plainNames, oneLine, reactions, unsaved = null }: AppearanceProps) {
   return (
     <>
+      <Plain>
+        {/* Each theme in its own colors: a picture only, the title names it. */}
+        <ChoiceCards
+          legend={HEADINGS.theme}
+          name="theme"
+          compact
+          value={theme.value}
+          onChange={theme.onChange}
+          choices={THEMES.map((each) => ({ value: each.id, title: each.name, theme: each.id }))}
+        />
+        {unsaved === "theme" ? <Unsaved /> : null}
+        {warmth ? (
+          <SettingRow title="Evening warmth" description="Softer colors after sunset." control={<Switch label="Evening warmth" checked={warmth.value} onChange={warmth.onChange} />} />
+        ) : null}
+      </Plain>
       {appIcon ? (
         <Block heading={HEADINGS.appIcon} lead={appIcon.phone === "iphone" ? "The icon on your Home Screen." : "The icon on your home screen."}>
           <IconPicker {...appIcon}>
@@ -151,13 +172,6 @@ export function AppearanceSection({ appIcon, scale, textSize, warmth, plainNames
             )}
           </IconPicker>
         </Block>
-      ) : null}
-      {/* Only when there's something to choose: a heading over nothing would look unfinished. */}
-      {warmth ? (
-        <Plain>
-          <h3 className="nx-set-heading">{HEADINGS.theme}</h3>
-          <SettingRow title="Evening warmth" description="Softer colors after sunset." control={<Switch label="Evening warmth" checked={warmth.value} onChange={warmth.onChange} />} />
-        </Plain>
       ) : null}
       {scale ? (
         <Block heading={HEADINGS.size} lead="Text, buttons and windows grow together.">

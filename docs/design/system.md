@@ -691,8 +691,14 @@ or "Each in its own window".
 - The selected card takes the lamp's wash and edge, and keyboard focus rings
   the whole card.
 - **`compact`** puts the art over the words, for short choices that should sit
-  three or four across, like the color theme. A card's contents always start
+  three or four across, like the theme. A card's contents always start
   at its top, so titles line up across a row whatever the descriptions' length.
+- **A theme's card** (`theme` in place of `art`, #964) shows the theme in
+  miniature: a title bar and three rows (one lit for something new, one
+  selected, one plain), drawn with the roles inside the picture's own
+  `data-theme`, so it's that theme's colors whatever the page's. The
+  picture is hidden from screen readers; the title names it, and a card
+  with a picture may go without a description.
 
 ### NavList
 
@@ -1432,6 +1438,7 @@ it catches, and nowhere else (AGENTS.md hard rule 4).
 | `src/next` imports nothing in `src/` but `src/lib`, `src/generated` and `src/fonts`; `src/lib` holds logic (`.ts`) only and imports nothing but itself and those two | `discipline.test.ts` › src/next shares only the core; the shared core stands on its own |
 | Kit components take no `className` or `style` prop | `discipline.test.ts` › takes no className or style prop |
 | A conversation that can't be drawn says so in its place, and the list, the tabs and the other conversations carry on; a window that can't says so under its title bar with Reload, and sends nothing anywhere; a time a date can't hold draws as no time | `next-side.spec.ts` › a conversation that can't be drawn says so in its place…, and › …from a time no date can hold draw with no time…; `next-boundary.spec.ts`; `lib/time.test.ts` › a time no date can hold |
+| The themes (#964): the five Settings offers, each setting only tokens The door has; `next.html`'s color before the styles load is each theme's window color; the choice kept on this computer or phone, The door for anything else, and a refused save changing nothing; a window, including one opened later, takes the theme Settings announces; picked in Settings › Appearance (arrow keys too) it changes the page at once and is still chosen when Settings opens again, on the desktop and the phone; each card's picture in its own theme's colors whatever the page's; a window opened afterwards, and the phone's page, start in it before the app's code has run | `contrast.test.ts`, `core/theme.test.ts`, `core/appearance.test.ts`, `next-themes.spec.ts`, `next-settings-window.spec.ts` |
 | Text roles reach 4.5:1 and icons, accent and focus 3:1 on every surface; all 16 name colors reach 4.5:1, also on a card washed in any of them where the wash is strongest; an offline name's grey, read from `kit/Name.css`, on the list and on a hovered or selected row; text on the accent and washes, and switch parts, pass; all of it in every theme, each laid over The door (#964) | `contrast.test.ts` |
 
 Every rule was proven by planting the bug it forbids and watching it fail. The
