@@ -2,6 +2,8 @@
 # from the installed app: its CSP (tauri.conf.json) allows https and wss
 # only, as the server says when it prints a setup link with no domain. The
 # app says it couldn't reach it, in words, and stays on this screen.
+tags:
+  - start
 appId: io.github.itsmattguenther.linger
 ---
 - tapOn: "Server or link"

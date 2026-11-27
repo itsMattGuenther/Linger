@@ -2452,3 +2452,33 @@ the theme.
 - **Later, perhaps:** one settings file that both the window and the page
   read at start would open a computer in the theme from its first frame.
   Phones would still open on navy.
+
+## Decided: a pull request runs the iPhone's start flows only (#971)
+
+**Matt, 2026-11-27**: "these iphone tests are brutal....35-60mins per run
+is outrageous", then "we desperately need the time savings." The iPhone app
+in the simulator was 35 to 60 minutes on a pull request: #970's run spent 20
+building the server from nothing, 11 building the app, and 9 on the flows.
+
+- **A pull request runs only the start flows**: the app starts, takes a
+  `linger://` link open and closed, and refuses a plain http address
+  (`client/tests/ios`, tagged `start`). They need no Linger server, so none
+  is built, started or warmed up.
+- **Every flow still runs** for the nightly run on `main`, a release's pull
+  request, a run by hand, and a pull request that changes the run's own
+  flows, workflow or scripts. What only the full run catches (setting up a
+  server, a room, sharing a photo, a restart) a pull request no longer
+  shows; the nightly run does, the next morning, and opens an issue. The
+  page those flows drive runs in the browser tests on every pull request,
+  and the share window's screens in `share-window.yml`.
+- **Only `main` saves the Rust build caches** (`ci.yml`, `package-check.yml`,
+  `ios-simulator.yml`, and `share-window.yml`, which the nightly run now
+  runs so that `main` keeps its caches too). GitHub keeps 10 GB of caches a
+  repository and drops
+  the oldest; each pull request's own copies (about 3 GB) pushed `main`'s
+  out, so the next pull request built everything from nothing. A pull
+  request now starts from `main`'s.
+- **On a pull request that runs only the start flows, the at-rest check
+  (#901) looks at the app signed out,** on its first screen, since no server
+  is set up; signed in and connected, it runs every night and for a pull
+  request that runs every flow.

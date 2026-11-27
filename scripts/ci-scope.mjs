@@ -13,13 +13,14 @@ import { resolve } from "node:path";
 // (push-relay/, #887), which reads the wire types too.
 const domains = ["rust", "s3", "web", "shell", "coturn", "packages", "ios", "simulator", "relay"];
 
-// The iPhone app in the simulator is 35 to 60 minutes on GitHub's Mac, and
+// The iPhone app in the simulator was 35 to 60 minutes on GitHub's Mac, and
 // most of its failures were GitHub's Mac or the flows, not the app (#955).
 // So on a pull request it runs only for what it builds, drives or runs
 // (`simulatorsOwn`) and for a release's pull request, the one that adds its
 // notes; the nightly run on main runs it for everything (Matt, 2026-11-24).
 // A run by hand (`gh workflow run ios-simulator.yml --ref <branch>`) runs it
-// for a branch whatever it changed.
+// for a branch whatever it changed. And a pull request runs only its start
+// flows, which need no server (`simulatorFlows`, #971).
 const RELEASE_NOTES = /^docs\/releases\/\d+\.\d+\.\d+\.md$/;
 
 // Only the checks a change can reach run on its pull request (#914). Most of
@@ -146,6 +147,12 @@ export function shellReach(path, read = fromDisk, before = null) {
   return (lib === null ? {} : shellModules(lib))[module] ?? "both";
 }
 
+/** Whether a file is the simulator run's own: its flows, its workflow, and the scripts it runs. */
+function theRunsOwn(path) {
+  return path.startsWith("client/tests/ios/") || path === ".github/workflows/ios-simulator.yml"
+    || /^scripts\/(https-front\.mjs|share-window-ready\.mjs|test-certs\.sh|app-at-rest\.mjs|maestro-driver\.mjs)$/.test(path);
+}
+
 /**
  * Whether a file is part of what the simulator's run builds, drives or runs:
  * the code and project only the phone app builds, the flows, the workflow,
@@ -153,8 +160,7 @@ export function shellReach(path, read = fromDisk, before = null) {
  * so a test alone isn't.
  */
 function simulatorsOwn(path, read, before) {
-  if (path.startsWith("client/tests/ios/") || path === ".github/workflows/ios-simulator.yml") return true;
-  if (/^scripts\/(https-front\.mjs|share-window-ready\.mjs|test-certs\.sh|app-at-rest\.mjs|maestro-driver\.mjs)$/.test(path)) return true;
+  if (theRunsOwn(path)) return true;
   if (!path.startsWith(SHELL)) return false;
   const inside = path.slice(SHELL.length);
   // The phone's now, or the phone's before this change moved it.
@@ -223,6 +229,19 @@ export function classify(paths, { read = fromDisk, before = null } = {}) {
   if (!paths.length || paths.some((path) => simulatorsOwn(path, read, before) || newReleaseNotes(path, before))) selected.add("simulator");
   else selected.delete("simulator");
   return Object.fromEntries(domains.map((name) => [name, selected.has(name)]));
+}
+
+/**
+ * Which of the simulator's flows a change runs (#971). `start`, the ones that
+ * need no Linger server (tagged so in client/tests/ios), for a pull request
+ * that changes only what the phone app builds: no server is built or started,
+ * and the run is about half as long. `all` for a run of everything (the
+ * nightly run, one by hand), a release's new notes, and a change to the run
+ * itself, its flows, workflow and scripts, which the full run is what tests.
+ */
+export function simulatorFlows(paths, { before = null } = {}) {
+  if (!paths.length) return "all";
+  return paths.some((path) => theRunsOwn(path) || newReleaseNotes(path, before)) ? "all" : "start";
 }
 
 /** The commit a change is measured from: where the branch left `base`, for a pull request. */
@@ -302,7 +321,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     console.log(JSON.stringify({ paths, scope }, null, 2));
     if (process.env.GITHUB_EVENT_NAME === "pull_request" && paths.length && !scope.simulator)
       console.log("The iPhone app in the simulator isn't run: it runs for what it builds, drives or runs and for a release's pull request, and every night on main. To run it on this branch: gh workflow run ios-simulator.yml --ref <branch>");
+    const flows = simulatorFlows(paths, { before });
+    if (scope.simulator) console.log(`The iPhone app in the simulator runs ${flows === "all" ? "every flow" : "its start flows, which need no server"} (flows=${flows}).`);
     if (process.env.GITHUB_OUTPUT)
-      appendFileSync(process.env.GITHUB_OUTPUT, Object.entries(scope).map(([key, value]) => `${key}=${value}\n`).join(""));
+      appendFileSync(process.env.GITHUB_OUTPUT, Object.entries(scope).map(([key, value]) => `${key}=${value}\n`).join("") + `flows=${flows}\n`);
   }
 }

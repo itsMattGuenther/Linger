@@ -73,7 +73,8 @@ The repo is arranged so a session reads little and misses nothing:
 
 - One task per PR, branched from and targeting `main`.
 - Open it as a draft, and mark it ready once it's done and `ci` is green: the
-  iPhone checks on GitHub's Mac (35 to 60 minutes) wait until then.
+  iPhone checks on GitHub's Mac (about 20 minutes, 40 when they run every
+  flow) wait until then.
 - CI must be green: rust gates, web gates, the desktop-shell pass, and the
   rules lint.
 - Docs move in the same commit as the behavior they describe. The rules for the

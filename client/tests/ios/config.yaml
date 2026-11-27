@@ -3,6 +3,11 @@
 # the simulator"). Each flow picks up where the last one left the app, so
 # they run in this order and stop at the first that fails.
 #
+# The first four are tagged `start`: they need no Linger server, and a pull
+# request runs only them (`maestro test --include-tags start`, #971).
+# Maestro then runs the tagged flows that begin this order, in it, so they
+# stay first (scripts/ios-flows.test.mjs holds that).
+#
 # What they need, passed with `maestro test -e NAME=value`:
 #   SERVER         a Linger server's plain http address, http://127.0.0.1:<port>
 #   SETUP_LINK     its setup link, through an https front the simulator trusts
