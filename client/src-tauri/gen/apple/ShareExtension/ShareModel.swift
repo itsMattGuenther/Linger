@@ -194,6 +194,10 @@ struct ShareColors {
   let accent: Color
   let onAccent: Color
   let danger: Color
+  /// Whether they're a light theme's (Daylight, #965): its sheet is
+  /// paper, so the window's own parts, the keyboard among them, are drawn
+  /// light to match it, and dark on every other theme.
+  let light: Bool
 
   init(_ theme: ShareList.Theme?) {
     func color(_ hex: String?, _ fallback: String) -> Color {
@@ -212,6 +216,8 @@ struct ShareColors {
     accent = color(theme?.accent, "#f3b55cff")
     onAccent = color(theme?.onAccent, "#1c1206ff")
     danger = color(theme?.danger, "#f06e6eff")
+    let (red, green, blue, _) = rgba(theme?.background ?? "#182135ff") ?? (0, 0, 0, 1)
+    light = 0.2126 * red + 0.7152 * green + 0.0722 * blue > 0.5
   }
 }
 

@@ -1,7 +1,8 @@
 /**
- * The warmth that arrives after sunset (SPEC §4.7). The app is dark only
- * (§5.3); warmth is the one change to its colors, the reader's own preference
- * and nobody else's business, so it never leaves this computer.
+ * The warmth that arrives after sunset (SPEC §4.7). It waits for an evening
+ * version of the themes' colors (§5.3); like a theme, it would be the
+ * reader's own preference and nobody else's business, so it never leaves this
+ * computer.
  *
  * **About "sunset".** The spec says the shift happens after local sunset, and
  * the honest way to know that is a latitude and a longitude. This app does not

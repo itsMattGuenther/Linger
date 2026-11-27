@@ -15,6 +15,7 @@ const WINDOW = {
   "porch-light": "rgb(28, 23, 20)",
   dusk: "rgb(33, 47, 88)",
   original: "rgb(1, 19, 51)",
+  daylight: "rgb(246, 248, 251)",
 } as const;
 type Theme = keyof typeof WINDOW;
 
@@ -25,6 +26,7 @@ const LAMP: Record<Theme, string> = {
   "porch-light": "rgb(243, 181, 92)",
   dusk: "rgb(249, 188, 102)",
   original: "rgb(243, 181, 92)",
+  daylight: "rgb(147, 82, 0)",
 };
 const GREEN: Record<Theme, string> = {
   door: "rgb(124, 201, 143)",
@@ -32,6 +34,7 @@ const GREEN: Record<Theme, string> = {
   "porch-light": "rgb(124, 201, 143)",
   dusk: "rgb(135, 210, 153)",
   original: "rgb(124, 201, 143)",
+  daylight: "rgb(40, 116, 65)",
 };
 
 const NAMES: Record<Theme, string> = {
@@ -40,6 +43,7 @@ const NAMES: Record<Theme, string> = {
   "porch-light": "Porch light",
   dusk: "Dusk",
   original: "The original",
+  daylight: "Daylight",
 };
 
 const themeOf = (page: Page) => page.evaluate(() => document.documentElement.dataset.theme ?? null);
@@ -76,7 +80,7 @@ test.describe("on a computer", () => {
 
   test("picking a theme changes the page at once, and it's still chosen when Settings opens again", async ({ page }) => {
     await settings(page);
-    await expect(themes(page).getByRole("radio")).toHaveCount(5);
+    await expect(themes(page).getByRole("radio")).toHaveCount(Object.keys(NAMES).length);
     for (const theme of Object.keys(NAMES) as Theme[]) await expect(choice(page, theme)).toHaveCount(1);
     await expect(choice(page, "door")).toBeChecked();
     expect(await themeOf(page)).toBe("door");
@@ -92,6 +96,29 @@ test.describe("on a computer", () => {
     expect(await themeOf(page)).toBe("dusk");
     await expect(choice(page, "dusk")).toBeChecked();
     expect(await ground(page)).toBe(WINDOW.dusk);
+  });
+
+  // Daylight (#965), the one light theme: paper, the darker set of the 16
+  // names from linger-core's palette, and the engine told the page is light
+  // (its own scrollbars and form parts follow). Every other theme keeps the
+  // names at 0.76 and says dark.
+  test("Daylight turns the page to paper, with the darker names, and says it's light", async ({ page }) => {
+    await settings(page);
+    const look = () =>
+      page.evaluate(() => {
+        const style = getComputedStyle(document.documentElement);
+        return { scheme: style.colorScheme, azure: style.getPropertyValue("--name-azure").trim(), amber: style.getPropertyValue("--name-amber").trim() };
+      });
+    expect(await look()).toEqual({ scheme: "dark", azure: "oklch(0.76 0.13 255)", amber: "oklch(0.76 0.13 68)" });
+
+    await choice(page, "daylight").check();
+    await expect.poll(() => themeOf(page)).toBe("daylight");
+    expect(await ground(page)).toBe(WINDOW.daylight);
+    expect(await look()).toEqual({ scheme: "light", azure: "oklch(0.5 0.13 255)", amber: "oklch(0.5 0.109 68)" });
+
+    await choice(page, "original").check();
+    await expect.poll(() => themeOf(page)).toBe("original");
+    expect(await look()).toEqual({ scheme: "dark", azure: "oklch(0.76 0.13 255)", amber: "oklch(0.76 0.13 68)" });
   });
 
   test("the arrow keys move through the themes, each applied as it's reached", async ({ page }) => {
@@ -151,6 +178,132 @@ test.describe("on a computer", () => {
     await expect.poll(() => ground(later)).toBe(WINDOW["after-dark"]);
     expect(await later.evaluate(() => getComputedStyle(document.documentElement).backgroundColor)).toBe(WINDOW["after-dark"]);
     expect(await themeOf(later)).toBe("after-dark");
+
+    // Daylight too: a window opening in it must not flash night before paper.
+    await choice(page, "daylight").check();
+    await expect.poll(() => themeOf(page)).toBe("daylight");
+    const paper = await context.newPage();
+    await paper.route(/\/src\/next\/main\.tsx/, (route) => route.abort());
+    await paper.goto("/next.html");
+    expect(await themeOf(paper)).toBe("daylight");
+    expect(await paper.evaluate(() => getComputedStyle(document.documentElement).backgroundColor)).toBe(WINDOW.daylight);
+  });
+});
+
+// The effects made for night, on paper (#965): older words fade two thirds
+// as far, since fading on paper washes out rather than dims, and a glow's
+// light is a pale mix of the name's color rather than a dark smudge of it.
+// The amounts are tokens (`--age-fade`, `--name-glow-mix`), which
+// contrast.test.ts holds to their reasons; this is the page using them.
+test.describe("the effects on paper", () => {
+  const put = (page: Page, theme: Theme) => page.evaluate((chosen) => (document.documentElement.dataset.theme = chosen), theme);
+
+  test("an old message's words fade less in Daylight than on night", async ({ page }) => {
+    await page.goto("/tests/fixtures/next-chat.html");
+    const bodies = page.getByRole("log").locator(".nx-msg-body");
+    await expect(bodies.first()).toBeVisible();
+    const faded = () =>
+      bodies.evaluateAll((all) =>
+        all.map((body) => ({ age: Number((body as HTMLElement).style.getPropertyValue("--age")), opacity: Number(getComputedStyle(body).opacity) })),
+      );
+    const night = await faded();
+    expect(night.some(({ age }) => age < 1)).toBe(true);
+    for (const { age, opacity } of night) expect(opacity).toBeCloseTo(age, 3);
+
+    await put(page, "daylight");
+    const paper = await faded();
+    expect(paper.map(({ age }) => age)).toEqual(night.map(({ age }) => age));
+    for (const { age, opacity } of paper) expect(opacity).toBeCloseTo(1 - (1 - age) * 0.67, 3);
+  });
+
+  test("a glowing name's light is its own color on night, and a paler mix of it in Daylight", async ({ page }) => {
+    await page.goto("/tests/fixtures/kit.html");
+    const name = page.locator("[data-section='names'] .name[data-name-effect='glow']").first();
+    await expect(name).toBeVisible();
+    // The glow's color and the name's, each drawn on a canvas and read back,
+    // whatever way the engine writes them out.
+    const colors = () =>
+      name.evaluate((node) => {
+        const style = getComputedStyle(node);
+        const glow = /drop-shadow\(((?:rgba?|color|oklch|oklab)\([^)]*\))/.exec(style.filter)?.[1] ?? "";
+        const pixel = (value: string) => {
+          const canvas = document.createElement("canvas");
+          canvas.width = canvas.height = 1;
+          const context = canvas.getContext("2d", { willReadFrequently: true });
+          if (!context || !value) return null;
+          context.fillStyle = value;
+          context.fillRect(0, 0, 1, 1);
+          return [...context.getImageData(0, 0, 1, 1).data];
+        };
+        return { glow: pixel(glow), name: pixel(style.getPropertyValue("--person-name").trim()) };
+      });
+    const lightness = ([r = 0, g = 0, b = 0]: number[]) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
+
+    const night = await colors();
+    expect(night.glow).not.toBeNull();
+    for (const [at, channel] of (night.name ?? []).entries()) expect(Math.abs(channel - (night.glow?.[at] ?? -9))).toBeLessThanOrEqual(1);
+
+    await put(page, "daylight");
+    const paper = await colors();
+    expect(paper.glow).not.toBeNull();
+    expect(lightness(paper.glow ?? [])).toBeGreaterThan(lightness(paper.name ?? []) + 40);
+  });
+});
+
+// The app's own page (main.tsx) in a pretend shell: the bridge answers the
+// theme and leaves every other ask waiting, and writes down what it was
+// asked. The list window tells the shell the saved theme as it starts, on a
+// computer and a phone; another window doesn't (#965).
+test.describe("the app's page tells its shell the theme", () => {
+  async function inShell(page: Page, label: string, theme: Theme) {
+    await page.addInitScript(
+      ({ label, theme }) => {
+        window.localStorage.setItem("linger.next.theme", theme);
+        const asked: Array<[string, unknown]> = [];
+        let next = 0;
+        Object.assign(window, {
+          isTauri: true,
+          __asked: asked,
+          __TAURI_INTERNALS__: {
+            metadata: { currentWindow: { label }, currentWebview: { windowLabel: label, label } },
+            transformCallback: () => (next += 1),
+            unregisterCallback: () => undefined,
+            convertFileSrc: (path: string) => path,
+            invoke: (command: string, args: unknown) => {
+              asked.push([command, args]);
+              return command === "app_theme" ? Promise.resolve(null) : new Promise(() => undefined);
+            },
+          },
+        });
+      },
+      { label, theme },
+    );
+  }
+  const told = (page: Page) =>
+    page.evaluate(() =>
+      ((window as unknown as { __asked?: Array<[string, { theme?: string } | undefined]> }).__asked ?? [])
+        .filter(([command]) => command === "app_theme")
+        .map(([, args]) => args?.theme),
+    );
+
+  test("the list window, on a computer and a phone, and no other window", async ({ page, context }) => {
+    await inShell(page, "main", "daylight");
+    await page.goto("/next.html");
+    await expect.poll(() => told(page)).toEqual(["daylight"]);
+
+    const phone = await context.newPage();
+    await inShell(phone, "main", "dusk");
+    await phone.goto("/next.html?shell=phone");
+    await expect.poll(() => told(phone)).toEqual(["dusk"]);
+
+    const settings = await context.newPage();
+    await inShell(settings, "settings", "daylight");
+    await settings.goto("/next.html?window=settings");
+    expect(await settings.evaluate(() => document.documentElement.dataset.theme)).toBe("daylight");
+    // Its page has asked the shell other things, so it got past where it
+    // would have told the theme, and didn't.
+    await expect.poll(() => settings.evaluate(() => ((window as unknown as { __asked?: unknown[] }).__asked ?? []).length)).toBeGreaterThan(0);
+    expect(await told(settings)).toEqual([]);
   });
 });
 
@@ -166,11 +319,28 @@ test.describe("on a phone", () => {
     return settings;
   }
 
+  // The phone's own status and navigation bars follow the theme (#965,
+  // src-tauri/src/theme.rs): the page tells the shell the one it starts in,
+  // and each one picked, once (the fixture writes down what it was told).
+  test("the phone tells its shell the theme it starts in and each one picked", async ({ page }) => {
+    await page.addInitScript(() => window.localStorage.setItem("linger.next.theme", "dusk"));
+    await page.goto("/tests/fixtures/next-list-window.html?one&shell=phone");
+    await expect(page.locator("[data-screen='list']")).toBeVisible();
+    const told = () => page.evaluate(() => document.body.dataset.shelltheme ?? "");
+    await expect.poll(told).toBe("dusk");
+
+    await appearance(page);
+    await choice(page, "daylight").check();
+    await expect.poll(told).toBe("dusk,daylight");
+    await choice(page, "after-dark").check();
+    await expect.poll(told).toBe("dusk,daylight,after-dark");
+  });
+
   test("the phone's Settings has the Theme picker, applied at once and still chosen when Settings opens again", async ({ page }) => {
     await page.goto("/tests/fixtures/next-list-window.html?one&shell=phone");
     await expect(page.locator("[data-screen='list']")).toBeVisible();
     const settings = await appearance(page);
-    await expect(themes(page).getByRole("radio")).toHaveCount(5);
+    await expect(themes(page).getByRole("radio")).toHaveCount(Object.keys(NAMES).length);
     await expect(choice(page, "door")).toBeChecked();
     await choice(page, "porch-light").check();
     await expect.poll(() => themeOf(page)).toBe("porch-light");
@@ -204,11 +374,13 @@ test.describe("on a phone", () => {
     });
   });
 
-  test("the phone's page starts in the theme chosen, before the app's code has run", async ({ page }) => {
-    await page.addInitScript(() => window.localStorage.setItem("linger.next.theme", "original"));
-    await page.route(/\/src\/next\/main\.tsx/, (route) => route.abort());
-    await page.goto("/next.html?shell=phone");
-    expect(await themeOf(page)).toBe("original");
-    expect(await page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor)).toBe(WINDOW.original);
-  });
+  for (const theme of ["original", "daylight"] as const) {
+    test(`the phone's page starts in the theme chosen, before the app's code has run: ${NAMES[theme]}`, async ({ page }) => {
+      await page.addInitScript((chosen) => window.localStorage.setItem("linger.next.theme", chosen), theme);
+      await page.route(/\/src\/next\/main\.tsx/, (route) => route.abort());
+      await page.goto("/next.html?shell=phone");
+      expect(await themeOf(page)).toBe(theme);
+      expect(await page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor)).toBe(WINDOW[theme]);
+    });
+  }
 });

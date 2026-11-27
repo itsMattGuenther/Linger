@@ -45,6 +45,8 @@ pub fn create(app: &App) -> tauri::Result<()> {
     // without taking the focus after a restart nobody pressed.
     let come_back = crate::updates::take_come_back(app);
     let in_tray = come_back == crate::updates::ComeBack::Tray;
+    // In the theme the last run kept (#965), before its page can say.
+    crate::theme::take_kept(app);
     for config in &app.config().app.windows {
         // The list holds the message box beside it (#337): on Linux its
         // dropped files come through the shell (`dropped.rs`, #673).
@@ -59,6 +61,7 @@ pub fn create(app: &App) -> tauri::Result<()> {
         }
         WebviewWindowBuilder::from_config(app, &config)?
             .decorations(config.decorations && decorated)
+            .background_color(crate::theme::window_color())
             .build()?;
         if hide {
             page_seen(app.handle(), OWNER, false);
@@ -86,7 +89,7 @@ fn with_drops<'a, R: tauri::Runtime, M: Manager<R>>(
 
 /// The owner window's label. Only it may open the Buddy list client's other
 /// windows (docs/design/architecture.md, "Window management").
-const OWNER: &str = "main";
+pub(crate) const OWNER: &str = "main";
 
 /// The page for one conversation in a window of its own: popped out of the
 /// tabs beside the list, or every conversation when each opens in its own
@@ -305,6 +308,7 @@ pub async fn next_open_conversation(
     .inner_size(width, height)
     .min_inner_size(360.0, 360.0)
     .decorations(false)
+    .background_color(crate::theme::window_color())
     .build()
     .map(|_| ())
     .map_err(|e| e.to_string())
@@ -346,6 +350,7 @@ pub async fn next_open_settings(
     .inner_size(720.0, 640.0)
     .min_inner_size(560.0, 480.0)
     .decorations(false)
+    .background_color(crate::theme::window_color())
     .build()
     .map(|_| ())
     .map_err(|e| e.to_string())
@@ -380,6 +385,7 @@ pub async fn next_open_tool(
     .inner_size(width, height)
     .min_inner_size(360.0, 420.0)
     .decorations(false)
+    .background_color(crate::theme::window_color())
     .build()
     .map(|_| ())
     .map_err(|e| e.to_string())
@@ -666,6 +672,27 @@ mod tests {
         assert!(note_seen(&mut unseen, "main", true));
         assert!(!note_seen(&mut unseen, "main", true));
         assert_eq!(unseen.into_iter().collect::<Vec<_>>(), ["chat-1"]);
+    }
+
+    /// A window shows its own color until its page draws: every window
+    /// Linger builds, the list from the config included, is built in the
+    /// theme's (#965, `theme.rs`), so none opens in another theme's.
+    #[test]
+    fn every_window_is_built_in_the_themes_color() {
+        let source = include_str!("window.rs");
+        let tests = source.find("#[cfg(test)]").expect("tests");
+        let source: String = source[..tests].split_whitespace().collect();
+        let built = source.matches("WebviewWindowBuilder::new(").count()
+            + source.matches("WebviewWindowBuilder::from_config(").count();
+        let colored = source
+            .matches(".background_color(crate::theme::window_color())")
+            .count();
+        assert!(built >= 4);
+        assert_eq!(
+            colored, built,
+            "a window built here isn't in the theme's color"
+        );
+        assert!(source.contains("crate::theme::take_kept(app);"));
     }
 
     /// Tauri's own drop handling keeps dropped files from the page on

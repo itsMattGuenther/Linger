@@ -149,10 +149,10 @@ wire (AGENTS rules 8 and 12). It becomes a color only in the generated
 
 ### Themes
 
-Five themes, all dark (#963, #964), picked per device in Settings ›
-Appearance › Theme (SPEC §5.3). Each is a set of values for the color
-tokens above, and nothing else: no size, face, radius or rule changes with
-one.
+Six themes (#963): five dark ones (#964) and Daylight, a light one
+(#965), picked per device in Settings › Appearance › Theme (SPEC §5.3).
+Each is a set of values for the color tokens above, and nothing else: no
+size, face, radius or rule changes with one.
 
 | Theme | id | A window | What changes |
 |---|---|---|---|
@@ -161,6 +161,7 @@ one.
 | Porch light | `porch-light` | `#1c1714` | Warm charcoal grounds, warm white text and warm lines; the lamp's washes 1.35 times as strong, so an unread row stands apart from the warm selected one; your own reaction's blue at 42% |
 | Dusk | `dusk` | `#212f58` | A lifted deep blue, a little darker than the Dusk icon's `#2b3a67`, where some of the 16 names fall under 4.5:1; the lamp's washes made from a deeper, more orange amber, 1.75 times as strong, since amber over blue turns grey; the menu a step darker than the window |
 | The original | `original` | `#011333` | The pixel porch's night blue, with wood and brick in the title bar, the lines, cards and menus; filled controls and a hovered or selected row stay blue, so nothing calm looks new; the lamp's washes deeper and 1.45 times as strong |
+| Daylight | `daylight` | `#f6f8fb` | The light one: paper grounds with a little of the Daylight icon's blue (`#dbe2f5` behind everything), navy text (`#1d2538`), and every color flipped: lines, `--ink-aNN` and the shadows dark on light. The lamp is a deep ochre (`#935200`) for words and marks, and its washes a bright amber laid on by eye, so the voice you're in stays a tint and an unread row gets a clear wash. The 16 names are a darker set (below), and the three effects made for night have their own amounts (below) |
 
 - **The door is `:root`.** Every other theme is one block of values under
   `[data-theme="<id>"]`, in `tokens.css` like every other color. The one
@@ -175,7 +176,10 @@ one.
   does in After dark and Porch light.
 - **A see-through token's number is The door's strength.** A theme may lay
   the lamp on thicker than `--lamp-a08` says, make it from a deeper amber,
-  or tint `--white-aNN` and `--black-aNN` toward its own ground.
+  or tint `--ink-aNN` and `--black-aNN` toward its own ground.
+  `--ink-aNN` is the ink's side of the scale: white on a dark theme, where a
+  thin layer of it lifts a fill or draws an edge, and navy on Daylight, where
+  the same layer has to darken (it was `--white-aNN` until #965).
 - **A theme works on any element, not only the page.** The roles are
   declared again wherever `data-theme` is, so each resolves from that
   element's own primitives. That's how the Theme picker shows each choice in
@@ -193,10 +197,42 @@ one.
   block over `:root` and runs every list on this page against it, at the
   same floors. A theme that misses one is fixed in its values, never in the
   test.
-- **The 16 name colors are the same in every dark theme.** A theme that
-  needs others (Daylight, #965) gets them from `linger-core::PALETTE`, as a
-  block of its own in the generated palette, which `contrast.test.ts` reads
-  too.
+- **A light theme says so.** Daylight's block sets `color-scheme: light`,
+  which the engine's own parts (scrollbars, a field's caret) follow; every
+  other theme is dark. `contrast.test.ts` checks only a light theme says
+  light.
+- **The 16 name colors are the same in every dark theme.** Daylight draws
+  the same 16 keys in a darker set from `linger-core::PALETTE` (SPEC §5.4):
+  the same hues at lightness 0.50, with the chroma of seven hues capped at
+  the most the screen can show, so amber doesn't clip into rust. The
+  generated palette declares it on `[data-theme="daylight"]`, a block
+  `contrast.test.ts` reads too. A person's color is still a key on the
+  wire. A Daylight picture inside a dark page takes Daylight's names, and a
+  dark one inside a Daylight page takes Daylight's: names aren't per
+  picture, so the Theme picker's pictures draw none.
+- **The effects have amounts a theme sets.** Three effects were made for
+  night, and each has a token a light theme changes:
+  - `--name-shimmer`, the band that crosses a Shimmer name, moves the
+    letters toward the ink: white on night, navy at the same strength on
+    paper, where a white band lifted L 0.50 letters almost into the paper.
+    Every name keeps 4.5:1 under it, on every surface.
+  - `--name-glow-mix` is what a glowing name's light is mixed with:
+    nothing on night, where the name's own color is a light, and white at
+    40% on paper, where the color itself was a dark smudge.
+  - `--age-fade` is how much of the age fade (§ The conversation) a
+    message's words take: all on night, two thirds on paper, where fading
+    washes out instead of dimming and takes more contrast at each step.
+    `contrast.test.ts` holds each theme's steps to about the contrast The
+    door's take.
+- **The shell follows the theme** (#965). The list window tells the shell
+  each theme it puts on (`followThemeInShell`, `core/theme.ts`), by its
+  id. On a computer every window is built in the theme's window color and
+  every open one takes a new one, so none shows another theme's for a
+  moment before its page draws, and the color is kept for the next start
+  (`src-tauri/src/theme.rs`). On a phone the status and navigation bars
+  draw their icons dark on Daylight and light on the dark themes
+  (`SystemBars.kt` on Android, the window's light or dark style on an
+  iPhone).
 
 ### Scales
 
@@ -1443,8 +1479,10 @@ it catches, and nowhere else (AGENTS.md hard rule 4).
 | `src/next` imports nothing in `src/` but `src/lib`, `src/generated` and `src/fonts`; `src/lib` holds logic (`.ts`) only and imports nothing but itself and those two | `discipline.test.ts` › src/next shares only the core; the shared core stands on its own |
 | Kit components take no `className` or `style` prop | `discipline.test.ts` › takes no className or style prop |
 | A conversation that can't be drawn says so in its place, and the list, the tabs and the other conversations carry on; a window that can't says so under its title bar with Reload, and sends nothing anywhere; a time a date can't hold draws as no time | `next-side.spec.ts` › a conversation that can't be drawn says so in its place…, and › …from a time no date can hold draw with no time…; `next-boundary.spec.ts`; `lib/time.test.ts` › a time no date can hold |
-| The themes (#964): the five Settings offers, each setting only tokens The door has; `next.html`'s color before the styles load is each theme's window color; the choice kept on this computer or phone, The door for anything else, and a refused save changing nothing; a window, including one opened later, takes the theme Settings announces; picked in Settings › Appearance (arrow keys too) it changes the page at once and is still chosen when Settings opens again, on the desktop and the phone; each card's picture in its own theme's colors whatever the page's; a window opened afterwards, and the phone's page, start in it before the app's code has run | `contrast.test.ts`, `core/theme.test.ts`, `core/appearance.test.ts`, `next-themes.spec.ts`, `next-settings-window.spec.ts` |
-| Text roles reach 4.5:1 and icons, accent and focus 3:1 on every surface; all 16 name colors reach 4.5:1, also on a card washed in any of them where the wash is strongest; an offline name's grey, read from `kit/Name.css`, on the list and on a hovered or selected row; text on the accent and washes, and switch parts, pass; all of it in every theme, each laid over The door (#964) | `contrast.test.ts` |
+| The themes (#964, #965): the six Settings offers, each setting only tokens The door has, Daylight alone light and alone with its own 16 names, from the palette; `next.html`'s color before the styles load is each theme's window color; the choice kept on this computer or phone, The door for anything else, and a refused save changing nothing; a window, including one opened later, takes the theme Settings announces; picked in Settings › Appearance (arrow keys too) it changes the page at once and is still chosen when Settings opens again, on the desktop and the phone; each card's picture in its own theme's colors whatever the page's; a window opened afterwards, and the phone's page, start in it before the app's code has run, Daylight too; Daylight puts the page on paper with the darker names and says it's light, an old message's words fade two thirds as far there, and a glow's light is a paler mix of the name's color; the list tells the shell the theme it starts in and each one picked, once, one at a time, and again after one the shell didn't take; the app's own page tells it from the list window, on a computer and a phone, and Settings doesn't | `contrast.test.ts`, `core/theme.test.ts`, `core/appearance.test.ts`, `next-themes.spec.ts`, `next-settings-window.spec.ts` |
+| The shell and the theme (#965): every window the desktop builds is in the theme's window color, which is the one `next.html` paints for it; only a theme `tokens.css` calls light is light to the shell; a theme it doesn't know is The door; the theme is kept for the next start | `src-tauri/src/theme.rs`, `src-tauri/src/window.rs` |
+| Text roles reach 4.5:1 and icons, accent and focus 3:1 on every surface; all 16 name colors reach 4.5:1, also on a card washed in any of them where the wash is strongest; an offline name's grey, read from `kit/Name.css`, on the list and on a hovered or selected row; text on the accent and washes, and switch parts, pass; every name under a shimmer's band at 4.5:1; each age step takes about as much of the words' contrast as The door's does; all of it in every theme, each laid over The door (#964, #965) | `contrast.test.ts` |
+| The light set of names (#965): all 16 at 4.5:1 on Daylight's window and hovered row, each on the screen unclipped, each capped hue at the most the screen can show, and the set the one Matt approved | `crates/linger-core/src/palette.rs` |
 
 Every rule was proven by planting the bug it forbids and watching it fail. The
 geometry spec also saves a review sheet of each gallery section to

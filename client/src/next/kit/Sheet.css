@@ -21,7 +21,7 @@
   max-height: calc(var(--window-height) * 0.9);
   overflow: hidden;
   padding-bottom: env(safe-area-inset-bottom);
-  border-top: 1px solid var(--white-a10);
+  border-top: 1px solid var(--ink-a10);
   border-radius: var(--radius-xl) var(--radius-xl) 0 0;
   background: var(--surface-popover);
   box-shadow: var(--shadow-popover);

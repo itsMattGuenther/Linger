@@ -5,7 +5,7 @@
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
   background: var(--surface-popover);
-  border: 1px solid var(--white-a10);
+  border: 1px solid var(--ink-a10);
   box-shadow: var(--shadow-popover);
   color: var(--text-primary);
   font: 500 var(--text-meta) / var(--line-meta) var(--font-ui);

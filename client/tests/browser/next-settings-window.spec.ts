@@ -205,8 +205,9 @@ test("the server's name or color saved here has the list window ask the server a
 
 test("interface size and plain names are saved here and take effect at once", async ({ page }) => {
   await open(page, "?section=appearance");
-  // No light theme yet (Daylight is #965), and no evening warmth: the colors have no evening version.
-  await expect(page.getByRole("group", { name: "Theme" }).getByRole("radio", { name: "Daylight" })).toHaveCount(0);
+  // Daylight, the light theme, is one of the themes (#965), and there's no
+  // evening warmth: the colors have no evening version.
+  await expect(page.getByRole("group", { name: "Theme" }).getByRole("radio", { name: "Daylight" })).toHaveCount(1);
   await expect(page.getByRole("switch", { name: "Evening warmth" })).toHaveCount(0);
   await page.getByRole("combobox", { name: "Interface size" }).selectOption("125");
   await expect.poll(() => page.evaluate(() => window.localStorage.getItem("linger.interface.scale"))).toBe("125");

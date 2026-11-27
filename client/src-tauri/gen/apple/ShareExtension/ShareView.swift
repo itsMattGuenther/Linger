@@ -32,7 +32,7 @@ struct ShareView: View {
       }
     }
     .background(colors.background.ignoresSafeArea())
-    .preferredColorScheme(.dark)
+    .preferredColorScheme(colors.light ? .light : .dark)
   }
 
   // MARK: - Parts

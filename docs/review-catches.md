@@ -936,6 +936,17 @@ on a world that has changed.
   fresh review. *Missed because* the tests were written while the light never
   ended. *Changed:* they hold the bands still and have the people they look at
   arrive just before; the fix has its test.
+- **#967 (4 catches): the desktop's kept theme, written for the write that
+  works.** A failed write was never tried again, a write cut short could
+  empty the file, two writes after a page reload could finish in the wrong
+  order, and Windows won't move a file over one a virus scan holds. Caught by
+  the fresh review, one round after another. *Missed because* the file was
+  written for the case where writing works, and each fix was written for the
+  failure just named. *Changed:* the newest theme is written in turn, beside
+  the file and moved over it, only when it changes, with a plain write on
+  Windows once the new words are whole; a refusal goes back to the page.
+  Later rounds kept finding rarer failures, so it stopped there and the rest
+  is under the pull request's *Found along the way*.
 
 ## A copy in another language, tested where the two agree
 

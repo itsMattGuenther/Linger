@@ -67,6 +67,8 @@ interface Painted {
   fill: string;
   image: string;
   filter: string;
+  /** A glow's color, drawn on a canvas and read back as "r,g,b,a", however the engine writes it out. */
+  glow: string | null;
   shadow: string;
   animation: string;
   font: string;
@@ -83,6 +85,16 @@ const paint = (name: Locator): Promise<Painted> =>
       fill: s.getPropertyValue("-webkit-text-fill-color"),
       image: s.backgroundImage,
       filter: s.filter,
+      glow: (() => {
+        // A glow mixes the name's color as the theme says (#965), so the
+        // engine may write it out in another form than the color itself.
+        const color = /drop-shadow\(((?:rgba?|color|oklch|oklab|lch|lab)\([^)]*\))/.exec(s.filter)?.[1];
+        const paint = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+        if (!color || !paint) return null;
+        paint.fillStyle = color;
+        paint.fillRect(0, 0, 1, 1);
+        return [...paint.getImageData(0, 0, 1, 1).data].join(",");
+      })(),
       shadow: s.textShadow,
       // The shimmer's band moves under the name, not the name (#532).
       animation:
@@ -96,6 +108,23 @@ const paint = (name: Locator): Promise<Painted> =>
       slant: s.fontStyle,
     };
   });
+
+/** A color drawn on a canvas and read back as "r,g,b,a", to compare with a glow's. */
+const drawn = (page: Page, value: string) =>
+  page.evaluate((value) => {
+    const paint = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+    if (!paint) return null;
+    paint.fillStyle = value;
+    paint.fillRect(0, 0, 1, 1);
+    return [...paint.getImageData(0, 0, 1, 1).data].join(",");
+  }, value);
+
+/** Two colors read back by `drawn` or `paint`, the same to within a step of rounding. */
+const sameColor = (a: string | null, b: string | null) => {
+  if (a === null || b === null) return false;
+  const [x, y] = [a.split(",").map(Number), b.split(",").map(Number)];
+  return x.length === 4 && x.every((value, at) => Math.abs(value - (y[at] ?? -9)) <= 1);
+};
 
 /** A color as the page computes it: a token (`--text-offline`) or a system color (`GrayText`). */
 const computed = (page: Page, value: string) =>
@@ -145,10 +174,11 @@ async function expectTheirs(page: Page, name: Locator, look: Look) {
   // A lit shimmering name's band, held where it starts (`open`): its person
   // has just arrived, as each test that looks at one makes sure.
   const animation = look.effect === "shimmer" ? "k-name-band k-name-band-letters" : "none";
+  const glow = await drawn(page, from);
   await expectLook(name, (now) => [
     ...(now.color === color ? [] : [`color ${now.color}`]),
     ...((throughLetters ? painted(now.image) : now.image === "none") ? [] : [`image ${now.image}`]),
-    ...((look.effect === "glow" ? now.filter.includes(`drop-shadow(${from}`) : now.filter === "none") ? [] : [`filter ${now.filter}`]),
+    ...((look.effect === "glow" ? now.filter.includes("drop-shadow(") && sameColor(now.glow, glow) : now.filter === "none") ? [] : [`filter ${now.filter}`]),
     ...(now.animation === animation ? [] : [`animation ${now.animation}`]),
   ]);
 }

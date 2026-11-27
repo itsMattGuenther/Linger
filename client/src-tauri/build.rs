@@ -33,6 +33,7 @@ const COMMANDS: &[&str] = &[
     "sound_play",
     "show_notification",
     "app_version",
+    "app_theme",
     "link_offered",
     "update_check",
     "newest_version",

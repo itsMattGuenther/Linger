@@ -7,7 +7,6 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.webkit.WebView
-import androidx.activity.enableEdgeToEdge
 import androidx.core.content.ContextCompat
 import java.lang.ref.WeakReference
 
@@ -29,7 +28,10 @@ class MainActivity : TauriActivity() {
   }
 
   override fun onCreate(savedInstanceState: Bundle?) {
-    enableEdgeToEdge()
+    // Drawn under the phone's bars, with their icons for the theme the page
+    // last put on (#965, SystemBars): dark on Daylight's paper, light on
+    // night, whatever the phone's own dark mode says.
+    SystemBars.draw(this, SystemBars.light(this))
     // Sign-ins are kept in the Android Keystore (src-tauri/src/secrets.rs),
     // which needs the app's context set up for Rust. tao does that in
     // super.onCreate; setting it up a second time aborted the app as it
@@ -39,6 +41,7 @@ class MainActivity : TauriActivity() {
     PushBridge.activity = WeakReference(this)
     AgeCheck.activity = WeakReference(this)
     LocalNetwork.activity = WeakReference(this)
+    SystemBars.activity = WeakReference(this)
     val actions = IntentFilter().apply {
       addAction(VoiceCallService.MUTE)
       addAction(VoiceCallService.UNMUTE)

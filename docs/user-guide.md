@@ -1263,9 +1263,10 @@ changes** returns to your saved look; **Save your look** publishes it.
 
 Also in settings:
 
-- **Theme**: Settings › Appearance › Theme. Five color themes, each shown as
+- **Theme**: Settings › Appearance › Theme. Six color themes, each shown as
   a small window in its own colors: The door (the usual), After dark, Porch
-  light, Dusk and The original. Only the colors change. The choice is kept on
+  light, Dusk, The original and Daylight, the light one. Only the colors
+  change; on a phone, the icons in its status bar follow too. The choice is kept on
   this computer or phone and isn't sent anywhere, so each device can have its
   own.
 - **Interface Size**: enlarge text and controls from 100% to 200%. The default
@@ -1280,8 +1281,9 @@ Also in settings:
   two, so more fit. Point at somebody to read their status. Off unless you turn
   it on; the phone always keeps two lines.
 
-Every theme is dark. The evening warmth of earlier versions comes back once
-the new look has an evening version of its own.
+Daylight is the one light theme; the other five are dark. The evening warmth
+of earlier versions comes back once the new look has an evening version of
+its own.
 
 ## Being interrupted, or not
 

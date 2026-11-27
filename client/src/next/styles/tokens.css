@@ -63,7 +63,11 @@
   --red-ink: #ffc9c4;
   --green-1: #7cc98f;
 
-  /* Translucent layers, written once here so components never need `rgb()`. */
+  /* Translucent layers, written once here so components never need `rgb()`.
+     `--ink-aNN` is a thin layer of the ink's side of the scale: white on a
+     dark theme, where it lifts a fill or draws an edge, and navy on a light
+     one (#965), where the same layer has to darken. `--black-aNN` is the
+     other side, the shade under a scrim or a shadow, in every theme. */
   --lamp-a06: rgb(243 181 92 / 0.06);
   --lamp-a08: rgb(243 181 92 / 0.08);
   --lamp-a12: rgb(243 181 92 / 0.12);
@@ -77,12 +81,12 @@
   --sign-a10: rgb(46 197 242 / 0.1);
   --sign-a28: rgb(46 197 242 / 0.28);
   --sign-a38: rgb(46 197 242 / 0.38);
-  --white-a02: rgb(255 255 255 / 0.02);
-  --white-a04: rgb(255 255 255 / 0.04);
-  --white-a06: rgb(255 255 255 / 0.06);
-  --white-a07: rgb(255 255 255 / 0.07);
-  --white-a09: rgb(255 255 255 / 0.09);
-  --white-a10: rgb(255 255 255 / 0.1);
+  --ink-a02: rgb(255 255 255 / 0.02);
+  --ink-a04: rgb(255 255 255 / 0.04);
+  --ink-a06: rgb(255 255 255 / 0.06);
+  --ink-a07: rgb(255 255 255 / 0.07);
+  --ink-a09: rgb(255 255 255 / 0.09);
+  --ink-a10: rgb(255 255 255 / 0.1);
   --black-a45: rgb(0 0 0 / 0.45);
   --black-a60: rgb(0 0 0 / 0.6);
   --black-a70: rgb(0 0 0 / 0.7);
@@ -93,8 +97,9 @@
    is worked out from that element's own primitives. A custom property that
    refers to another is resolved where it's declared, so without this a
    preview in another theme would inherit the page's roles, already worked
-   out in the page's colors. Only colors here: sizes and the focus ring are
-   the page's (layer 3), and a theme set on one element never changes them. */
+   out in the page's colors. Only colors here, and how strongly an effect
+   lays them on: sizes and the focus ring are the page's (layer 3), and a
+   theme set on one element never changes them. */
 :root,
 [data-theme] {
   color-scheme: dark;
@@ -115,8 +120,8 @@
   --surface-control: var(--night-8);
   --surface-control-hover: var(--night-9);
   --surface-control-edge: var(--night-9);
-  --surface-subtle: var(--white-a04);
-  --surface-subtle-hover: var(--white-a07);
+  --surface-subtle: var(--ink-a04);
+  --surface-subtle-hover: var(--ink-a07);
 
   /* Text. Three tiers and nothing dimmer (see `--ink-4`). */
   --text-primary: var(--ink-1);
@@ -182,23 +187,34 @@
 
   /* The focused window's edge, from the logo's sign. */
   --window-focus-edge: var(--sign-a38);
-  --window-edge: var(--white-a07);
+  --window-edge: var(--ink-a07);
 
   /* The band that crosses a shimmering name (SPEC §4.5). `lib/names.ts`
-     and `kit/Name.css` read it. */
+     and `kit/Name.css` read it. It moves the letters it crosses toward the
+     ink, white on night, so they never drop under 4.5:1 while it passes
+     (`contrast.test.ts`). */
   --name-shimmer: rgb(255 255 255 / 0.6);
+  /* What a glowing name's light is mixed with (`kit/Name.css`): nothing on
+     night, where the name's own color is a light. On paper (#965) the same
+     color is a dark smudge, so there it's mixed toward white. */
+  --name-glow-mix: transparent 0%;
+  /* How much of the age fade a message's words take (SPEC §5.6,
+     `app/chat/MessageRow.css`): all of it on night, where fading dims. On
+     paper fading washes out instead, and takes more contrast at each step,
+     so a light theme takes less of it (`contrast.test.ts`). */
+  --age-fade: 1;
 
   /* Shadows: windows and floating things only. Never on a row or a control. */
   --shadow-window:
     0 30px 70px -20px var(--black-a60),
     0 10px 24px -8px var(--black-a45),
-    inset 0 1px 0 var(--white-a04);
+    inset 0 1px 0 var(--ink-a04);
   --shadow-window-focused:
     0 0 0 1px var(--sign-a10),
     0 0 28px -6px var(--sign-a28),
     0 34px 80px -20px var(--black-a70),
     0 10px 24px -8px var(--black-a45),
-    inset 0 1px 0 var(--white-a04);
+    inset 0 1px 0 var(--ink-a04);
   --shadow-popover: 0 24px 60px -16px var(--black-a70);
   --shadow-notice: 0 16px 40px -12px var(--black-a60);
 }
@@ -413,14 +429,16 @@
    of layer 1, even one the same as The door's: a theme on one element (a
    preview in the Theme picker) would otherwise take that color from the
    page's theme. It sets a role only where a mix needs another strength, and
-   nothing The door lacks. Every theme keeps the 16 name colors.
+   nothing The door lacks. Every dark theme keeps the 16 name colors; the
+   light one, Daylight, has a darker set of the same, from linger-core's
+   palette (palette.generated.css), and says it is light (color-scheme).
    `contrast.test.ts` holds each block to all of that, lays it over The door
    and checks it at the same floors, and `core/theme.ts` lists the ones
    Settings offers.
 
    A see-through token's number is The door's strength. A theme may lay the
    lamp on thicker than `--lamp-a08` says, make it from a deeper amber, or tint
-   `--white-aNN` and `--black-aNN` toward its own ground.
+   `--ink-aNN` and `--black-aNN` toward its own ground.
 
    The values are the mockups Matt approved on 2026-11-26, written as OKLCH
    and turned into hex. */
@@ -472,12 +490,12 @@
   --sign-a10: rgb(46 174 213 / 0.1);
   --sign-a28: rgb(46 174 213 / 0.28);
   --sign-a38: rgb(46 174 213 / 0.38);
-  --white-a02: rgb(255 255 255 / 0.02);
-  --white-a04: rgb(255 255 255 / 0.04);
-  --white-a06: rgb(255 255 255 / 0.06);
-  --white-a07: rgb(255 255 255 / 0.07);
-  --white-a09: rgb(255 255 255 / 0.09);
-  --white-a10: rgb(255 255 255 / 0.1);
+  --ink-a02: rgb(255 255 255 / 0.02);
+  --ink-a04: rgb(255 255 255 / 0.04);
+  --ink-a06: rgb(255 255 255 / 0.06);
+  --ink-a07: rgb(255 255 255 / 0.07);
+  --ink-a09: rgb(255 255 255 / 0.09);
+  --ink-a10: rgb(255 255 255 / 0.1);
   --black-a45: rgb(0 0 0 / 0.45);
   --black-a60: rgb(0 0 0 / 0.6);
   --black-a70: rgb(0 0 0 / 0.7);
@@ -535,12 +553,12 @@
   --sign-a10: rgb(46 197 242 / 0.1);
   --sign-a28: rgb(46 197 242 / 0.28);
   --sign-a38: rgb(46 197 242 / 0.38);
-  --white-a02: rgb(255 246 232 / 0.02);
-  --white-a04: rgb(255 246 232 / 0.04);
-  --white-a06: rgb(255 246 232 / 0.06);
-  --white-a07: rgb(255 246 232 / 0.07);
-  --white-a09: rgb(255 246 232 / 0.09);
-  --white-a10: rgb(255 246 232 / 0.1);
+  --ink-a02: rgb(255 246 232 / 0.02);
+  --ink-a04: rgb(255 246 232 / 0.04);
+  --ink-a06: rgb(255 246 232 / 0.06);
+  --ink-a07: rgb(255 246 232 / 0.07);
+  --ink-a09: rgb(255 246 232 / 0.09);
+  --ink-a10: rgb(255 246 232 / 0.1);
   --black-a45: rgb(0 0 0 / 0.45);
   --black-a60: rgb(0 0 0 / 0.6);
   --black-a70: rgb(0 0 0 / 0.7);
@@ -599,12 +617,12 @@
   --sign-a10: rgb(46 197 242 / 0.1);
   --sign-a28: rgb(46 197 242 / 0.28);
   --sign-a38: rgb(46 197 242 / 0.38);
-  --white-a02: rgb(255 255 255 / 0.02);
-  --white-a04: rgb(255 255 255 / 0.04);
-  --white-a06: rgb(255 255 255 / 0.06);
-  --white-a07: rgb(255 255 255 / 0.07);
-  --white-a09: rgb(255 255 255 / 0.09);
-  --white-a10: rgb(255 255 255 / 0.1);
+  --ink-a02: rgb(255 255 255 / 0.02);
+  --ink-a04: rgb(255 255 255 / 0.04);
+  --ink-a06: rgb(255 255 255 / 0.06);
+  --ink-a07: rgb(255 255 255 / 0.07);
+  --ink-a09: rgb(255 255 255 / 0.09);
+  --ink-a10: rgb(255 255 255 / 0.1);
   --black-a45: rgb(5 9 26 / 0.45);
   --black-a60: rgb(5 9 26 / 0.6);
   --black-a70: rgb(5 9 26 / 0.7);
@@ -664,15 +682,107 @@
   --sign-a10: rgb(46 197 242 / 0.1);
   --sign-a28: rgb(46 197 242 / 0.28);
   --sign-a38: rgb(46 197 242 / 0.38);
-  --white-a02: rgb(255 242 228 / 0.02);
-  --white-a04: rgb(255 242 228 / 0.04);
-  --white-a06: rgb(255 242 228 / 0.06);
-  --white-a07: rgb(255 242 228 / 0.07);
-  --white-a09: rgb(255 242 228 / 0.09);
-  --white-a10: rgb(255 242 228 / 0.1);
+  --ink-a02: rgb(255 242 228 / 0.02);
+  --ink-a04: rgb(255 242 228 / 0.04);
+  --ink-a06: rgb(255 242 228 / 0.06);
+  --ink-a07: rgb(255 242 228 / 0.07);
+  --ink-a09: rgb(255 242 228 / 0.09);
+  --ink-a10: rgb(255 242 228 / 0.1);
   --black-a45: rgb(0 4 15 / 0.45);
   --black-a60: rgb(0 4 15 / 0.6);
   --black-a70: rgb(0 4 15 / 0.7);
+}
+
+/* Daylight (#965): the light theme. Paper grounds with a little of the
+   Daylight icon's blue (#dbe2f5 is the backdrop) and navy text (#1d2538).
+   Every color flips: lines, the see-through layers and the shadows are dark
+   on light, and the 16 names are a darker set from linger-core's palette
+   (palette.generated.css), the same hues at lightness 0.50. The lamp is a
+   deep ochre for words and marks, and its washes a bright amber, laid on by
+   eye rather than by The door's numbers: amber on paper reads far stronger
+   than on night, so the voice you're in stays a tint while an unread row
+   gets a clear wash. Amber still means new. */
+[data-theme="daylight"] {
+  color-scheme: light;
+
+  --night-0: #dbe2f5;
+  --night-1: #ebeef5;
+  --night-2: #f6f8fb;
+  --night-3: #ebeef7;
+  --night-4: #fdfdff;
+  --night-5: #ecf0f9;
+  --night-6: #fbfcfe;
+  --night-7: #e4eaf5;
+  --night-8: #d2d9e8;
+  --night-9: #b3bed5;
+
+  --ink-1: #1d2538;
+  --ink-2: #3a455b;
+  --ink-3: #58637b;
+  --ink-4: #768096;
+  --ink-warm: #6b4f34;
+  --ink-warm-2: #5a3e25;
+
+  --hair-1: #dbe0eb;
+  --hair-2: #c9cfde;
+  --hair-3: #99a5be;
+
+  --lamp-1: #935200;
+  --lamp-2: #864900;
+  --lamp-ink: #fffaf2;
+  --sign-1: #008cba;
+  --red-1: #bc3233;
+  --red-ink: #892122;
+  --green-1: #287441;
+
+  --lamp-a06: rgb(248 172 61 / 0.08);
+  --lamp-a08: rgb(248 172 61 / 0.1);
+  --lamp-a12: rgb(248 172 61 / 0.24);
+  --lamp-a16: rgb(248 172 61 / 0.3);
+  --lamp-a28: rgb(248 172 61 / 0.5);
+  --lamp-a45: rgb(248 172 61 / 0.66);
+  --warm-a06: rgb(107 79 52 / 0.072);
+  --warm-a24: rgb(107 79 52 / 0.288);
+  --red-a16: rgb(188 50 51 / 0.16);
+  --red-a42: rgb(188 50 51 / 0.42);
+  --sign-a10: rgb(0 140 186 / 0.1);
+  --sign-a28: rgb(0 140 186 / 0.28);
+  --sign-a38: rgb(0 140 186 / 0.38);
+  --ink-a02: rgb(29 37 56 / 0.022);
+  --ink-a04: rgb(29 37 56 / 0.044);
+  --ink-a06: rgb(29 37 56 / 0.066);
+  --ink-a07: rgb(29 37 56 / 0.077);
+  --ink-a09: rgb(29 37 56 / 0.099);
+  --ink-a10: rgb(29 37 56 / 0.11);
+  --black-a45: rgb(11 17 31 / 0.45);
+  --black-a60: rgb(11 17 31 / 0.6);
+  --black-a70: rgb(11 17 31 / 0.7);
+
+  /* Shadows in navy, softer than night's black, with paper's own light
+     along a window's top edge. */
+  --shadow-window:
+    0 30px 70px -20px rgb(29 37 56 / 0.22),
+    0 10px 24px -8px rgb(29 37 56 / 0.14),
+    inset 0 1px 0 rgb(255 255 255 / 0.6);
+  --shadow-window-focused:
+    0 0 0 1px var(--sign-a10),
+    0 0 28px -6px var(--sign-a28),
+    0 34px 80px -20px rgb(29 37 56 / 0.26),
+    0 10px 24px -8px rgb(29 37 56 / 0.14),
+    inset 0 1px 0 rgb(255 255 255 / 0.6);
+  --shadow-popover: 0 24px 60px -16px rgb(29 37 56 / 0.28);
+  --shadow-notice: 0 16px 40px -12px rgb(29 37 56 / 0.24);
+
+  /* The effects, on paper. A shimmer's band in white would lift L 0.50
+     letters almost into the paper (under 2:1), so it's navy, at night's
+     strength: the letters it crosses darken toward the ink, as night's
+     lighten toward it. A glow's light is a pale mix of the name's color
+     rather than the color itself. Old messages fade two thirds as far
+     (0.92 and 0.85 for 0.88 and 0.78), which takes about as much contrast
+     from the words as night's steps do. */
+  --name-shimmer: rgb(29 37 56 / 0.6);
+  --name-glow-mix: rgb(255 255 255) 40%;
+  --age-fade: 0.67;
 }
 
 /* The phone (SPEC §4.15, styles/phone.css): rows and the title bar a thumb

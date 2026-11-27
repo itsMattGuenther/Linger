@@ -6,7 +6,7 @@
   min-height: var(--control-lg);
   padding: var(--space-1-5) var(--space-3-5) var(--space-1-5) var(--space-1-5);
   border-radius: var(--radius-xl);
-  border: 1px solid var(--white-a07);
+  border: 1px solid var(--ink-a07);
   background: var(--surface-popover);
   box-shadow: var(--shadow-notice);
   color: var(--text-secondary);

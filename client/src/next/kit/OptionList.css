@@ -9,7 +9,7 @@
   max-width: calc(100vw - 2 * var(--space-2));
   padding: var(--space-1) 0;
   border-radius: var(--radius-md);
-  border: 1px solid var(--white-a10);
+  border: 1px solid var(--ink-a10);
   background: var(--surface-popover);
   box-shadow: var(--shadow-popover);
   overflow-y: auto;

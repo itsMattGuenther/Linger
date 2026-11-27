@@ -15,6 +15,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { ageOpacity } from "../../lib/time";
 import { THEMES } from "../core/theme";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -28,8 +29,9 @@ type Vars = Map<string, string>;
 
 /**
  * A sheet's top-level rules: each one's selectors and the custom properties
- * it declares. A rule inside an at-rule (`@media`) isn't one: it applies only
- * sometimes, and none of them sets a color.
+ * it declares, with `color-scheme` (whether a theme is light, #965). A rule
+ * inside an at-rule (`@media`) isn't one: it applies only sometimes, and
+ * none of them sets a color.
  */
 function topRules(css: string): Array<{ selectors: string[]; vars: Vars }> {
   const clean = css.replace(/\/\*[\s\S]*?\*\//g, "");
@@ -51,7 +53,7 @@ function topRules(css: string): Array<{ selectors: string[]; vars: Vars }> {
     }
     if (!head.startsWith("@")) {
       const vars: Vars = new Map();
-      for (const found of clean.slice(open + 1, end).matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) {
+      for (const found of clean.slice(open + 1, end).matchAll(/(--[\w-]+|color-scheme)\s*:\s*([^;]+);/g)) {
         if (found[1] && found[2]) vars.set(found[1], found[2].trim());
       }
       rules.push({ selectors: head.split(",").map((selector) => selector.trim()), vars });
@@ -220,6 +222,22 @@ describe("the themes in tokens.css (#964)", () => {
     expect(missing, missing.join("\n")).toEqual([]);
   });
 
+  // Daylight (#965) is the one light theme. It says so, which the engine's
+  // own scrollbars and form parts follow, and draws the 16 names in
+  // linger-core's darker set from the generated palette; every dark theme
+  // says dark and keeps The door's 16.
+  it("say whether they're light, and the light one alone has its own 16 names, from the palette", () => {
+    const light = THEME_IDS.filter((id) => themeVars(id).get("color-scheme") === "light");
+    expect(light).toEqual(["daylight"]);
+    for (const id of THEME_IDS) {
+      expect(themeVars(id).get("color-scheme"), id).toBe(light.includes(id) ? "light" : "dark");
+      const own = PALETTE_KEYS.filter((name) => OWN.get(id)?.has(name));
+      expect(own, id).toEqual(light.includes(id) ? PALETTE_KEYS : []);
+    }
+    const fromPalette = topRules(PALETTE).filter((rule) => rule.selectors.includes('[data-theme="daylight"]'));
+    expect(fromPalette.flatMap((rule) => [...rule.vars.keys()]).sort()).toEqual([...PALETTE_KEYS].sort());
+  });
+
   it("set only tokens The door has, so a theme can't add a color nothing else knows", () => {
     const strays = [...OWN].flatMap(([id, vars]) => [...vars.keys()].filter((name) => !DOOR.has(name) && !NAMES.has(name)).map((name) => `${id}: ${name}`));
     expect(strays, strays.join("\n")).toEqual([]);
@@ -353,6 +371,48 @@ describe.each(THEME_IDS)("contrast of the new client's tokens, in %s", (theme) =
       .map(([where, surface, value]) => `${offline} on ${where} (${surface}): ${value.toFixed(2)}:1, needs 4.5:1`);
     expect(offline).toBe("--text-offline");
     expect(bad, bad.join("\n")).toEqual([]);
+  });
+
+  // A Shimmer name's band (kit/Name.css) repaints the letters it crosses
+  // in `--name-shimmer` laid over the name's own color. On night it lifts
+  // them toward white; on paper a white band would lift L 0.50 letters
+  // nearly into the paper (#965), so they must keep 4.5:1 under it too.
+  it("keeps all 16 name colors at 4.5:1 under a shimmer's band, on every surface", () => {
+    const band = color("--name-shimmer");
+    const bad: string[] = [];
+    for (const name of PALETTE_KEYS) {
+      const lit = over(band, color(name));
+      for (const surface of SURFACES) {
+        const value = ratio(lit, color(surface));
+        if (value < 4.5) bad.push(`${name} under the band on ${surface}: ${value.toFixed(2)}:1, needs 4.5:1`);
+      }
+    }
+    expect(bad, bad.join("\n")).toEqual([]);
+  });
+
+  // Older words fade (SPEC §5.6, lib/time.ts's ageOpacity), as much as the
+  // theme's `--age-fade` says (app/chat/MessageRow.css). On night fading
+  // dims; on paper it washes out and takes more contrast at the same
+  // strength (#965). Each step takes about as much of the words' contrast in
+  // every theme as it does in The door: a light theme fading as far as night
+  // would leave old words half as clear, and one not fading would lose the
+  // sense of walking into the past.
+  it("fades old words by about as much contrast as The door does", () => {
+    const hour = 60 * 60 * 1000;
+    const steps = [ageOpacity(0, 2 * hour), ageOpacity(0, 30 * 24 * hour)];
+    expect(steps).toEqual([0.88, 0.78]);
+    const kept = (vars: Vars, step: number) => {
+      const read = (name: string) => parseColor(resolveVar(vars, name));
+      const opacity = 1 - (1 - step) * Number(resolveVar(vars, "--age-fade"));
+      const [r, g, b] = read("--text-primary");
+      const window = read("--surface-window");
+      return ratio(over([r, g, b, opacity], window), window) / ratio(read("--text-primary"), window);
+    };
+    for (const step of steps) {
+      const door = kept(themeVars("door"), step);
+      const here = kept(vars, step);
+      expect(Math.abs(here - door), `at ${step}, ${theme} keeps ${here.toFixed(3)} of its words' contrast, The door ${door.toFixed(3)}`).toBeLessThan(0.035);
+    }
   });
 
   it("keeps text readable on the accent and on filled controls", () => {

@@ -121,6 +121,8 @@ import { apply, type GatewayState, type GatewayStatus, serverState, voiceEndedAw
 import { ListWindow } from "../../src/next/app/list/ListWindow";
 import { loadTextSize, onAppearance } from "../../src/next/core/appearance";
 import { followTextSize } from "../../src/next/core/phone";
+import { followThemeInShell } from "../../src/next/core/theme";
+import { invoke } from "@tauri-apps/api/core";
 import "../../src/next/styles/app.css";
 import { hearSounds } from "./next/audio";
 import { Counted } from "./next/commits";
@@ -531,6 +533,13 @@ mockIPC((cmd, args) => {
       // written with, for its colors following a theme (#964).
       const list = JSON.parse(String(a.list)) as { theme: { background: string } };
       document.body.dataset.sharelist = list.theme.background;
+      return null;
+    }
+    case "app_theme": {
+      // The theme the list told the shell (#965, src-tauri/src/theme.rs),
+      // every time, in order.
+      const told = document.body.dataset.shelltheme;
+      document.body.dataset.shelltheme = told ? `${told},${String(a.theme)}` : String(a.theme);
       return null;
     }
     default:
@@ -1181,6 +1190,10 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   if (path === "/me" && method === "PATCH") return json({ ...state.me, status: body.status ?? state.me?.status ?? null });
   return json({ error: { code: "NOT_FOUND", message: "Not in this fixture.", retry_after_ms: null } }, 404);
 };
+
+// The list tells the shell the theme, as main.tsx has it do on a computer
+// and a phone (#965).
+followThemeInShell(onAppearance, (command, args) => invoke(command, args));
 
 // The phone marks its page the way main.tsx does, so its styles apply here
 // too, and sizes its text the same way: the phone's text size (`?phonetext=`,

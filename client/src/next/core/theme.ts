@@ -1,5 +1,5 @@
 /**
- * The app's color themes (SPEC §5.3, #963, #964): which there are, the one
+ * The app's color themes (SPEC §5.3, #963, #964, #965): which there are, the one
  * this computer or phone has chosen, and putting it on the page.
  *
  * A theme is a set of values for the color tokens (`styles/tokens.css`, a
@@ -22,6 +22,7 @@ export const THEMES = [
   { id: "porch-light", name: "Porch light" },
   { id: "dusk", name: "Dusk" },
   { id: "original", name: "The original" },
+  { id: "daylight", name: "Daylight" },
 ] as const;
 
 export type ThemeId = (typeof THEMES)[number]["id"];
@@ -60,4 +61,43 @@ export function saveTheme(theme: ThemeId): boolean {
 /** Put a theme on the page: every color token follows `data-theme` on `<html>`. */
 export function applyTheme(theme: ThemeId): void {
   document.documentElement.dataset.theme = theme;
+}
+
+type Call = (command: string, args?: Record<string, unknown>) => Promise<unknown>;
+
+/**
+ * Tell the shell the theme on this page now, and again whenever it changes
+ * (#965), so what the shell draws itself follows it: on a computer the
+ * color every window shows before its page draws (`src-tauri/src/theme.rs`),
+ * which a light theme can't leave dark; on a phone the status bar's and
+ * navigation bar's icons, dark on Daylight's paper and light on every dark
+ * theme. Only the window that owns the shell's state calls it: the list,
+ * on a computer and a phone. `hear` is how the page hears it has applied
+ * the look (`onAppearance`); a shell that can't take the theme changes
+ * nothing, and is told again at the next change. One theme is told at a
+ * time, each after the shell has answered the one before: the shell does
+ * each on a thread of its own, and two at once (the arrow keys moving
+ * through the picker) could land the other way round, leaving the bars or
+ * the kept theme on the older one.
+ */
+export function followThemeInShell(hear: (listener: () => void) => () => void, call: Call): () => void {
+  let told: ThemeId | null = null;
+  let turn: Promise<void> = Promise.resolve();
+  const tell = () => {
+    const shown = document.documentElement.dataset.theme;
+    const theme = isThemeId(shown) ? shown : DEFAULT_THEME;
+    if (theme === told) return;
+    told = theme;
+    turn = turn
+      .then(() => call("app_theme", { theme }))
+      .then(
+        () => undefined,
+        () => {
+          // Not taken: the next look this page applies tells it again.
+          if (told === theme) told = null;
+        },
+      );
+  };
+  tell();
+  return hear(tell);
 }
