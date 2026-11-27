@@ -133,20 +133,25 @@ mod desktop {
 
     /// Write the theme for the next start. Says whether it was written. It's
     /// written beside the kept file and moved over it, so a write cut short
-    /// leaves the old theme, never an empty file.
+    /// leaves the old theme, never an empty file. A write that fails leaves
+    /// the old theme too, and the page tells again.
     fn keep(dir: &Path, theme: Look) -> bool {
         let kept = dir.join(KEPT);
         let next = dir.join(format!("{KEPT}.next"));
-        if std::fs::create_dir_all(dir).is_err() {
+        if std::fs::create_dir_all(dir).is_err() || std::fs::write(&next, theme.id).is_err() {
+            let _ = std::fs::remove_file(&next);
             return false;
         }
-        if std::fs::write(&next, theme.id).is_ok() && std::fs::rename(&next, &kept).is_ok() {
+        if std::fs::rename(&next, &kept).is_ok() {
             return true;
         }
         // Windows won't replace a file another program has open (a virus
-        // scan, say): written in place then, as a plain write would be.
+        // scan, say). The new words are whole beside it, so there they're
+        // written in place, as a plain write would be; elsewhere the old
+        // theme stays.
+        let written = cfg!(windows) && std::fs::write(&kept, theme.id).is_ok();
         let _ = std::fs::remove_file(&next);
-        std::fs::write(&kept, theme.id).is_ok()
+        written
     }
 
     /// Keep the theme shown now, in turn with any other write.
