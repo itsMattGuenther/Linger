@@ -51,9 +51,31 @@ using System.Runtime.InteropServices;
 public static class LingerIconProbe {
   [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
   [DllImport("user32.dll", EntryPoint="GetClassLongPtrW")] public static extern IntPtr GetClassLongPtr(IntPtr h, int i);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr h, uint cmd);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr h, System.Text.StringBuilder s, int n);
+  public delegate bool Each(IntPtr h, IntPtr l);
+  [DllImport("user32.dll")] public static extern bool EnumThreadWindows(uint thread, Each each, IntPtr l);
+  // Linger's own windows only, by its own threads, so no other program's
+  // window is ever looked at: each one's class, whether it shows, whether
+  // it has an owner, and whether it has a small icon.
+  public static string Describe(int[] threads, IntPtr found) {
+    var lines = new System.Text.StringBuilder();
+    foreach (var thread in threads) {
+      EnumThreadWindows((uint)thread, (h, l) => {
+        var name = new System.Text.StringBuilder(256);
+        GetClassName(h, name, 256);
+        var icon = SendMessage(h, 0x7F, IntPtr.Zero, IntPtr.Zero) != IntPtr.Zero || GetClassLongPtr(h, -34) != IntPtr.Zero;
+        lines.AppendLine(string.Format("  {0} class={1} visible={2} owned={3} icon={4}{5}", h, name, IsWindowVisible(h), GetWindow(h, 4) != IntPtr.Zero, icon, h == found ? "  <- the one found" : ""));
+        return true;
+      }, IntPtr.Zero);
+    }
+    return lines.ToString();
+  }
 }
 '@
 $app = Start-Process $exe -PassThru
+$started = Get-Date
 try {
     for ($i = 0; $i -lt 100; $i++) {
         Start-Sleep -Milliseconds 200
@@ -62,6 +84,7 @@ try {
         if ($app.MainWindowHandle -ne [IntPtr]::Zero) { break }
     }
     if ($app.MainWindowHandle -eq [IntPtr]::Zero) { throw 'Installed app did not open a window' }
+    Write-Output ("A window shown {0:N1} s after start" -f ((Get-Date) - $started).TotalSeconds)
     # Tao's window icon uses ICON_SMALL; ICON_BIG is a separate taskbar override
     # and may be unset. Its absence does not mean the window has no icon.
     # Tao sets the icon just after the window appears, so one look the moment
@@ -74,7 +97,14 @@ try {
         Start-Sleep -Milliseconds 200
         $app.Refresh()
     }
-    if ($icon -eq [IntPtr]::Zero) { throw 'Running app has no caption icon' }
+    if ($icon -eq [IntPtr]::Zero) {
+        # Which of Linger's windows it was, to tell a missing icon from the
+        # wrong window.
+        $app.Refresh()
+        Write-Output "Linger's top-level windows:"
+        Write-Output ([LingerIconProbe]::Describe(@($app.Threads | ForEach-Object { $_.Id }), $app.MainWindowHandle))
+        throw 'Running app has no caption icon'
+    }
     $taskbarIcon = [LingerIconProbe]::SendMessage($app.MainWindowHandle, 0x7F, [IntPtr]1, [IntPtr]::Zero)
     Write-Output "Separate taskbar icon override present: $($taskbarIcon -ne [IntPtr]::Zero)"
     $bitmap = [System.Drawing.Icon]::FromHandle($icon).ToBitmap()
