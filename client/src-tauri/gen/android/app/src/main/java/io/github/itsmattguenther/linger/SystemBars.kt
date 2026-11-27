@@ -25,13 +25,18 @@ object SystemBars {
   private const val LIGHT = "light"
 
   /**
-   * Behind the navigation bar's light buttons where Android can't draw
-   * dark ones (before Android 8, which Linger still runs on): see-through
-   * dark, as androidx's own default, so they still read on paper.
+   * See-through dark, androidx's own default. Behind a bar's light icons
+   * where Android can't draw dark ones (the status bar before Android 6,
+   * the navigation bar before Android 8), so they read on paper; and on
+   * Android 8 and 9, the navigation bar's backing on a dark theme.
    */
-  private val OLD_ANDROID_SCRIM = Color.argb(0x80, 0x1b, 0x1b, 0x1b)
+  private val DARK_SCRIM = Color.argb(0x80, 0x1b, 0x1b, 0x1b)
 
-  /** Behind three-button navigation on a light page, as androidx's own default. */
+  /**
+   * See-through white, androidx's own default: the navigation bar's backing
+   * on Daylight on Android 8 and 9. From Android 10 the system draws its
+   * own backing behind three buttons, and none behind gestures.
+   */
   private val LIGHT_SCRIM = Color.argb(0xe6, 0xff, 0xff, 0xff)
 
   /** The app's screen, while it has one. */
@@ -43,18 +48,19 @@ object SystemBars {
 
   /**
    * The bars for a light theme's page, or a dark one's. On the screen's own
-   * thread. The navigation bar keeps Android's own backing behind three
-   * buttons (an "auto" style, which lets the system keep their contrast, as
-   * the plain `enableEdgeToEdge()` did), told the theme rather than the
-   * phone's dark mode; gesture navigation stays see-through.
+   * thread. The navigation bar keeps the backing the plain
+   * `enableEdgeToEdge()` gave it (an "auto" style: from Android 10 the
+   * system's own behind three buttons and none behind gestures; on 8 and 9
+   * a see-through band either way), told the theme rather than the phone's
+   * dark mode.
    */
   fun draw(screen: ComponentActivity, light: Boolean) {
     val status = if (light) {
-      SystemBarStyle.light(Color.TRANSPARENT, OLD_ANDROID_SCRIM)
+      SystemBarStyle.light(Color.TRANSPARENT, DARK_SCRIM)
     } else {
       SystemBarStyle.dark(Color.TRANSPARENT)
     }
-    val navigation = SystemBarStyle.auto(LIGHT_SCRIM, OLD_ANDROID_SCRIM) { !light }
+    val navigation = SystemBarStyle.auto(LIGHT_SCRIM, DARK_SCRIM) { !light }
     screen.enableEdgeToEdge(status, navigation)
   }
 

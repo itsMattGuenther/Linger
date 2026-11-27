@@ -79,10 +79,10 @@ mod desktop {
     /// built in. The door until a start reads the one kept, or the list says.
     static SHOWN: Mutex<&str> = Mutex::new("door");
 
-    /// The theme the file holds, as far as this run knows: read at start,
-    /// then each one written. Kept apart from `SHOWN`, so a write that
-    /// failed is tried again at the next word from the list.
-    static SAVED: Mutex<Option<&str>> = Mutex::new(None);
+    /// One write of the kept theme at a time, each writing what's shown when
+    /// its turn comes: whichever write is last writes the newest theme, in
+    /// whatever order they were asked for.
+    static WRITING: Mutex<()> = Mutex::new(());
 
     /// Where the theme is kept for the next start, in the app's config
     /// folder, beside the windows' remembered sizes.
@@ -117,9 +117,6 @@ mod desktop {
             *SHOWN
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner) = kept.id;
-            *SAVED
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(kept.id);
         }
     }
 
@@ -131,6 +128,14 @@ mod desktop {
     /// Write the theme for the next start. Says whether it was written.
     fn keep(dir: &Path, theme: Look) -> bool {
         std::fs::create_dir_all(dir).is_ok() && std::fs::write(dir.join(KEPT), theme.id).is_ok()
+    }
+
+    /// Write the theme shown now, in turn with any other write.
+    fn keep_shown(dir: &Path) -> bool {
+        let _turn = WRITING
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        keep(dir, shown())
     }
 
     /// `app_theme` on a computer.
@@ -149,24 +154,21 @@ mod desktop {
         for open in app.webview_windows().values() {
             let _ = open.set_background_color(Some(color(now)));
         }
-        let saved = *SAVED
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if saved != Some(now.id) {
-            if let Ok(dir) = app.path().app_config_dir() {
-                if crate::off_thread(move || keep(&dir, now), || false).await {
-                    *SAVED
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(now.id);
-                }
-            }
+        // Written each time the list says, so a write that failed is made
+        // again: the page hears the refusal and tells again at the next look
+        // it applies (`followThemeInShell`).
+        let Ok(dir) = app.path().app_config_dir() else {
+            return Ok(());
+        };
+        if !crate::off_thread(move || keep_shown(&dir), || false).await {
+            return Err("couldn't keep the theme for the next start".into());
         }
         Ok(())
     }
 
     #[cfg(test)]
     mod tests {
-        use super::{keep, read};
+        use super::{keep, keep_shown, read};
         use crate::theme::look;
 
         #[test]
@@ -184,15 +186,35 @@ mod desktop {
             let _ = std::fs::remove_dir_all(&dir);
         }
 
-        /// A write that fails says so, so `put_on` tries again next time
-        /// rather than taking the file as written.
+        /// A write that fails says so, and `put_on` hands the refusal to the
+        /// page, which tells again.
         #[test]
         fn a_theme_that_could_not_be_kept_says_so() {
             let file =
                 std::env::temp_dir().join(format!("linger-theme-file-{}", std::process::id()));
             std::fs::write(&file, "a file where the folder would go").unwrap();
-            assert!(!keep(&file, look("daylight")));
+            let kept = keep(&file, look("daylight"));
             let _ = std::fs::remove_file(&file);
+            assert!(!kept);
+        }
+
+        /// A write keeps the theme shown when its turn comes, not the one it
+        /// was asked for, so writes finishing out of order can't leave an
+        /// older theme for the next start.
+        #[test]
+        fn a_write_keeps_the_theme_shown_when_it_runs() {
+            let dir =
+                std::env::temp_dir().join(format!("linger-theme-shown-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            *super::SHOWN
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = "dusk";
+            let kept = keep_shown(&dir).then(|| read(&dir));
+            *super::SHOWN
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = "door";
+            let _ = std::fs::remove_dir_all(&dir);
+            assert_eq!(kept, Some(Some(look("dusk"))));
         }
     }
 }
