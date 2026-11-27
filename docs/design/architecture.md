@@ -365,12 +365,13 @@ window itself, which the shell draws: a Daylight window opened dark until its
 page painted, and a phone's status bar drew its icons for the phone's own
 dark mode, not for the page under it. So the list window tells the shell the
 theme each time it puts one on (`followThemeInShell`, `core/theme.ts`), by its
-id (`src-tauri/src/theme.rs`). On a computer every window is built in the
-theme's window color and every open one takes a new one; the shell keeps the
-theme for the next start, when the list is built before any page runs. On a
-phone the status and navigation bars take dark icons on Daylight and light
-ones otherwise (`SystemBars.kt` on Android, which keeps the answer for the
-next start too; the window's light or dark style on an iPhone).
+id (`src-tauri/src/theme.rs`). Linger opens on The door's navy everywhere,
+then its page draws the theme: what's drawn before the page runs can't know
+it, and the shell keeps nothing for the next start. After that, on a computer
+every window opened later is built in the theme's window color and every open
+one takes a new one; on a phone the status and navigation bars take dark
+icons on Daylight and light ones otherwise (`SystemBars.kt` on Android, the
+window's light or dark style on an iPhone).
 
 **Sound preferences need no message.** Mute, quiet hours, the chime switches
 and the sound volume are kept on this computer (`linger.sound.*`, `lib/sound.ts`).

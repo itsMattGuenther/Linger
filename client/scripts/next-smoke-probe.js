@@ -24,14 +24,10 @@
       throw new Error(`no sign-in screen at ${location.href}: ${(document.body?.innerText ?? "").slice(0, 200)}`);
     }
     const checks = { page: location.pathname };
-    // The list is on screen (#965): at start it waits, hidden, until its
-    // page has told the shell its theme, and must then be shown: within two
-    // seconds of its sign-in being drawn, which fails a page whose word never
-    // arrives as long as the sign-in draws well inside the shell's ten-second
-    // deadline (whether the word or the deadline showed it is the shell's
-    // tests'). WebKitGTK says so here; WebView2 says "visible" whatever the
-    // window is, so on Windows windows-hidden-check.mjs looks at the window
-    // itself.
+    // The list is on screen (#965): Linger opens on The door's navy, the
+    // list shown at once, and its page then draws the theme. WebKitGTK says
+    // so here; WebView2 says "visible" whatever the window is, so on Windows
+    // windows-hidden-check.mjs looks at the window itself.
     for (let tries = 0; tries < 40 && document.visibilityState !== "visible"; tries++) await wait(50);
     if (document.visibilityState !== "visible") throw new Error(`the list window was never shown: ${document.visibilityState}`);
     const background = getComputedStyle(signin).backgroundColor;

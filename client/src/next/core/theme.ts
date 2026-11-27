@@ -69,8 +69,8 @@ type Call = (command: string, args?: Record<string, unknown>) => Promise<unknown
  * Tell the shell the theme on this page now, and again whenever it changes
  * (#965), so what the shell draws itself follows it: on a computer the
  * color every window shows before its page draws (`src-tauri/src/theme.rs`),
- * which a light theme can't leave dark, and at start the list is shown only
- * once the first word comes; on a phone the status bar's and
+ * which a light theme can't leave dark (at start Linger opens on The door's
+ * navy everywhere, before any page can say); on a phone the status bar's and
  * navigation bar's icons, dark on Daylight's paper and light on every dark
  * theme. Only the window that owns the shell's state calls it: the list,
  * on a computer and a phone. `hear` is how the page hears it has applied

@@ -5,10 +5,12 @@
 //!
 //! - **On a computer**, the color a window shows before its page draws:
 //!   every open window takes it at once, and a window opened later is built
-//!   in it. Without it a window opened dark under Daylight's paper. At start
-//!   the list is built before any page runs, so it waits, hidden, until its
-//!   page says (#965): the page's own saved choice is the only copy, and
-//!   nothing the shell keeps can fall behind it.
+//!   in it. Without it a window opened dark under Daylight's paper.
+//! - **At start, everywhere**, Linger opens on The door's navy and its page
+//!   then draws the theme (Matt, 2026-11-27): the list is built before any
+//!   page runs, and a phone's launch screen is fixed, so nothing the shell
+//!   draws first can know the theme. The page's own saved choice is the
+//!   only copy; the shell keeps nothing for the next start.
 //! - **On a phone**, the status bar's and navigation bar's icons: dark on
 //!   Daylight's paper, light on every dark theme. The page is drawn under
 //!   both bars, so their icons have to read on its ground rather than follow
@@ -35,7 +37,6 @@ const THEMES: [(&str, [u8; 3], bool); 6] = [
 struct Look {
     #[cfg_attr(mobile, allow(dead_code))]
     id: &'static str,
-    #[cfg_attr(mobile, allow(dead_code))]
     window: [u8; 3],
     #[cfg_attr(not(mobile), allow(dead_code))]
     light: bool,
@@ -52,13 +53,12 @@ fn look(id: &str) -> Look {
 }
 
 #[cfg(desktop)]
-pub use desktop::{wait_for_theme, waiting, window_color};
+pub use desktop::window_color;
 
 /// The list window puts a theme on: every window takes its color, and so
-/// does every window opened after, and a list waiting to be shown at start
-/// is shown in it. Only the list says; another window's word is refused.
-/// Not `async`, so it runs on the app's main thread, one at a time in the
-/// order the list said them.
+/// does every window opened after. Only the list says; another window's
+/// word is refused. Not `async`, so it runs on the app's main thread, one
+/// at a time in the order the list said them.
 #[cfg(desktop)]
 #[tauri::command]
 pub fn app_theme(
@@ -72,7 +72,6 @@ pub fn app_theme(
 #[cfg(desktop)]
 mod desktop {
     use std::sync::Mutex;
-    use std::time::Duration;
 
     use tauri::window::Color;
     use tauri::{AppHandle, Manager, WebviewWindow};
@@ -80,55 +79,18 @@ mod desktop {
     use super::{look, Look};
 
     /// The theme the list last told, which windows opened from now on are
-    /// built in. The door until the list says.
+    /// built in. The door until the list says, so the list itself opens on
+    /// The door's navy at start (`window::create`).
     static SHOWN: Mutex<&str> = Mutex::new("door");
-
-    /// Whether the list is hidden at start until its page says its theme.
-    static WAIT: Wait = Wait::new();
-
-    /// How long the list waits for its page before it's shown anyway. Only a
-    /// page that failed to load runs into it, so it's generous: a slow
-    /// computer's first start still has its page say first.
-    const DEADLINE: Duration = Duration::from_secs(10);
-
-    /// A window waiting to be shown until its page has said its theme.
-    /// Ended once, by whichever comes first: the page's word or the
-    /// deadline. The window is shown at the end, so only once.
-    pub(super) struct Wait(Mutex<bool>);
-
-    impl Wait {
-        pub(super) const fn new() -> Self {
-            Self(Mutex::new(false))
-        }
-
-        fn held(&self) -> std::sync::MutexGuard<'_, bool> {
-            self.0
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-        }
-
-        pub(super) fn start(&self) {
-            *self.held() = true;
-        }
-
-        pub(super) fn waiting(&self) -> bool {
-            *self.held()
-        }
-
-        /// End the wait. Says whether this ended it, and so whether to show
-        /// the window now: a second end, or one with no wait, shows nothing.
-        pub(super) fn end(&self) -> bool {
-            std::mem::replace(&mut *self.held(), false)
-        }
-    }
 
     fn color(look: Look) -> Color {
         let [r, g, b] = look.window;
         Color(r, g, b, 255)
     }
 
-    /// The color a window is built in: the theme's, so it never shows another
-    /// theme's for a moment before its page draws.
+    /// The color a window is built in: the theme's once the list has said
+    /// it, so a window opened later never shows another theme's for a
+    /// moment before its page draws; The door's navy before.
     pub fn window_color() -> Color {
         color(look(
             &SHOWN
@@ -137,43 +99,7 @@ mod desktop {
         ))
     }
 
-    /// The list was built hidden at start (`window::create`): it's shown
-    /// when its page says its theme, in that theme's color, so it never
-    /// shows another theme's first. Nothing is kept for this: the page's
-    /// own saved choice is the only copy, and it tells first thing
-    /// (`followThemeInShell`). A page that never says is shown at the
-    /// deadline, so Linger never starts with nothing on screen.
-    pub fn wait_for_theme(app: &AppHandle) {
-        WAIT.start();
-        let app = app.clone();
-        tauri::async_runtime::spawn(async move {
-            tokio::time::sleep(DEADLINE).await;
-            let shell = app.clone();
-            let _ = app.run_on_main_thread(move || show_if_waiting(&shell));
-        });
-    }
-
-    /// Whether the list is still waiting for its page's theme. Bringing it
-    /// forward meanwhile (the tray, a second start, a link) is left to the
-    /// end of the wait, moments away, which brings it forward anyway, so
-    /// it isn't shown in another theme's color first (`tray::show_list`).
-    pub fn waiting() -> bool {
-        WAIT.waiting()
-    }
-
-    /// At the end of the wait the list comes forward as the tray's Show
-    /// Linger brings it: shown, restored and focused, as a start that
-    /// somebody made, built visible and focused, always came up. Only such
-    /// a start waits (`window::ListStart`).
-    fn show_if_waiting(app: &AppHandle) {
-        if WAIT.end() {
-            crate::tray::show_list(app);
-        }
-    }
-
-    /// `app_theme` on a computer, on the app's main thread: the color goes
-    /// on every window before a waiting list is shown, so its first frame
-    /// is in it.
+    /// `app_theme` on a computer, on the app's main thread.
     pub fn put_on(app: &AppHandle, window: &WebviewWindow, theme: &str) -> Result<(), String> {
         if window.label() != crate::window::OWNER {
             return Err("only the list window says the theme".into());
@@ -185,49 +111,32 @@ mod desktop {
         for open in app.webview_windows().values() {
             let _ = open.set_background_color(Some(color(now)));
         }
-        show_if_waiting(app);
         Ok(())
-    }
-
-    #[cfg(test)]
-    mod tests {
-        use super::Wait;
-
-        #[test]
-        fn a_waiting_window_is_shown_once() {
-            let wait = Wait::new();
-            wait.start();
-            assert!(wait.waiting(), "a show asked for meanwhile waits too");
-            assert!(wait.end(), "the page's word shows it");
-            assert!(!wait.waiting(), "after it, a show asked for shows it");
-            assert!(!wait.end(), "the deadline after it shows nothing");
-            assert!(!wait.end(), "nor a second word");
-        }
-
-        #[test]
-        fn a_window_that_never_waited_is_never_shown_by_the_end_of_one() {
-            // A start into the tray (#772): the list stays hidden there,
-            // whatever the page says or the deadline.
-            let wait = Wait::new();
-            assert!(!wait.waiting());
-            assert!(!wait.end());
-        }
     }
 }
 
 /// The page puts a theme on: the phone's bars take its icons, dark on a
-/// light theme and light on a dark one.
+/// light theme and light on a dark one, and the page's ground takes its
+/// window color. A phone opens on The door's navy whatever the theme (its
+/// launch screen, and the ground before the page draws), with light icons
+/// on it, so that's what the ground leaves: nothing navy shows under
+/// Daylight's paper once the page has said.
 #[cfg(mobile)]
 #[tauri::command]
 pub async fn app_theme(webview: tauri::Webview, theme: String) {
-    platform::follow(&webview, look(&theme).light).await;
+    let theme = look(&theme);
+    let [r, g, b] = theme.window;
+    let _ = webview.set_background_color(Some(tauri::window::Color(r, g, b, 255)));
+    platform::follow(&webview, theme.light).await;
 }
 
 #[cfg(target_os = "android")]
 mod platform {
     //! `SystemBars.kt`, asked from a thread kept for blocking work, which
-    //! redraws the bars on the app's own thread and keeps the answer for
-    //! the next start (`MainActivity.kt`).
+    //! redraws the bars on the app's own thread. Nothing is kept for the
+    //! next start: Linger opens on The door's navy (`themes.xml`, and the
+    //! page's ground in `tauri.android.conf.json`), so `MainActivity.kt`
+    //! starts with light icons.
 
     use jni::objects::JValue;
 
@@ -240,13 +149,8 @@ mod platform {
     fn bars(light: bool) -> Option<()> {
         with_env(|env, app| {
             let class = app_class(env, app, "io.github.itsmattguenther.linger.SystemBars")?;
-            env.call_static_method(
-                &class,
-                "follow",
-                "(Landroid/content/Context;Z)V",
-                &[JValue::Object(app), JValue::Bool(u8::from(light))],
-            )
-            .ok()?;
+            env.call_static_method(&class, "follow", "(Z)V", &[JValue::Bool(u8::from(light))])
+                .ok()?;
             Some(())
         })
     }
@@ -260,9 +164,11 @@ mod platform {
     //! the window's style is all it takes. The keyboard and the share sheet
     //! follow it too, so they match the page.
     //!
-    //! Nothing is kept here, unlike Android: at a cold start the bars follow
-    //! the phone's own light or dark mode until the page says, a moment
-    //! after it loads.
+    //! Nothing is kept for the next start: an iPhone opens on The door's
+    //! navy, its launch screen (`LaunchScreen.storyboard`, Apple allows
+    //! one fixed one) and the page's ground before it draws
+    //! (`tauri.ios.conf.json`), and starts dark (`UIUserInterfaceStyle` in
+    //! `Info.plist`), so its icons are light on it until the page says.
 
     use objc2::MainThreadMarker;
     use objc2_ui_kit::{UIUserInterfaceStyle, UIViewController};
@@ -347,6 +253,73 @@ mod tests {
         }
         assert!(look("daylight").light);
         assert!(!look("door").light);
+    }
+
+    /// A phone opens on The door's navy before its page draws, whatever the
+    /// theme: the launch screen, the page's ground, and a start with light
+    /// bar icons on it (`app_theme` on a phone). Every copy is The door's.
+    #[test]
+    fn a_phone_opens_on_the_doors_navy() {
+        let [r, g, b] = look("door").window;
+        let hex = format!("#{r:02x}{g:02x}{b:02x}");
+        for config in [
+            include_str!("../tauri.ios.conf.json"),
+            include_str!("../tauri.android.conf.json"),
+        ] {
+            assert!(
+                config.contains(&format!("\"backgroundColor\": \"{hex}\"")),
+                "a phone's page ground isn't The door's"
+            );
+        }
+        // iPhone: the launch screen, and a dark start.
+        let launch = include_str!("../gen/apple/LaunchScreen.storyboard");
+        let at = launch
+            .find("<color key=\"backgroundColor\"")
+            .expect("the launch screen's color");
+        let line = &launch[at..at + launch[at..].find("/>").expect("its end")];
+        let part = |name: &str| -> f64 {
+            let from = line.find(&format!("{name}=\"")).expect(name) + name.len() + 2;
+            line[from..from + line[from..].find('"').expect("quote")]
+                .parse()
+                .expect("a number")
+        };
+        for (name, byte) in [("red", r), ("green", g), ("blue", b)] {
+            assert!(
+                (part(name) * 255.0 - f64::from(byte)).abs() < 0.01,
+                "the launch screen's {name} isn't The door's"
+            );
+        }
+        assert!(line.contains("customColorSpace=\"sRGB\""));
+        let plist = include_str!("../gen/apple/linger-client_iOS/Info.plist");
+        let plist: String = plist.split_whitespace().collect();
+        assert!(plist.contains("<key>UIUserInterfaceStyle</key><string>Dark</string>"));
+        let project = include_str!("../gen/apple/project.yml");
+        assert!(project.contains("UIUserInterfaceStyle: Dark"));
+        // Android: the starting window and Android 12's launch screen, in
+        // light mode and dark, with light bar icons.
+        let colors = include_str!("../gen/android/app/src/main/res/values/colors.xml");
+        assert!(colors.contains(&format!(
+            "<color name=\"door\">#FF{}</color>",
+            hex[1..].to_uppercase()
+        )));
+        for theme in [
+            include_str!("../gen/android/app/src/main/res/values/themes.xml"),
+            include_str!("../gen/android/app/src/main/res/values-night/themes.xml"),
+        ] {
+            for item in [
+                "<item name=\"android:windowBackground\">@color/door</item>",
+                "<item name=\"android:windowSplashScreenBackground\" tools:targetApi=\"31\">@color/door</item>",
+                "<item name=\"android:windowLightStatusBar\">false</item>",
+            ] {
+                assert!(theme.contains(item), "themes.xml lacks {item}");
+            }
+        }
+        let activity = include_str!(
+            "../gen/android/app/src/main/java/io/github/itsmattguenther/linger/MainActivity.kt"
+        );
+        // Every page starts on the navy with light icons, a rebuilt screen's
+        // too: wry builds its web view afresh, and the page says again.
+        assert!(activity.contains("SystemBars.draw(this, false)"));
     }
 
     #[test]

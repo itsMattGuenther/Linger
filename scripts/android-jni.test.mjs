@@ -66,7 +66,7 @@ Class #13           -
   Direct methods    -
     #0              : (in Lio/github/itsmattguenther/linger/SystemBars;)
       name          : 'follow'
-      type          : '(Landroid/content/Context;Z)V'
+      type          : '(Z)V'
       access        : 0x0019 (PUBLIC STATIC FINAL)
   Virtual methods   -
 `;

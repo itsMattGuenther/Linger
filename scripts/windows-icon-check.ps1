@@ -49,33 +49,94 @@ Add-Type @'
 using System;
 using System.Runtime.InteropServices;
 public static class LingerIconProbe {
-  [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
   [DllImport("user32.dll", EntryPoint="GetClassLongPtrW")] public static extern IntPtr GetClassLongPtr(IntPtr h, int i);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr h, uint cmd);
+  [DllImport("user32.dll")] public static extern IntPtr SendMessageTimeout(IntPtr h, uint m, IntPtr w, IntPtr l, uint flags, uint ms, out IntPtr result);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr h, System.Text.StringBuilder s, int n);
+  public delegate bool Each(IntPtr h, IntPtr l);
+  [DllImport("user32.dll")] public static extern bool EnumThreadWindows(uint thread, Each each, IntPtr l);
+  // Linger's own windows only, by its own threads, so no other program's
+  // window is ever looked at: each one's class, whether it shows, whether
+  // it has an owner, and whether it has a small icon.
+  // WM_GETICON with a 200 ms limit, saying whether the window answered.
+  public static IntPtr Icon(IntPtr h, int which, out bool answered) {
+    IntPtr asked;
+    answered = SendMessageTimeout(h, 0x7F, (IntPtr)which, IntPtr.Zero, 0x2, 200, out asked) != IntPtr.Zero;
+    return answered ? asked : IntPtr.Zero;
+  }
+  public static string Describe(int[] threads, IntPtr found) {
+    var lines = new System.Text.StringBuilder();
+    foreach (var thread in threads) {
+      EnumThreadWindows((uint)thread, (h, l) => {
+        var name = new System.Text.StringBuilder(256);
+        GetClassName(h, name, 256);
+        // Asked with a 200 ms limit, so a listing never waits on a stuck
+        // thread; one that doesn't answer says so rather than "no icon".
+        IntPtr asked;
+        var answered = SendMessageTimeout(h, 0x7F, IntPtr.Zero, IntPtr.Zero, 0x2, 200, out asked) != IntPtr.Zero;
+        var icon = !answered ? "no answer" : (asked != IntPtr.Zero || GetClassLongPtr(h, -34) != IntPtr.Zero).ToString();
+        lines.AppendLine(string.Format("  {0} class={1} visible={2} owned={3} icon={4}{5}", h, name, IsWindowVisible(h), GetWindow(h, 4) != IntPtr.Zero, icon, h == found ? "  <- the one found" : ""));
+        return true;
+      }, IntPtr.Zero);
+    }
+    return lines.ToString();
+  }
+  // The shown top-level window of Linger's with this class (the list is
+  // Tauri's), or none: by its own threads only, as above.
+  public static IntPtr Shown(int[] threads, string wanted) {
+    var found = IntPtr.Zero;
+    foreach (var thread in threads) {
+      EnumThreadWindows((uint)thread, (h, l) => {
+        var name = new System.Text.StringBuilder(256);
+        GetClassName(h, name, 256);
+        if (found == IntPtr.Zero && name.ToString() == wanted && IsWindowVisible(h) && GetWindow(h, 4) == IntPtr.Zero) { found = h; }
+        return true;
+      }, IntPtr.Zero);
+    }
+    return found;
+  }
 }
 '@
 $app = Start-Process $exe -PassThru
+$started = Get-Date
 try {
-    for ($i = 0; $i -lt 100; $i++) {
+    # The list, by its class: Windows' own idea of the main window can be one
+    # of Linger's message windows (single instance, tao's events), which
+    # report themselves shown and have no icon. A runner's first start is
+    # slow, so it gets thirty seconds.
+    $list = [IntPtr]::Zero
+    for ($i = 0; $i -lt 150; $i++) {
         Start-Sleep -Milliseconds 200
         $app.Refresh()
         if ($app.HasExited) { throw 'Installed app exited before opening a window' }
-        if ($app.MainWindowHandle -ne [IntPtr]::Zero) { break }
+        $list = [LingerIconProbe]::Shown(@($app.Threads | ForEach-Object { $_.Id }), 'Tauri Window')
+        if ($list -ne [IntPtr]::Zero) { break }
     }
-    if ($app.MainWindowHandle -eq [IntPtr]::Zero) { throw 'Installed app did not open a window' }
+    if ($list -eq [IntPtr]::Zero) {
+        Write-Output "Linger's top-level windows:"
+        Write-Output ([LingerIconProbe]::Describe(@($app.Threads | ForEach-Object { $_.Id }), [IntPtr]::Zero))
+        throw 'Installed app did not show its list'
+    }
+    Write-Output ("The list shown {0:N1} s after start" -f ((Get-Date) - $started).TotalSeconds)
     # Tao's window icon uses ICON_SMALL; ICON_BIG is a separate taskbar override
     # and may be unset. Its absence does not mean the window has no icon.
     # Tao sets the icon just after the window appears, so one look the moment
     # it does can find none (#348): keep looking for up to ten seconds.
     $icon = [IntPtr]::Zero
+    $answered = $false
     for ($i = 0; $i -lt 50; $i++) {
-        $icon = [LingerIconProbe]::SendMessage($app.MainWindowHandle, 0x7F, [IntPtr]::Zero, [IntPtr]::Zero)
-        if ($icon -eq [IntPtr]::Zero) { $icon = [LingerIconProbe]::GetClassLongPtr($app.MainWindowHandle, -34) }
+        $icon = [LingerIconProbe]::Icon($list, 0, [ref]$answered)
+        if ($icon -eq [IntPtr]::Zero) { $icon = [LingerIconProbe]::GetClassLongPtr($list, -34) }
         if ($icon -ne [IntPtr]::Zero) { break }
         Start-Sleep -Milliseconds 200
-        $app.Refresh()
     }
-    if ($icon -eq [IntPtr]::Zero) { throw 'Running app has no caption icon' }
-    $taskbarIcon = [LingerIconProbe]::SendMessage($app.MainWindowHandle, 0x7F, [IntPtr]1, [IntPtr]::Zero)
+    if ($icon -eq [IntPtr]::Zero) {
+        Write-Output "Linger's top-level windows:"
+        Write-Output ([LingerIconProbe]::Describe(@($app.Threads | ForEach-Object { $_.Id }), $list))
+        throw $(if ($answered) { 'Running app has no caption icon' } else { "The list's window didn't answer when asked for its icon" })
+    }
+    $taskbarIcon = [LingerIconProbe]::Icon($list, 1, [ref]$answered)
     Write-Output "Separate taskbar icon override present: $($taskbarIcon -ne [IntPtr]::Zero)"
     $bitmap = [System.Drawing.Icon]::FromHandle($icon).ToBitmap()
     $bitmap.Save((Join-Path $Output 'running-window-icon.png'))

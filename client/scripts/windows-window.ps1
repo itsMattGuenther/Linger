@@ -5,9 +5,10 @@
 #
 # Reads one JSON command per line on stdin and answers each with one line,
 # "LINGER-REPLY {json}", so Add-Type is compiled once rather than per step.
-# It only ever touches the window handle it's given and the windows inside it:
-# it never lists, names or looks at any other window. Run only on a disposable
-# runner.
+# It only ever touches the window handle it's given and the windows inside it,
+# and finds the list among Linger's own top-level windows, by Linger's threads
+# and the window class alone: it never lists, names or looks at another
+# program's window. Run only on a disposable runner.
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 Add-Type @'
@@ -26,9 +27,26 @@ public static class LingerWindowProbe {
   [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr hdc, uint flags);
   public delegate bool ChildProc(IntPtr h, IntPtr l);
   [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr parent, ChildProc f, IntPtr l);
-  // How many windows inside this one (WebView2's own, here) are shown, and
-  // how many there are. Only counted: nothing about them is read.
   [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] public static extern IntPtr GetWindowLongPtr(IntPtr h, int index);
+  [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr h, uint cmd);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(IntPtr h, System.Text.StringBuilder s, int n);
+  [DllImport("user32.dll")] public static extern bool EnumThreadWindows(uint thread, ChildProc f, IntPtr l);
+  // The list: Linger's shown, unowned top-level window of Tauri's class, by
+  // Linger's own threads, so no other program's window is looked at. Not
+  // Windows' idea of the main window, which can be one of Linger's message
+  // windows (single instance, tao's events), which report themselves shown.
+  public static IntPtr List(int[] threads) {
+    IntPtr found = IntPtr.Zero;
+    foreach (int thread in threads) {
+      EnumThreadWindows((uint)thread, (h, l) => {
+        var name = new System.Text.StringBuilder(256);
+        GetClassName(h, name, 256);
+        if (found == IntPtr.Zero && name.ToString() == "Tauri Window" && IsWindowVisible(h) && GetWindow(h, 4) == IntPtr.Zero) found = h;
+        return true;
+      }, IntPtr.Zero);
+    }
+    return found;
+  }
   // Of the windows inside this one (WebView2's own, here): how many are shown
   // on screen, how many are set to show themselves (WS_VISIBLE, whatever
   // their parent does), and how many there are. Only counted: nothing about
@@ -107,11 +125,10 @@ while ($null -ne ($line = [Console]::In.ReadLine())) {
   try {
     $cmd = $line | ConvertFrom-Json
     $reply = switch ($cmd.op) {
-      # The app's top-level window, as the icon check finds it: at start the
-      # list is the only window Linger shows.
+      # The list, shown, as the icon check finds it (scripts/windows-icon-check.ps1).
       'main' {
         $p = Get-Process -Id $cmd.pid -ErrorAction SilentlyContinue
-        if (!$p) { @{ hwnd = 0; exited = $true } } else { $p.Refresh(); @{ hwnd = [int64]$p.MainWindowHandle } }
+        if (!$p) { @{ hwnd = 0; exited = $true } } else { $p.Refresh(); @{ hwnd = [int64][LingerWindowProbe]::List(@($p.Threads | ForEach-Object { $_.Id })) } }
       }
       'state' {
         $hwnd = Handle $cmd.hwnd

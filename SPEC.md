@@ -1731,12 +1731,14 @@ name's band darkens the letters it crosses instead of lifting them nearly into t
 a glow's light is a pale mix of the name's color rather than a dark smudge of it, and
 older messages fade less (§4.7).
 
-**The app around the page follows the theme too.** On a computer every window opens in
-the theme's window color, so none shows another theme's for a moment before its page
-draws; at start the list waits, hidden, until its page has said which theme it's in
-(but after an update restarts Linger by itself behind other windows, which mustn't take the focus).
-On a phone the status bar's and navigation bar's icons are dark on Daylight and
-light on the dark themes, whatever the phone's own dark mode says.
+**The app around the page follows the theme too.** Linger opens on The door's navy
+everywhere, then its page draws the theme (Matt, 2026-11-27): on a computer the list
+appears at once in navy, and on a phone the launch screen and the page's ground before it
+draws are navy, with light icons, whatever the phone's own mode (an iPhone allows one
+fixed launch screen). After that, on a computer every window opened later is in the
+theme's window color, so none shows another theme's for a moment before its page draws;
+on a phone the status bar's and navigation bar's icons are dark on Daylight and light on
+the dark themes, whatever the phone's own dark mode says.
 
 Evening warmth still waits for an evening version of these colors: Porch light is the
 warm look, chosen by hand.
