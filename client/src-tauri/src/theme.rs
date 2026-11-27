@@ -125,17 +125,30 @@ mod desktop {
         Some(look(said.trim()))
     }
 
-    /// Write the theme for the next start. Says whether it was written.
+    /// Write the theme for the next start. Says whether it was written. It's
+    /// written beside the kept file and moved over it, so a write cut short
+    /// leaves the old theme, never an empty file.
     fn keep(dir: &Path, theme: Look) -> bool {
-        std::fs::create_dir_all(dir).is_ok() && std::fs::write(dir.join(KEPT), theme.id).is_ok()
+        let next = dir.join(format!("{KEPT}.next"));
+        std::fs::create_dir_all(dir).is_ok()
+            && std::fs::write(&next, theme.id).is_ok()
+            && std::fs::rename(&next, dir.join(KEPT)).is_ok()
     }
 
-    /// Write the theme shown now, in turn with any other write.
+    /// Keep the theme shown now, in turn with any other write.
     fn keep_shown(dir: &Path) -> bool {
+        keep_in_turn(dir, shown)
+    }
+
+    /// Keep the newest theme, read when this write's turn comes, so the last
+    /// write is the newest whatever order they were asked in. Nothing is
+    /// written when the file already holds it, as at most starts.
+    fn keep_in_turn(dir: &Path, newest: fn() -> Look) -> bool {
         let _turn = WRITING
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        keep(dir, shown())
+        let theme = newest();
+        read(dir) == Some(theme) || keep(dir, theme)
     }
 
     /// `app_theme` on a computer.
@@ -168,7 +181,7 @@ mod desktop {
 
     #[cfg(test)]
     mod tests {
-        use super::{keep, keep_shown, read};
+        use super::{keep, keep_in_turn, read};
         use crate::theme::look;
 
         #[test]
@@ -206,15 +219,17 @@ mod desktop {
             let dir =
                 std::env::temp_dir().join(format!("linger-theme-shown-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&dir);
-            *super::SHOWN
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner) = "dusk";
-            let kept = keep_shown(&dir).then(|| read(&dir));
-            *super::SHOWN
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner) = "door";
+            let kept = keep_in_turn(&dir, || look("dusk")).then(|| read(&dir));
+            let unchanged =
+                std::fs::metadata(dir.join(super::KEPT)).and_then(|file| file.modified());
+            let again = keep_in_turn(&dir, || look("dusk"));
+            let still = std::fs::metadata(dir.join(super::KEPT)).and_then(|file| file.modified());
+            let left = dir.join(format!("{}.next", super::KEPT)).exists();
             let _ = std::fs::remove_dir_all(&dir);
             assert_eq!(kept, Some(Some(look("dusk"))));
+            assert!(again, "the same theme again is kept");
+            assert_eq!(unchanged.ok(), still.ok(), "and not written again");
+            assert!(!left, "nothing left beside it");
         }
     }
 }

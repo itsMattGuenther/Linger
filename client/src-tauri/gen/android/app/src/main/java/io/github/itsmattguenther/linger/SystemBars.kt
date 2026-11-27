@@ -25,10 +25,11 @@ object SystemBars {
   private const val LIGHT = "light"
 
   /**
-   * See-through dark, androidx's own default. Behind a bar's light icons
-   * where Android can't draw dark ones (the status bar before Android 6,
-   * the navigation bar before Android 8), so they read on paper; and on
-   * Android 8 and 9, the navigation bar's backing on a dark theme.
+   * See-through dark, androidx's own default: behind the navigation bar's
+   * light buttons before Android 8, which can't draw dark ones, so they
+   * read on paper; and on Android 8 and 9, the navigation bar's backing on
+   * a dark theme. (The status bar's, before Android 6, never runs: Linger
+   * needs Android 7.)
    */
   private val DARK_SCRIM = Color.argb(0x80, 0x1b, 0x1b, 0x1b)
 
