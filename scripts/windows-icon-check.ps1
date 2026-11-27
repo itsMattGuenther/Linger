@@ -72,40 +72,61 @@ public static class LingerIconProbe {
     }
     return lines.ToString();
   }
+  // The shown top-level window of Linger's with this class (the list is
+  // Tauri's), or none: by its own threads only, as above.
+  public static IntPtr Shown(int[] threads, string wanted) {
+    var found = IntPtr.Zero;
+    foreach (var thread in threads) {
+      EnumThreadWindows((uint)thread, (h, l) => {
+        var name = new System.Text.StringBuilder(256);
+        GetClassName(h, name, 256);
+        if (found == IntPtr.Zero && name.ToString() == wanted && IsWindowVisible(h) && GetWindow(h, 4) == IntPtr.Zero) { found = h; }
+        return true;
+      }, IntPtr.Zero);
+    }
+    return found;
+  }
 }
 '@
 $app = Start-Process $exe -PassThru
 $started = Get-Date
 try {
-    for ($i = 0; $i -lt 100; $i++) {
+    # The list, by its class: Windows' own idea of the main window can be one
+    # of Linger's hidden message windows (single instance, tao's events),
+    # which have no icon. The list stays hidden until its page says its
+    # theme, or for the shell's ten-second deadline (#968), and a runner's
+    # first WebView2 start is slow, so it gets thirty seconds.
+    $list = [IntPtr]::Zero
+    for ($i = 0; $i -lt 150; $i++) {
         Start-Sleep -Milliseconds 200
         $app.Refresh()
         if ($app.HasExited) { throw 'Installed app exited before opening a window' }
-        if ($app.MainWindowHandle -ne [IntPtr]::Zero) { break }
+        $list = [LingerIconProbe]::Shown(@($app.Threads | ForEach-Object { $_.Id }), 'Tauri Window')
+        if ($list -ne [IntPtr]::Zero) { break }
     }
-    if ($app.MainWindowHandle -eq [IntPtr]::Zero) { throw 'Installed app did not open a window' }
-    Write-Output ("A window shown {0:N1} s after start" -f ((Get-Date) - $started).TotalSeconds)
+    if ($list -eq [IntPtr]::Zero) {
+        Write-Output "Linger's top-level windows:"
+        Write-Output ([LingerIconProbe]::Describe(@($app.Threads | ForEach-Object { $_.Id }), [IntPtr]::Zero))
+        throw 'Installed app did not show its list'
+    }
+    Write-Output ("The list shown {0:N1} s after start" -f ((Get-Date) - $started).TotalSeconds)
     # Tao's window icon uses ICON_SMALL; ICON_BIG is a separate taskbar override
     # and may be unset. Its absence does not mean the window has no icon.
     # Tao sets the icon just after the window appears, so one look the moment
     # it does can find none (#348): keep looking for up to ten seconds.
     $icon = [IntPtr]::Zero
     for ($i = 0; $i -lt 50; $i++) {
-        $icon = [LingerIconProbe]::SendMessage($app.MainWindowHandle, 0x7F, [IntPtr]::Zero, [IntPtr]::Zero)
-        if ($icon -eq [IntPtr]::Zero) { $icon = [LingerIconProbe]::GetClassLongPtr($app.MainWindowHandle, -34) }
+        $icon = [LingerIconProbe]::SendMessage($list, 0x7F, [IntPtr]::Zero, [IntPtr]::Zero)
+        if ($icon -eq [IntPtr]::Zero) { $icon = [LingerIconProbe]::GetClassLongPtr($list, -34) }
         if ($icon -ne [IntPtr]::Zero) { break }
         Start-Sleep -Milliseconds 200
-        $app.Refresh()
     }
     if ($icon -eq [IntPtr]::Zero) {
-        # Which of Linger's windows it was, to tell a missing icon from the
-        # wrong window.
-        $app.Refresh()
         Write-Output "Linger's top-level windows:"
-        Write-Output ([LingerIconProbe]::Describe(@($app.Threads | ForEach-Object { $_.Id }), $app.MainWindowHandle))
+        Write-Output ([LingerIconProbe]::Describe(@($app.Threads | ForEach-Object { $_.Id }), $list))
         throw 'Running app has no caption icon'
     }
-    $taskbarIcon = [LingerIconProbe]::SendMessage($app.MainWindowHandle, 0x7F, [IntPtr]1, [IntPtr]::Zero)
+    $taskbarIcon = [LingerIconProbe]::SendMessage($list, 0x7F, [IntPtr]1, [IntPtr]::Zero)
     Write-Output "Separate taskbar icon override present: $($taskbarIcon -ne [IntPtr]::Zero)"
     $bitmap = [System.Drawing.Icon]::FromHandle($icon).ToBitmap()
     $bitmap.Save((Join-Path $Output 'running-window-icon.png'))
