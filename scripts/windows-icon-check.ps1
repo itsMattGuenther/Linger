@@ -49,7 +49,6 @@ Add-Type @'
 using System;
 using System.Runtime.InteropServices;
 public static class LingerIconProbe {
-  [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
   [DllImport("user32.dll", EntryPoint="GetClassLongPtrW")] public static extern IntPtr GetClassLongPtr(IntPtr h, int i);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
   [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr h, uint cmd);
@@ -60,11 +59,11 @@ public static class LingerIconProbe {
   // Linger's own windows only, by its own threads, so no other program's
   // window is ever looked at: each one's class, whether it shows, whether
   // it has an owner, and whether it has a small icon.
-  // WM_GETICON with a limit: zero when the window has none or its thread
-  // doesn't answer in time.
-  public static IntPtr Icon(IntPtr h, int which) {
+  // WM_GETICON with a 200 ms limit, saying whether the window answered.
+  public static IntPtr Icon(IntPtr h, int which, out bool answered) {
     IntPtr asked;
-    return SendMessageTimeout(h, 0x7F, (IntPtr)which, IntPtr.Zero, 0x2, 1000, out asked) != IntPtr.Zero ? asked : IntPtr.Zero;
+    answered = SendMessageTimeout(h, 0x7F, (IntPtr)which, IntPtr.Zero, 0x2, 200, out asked) != IntPtr.Zero;
+    return answered ? asked : IntPtr.Zero;
   }
   public static string Describe(int[] threads, IntPtr found) {
     var lines = new System.Text.StringBuilder();
@@ -125,8 +124,9 @@ try {
     # Tao sets the icon just after the window appears, so one look the moment
     # it does can find none (#348): keep looking for up to ten seconds.
     $icon = [IntPtr]::Zero
+    $answered = $false
     for ($i = 0; $i -lt 50; $i++) {
-        $icon = [LingerIconProbe]::Icon($list, 0)
+        $icon = [LingerIconProbe]::Icon($list, 0, [ref]$answered)
         if ($icon -eq [IntPtr]::Zero) { $icon = [LingerIconProbe]::GetClassLongPtr($list, -34) }
         if ($icon -ne [IntPtr]::Zero) { break }
         Start-Sleep -Milliseconds 200
@@ -134,9 +134,9 @@ try {
     if ($icon -eq [IntPtr]::Zero) {
         Write-Output "Linger's top-level windows:"
         Write-Output ([LingerIconProbe]::Describe(@($app.Threads | ForEach-Object { $_.Id }), $list))
-        throw 'Running app has no caption icon'
+        throw $(if ($answered) { 'Running app has no caption icon' } else { "The list's window didn't answer when asked for its icon" })
     }
-    $taskbarIcon = [LingerIconProbe]::Icon($list, 1)
+    $taskbarIcon = [LingerIconProbe]::Icon($list, 1, [ref]$answered)
     Write-Output "Separate taskbar icon override present: $($taskbarIcon -ne [IntPtr]::Zero)"
     $bitmap = [System.Drawing.Icon]::FromHandle($icon).ToBitmap()
     $bitmap.Save((Join-Path $Output 'running-window-icon.png'))

@@ -317,24 +317,9 @@ mod tests {
         let activity = include_str!(
             "../gen/android/app/src/main/java/io/github/itsmattguenther/linger/MainActivity.kt"
         );
-        assert!(
-            activity
-                .contains("SystemBars.draw(this, savedInstanceState != null && SystemBars.last)"),
-            "only a rebuilt screen takes the page's last answer; a new one starts light"
-        );
-        let registered = activity.find("SystemBars.activity = WeakReference(this)");
-        let drawn = activity.find("SystemBars.draw(this,");
-        assert!(
-            registered < drawn,
-            "registered before it reads the last answer"
-        );
-        let bars = include_str!(
-            "../gen/android/app/src/main/java/io/github/itsmattguenther/linger/SystemBars.kt"
-        );
-        assert!(
-            bars.contains("var last: Boolean = false"),
-            "a cold start's icons are light"
-        );
+        // Every page starts on the navy with light icons, a rebuilt screen's
+        // too: wry builds its web view afresh, and the page says again.
+        assert!(activity.contains("SystemBars.draw(this, false)"));
     }
 
     #[test]

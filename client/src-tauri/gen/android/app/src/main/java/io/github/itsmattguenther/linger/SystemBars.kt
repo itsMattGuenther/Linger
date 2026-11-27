@@ -15,12 +15,8 @@ import java.lang.ref.WeakReference
  *
  * Rust (src-tauri/src/theme.rs) calls [follow] each time the page puts a
  * theme on. Nothing is kept for the next start: Linger always opens on The
- * door's navy (themes.xml), so a cold start draws light icons, and the page
- * says its theme as it loads. The last answer is held while the app runs
- * ([last]) for a screen Android rebuilds, for a change the manifest doesn't
- * take itself (the phone's font or display size): it keeps the page, which
- * doesn't say its theme again. A new screen (opened again after Back) loads
- * the page afresh, so it starts light like a cold start.
+ * door's navy (themes.xml), so MainActivity starts with light icons, and
+ * the page says its theme as it loads.
  * The bars stay see-through over the page's own ground, but for Android's
  * backing behind three-button navigation.
  */
@@ -44,11 +40,6 @@ object SystemBars {
   /** The app's screen, while it has one. */
   var activity: WeakReference<ComponentActivity>? = null
 
-  /** Whether the page's theme is light, as it last said while the app runs: dark until it says. */
-  @Volatile
-  var last: Boolean = false
-    private set
-
   /**
    * The bars for a light theme's page, or a dark one's. On the screen's own
    * thread. The navigation bar keeps the backing the plain
@@ -67,10 +58,9 @@ object SystemBars {
     screen.enableEdgeToEdge(status, navigation)
   }
 
-  /** Rust's call: hold the answer for a rebuilt screen, and redraw the bars now if there's one. */
+  /** Rust's call: redraw the bars now, if there's a screen. */
   @JvmStatic
   fun follow(light: Boolean) {
-    last = light
     val screen = activity?.get() ?: return
     screen.runOnUiThread { draw(screen, light) }
   }

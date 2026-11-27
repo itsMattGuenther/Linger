@@ -30,12 +30,11 @@ class MainActivity : TauriActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     // Drawn under the phone's bars, with light icons on the navy Linger
     // opens on (#965, themes.xml), whatever the phone's own dark mode says;
-    // the page turns them dark on Daylight's paper when it says. Only a
-    // screen Android rebuilt (savedInstanceState) keeps the page, which
-    // doesn't say again, so only it takes the page's last answer. It's
-    // registered first, so an answer arriving meanwhile redraws this screen.
-    SystemBars.activity = WeakReference(this)
-    SystemBars.draw(this, savedInstanceState != null && SystemBars.last)
+    // the page turns them dark on Daylight's paper when it says (SystemBars).
+    // Every page starts on that navy, a screen Android rebuilt included:
+    // wry builds its web view afresh then (`CreateWebView` in its android
+    // mod.rs), so the page loads again and says its theme again.
+    SystemBars.draw(this, false)
     // Sign-ins are kept in the Android Keystore (src-tauri/src/secrets.rs),
     // which needs the app's context set up for Rust. tao does that in
     // super.onCreate; setting it up a second time aborted the app as it
@@ -45,6 +44,7 @@ class MainActivity : TauriActivity() {
     PushBridge.activity = WeakReference(this)
     AgeCheck.activity = WeakReference(this)
     LocalNetwork.activity = WeakReference(this)
+    SystemBars.activity = WeakReference(this)
     val actions = IntentFilter().apply {
       addAction(VoiceCallService.MUTE)
       addAction(VoiceCallService.UNMUTE)
@@ -134,7 +134,6 @@ class MainActivity : TauriActivity() {
   // The page, and any call in it, ends with the app's one screen: the bar
   // goes too.
   override fun onDestroy() {
-    if (SystemBars.activity?.get() === this) SystemBars.activity = null
     unregisterReceiver(callBar)
     VoiceCallService.update(applicationContext, null, false, false)
     webView = null
