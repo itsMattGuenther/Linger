@@ -1095,6 +1095,12 @@ it, or another program, runs at the same time.
   a time, in the order they came, so the newest is also the one the phone
   ends on. Tests of two changes answered in either order, and of the asks
   taking turns (`core/appIcon.test.ts`).
+- **#969: a test that set the app's own shown theme.** The test of a
+  restart's handed-over theme wrote the shell's one process-wide theme,
+  which any other test reading it would race, since cargo runs tests side
+  by side. Caught by the fresh review. *Missed because* it was the only
+  test touching it at the time. *Changed:* the shown theme is a store of
+  its own (`Shown` in `theme.rs`), and the test uses its own copy.
 
 ## Counted after the work it limits
 
