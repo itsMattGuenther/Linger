@@ -291,7 +291,8 @@ mod tests {
         }
         assert!(line.contains("customColorSpace=\"sRGB\""));
         let plist = include_str!("../gen/apple/linger-client_iOS/Info.plist");
-        assert!(plist.contains("<key>UIUserInterfaceStyle</key>\n\t<string>Dark</string>"));
+        let plist: String = plist.split_whitespace().collect();
+        assert!(plist.contains("<key>UIUserInterfaceStyle</key><string>Dark</string>"));
         let project = include_str!("../gen/apple/project.yml");
         assert!(project.contains("UIUserInterfaceStyle: Dark"));
         // Android: the starting window and Android 12's launch screen, in
@@ -316,7 +317,14 @@ mod tests {
         let activity = include_str!(
             "../gen/android/app/src/main/java/io/github/itsmattguenther/linger/MainActivity.kt"
         );
-        assert!(activity.contains("SystemBars.draw(this, false)"));
+        assert!(activity.contains("SystemBars.draw(this, SystemBars.last)"));
+        let bars = include_str!(
+            "../gen/android/app/src/main/java/io/github/itsmattguenther/linger/SystemBars.kt"
+        );
+        assert!(
+            bars.contains("var last: Boolean = false"),
+            "a cold start's icons are light"
+        );
     }
 
     #[test]

@@ -5,9 +5,10 @@
 #
 # Reads one JSON command per line on stdin and answers each with one line,
 # "LINGER-REPLY {json}", so Add-Type is compiled once rather than per step.
-# It only ever touches the window handle it's given and the windows inside it:
-# it never lists, names or looks at any other window. Run only on a disposable
-# runner.
+# It only ever touches the window handle it's given and the windows inside it,
+# and finds the list among Linger's own top-level windows, by Linger's threads
+# and the window class alone: it never lists, names or looks at another
+# program's window. Run only on a disposable runner.
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 Add-Type @'
@@ -29,10 +30,6 @@ public static class LingerWindowProbe {
   // How many windows inside this one (WebView2's own, here) are shown, and
   // how many there are. Only counted: nothing about them is read.
   [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] public static extern IntPtr GetWindowLongPtr(IntPtr h, int index);
-  // Of the windows inside this one (WebView2's own, here): how many are shown
-  // on screen, how many are set to show themselves (WS_VISIBLE, whatever
-  // their parent does), and how many there are. Only counted: nothing about
-  // them is read.
   [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr h, uint cmd);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(IntPtr h, System.Text.StringBuilder s, int n);
   [DllImport("user32.dll")] public static extern bool EnumThreadWindows(uint thread, ChildProc f, IntPtr l);
@@ -52,6 +49,10 @@ public static class LingerWindowProbe {
     }
     return found;
   }
+  // Of the windows inside this one (WebView2's own, here): how many are shown
+  // on screen, how many are set to show themselves (WS_VISIBLE, whatever
+  // their parent does), and how many there are. Only counted: nothing about
+  // them is read.
   public static int[] ShownChildren(IntPtr parent) {
     int shown = 0, styled = 0, all = 0;
     EnumChildWindows(parent, (h, l) => {

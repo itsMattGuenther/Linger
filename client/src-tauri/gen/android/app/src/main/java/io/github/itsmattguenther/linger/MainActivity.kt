@@ -30,8 +30,10 @@ class MainActivity : TauriActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     // Drawn under the phone's bars, with light icons on the navy Linger
     // opens on (#965, themes.xml), whatever the phone's own dark mode says;
-    // the page turns them dark on Daylight's paper when it says (SystemBars).
-    SystemBars.draw(this, false)
+    // the page turns them dark on Daylight's paper when it says. A screen
+    // Android rebuilt keeps the page, so it takes the page's last answer
+    // (SystemBars.last), which is light-icons-on-navy at a cold start.
+    SystemBars.draw(this, SystemBars.last)
     // Sign-ins are kept in the Android Keystore (src-tauri/src/secrets.rs),
     // which needs the app's context set up for Rust. tao does that in
     // super.onCreate; setting it up a second time aborted the app as it

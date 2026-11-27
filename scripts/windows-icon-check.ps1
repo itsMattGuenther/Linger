@@ -53,6 +53,7 @@ public static class LingerIconProbe {
   [DllImport("user32.dll", EntryPoint="GetClassLongPtrW")] public static extern IntPtr GetClassLongPtr(IntPtr h, int i);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
   [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr h, uint cmd);
+  [DllImport("user32.dll")] public static extern IntPtr SendMessageTimeout(IntPtr h, uint m, IntPtr w, IntPtr l, uint flags, uint ms, out IntPtr result);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr h, System.Text.StringBuilder s, int n);
   public delegate bool Each(IntPtr h, IntPtr l);
   [DllImport("user32.dll")] public static extern bool EnumThreadWindows(uint thread, Each each, IntPtr l);
@@ -65,7 +66,11 @@ public static class LingerIconProbe {
       EnumThreadWindows((uint)thread, (h, l) => {
         var name = new System.Text.StringBuilder(256);
         GetClassName(h, name, 256);
-        var icon = SendMessage(h, 0x7F, IntPtr.Zero, IntPtr.Zero) != IntPtr.Zero || GetClassLongPtr(h, -34) != IntPtr.Zero;
+        // A window whose thread doesn't answer in 200 ms reads as no icon
+        // (SMTO_ABORTIFHUNG), so a listing never waits on a stuck thread.
+        IntPtr asked;
+        SendMessageTimeout(h, 0x7F, IntPtr.Zero, IntPtr.Zero, 0x2, 200, out asked);
+        var icon = asked != IntPtr.Zero || GetClassLongPtr(h, -34) != IntPtr.Zero;
         lines.AppendLine(string.Format("  {0} class={1} visible={2} owned={3} icon={4}{5}", h, name, IsWindowVisible(h), GetWindow(h, 4) != IntPtr.Zero, icon, h == found ? "  <- the one found" : ""));
         return true;
       }, IntPtr.Zero);
