@@ -52,7 +52,7 @@ fn look(id: &str) -> Look {
 }
 
 #[cfg(desktop)]
-pub use desktop::{wait_for_theme, waiting, window_color};
+pub use desktop::{ask_to_come_forward, wait_for_theme, window_color};
 
 /// The list window puts a theme on: every window takes its color, and so
 /// does every window opened after, and a list waiting to be shown at start
@@ -91,34 +91,45 @@ mod desktop {
     /// computer's first start still has its page say first.
     const DEADLINE: Duration = Duration::from_secs(10);
 
-    /// A window waiting to be shown until its page has said its theme.
-    /// Ended once, by whichever comes first: the page's word or the
-    /// deadline. The window is shown at the end, so only once.
-    pub(super) struct Wait(Mutex<bool>);
+    /// A window waiting to be shown until its page has said its theme, and
+    /// whether somebody asked meanwhile to bring it forward. Ended once, by
+    /// whichever comes first: the page's word or the deadline. The window
+    /// is shown at the end, so only once.
+    pub(super) struct Wait(Mutex<Option<bool>>);
 
     impl Wait {
         pub(super) const fn new() -> Self {
-            Self(Mutex::new(false))
+            Self(Mutex::new(None))
         }
 
-        fn held(&self) -> std::sync::MutexGuard<'_, bool> {
+        fn held(&self) -> std::sync::MutexGuard<'_, Option<bool>> {
             self.0
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
         }
 
         pub(super) fn start(&self) {
-            *self.held() = true;
+            *self.held() = Some(false);
         }
 
-        pub(super) fn waiting(&self) -> bool {
-            *self.held()
+        /// Somebody asked to bring the window forward. While it waits, it's
+        /// noted for the end of the wait, and this says so: the ask is
+        /// taken. With no wait it says not, and the asker shows it itself.
+        pub(super) fn ask(&self) -> bool {
+            match self.held().as_mut() {
+                Some(asked) => {
+                    *asked = true;
+                    true
+                }
+                None => false,
+            }
         }
 
-        /// End the wait. Says whether this ended it, and so whether to show
-        /// the window now: a second end, or one with no wait, shows nothing.
-        pub(super) fn end(&self) -> bool {
-            std::mem::replace(&mut *self.held(), false)
+        /// End the wait. `None` when it had already ended (or never began):
+        /// nothing to show. Otherwise whether somebody asked meanwhile to
+        /// bring the window forward.
+        pub(super) fn end(&self) -> Option<bool> {
+            self.held().take()
         }
     }
 
@@ -153,20 +164,29 @@ mod desktop {
         });
     }
 
-    /// Whether the list is still waiting for its page's theme. Showing it
-    /// any other way meanwhile (the tray, a second start, a link) is left
-    /// to the page's word, moments away, so it isn't shown in the wrong
-    /// color first (`tray::show_list`).
-    pub fn waiting() -> bool {
-        WAIT.waiting()
+    /// The list is asked to come forward (the tray, a second start, a
+    /// link). While it waits for its page's theme, that's left to the end
+    /// of the wait, moments away, so it isn't shown in another theme's
+    /// color first; this says whether it was (`tray::show_list`).
+    pub fn ask_to_come_forward() -> bool {
+        WAIT.ask()
     }
 
-    /// Shown, restored and focused as the tray's Show Linger does, which
-    /// is also what a start built visible and focused did, and what a
-    /// second start or a link asked for meanwhile wanted.
+    /// At the end of the wait the list is shown as a window built visible
+    /// would have been, taking the focus only as the desktop gives a new
+    /// window it: the end can come late (a slow first start, the
+    /// deadline), when somebody is typing elsewhere. Asked to come forward
+    /// meanwhile, it's shown, restored and focused, as the tray's Show
+    /// Linger does.
     fn show_if_waiting(app: &AppHandle) {
-        if WAIT.end() {
-            crate::tray::show_list(app);
+        match WAIT.end() {
+            Some(true) => crate::tray::show_list(app),
+            Some(false) => {
+                if let Some(list) = app.get_webview_window(crate::window::OWNER) {
+                    let _ = list.show();
+                }
+            }
+            None => {}
         }
     }
 
@@ -196,11 +216,20 @@ mod desktop {
         fn a_waiting_window_is_shown_once() {
             let wait = Wait::new();
             wait.start();
-            assert!(wait.waiting());
-            assert!(wait.end(), "the page's word shows it");
-            assert!(!wait.waiting());
-            assert!(!wait.end(), "the deadline after it shows nothing");
-            assert!(!wait.end(), "nor a second word");
+            assert_eq!(wait.end(), Some(false), "the page's word shows it");
+            assert_eq!(wait.end(), None, "the deadline after it shows nothing");
+            assert_eq!(wait.end(), None, "nor a second word");
+        }
+
+        #[test]
+        fn an_ask_to_come_forward_during_the_wait_is_kept_for_its_end() {
+            let wait = Wait::new();
+            wait.start();
+            assert!(wait.ask(), "taken while it waits");
+            assert!(wait.ask());
+            assert_eq!(wait.end(), Some(true), "brought forward at the end");
+            assert!(!wait.ask(), "after the wait the asker shows it");
+            assert_eq!(wait.end(), None);
         }
 
         #[test]
@@ -208,8 +237,8 @@ mod desktop {
             // A start into the tray (#772): the list stays hidden there,
             // whatever the page says or the deadline.
             let wait = Wait::new();
-            assert!(!wait.waiting());
-            assert!(!wait.end());
+            assert!(!wait.ask());
+            assert_eq!(wait.end(), None);
         }
     }
 }

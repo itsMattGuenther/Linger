@@ -248,9 +248,10 @@ fn build(app: &App) -> tauri::Result<()> {
 /// Bring the list back: shown, restored and focused, and its page told it's
 /// seen again (#594).
 pub fn show_list(app: &AppHandle) {
-    // At start the list waits for its page to say its theme and is shown
-    // then, moments away (#965, `theme.rs`), rather than now in another's.
-    if crate::theme::waiting() {
+    // At start the list waits for its page to say its theme and comes
+    // forward then, moments away (#965, `theme.rs`), rather than now in
+    // another theme's color.
+    if crate::theme::ask_to_come_forward() {
         return;
     }
     if let Some(list) = app.get_webview_window("main") {
