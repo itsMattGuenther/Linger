@@ -154,6 +154,12 @@ to be right for every shape that window takes.
   looks in `/usr/lib`, `/usr/lib64` and `/usr/lib/x86_64-linux-gnu`, and never
   mounts a file that isn't there (Docker makes an empty directory in its
   place). Rule in `docs/testing-strategy.md`.
+- **#970: a test that matched a file's line endings.** The phone test looked
+  for two lines of the iPhone's `Info.plist` joined by a newline, which a
+  Windows checkout (`* text=auto`, Git for Windows' line endings) writes as
+  `\r\n`, so it failed there with the file right. Caught by the fresh
+  review. *Missed because* it was written and run on Linux. *Changed:* it
+  compares the file with its whitespace taken out.
 
 ## A test of the source, not of what it does
 
