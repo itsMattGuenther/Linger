@@ -22,7 +22,7 @@
   max-width: calc(100vw - var(--space-8));
   padding: var(--space-3) var(--space-3) var(--space-3) var(--space-3-5);
   border-radius: var(--radius-xl);
-  border: 1px solid var(--white-a10);
+  border: 1px solid var(--ink-a10);
   background: var(--surface-popover);
   box-shadow: var(--shadow-popover);
   animation: k-pop-in var(--duration-base) var(--ease-out);
@@ -67,14 +67,14 @@
 
 .k-popover[data-arrow="left"]::before {
   left: calc(-1 * var(--space-1-5));
-  border-left: 1px solid var(--white-a10);
-  border-bottom: 1px solid var(--white-a10);
+  border-left: 1px solid var(--ink-a10);
+  border-bottom: 1px solid var(--ink-a10);
 }
 
 .k-popover[data-arrow="right"]::before {
   right: calc(-1 * var(--space-1-5));
-  border-right: 1px solid var(--white-a10);
-  border-top: 1px solid var(--white-a10);
+  border-right: 1px solid var(--ink-a10);
+  border-top: 1px solid var(--ink-a10);
 }
 
 @keyframes k-pop-in {

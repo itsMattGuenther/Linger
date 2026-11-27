@@ -63,7 +63,11 @@
   --red-ink: #ffc9c4;
   --green-1: #7cc98f;
 
-  /* Translucent layers, written once here so components never need `rgb()`. */
+  /* Translucent layers, written once here so components never need `rgb()`.
+     `--ink-aNN` is a thin layer of the ink's side of the scale: white on a
+     dark theme, where it lifts a fill or draws an edge, and navy on a light
+     one (#965), where the same layer has to darken. `--black-aNN` is the
+     other side, the shade under a scrim or a shadow, in every theme. */
   --lamp-a06: rgb(243 181 92 / 0.06);
   --lamp-a08: rgb(243 181 92 / 0.08);
   --lamp-a12: rgb(243 181 92 / 0.12);
@@ -77,12 +81,12 @@
   --sign-a10: rgb(46 197 242 / 0.1);
   --sign-a28: rgb(46 197 242 / 0.28);
   --sign-a38: rgb(46 197 242 / 0.38);
-  --white-a02: rgb(255 255 255 / 0.02);
-  --white-a04: rgb(255 255 255 / 0.04);
-  --white-a06: rgb(255 255 255 / 0.06);
-  --white-a07: rgb(255 255 255 / 0.07);
-  --white-a09: rgb(255 255 255 / 0.09);
-  --white-a10: rgb(255 255 255 / 0.1);
+  --ink-a02: rgb(255 255 255 / 0.02);
+  --ink-a04: rgb(255 255 255 / 0.04);
+  --ink-a06: rgb(255 255 255 / 0.06);
+  --ink-a07: rgb(255 255 255 / 0.07);
+  --ink-a09: rgb(255 255 255 / 0.09);
+  --ink-a10: rgb(255 255 255 / 0.1);
   --black-a45: rgb(0 0 0 / 0.45);
   --black-a60: rgb(0 0 0 / 0.6);
   --black-a70: rgb(0 0 0 / 0.7);
@@ -115,8 +119,8 @@
   --surface-control: var(--night-8);
   --surface-control-hover: var(--night-9);
   --surface-control-edge: var(--night-9);
-  --surface-subtle: var(--white-a04);
-  --surface-subtle-hover: var(--white-a07);
+  --surface-subtle: var(--ink-a04);
+  --surface-subtle-hover: var(--ink-a07);
 
   /* Text. Three tiers and nothing dimmer (see `--ink-4`). */
   --text-primary: var(--ink-1);
@@ -182,7 +186,7 @@
 
   /* The focused window's edge, from the logo's sign. */
   --window-focus-edge: var(--sign-a38);
-  --window-edge: var(--white-a07);
+  --window-edge: var(--ink-a07);
 
   /* The band that crosses a shimmering name (SPEC §4.5). `lib/names.ts`
      and `kit/Name.css` read it. */
@@ -192,13 +196,13 @@
   --shadow-window:
     0 30px 70px -20px var(--black-a60),
     0 10px 24px -8px var(--black-a45),
-    inset 0 1px 0 var(--white-a04);
+    inset 0 1px 0 var(--ink-a04);
   --shadow-window-focused:
     0 0 0 1px var(--sign-a10),
     0 0 28px -6px var(--sign-a28),
     0 34px 80px -20px var(--black-a70),
     0 10px 24px -8px var(--black-a45),
-    inset 0 1px 0 var(--white-a04);
+    inset 0 1px 0 var(--ink-a04);
   --shadow-popover: 0 24px 60px -16px var(--black-a70);
   --shadow-notice: 0 16px 40px -12px var(--black-a60);
 }
@@ -420,7 +424,7 @@
 
    A see-through token's number is The door's strength. A theme may lay the
    lamp on thicker than `--lamp-a08` says, make it from a deeper amber, or tint
-   `--white-aNN` and `--black-aNN` toward its own ground.
+   `--ink-aNN` and `--black-aNN` toward its own ground.
 
    The values are the mockups Matt approved on 2026-11-26, written as OKLCH
    and turned into hex. */
@@ -472,12 +476,12 @@
   --sign-a10: rgb(46 174 213 / 0.1);
   --sign-a28: rgb(46 174 213 / 0.28);
   --sign-a38: rgb(46 174 213 / 0.38);
-  --white-a02: rgb(255 255 255 / 0.02);
-  --white-a04: rgb(255 255 255 / 0.04);
-  --white-a06: rgb(255 255 255 / 0.06);
-  --white-a07: rgb(255 255 255 / 0.07);
-  --white-a09: rgb(255 255 255 / 0.09);
-  --white-a10: rgb(255 255 255 / 0.1);
+  --ink-a02: rgb(255 255 255 / 0.02);
+  --ink-a04: rgb(255 255 255 / 0.04);
+  --ink-a06: rgb(255 255 255 / 0.06);
+  --ink-a07: rgb(255 255 255 / 0.07);
+  --ink-a09: rgb(255 255 255 / 0.09);
+  --ink-a10: rgb(255 255 255 / 0.1);
   --black-a45: rgb(0 0 0 / 0.45);
   --black-a60: rgb(0 0 0 / 0.6);
   --black-a70: rgb(0 0 0 / 0.7);
@@ -535,12 +539,12 @@
   --sign-a10: rgb(46 197 242 / 0.1);
   --sign-a28: rgb(46 197 242 / 0.28);
   --sign-a38: rgb(46 197 242 / 0.38);
-  --white-a02: rgb(255 246 232 / 0.02);
-  --white-a04: rgb(255 246 232 / 0.04);
-  --white-a06: rgb(255 246 232 / 0.06);
-  --white-a07: rgb(255 246 232 / 0.07);
-  --white-a09: rgb(255 246 232 / 0.09);
-  --white-a10: rgb(255 246 232 / 0.1);
+  --ink-a02: rgb(255 246 232 / 0.02);
+  --ink-a04: rgb(255 246 232 / 0.04);
+  --ink-a06: rgb(255 246 232 / 0.06);
+  --ink-a07: rgb(255 246 232 / 0.07);
+  --ink-a09: rgb(255 246 232 / 0.09);
+  --ink-a10: rgb(255 246 232 / 0.1);
   --black-a45: rgb(0 0 0 / 0.45);
   --black-a60: rgb(0 0 0 / 0.6);
   --black-a70: rgb(0 0 0 / 0.7);
@@ -599,12 +603,12 @@
   --sign-a10: rgb(46 197 242 / 0.1);
   --sign-a28: rgb(46 197 242 / 0.28);
   --sign-a38: rgb(46 197 242 / 0.38);
-  --white-a02: rgb(255 255 255 / 0.02);
-  --white-a04: rgb(255 255 255 / 0.04);
-  --white-a06: rgb(255 255 255 / 0.06);
-  --white-a07: rgb(255 255 255 / 0.07);
-  --white-a09: rgb(255 255 255 / 0.09);
-  --white-a10: rgb(255 255 255 / 0.1);
+  --ink-a02: rgb(255 255 255 / 0.02);
+  --ink-a04: rgb(255 255 255 / 0.04);
+  --ink-a06: rgb(255 255 255 / 0.06);
+  --ink-a07: rgb(255 255 255 / 0.07);
+  --ink-a09: rgb(255 255 255 / 0.09);
+  --ink-a10: rgb(255 255 255 / 0.1);
   --black-a45: rgb(5 9 26 / 0.45);
   --black-a60: rgb(5 9 26 / 0.6);
   --black-a70: rgb(5 9 26 / 0.7);
@@ -664,12 +668,12 @@
   --sign-a10: rgb(46 197 242 / 0.1);
   --sign-a28: rgb(46 197 242 / 0.28);
   --sign-a38: rgb(46 197 242 / 0.38);
-  --white-a02: rgb(255 242 228 / 0.02);
-  --white-a04: rgb(255 242 228 / 0.04);
-  --white-a06: rgb(255 242 228 / 0.06);
-  --white-a07: rgb(255 242 228 / 0.07);
-  --white-a09: rgb(255 242 228 / 0.09);
-  --white-a10: rgb(255 242 228 / 0.1);
+  --ink-a02: rgb(255 242 228 / 0.02);
+  --ink-a04: rgb(255 242 228 / 0.04);
+  --ink-a06: rgb(255 242 228 / 0.06);
+  --ink-a07: rgb(255 242 228 / 0.07);
+  --ink-a09: rgb(255 242 228 / 0.09);
+  --ink-a10: rgb(255 242 228 / 0.1);
   --black-a45: rgb(0 4 15 / 0.45);
   --black-a60: rgb(0 4 15 / 0.6);
   --black-a70: rgb(0 4 15 / 0.7);

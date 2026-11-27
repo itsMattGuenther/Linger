@@ -80,7 +80,7 @@
 /* secondary: a quiet outline. */
 .k-button[data-variant="secondary"],
 .k-button[data-variant="danger"] {
-  background: var(--white-a02);
+  background: var(--ink-a02);
   border-color: var(--hairline-strong);
   color: var(--text-secondary);
 }

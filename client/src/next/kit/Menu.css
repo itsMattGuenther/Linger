@@ -7,7 +7,7 @@
   width: var(--menu-w);
   padding: var(--space-1);
   border-radius: var(--radius-md);
-  border: 1px solid var(--white-a10);
+  border: 1px solid var(--ink-a10);
   background: var(--surface-popover);
   box-shadow: var(--shadow-popover);
   /* Only in a window too short for it either way: it scrolls (kit/place.ts). */

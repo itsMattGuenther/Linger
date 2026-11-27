@@ -175,7 +175,7 @@ one.
   does in After dark and Porch light.
 - **A see-through token's number is The door's strength.** A theme may lay
   the lamp on thicker than `--lamp-a08` says, make it from a deeper amber,
-  or tint `--white-aNN` and `--black-aNN` toward its own ground.
+  or tint `--ink-aNN` and `--black-aNN` toward its own ground.
 - **A theme works on any element, not only the page.** The roles are
   declared again wherever `data-theme` is, so each resolves from that
   element's own primitives. That's how the Theme picker shows each choice in
