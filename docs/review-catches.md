@@ -994,6 +994,17 @@ on a world that has changed.
   scroll the list did it to each one. Caught by the fresh review. *Missed
   because* pointing was written for a mouse and tested with one. *Changed:*
   pointing is a mouse or a pen, with a test that a touch doesn't cross.
+- **#968 (2 catches): a hidden window shown later, from one platform's
+  focus.** With the list held hidden until its page said its theme, the
+  update restart that must come back without the focus (#772) was shown
+  with it on Windows, where tao forgets "not focused" once a window is
+  built; and a second start or a link during the wait was dropped. Caught
+  by the fresh review. *Missed because* the focus was read from what a
+  window does when it's built, not from what showing it later does on
+  each platform. *Changed:* that restart doesn't wait, and the wait ends
+  as Show Linger brings the list back, with a test of which start waits.
+  The next rounds found each per-platform answer wrong somewhere else, so
+  the rule went back to the plain one.
 
 ## Code only one platform compiles
 

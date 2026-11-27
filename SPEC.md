@@ -1733,7 +1733,9 @@ older messages fade less (§4.7).
 
 **The app around the page follows the theme too.** On a computer every window opens in
 the theme's window color, so none shows another theme's for a moment before its page
-draws. On a phone the status bar's and navigation bar's icons are dark on Daylight and
+draws; at start the list waits, hidden, until its page has said which theme it's in
+(but after an update restarts Linger by itself behind other windows, which mustn't take the focus).
+On a phone the status bar's and navigation bar's icons are dark on Daylight and
 light on the dark themes, whatever the phone's own dark mode says.
 
 Evening warmth still waits for an evening version of these colors: Porch light is the
