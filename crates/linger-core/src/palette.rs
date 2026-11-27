@@ -2,15 +2,28 @@
 //!
 //! Colors travel as *named keys* (`"azure"`), never as hex or OKLCH literals. Each
 //! key maps to one OKLCH hue at one lightness, so contrast against the background is
-//! guaranteed by construction and nothing is clamped at runtime. The app is dark
-//! only (SPEC §5.3). The property test at the bottom asserts ≥4.5:1 for all 16 keys,
-//! against the background and its evening version, and runs in CI — it is the guard
-//! against someone "improving" a value later.
+//! guaranteed by construction and nothing is clamped at runtime.
+//!
+//! Two sets of the same 16 hues (SPEC §5.3, §5.4): the dark themes' names at
+//! lightness 0.76, and Daylight's (#965), the light theme, at 0.50 so they read on
+//! paper. A key is the same person's color in both; only the shade a theme draws it
+//! in changes. The property tests at the bottom assert ≥4.5:1 for all 16 keys of
+//! each set against its grounds, and run in CI: they are the guard against
+//! someone "improving" a value later.
 
 /// oklch(0.76 0.13 hue) · slate: chroma 0.02.
 const LIGHTNESS: f64 = 0.76;
 const CHROMA: f64 = 0.13;
 const SLATE_C: f64 = 0.02;
+
+/// Daylight's names (#965): oklch(0.50 0.13 hue), slate at chroma 0.025, with
+/// the chroma of some hues capped (`PaletteColor::light_chroma`).
+const LIGHT_LIGHTNESS: f64 = 0.5;
+const LIGHT_SLATE_C: f64 = 0.025;
+
+/// The theme the light set is for: the client's `[data-theme="daylight"]`
+/// (`client/src/next/core/theme.ts`).
+const LIGHT_THEME: &str = "daylight";
 
 /// The background the palette must hold ≥4.5:1 against (SPEC §5.3 surface-0).
 pub const DARK_BG: &str = "#16181C";
@@ -24,6 +37,15 @@ pub const DARK_BG: &str = "#16181C";
 /// a temperature change, not a brightness change.
 pub const DARK_BG_WARM: &str = "#1A1714";
 
+/// Daylight's window (`--surface-window` there, #965): the paper the light set
+/// must hold ≥4.5:1 against.
+pub const LIGHT_BG: &str = "#F6F8FB";
+
+/// Daylight's hovered or selected row, the darkest ground a name sits on there.
+/// `client/src/next/styles/contrast.test.ts` checks every ground and the card
+/// washes; this keeps the guarantee here too, where the values are.
+pub const LIGHT_BG_HOVER: &str = "#E4EAF5";
+
 /// One named palette entry: a key and its OKLCH hue.
 #[derive(Debug, Clone, Copy)]
 pub struct PaletteColor {
@@ -31,13 +53,24 @@ pub struct PaletteColor {
     pub hue: f64,
     /// slate is the one desaturated entry (chroma 0.02 instead of 0.13).
     pub muted: bool,
+    /// Its chroma in the light set. 0.13 where the screen can show the hue
+    /// that strong at lightness 0.50; where it can't, the most it can, to
+    /// three places, so the hue stays true. Asked for more, the screen would
+    /// clip it toward a neighbour: amber at 0.13 comes out rust.
+    pub light_chroma: f64,
 }
 
 const fn c(key: &'static str, hue: f64) -> PaletteColor {
+    capped(key, hue, CHROMA)
+}
+
+/// A hue whose light shade is weaker than 0.13 (see `light_chroma`).
+const fn capped(key: &'static str, hue: f64, light_chroma: f64) -> PaletteColor {
     PaletteColor {
         key,
         hue,
         muted: false,
+        light_chroma,
     }
 }
 
@@ -45,14 +78,14 @@ const fn c(key: &'static str, hue: f64) -> PaletteColor {
 pub const PALETTE: [PaletteColor; 16] = [
     c("ember", 32.0),
     c("rust", 50.0),
-    c("amber", 68.0),
-    c("brass", 90.0),
-    c("lime", 118.0),
+    capped("amber", 68.0, 0.109),
+    capped("brass", 90.0, 0.102),
+    capped("lime", 118.0, 0.116),
     c("fern", 145.0),
-    c("mint", 162.0),
-    c("teal", 180.0),
-    c("cyan", 200.0),
-    c("sky", 230.0),
+    capped("mint", 162.0, 0.109),
+    capped("teal", 180.0, 0.09),
+    capped("cyan", 200.0, 0.085),
+    capped("sky", 230.0, 0.099),
     c("azure", 255.0),
     c("indigo", 275.0),
     c("violet", 295.0),
@@ -62,6 +95,7 @@ pub const PALETTE: [PaletteColor; 16] = [
         key: "slate",
         hue: 250.0,
         muted: true,
+        light_chroma: LIGHT_SLATE_C,
     },
 ];
 
@@ -77,33 +111,58 @@ pub fn get(key: &str) -> Option<&'static PaletteColor> {
 }
 
 impl PaletteColor {
-    /// The OKLCH components for this color.
+    /// The OKLCH components for this color, as the dark themes draw it.
     #[must_use]
     pub fn oklch(&self) -> (f64, f64, f64) {
         let chroma = if self.muted { SLATE_C } else { CHROMA };
         (LIGHTNESS, chroma, self.hue)
     }
 
+    /// The OKLCH components for this color in the light set, as Daylight
+    /// draws it (#965): the same hue, dark enough to read on paper.
+    #[must_use]
+    pub fn light_oklch(&self) -> (f64, f64, f64) {
+        (LIGHT_LIGHTNESS, self.light_chroma, self.hue)
+    }
+
     /// sRGB hex fallback (`#rrggbb`), gamut-clipped. The build ships these in case
     /// the target WebKitGTK's `oklch()` support falls through (SPEC §5.4).
     #[must_use]
     pub fn hex(&self) -> String {
-        let (l, ch, h) = self.oklch();
-        let (r, g, b) = oklch_to_srgb(l, ch, h);
-        format!(
-            "#{:02X}{:02X}{:02X}",
-            (r * 255.0).round() as u8,
-            (g * 255.0).round() as u8,
-            (b * 255.0).round() as u8
-        )
+        hex_of(self.oklch())
+    }
+
+    /// The light set's hex (`#rrggbb`), as `hex` is the dark set's.
+    #[must_use]
+    pub fn light_hex(&self) -> String {
+        hex_of(self.light_oklch())
     }
 
     /// The `oklch()` CSS literal for this color.
     #[must_use]
     pub fn css_oklch(&self) -> String {
-        let (l, ch, h) = self.oklch();
-        format!("oklch({l} {ch} {h})")
+        css_of(self.oklch())
     }
+
+    /// The light set's `oklch()` CSS literal.
+    #[must_use]
+    pub fn css_light_oklch(&self) -> String {
+        css_of(self.light_oklch())
+    }
+}
+
+fn hex_of((l, ch, h): (f64, f64, f64)) -> String {
+    let (r, g, b) = oklch_to_srgb(l, ch, h);
+    format!(
+        "#{:02X}{:02X}{:02X}",
+        (r * 255.0).round() as u8,
+        (g * 255.0).round() as u8,
+        (b * 255.0).round() as u8
+    )
+}
+
+fn css_of((l, ch, h): (f64, f64, f64)) -> String {
+    format!("oklch({l} {ch} {h})")
 }
 
 /// CSS custom properties for every palette entry, e.g.
@@ -126,7 +185,21 @@ pub fn css_variables() -> String {
         .join("\n")
 }
 
-/// The whole generated stylesheet: every key, on `:root`, one file.
+/// The same for the light set (#965), `--name-azure: oklch(0.5 0.13 255);`,
+/// which Daylight declares over the dark set.
+#[must_use]
+pub fn css_light_variables() -> String {
+    PALETTE
+        .iter()
+        .map(|p| format!("--name-{}: {};", p.key, p.css_light_oklch()))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// The whole generated stylesheet, one file: every key on `:root`, as the
+/// dark themes draw them, and again on `[data-theme="daylight"]`, as the
+/// light one does (#965). A theme on one element, as in the Theme picker,
+/// takes its block too.
 ///
 /// The client imports the result as `palette.generated.css`.
 #[must_use]
@@ -142,14 +215,20 @@ pub fn stylesheet() -> String {
  * Colors are palette *keys* everywhere else in this codebase (AGENTS rule 12).
  * This file is the one place a key becomes a color, and these values are the
  * only reason `var(--name-azure)` draws anything.
+ *
+ * Two shades of each key: the dark themes' on `:root`, and Daylight's, the
+ * light theme, darker so they read on paper (#965, SPEC §5.4).
  */"#;
 
-    let body = css_variables()
-        .lines()
-        .map(|line| format!("  {line}"))
-        .collect::<Vec<_>>()
-        .join("\n");
-    format!("{HEADER}\n\n:root {{\n{body}\n}}\n")
+    let indent = |css: String| {
+        css.lines()
+            .map(|line| format!("  {line}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let dark = indent(css_variables());
+    let light = indent(css_light_variables());
+    format!("{HEADER}\n\n:root {{\n{dark}\n}}\n\n[data-theme=\"{LIGHT_THEME}\"] {{\n{light}\n}}\n")
 }
 
 /// Where the generated stylesheet is written, next to the ts-rs bindings.
@@ -175,6 +254,17 @@ fn generated_dir() -> std::path::PathBuf {
 // ---------------------------------------------------------------------------
 
 fn oklch_to_srgb(l: f64, chroma: f64, hue_deg: f64) -> (f64, f64, f64) {
+    let (r, g, b) = oklch_to_linear(l, chroma, hue_deg);
+    (
+        gamma(r.clamp(0.0, 1.0)),
+        gamma(g.clamp(0.0, 1.0)),
+        gamma(b.clamp(0.0, 1.0)),
+    )
+}
+
+/// Linear sRGB, unclamped: a channel outside 0–1 is a color the screen can't
+/// show, which `oklch_to_srgb` would clip.
+fn oklch_to_linear(l: f64, chroma: f64, hue_deg: f64) -> (f64, f64, f64) {
     let hr = hue_deg.to_radians();
     let a = chroma * hr.cos();
     let b = chroma * hr.sin();
@@ -191,11 +281,7 @@ fn oklch_to_srgb(l: f64, chroma: f64, hue_deg: f64) -> (f64, f64, f64) {
     let g = -1.268_438_004_6 * l3 + 2.609_757_401_1 * m3 - 0.341_319_396_5 * s3;
     let b = -0.004_196_086_3 * l3 - 0.703_418_614_7 * m3 + 1.707_614_701_0 * s3;
 
-    (
-        gamma(r.clamp(0.0, 1.0)),
-        gamma(g.clamp(0.0, 1.0)),
-        gamma(b.clamp(0.0, 1.0)),
-    )
+    (r, g, b)
 }
 
 fn gamma(linear: f64) -> f64 {
@@ -263,6 +349,85 @@ mod tests {
         }
     }
 
+    /// The same guard for the light set (#965): every key at ≥4.5:1 on
+    /// Daylight's paper, and on its hovered row, the darkest ground a name
+    /// sits on there.
+    #[test]
+    fn all_16_keys_hold_contrast_on_paper() {
+        for color in &PALETTE {
+            for bg in [LIGHT_BG, LIGHT_BG_HOVER] {
+                let hex = color.light_hex();
+                let ratio = contrast_ratio(&hex, bg);
+                assert!(
+                    ratio >= 4.5,
+                    "{} is {hex} in the light set → {ratio:.2}:1 against {bg}, below 4.5:1",
+                    color.key
+                );
+            }
+        }
+    }
+
+    /// Whether the screen can show a color without clipping it. A hair of
+    /// leeway for rounding: cyan's cap is 0.000003 inside the edge.
+    fn on_screen((l, ch, h): (f64, f64, f64)) -> bool {
+        let (r, g, b) = oklch_to_linear(l, ch, h);
+        [r, g, b].iter().all(|c| (-1e-9..=1.0 + 1e-9).contains(c))
+    }
+
+    /// A light shade the screen can't show would be clipped toward another
+    /// hue (amber into rust), so each is on the screen, and a capped hue's
+    /// chroma is the most it can show, to three places: 0.001 more is off it.
+    #[test]
+    fn the_light_set_keeps_its_hues() {
+        for color in &PALETTE {
+            let (l, ch, h) = color.light_oklch();
+            assert!(
+                on_screen((l, ch, h)),
+                "{} at chroma {ch} is clipped",
+                color.key
+            );
+            if !color.muted && ch < CHROMA {
+                assert!(
+                    !on_screen((l, ch + 0.001, h)),
+                    "{} could be stronger than {ch} and still on the screen",
+                    color.key
+                );
+            }
+            if !color.muted && on_screen((l, CHROMA, h)) {
+                assert!(
+                    (ch - CHROMA).abs() < f64::EPSILON,
+                    "{} is capped at {ch} though 0.13 is on the screen",
+                    color.key
+                );
+            }
+        }
+    }
+
+    /// The light set is the one Matt approved in the Daylight mockup
+    /// (2026-11-26): lightness 0.50, the same hues, the caps above.
+    #[test]
+    fn the_light_set_is_the_approved_one() {
+        let expected = [
+            "--name-ember: oklch(0.5 0.13 32);",
+            "--name-rust: oklch(0.5 0.13 50);",
+            "--name-amber: oklch(0.5 0.109 68);",
+            "--name-brass: oklch(0.5 0.102 90);",
+            "--name-lime: oklch(0.5 0.116 118);",
+            "--name-fern: oklch(0.5 0.13 145);",
+            "--name-mint: oklch(0.5 0.109 162);",
+            "--name-teal: oklch(0.5 0.09 180);",
+            "--name-cyan: oklch(0.5 0.085 200);",
+            "--name-sky: oklch(0.5 0.099 230);",
+            "--name-azure: oklch(0.5 0.13 255);",
+            "--name-indigo: oklch(0.5 0.13 275);",
+            "--name-violet: oklch(0.5 0.13 295);",
+            "--name-orchid: oklch(0.5 0.13 320);",
+            "--name-rose: oklch(0.5 0.13 350);",
+            "--name-slate: oklch(0.5 0.025 250);",
+        ];
+        assert_eq!(css_light_variables().lines().collect::<Vec<_>>(), expected);
+    }
+
     #[test]
     fn palette_is_exactly_the_named_16() {
         assert_eq!(PALETTE.len(), 16);
@@ -296,15 +461,28 @@ mod tests {
         assert!(!css.contains('#'));
     }
 
+    /// Two blocks, the dark set on `:root` and the light set on Daylight,
+    /// each defining every key once, and nothing else.
     #[test]
-    fn stylesheet_defines_every_key_once() {
+    fn stylesheet_defines_every_key_once_in_each_set() {
         let css = stylesheet();
-        assert!(css.contains(":root {"));
-        assert!(!css.contains("data-theme"));
-        for color in &PALETTE {
-            let count = css.matches(&format!("--name-{}:", color.key)).count();
-            assert_eq!(count, 1, "{} is not defined exactly once", color.key);
+        let (dark, light) = css
+            .split_once("[data-theme=\"daylight\"] {")
+            .expect("the light set's block");
+        let dark = &dark[dark.find(":root {").expect("the dark set's block")..];
+        assert_eq!(css.matches('{').count(), 2, "two blocks and no more");
+        for (set, block) in [("dark", dark), ("light", light)] {
+            for color in &PALETTE {
+                let count = block.matches(&format!("--name-{}:", color.key)).count();
+                assert_eq!(
+                    count, 1,
+                    "{} is not defined exactly once in the {set} set",
+                    color.key
+                );
+            }
         }
+        assert!(dark.contains("--name-azure: oklch(0.76 0.13 255);"));
+        assert!(light.contains("--name-azure: oklch(0.5 0.13 255);"));
     }
 
     /// Writing a source file from a test is the same trick ts-rs plays next

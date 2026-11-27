@@ -1,5 +1,5 @@
 /**
- * The app's color themes (SPEC §5.3, #963, #964): which there are, the one
+ * The app's color themes (SPEC §5.3, #963, #964, #965): which there are, the one
  * this computer or phone has chosen, and putting it on the page.
  *
  * A theme is a set of values for the color tokens (`styles/tokens.css`, a
@@ -22,6 +22,7 @@ export const THEMES = [
   { id: "porch-light", name: "Porch light" },
   { id: "dusk", name: "Dusk" },
   { id: "original", name: "The original" },
+  { id: "daylight", name: "Daylight" },
 ] as const;
 
 export type ThemeId = (typeof THEMES)[number]["id"];

@@ -417,7 +417,9 @@
    of layer 1, even one the same as The door's: a theme on one element (a
    preview in the Theme picker) would otherwise take that color from the
    page's theme. It sets a role only where a mix needs another strength, and
-   nothing The door lacks. Every theme keeps the 16 name colors.
+   nothing The door lacks. Every dark theme keeps the 16 name colors; the
+   light one, Daylight, has a darker set of the same, from linger-core's
+   palette (palette.generated.css), and says it is light (color-scheme).
    `contrast.test.ts` holds each block to all of that, lays it over The door
    and checks it at the same floors, and `core/theme.ts` lists the ones
    Settings offers.
@@ -677,6 +679,87 @@
   --black-a45: rgb(0 4 15 / 0.45);
   --black-a60: rgb(0 4 15 / 0.6);
   --black-a70: rgb(0 4 15 / 0.7);
+}
+
+/* Daylight (#965): the light theme. Paper grounds with a little of the
+   Daylight icon's blue (#dbe2f5 is the backdrop) and navy text (#1d2538).
+   Every color flips: lines, the see-through layers and the shadows are dark
+   on light, and the 16 names are a darker set from linger-core's palette
+   (palette.generated.css), the same hues at lightness 0.50. The lamp is a
+   deep ochre for words and marks, and its washes a bright amber, laid on by
+   eye rather than by The door's numbers: amber on paper reads far stronger
+   than on night, so the voice you're in stays a tint while an unread row
+   gets a clear wash. Amber still means new. */
+[data-theme="daylight"] {
+  color-scheme: light;
+
+  --night-0: #dbe2f5;
+  --night-1: #ebeef5;
+  --night-2: #f6f8fb;
+  --night-3: #ebeef7;
+  --night-4: #fdfdff;
+  --night-5: #ecf0f9;
+  --night-6: #fbfcfe;
+  --night-7: #e4eaf5;
+  --night-8: #d2d9e8;
+  --night-9: #b3bed5;
+
+  --ink-1: #1d2538;
+  --ink-2: #3a455b;
+  --ink-3: #58637b;
+  --ink-4: #768096;
+  --ink-warm: #6b4f34;
+  --ink-warm-2: #5a3e25;
+
+  --hair-1: #dbe0eb;
+  --hair-2: #c9cfde;
+  --hair-3: #99a5be;
+
+  --lamp-1: #935200;
+  --lamp-2: #864900;
+  --lamp-ink: #fffaf2;
+  --sign-1: #008cba;
+  --red-1: #bc3233;
+  --red-ink: #892122;
+  --green-1: #287441;
+
+  --lamp-a06: rgb(248 172 61 / 0.08);
+  --lamp-a08: rgb(248 172 61 / 0.1);
+  --lamp-a12: rgb(248 172 61 / 0.24);
+  --lamp-a16: rgb(248 172 61 / 0.3);
+  --lamp-a28: rgb(248 172 61 / 0.5);
+  --lamp-a45: rgb(248 172 61 / 0.66);
+  --warm-a06: rgb(107 79 52 / 0.072);
+  --warm-a24: rgb(107 79 52 / 0.288);
+  --red-a16: rgb(188 50 51 / 0.16);
+  --red-a42: rgb(188 50 51 / 0.42);
+  --sign-a10: rgb(0 140 186 / 0.1);
+  --sign-a28: rgb(0 140 186 / 0.28);
+  --sign-a38: rgb(0 140 186 / 0.38);
+  --ink-a02: rgb(29 37 56 / 0.022);
+  --ink-a04: rgb(29 37 56 / 0.044);
+  --ink-a06: rgb(29 37 56 / 0.066);
+  --ink-a07: rgb(29 37 56 / 0.077);
+  --ink-a09: rgb(29 37 56 / 0.099);
+  --ink-a10: rgb(29 37 56 / 0.11);
+  --black-a45: rgb(11 17 31 / 0.45);
+  --black-a60: rgb(11 17 31 / 0.6);
+  --black-a70: rgb(11 17 31 / 0.7);
+
+  /* Shadows in navy, softer than night's black, with paper's own light
+     along a window's top edge. */
+  --shadow-window:
+    0 30px 70px -20px rgb(29 37 56 / 0.22),
+    0 10px 24px -8px rgb(29 37 56 / 0.14),
+    inset 0 1px 0 rgb(255 255 255 / 0.6);
+  --shadow-window-focused:
+    0 0 0 1px var(--sign-a10),
+    0 0 28px -6px var(--sign-a28),
+    0 34px 80px -20px rgb(29 37 56 / 0.26),
+    0 10px 24px -8px rgb(29 37 56 / 0.14),
+    inset 0 1px 0 rgb(255 255 255 / 0.6);
+  --shadow-popover: 0 24px 60px -16px rgb(29 37 56 / 0.28);
+  --shadow-notice: 0 16px 40px -12px rgb(29 37 56 / 0.24);
 }
 
 /* The phone (SPEC §4.15, styles/phone.css): rows and the title bar a thumb

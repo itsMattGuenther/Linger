@@ -9,7 +9,7 @@
 // The key and the themes are core/theme.ts's; theme.test.ts checks they
 // match. Anything else, or storage that won't answer, is The door.
 (function () {
-  var THEMES = ["door", "after-dark", "porch-light", "dusk", "original"];
+  var THEMES = ["door", "after-dark", "porch-light", "dusk", "original", "daylight"];
   var theme = "door";
   try {
     var saved = window.localStorage.getItem("linger.next.theme");

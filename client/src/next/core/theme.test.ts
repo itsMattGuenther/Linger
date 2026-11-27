@@ -47,7 +47,7 @@ describe("the theme chosen on this computer or phone (#964)", () => {
   });
 
   it("reads anything it doesn't know as The door: a theme that's gone, or the previous client's dark, light and system", () => {
-    for (const stray of ["daylight", "light", "dark", "system", "", "DUSK", "dusk "]) {
+    for (const stray of ["light", "dark", "system", "", "DUSK", "dusk ", "Daylight", "day-light"]) {
       storage.set(THEME_KEY, stray);
       expect(loadTheme()).toBe("door");
     }

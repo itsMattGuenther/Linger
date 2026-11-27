@@ -28,8 +28,9 @@ type Vars = Map<string, string>;
 
 /**
  * A sheet's top-level rules: each one's selectors and the custom properties
- * it declares. A rule inside an at-rule (`@media`) isn't one: it applies only
- * sometimes, and none of them sets a color.
+ * it declares, with `color-scheme` (whether a theme is light, #965). A rule
+ * inside an at-rule (`@media`) isn't one: it applies only sometimes, and
+ * none of them sets a color.
  */
 function topRules(css: string): Array<{ selectors: string[]; vars: Vars }> {
   const clean = css.replace(/\/\*[\s\S]*?\*\//g, "");
@@ -51,7 +52,7 @@ function topRules(css: string): Array<{ selectors: string[]; vars: Vars }> {
     }
     if (!head.startsWith("@")) {
       const vars: Vars = new Map();
-      for (const found of clean.slice(open + 1, end).matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) {
+      for (const found of clean.slice(open + 1, end).matchAll(/(--[\w-]+|color-scheme)\s*:\s*([^;]+);/g)) {
         if (found[1] && found[2]) vars.set(found[1], found[2].trim());
       }
       rules.push({ selectors: head.split(",").map((selector) => selector.trim()), vars });
@@ -218,6 +219,22 @@ describe("the themes in tokens.css (#964)", () => {
     expect(primitives.length).toBeGreaterThan(40);
     const missing = [...OWN].flatMap(([id, vars]) => (id === "door" ? [] : primitives.filter((name) => !vars.has(name)).map((name) => `${id}: ${name}`)));
     expect(missing, missing.join("\n")).toEqual([]);
+  });
+
+  // Daylight (#965) is the one light theme. It says so, which the engine's
+  // own scrollbars and form parts follow, and draws the 16 names in
+  // linger-core's darker set from the generated palette; every dark theme
+  // says dark and keeps The door's 16.
+  it("say whether they're light, and the light one alone has its own 16 names, from the palette", () => {
+    const light = THEME_IDS.filter((id) => themeVars(id).get("color-scheme") === "light");
+    expect(light).toEqual(["daylight"]);
+    for (const id of THEME_IDS) {
+      expect(themeVars(id).get("color-scheme"), id).toBe(light.includes(id) ? "light" : "dark");
+      const own = PALETTE_KEYS.filter((name) => OWN.get(id)?.has(name));
+      expect(own, id).toEqual(light.includes(id) ? PALETTE_KEYS : []);
+    }
+    const fromPalette = topRules(PALETTE).filter((rule) => rule.selectors.includes('[data-theme="daylight"]'));
+    expect(fromPalette.flatMap((rule) => [...rule.vars.keys()]).sort()).toEqual([...PALETTE_KEYS].sort());
   });
 
   it("set only tokens The door has, so a theme can't add a color nothing else knows", () => {
