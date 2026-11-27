@@ -660,18 +660,25 @@ builds, this workflow and the scripts it runs; `scripts/ci-scope.mjs`,
 `simulator`, says exactly) or is a release's (it adds `docs/releases/<version>.md`) once it's
 out of draft (#933), and by hand. A change to the page or to what both apps
 build waits for the nightly run, which opens an issue when it fails (Matt,
-2026-11-24, after #955: the run is 35 to 60 minutes, and most of its
-failures were GitHub's Mac or the flows). Run it by hand on a branch whose
-change a phone would feel most:
+2026-11-24, after #955: the run was 35 to 60 minutes, and most of its
+failures were GitHub's Mac or the flows). A pull request runs only the
+start flows, the four below tagged `start`, which need no Linger server, so
+no server is built or started: about 20 minutes. The nightly run, a
+release's pull request, a run by hand and a pull request that changes the
+run's own flows, workflow or scripts run every flow, about 40 minutes
+(#971; `scripts/ci-scope.mjs`, `simulatorFlows`). Run it by hand on a
+branch whose change a phone would feel most:
 
 ```bash
 gh workflow run ios-simulator.yml --ref <your-branch>   # whatever the branch changed
 gh workflow run ios-simulator.yml --ref <your-branch> -f xcode=26.6   # with Xcode 26.6, to tell whether a problem is Xcode 27's (#839)
+gh workflow run ios-simulator.yml --ref <your-branch> -f flows=start  # only the start flows, as a pull request runs them
 gh run download <run-id> -n iphone-simulator            # the pictures and logs
 ```
 
 **What it does**, in `client/tests/ios/` (`config.yaml` has the order; each
-flow carries on from where the last left the app):
+flow carries on from where the last left the app; the first four are the
+start flows):
 
 1. `first-screen.yaml`: the app starts and shows the screen for joining a
    server.
@@ -685,7 +692,8 @@ flow carries on from where the last left the app):
 4. `plain-http.yaml`: a server's plain `http://` address is refused with
    "Couldn't reach …", as in every installed app: their CSP
    (`tauri.conf.json`) allows only `https:` and `wss:`. So the check doesn't
-   sign in that way.
+   sign in that way. With the start flows alone, something else answers
+   plain http there, so the app still has something to refuse.
 5. `set-up.yaml`: a real server, built from the branch as a host runs it
    (a release build: a debug one hashes passwords too slowly for the app's
    30-second wait) and running on the same Mac with a temporary data folder,

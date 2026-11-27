@@ -65,6 +65,10 @@ jobs:
           toolchain: stable
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
+          # Saved from main only, never a pull request's (#971): GitHub
+          # keeps 10 GB of caches and drops the oldest, and pull requests'
+          # copies pushed main's out (ios-simulator.yml says more).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: client/src-tauri
           cache-on-failure: true
       - name: Linux build tools

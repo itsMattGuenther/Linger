@@ -83,6 +83,11 @@ jobs:
           toolchain: stable
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Saved from main only, never a pull request's (#971): GitHub
+          # keeps 10 GB of caches and drops the oldest, and pull requests'
+          # copies pushed main's out (ios-simulator.yml says more).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: ffmpeg
         # Video and sound uploads shell out to ffmpeg: it copies each without
         # its tags (#651) and gives a video its poster and duration. The tests
@@ -128,6 +133,8 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # MinIO no longer publishes images or binaries: the Docker Hub image went
       # first (#64), then the quay.io image and the dl.min.io downloads. The
       # source is still public, so build the pinned release from it. The tag is
@@ -378,6 +385,7 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: client/src-tauri
       - name: clippy (shell)
         # The root clippy job can't reach this crate: it is deliberately outside

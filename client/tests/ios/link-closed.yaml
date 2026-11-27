@@ -3,6 +3,8 @@
 # hands a starting link to the scene, not the app, and tao 0.37 doesn't
 # pass that one on (tauri-apps/tao#1248), so this is the check that fails
 # if an invite opened from a closed Linger is lost (#788).
+tags:
+  - start
 appId: io.github.itsmattguenther.linger
 ---
 - stopApp

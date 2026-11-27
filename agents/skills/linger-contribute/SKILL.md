@@ -101,10 +101,11 @@ commits that carry them (`scripts/lint-rules.sh`).
   ready (`gh pr ready`) when it's done and `ci` is green: the iPhone runs on
   a Mac wait until then. They still have to pass before it merges, and `all
   green` doesn't include them, so wait for them even if they showed as
-  skipped while it was a draft. The 35 to 60 minute simulator run happens
-  only when the flows, the code only a phone builds, or the run's own
-  workflow or scripts changed, or it's a release's pull request; the
-  nightly run covers the rest.
+  skipped while it was a draft. The simulator run happens only when the
+  flows, the code only a phone builds, or the run's own workflow or scripts
+  changed, or it's a release's pull request; the nightly run covers the
+  rest. On a pull request it runs the start flows alone (about 20 minutes),
+  and every flow (about 40) for a release's or a change to the run itself.
 - CI runs only the checks your change can reach, by which app builds each
   file (`scripts/ci-scope.mjs`). To run the iPhone simulator on a branch it
   skipped: `gh workflow run ios-simulator.yml --ref <branch>`.

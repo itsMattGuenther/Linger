@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { cfgReach, classify, localPaths, shellModules, shellReach } from "./ci-scope.mjs";
+import { cfgReach, classify, localPaths, shellModules, shellReach, simulatorFlows } from "./ci-scope.mjs";
 
 const active = (paths) => Object.entries(classify(paths)).filter(([, value]) => value).map(([key]) => key);
 for (const paths of [["README.md"], ["docs/testing.md", "LICENSE"], ["docs/screenshots/example.png"]])
@@ -492,4 +492,17 @@ test("a phone module's file runs the simulator, deleted or moved to the desktop 
   assert(!reached(["client/src-tauri/src/tray.rs"], { before: () => null }).includes("simulator"));
   assert(reached(["client/src-tauri/src/phone_scene.rs"], { before: () => null }).includes("simulator"));
   assert(!reached(["client/src-tauri/src/phone_scene.rs"], { read: shell({ [libPath]: withoutScene }) }).includes("simulator"));
+});
+
+test("a pull request runs the simulator's start flows, but everything, a release and the run's own files run every flow (#971)", () => {
+  assert.equal(simulatorFlows([]), "all", "the nightly run and a run by hand");
+  for (const path of ["client/src-tauri/gen/apple/LaunchScreen.storyboard", "client/src-tauri/tauri.ios.conf.json", "client/src-tauri/src/phone_save.rs"])
+    assert.equal(simulatorFlows([path]), "start", path);
+  for (const path of ["client/tests/ios/room.yaml", "client/tests/ios/config.yaml", "client/tests/ios/subflows/type.yaml",
+    ".github/workflows/ios-simulator.yml", "scripts/https-front.mjs", "scripts/share-window-ready.mjs", "scripts/test-certs.sh",
+    "scripts/app-at-rest.mjs", "scripts/maestro-driver.mjs"])
+    assert.equal(simulatorFlows(["client/src-tauri/tauri.ios.conf.json", path]), "all", path);
+  // A release's pull request adds its notes: new, every flow; an older one fixed, not.
+  assert.equal(simulatorFlows(["docs/releases/0.9.9.md"], { before: () => undefined }), "all");
+  assert.equal(simulatorFlows(["client/src-tauri/tauri.ios.conf.json", "docs/releases/0.5.0.md"], { before: () => "old notes" }), "start");
 });

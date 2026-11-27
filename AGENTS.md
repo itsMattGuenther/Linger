@@ -159,11 +159,14 @@ rewritten for it.
   before it merges (#933). `all green` doesn't include them, so wait for
   them; a Mac job skipped while it was a draft isn't one that doesn't apply.
   Push your fixes together, not one at a time: after it's ready, every push
-  runs them again. The longest, the iPhone app in the simulator (35 to 60
-  minutes), runs on a pull request only when it changes what that run
-  builds, drives or runs (the flows, the shell's code and project only a
-  phone builds, its workflow and the scripts it runs) or it's a release's;
-  the nightly run on `main` runs it for the rest (#955).
+  runs them again. The longest, the iPhone app in the simulator, runs on a
+  pull request only when it changes what that run builds, drives or runs
+  (the flows, the shell's code and project only a phone builds, its
+  workflow and the scripts it runs) or it's a release's; the nightly run on
+  `main` runs it for the rest (#955). On a pull request it runs only the
+  start flows, which need no server (about 20 minutes); the nightly run, a
+  release's pull request and a change to the run's own flows or workflow
+  run every flow (about 40, #971).
 - **Before opening a pull request, run `node scripts/pr-questions.mjs`** and
   answer the questions it prints for your change: the kinds of mistake
   reviews have caught, for the parts of the project your branch changed. Say

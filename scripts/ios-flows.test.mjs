@@ -138,6 +138,44 @@ test("the simulator's run is gated on the simulator scope ci-scope.mjs gives, wh
   assert.equal(classify(["client/tests/ios/first-screen.yaml"]).simulator, true);
 });
 
+/** A flow's tags, from its header (above the `---`), as Maestro reads them. */
+export function tagsOf(text) {
+  const header = text.slice(0, text.search(/^---$/m));
+  const at = header.search(/^tags:\s*$/m);
+  if (at < 0) return [];
+  const tags = [];
+  for (const line of header.slice(at).split("\n").slice(1)) {
+    if (!line.trim() || /^\s*#/.test(line)) continue;
+    const item = /^ {2}- (\w[\w-]*)\s*$/.exec(line);
+    if (!item) break;
+    tags.push(item[1]);
+  }
+  return tags;
+}
+
+test("the start flows begin the order and need no server, so a pull request can run them alone (#971)", () => {
+  const order = flowsOrder(readFileSync(join(DIR, "config.yaml"), "utf8"));
+  const start = order.filter((name) => tagsOf(readFileSync(join(DIR, `${name}.yaml`), "utf8")).includes("start"));
+  // Maestro runs the tagged flows that begin flowsOrder, in it, and none after
+  // a gap (ExecutionOrderPlanner, Maestro 2.12.1): so they're its first ones.
+  assert.ok(start.length >= 1, "no flow is tagged start");
+  assert.deepEqual(start, order.slice(0, start.length), "the start flows aren't the first in config.yaml's order");
+  for (const name of start) {
+    const text = readFileSync(join(DIR, `${name}.yaml`), "utf8");
+    assert.doesNotMatch(text, /\$\{(SETUP_LINK|HOST_USERNAME|HOST_PASSWORD|WINDOW_READY)\}/, `${name}.yaml needs the server's run`);
+  }
+  // And the workflow runs them alone, by that tag, when it runs the start flows.
+  const workflow = readFileSync(fileURLToPath(new URL("../.github/workflows/ios-simulator.yml", import.meta.url)), "utf8");
+  assert.match(workflow, /--include-tags start/);
+});
+
+test("a flow's tags are read from its header only", () => {
+  assert.deepEqual(tagsOf("tags:\n  - start\nappId: a\n---\n- launchApp\n"), ["start"]);
+  assert.deepEqual(tagsOf("appId: a\n---\ntags:\n  - start\n"), []);
+  assert.deepEqual(tagsOf("tags:\n  - start\n  # a note\n  - other\nappId: a\n---\n"), ["start", "other"]);
+  assert.deepEqual(tagsOf("appId: a\n---\n"), []);
+});
+
 test("docs/development.md lists the flows in config.yaml's order", () => {
   const order = flowsOrder(readFileSync(join(DIR, "config.yaml"), "utf8"));
   const listed = [...readFileSync(GUIDE, "utf8").matchAll(/^(\d+)\. `([\w-]+)\.yaml`/gm)];

@@ -17,6 +17,14 @@ name: iphone simulator
 # release's pull request, once it's out of draft (#933); the nightly run on
 # main runs it for everything
 # else (scripts/ci-scope.mjs, `simulator`; Matt, 2026-11-24, after #955).
+#
+# And a pull request runs only the start flows (#971): the ones tagged
+# `start` in client/tests/ios, which need no Linger server, so no server is
+# built, started or warmed up, the longest part of the run. Every flow runs
+# for the nightly run, a release's pull request, a run by hand, and a pull
+# request that changes this run's own flows, workflow or scripts
+# (ci-scope.mjs, `simulatorFlows`). Matt, 2026-11-27: "we desperately need
+# the time savings."
 # By hand, it runs on any branch: gh workflow run ios-simulator.yml --ref
 # <branch>. The signed build for TestFlight is ios.yml's.
 # docs/development.md, "The iPhone in the simulator", says how to run the
@@ -29,9 +37,10 @@ name: iphone simulator
 # Apple requires the iOS 27 SDK, in April 2027.
 on:
   # A draft pull request doesn't run it: it starts when the pull request is
-  # marked ready, and on each push after (#933). It's 35 to 60 minutes on a
-  # Mac, and drafts are where a change is still being worked out. Back to
-  # draft, a new run takes the old one's place and stops it.
+  # marked ready, and on each push after (#933). It's a long run on a Mac
+  # (every flow about 40 minutes, the start flows about half that), and
+  # drafts are where a change is still being worked out. Back to draft, a new
+  # run takes the old one's place and stops it.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
@@ -43,6 +52,13 @@ on:
           - "27.1"
           - "26.6"
         default: "27.1"
+      flows:
+        description: Every flow, or only the start flows a pull request runs (to try them)
+        type: choice
+        options:
+          - all
+          - start
+        default: all
   # nightly.yml runs it on main every night, whatever changed.
   workflow_call:
     inputs:
@@ -64,6 +80,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       simulator: ${{ steps.classify.outputs.simulator }}
+      flows: ${{ steps.classify.outputs.flows }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -84,6 +101,10 @@ jobs:
     runs-on: ${{ startsWith(inputs.xcode || '27.1', '26') && 'macos-26' || 'xcode-27' }}
     timeout-minutes: 75
     env:
+      # Every flow (`all`), or the start flows alone, which need no server
+      # (`start`, #971): a pull request's choice from ci-scope.mjs, or a run
+      # by hand's.
+      FLOWS: ${{ inputs.flows || needs.changes.outputs.flows }}
       # Maestro, pinned by version and checksum (its release's
       # checksums_sha256.txt). It talks to the simulator through Apple's
       # XCTest, so nothing else is installed for it but Java.
@@ -133,6 +154,12 @@ jobs:
           # with: restored under Xcode 27, the link looked for Xcode 26.6's
           # libraries and failed (#835). So each Xcode has a cache of its own.
           key: ${{ startsWith(inputs.xcode || '27.1', '27') && 'xcode-27' || '' }}
+          # Saved from main only (the nightly run), never a pull request's
+          # (#971): GitHub keeps 10 GB of caches a repository and drops the
+          # oldest, and each pull request's copies of every build cache (3
+          # GB or so) pushed main's out, so the next pull request built the
+          # app and the server from nothing. A pull request restores main's.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # The same Xcode as ios.yml, for the reasons there (#779, #839), unless
       # run by hand with Xcode 26.6 (above).
       - name: Xcode ${{ inputs.xcode || '27.1' }}
@@ -151,22 +178,25 @@ jobs:
           # TestFlight with altool, and fails before building without it.
           xcrun altool --version || echo "::warning::this Xcode has no altool, which ios.yml uploads with"
 
-      # The server, as built before from the same code. The Rust cache
-      # above brings back its dependencies, but its own three crates were
-      # compiled again every run: 11 to 14 minutes, the longest step, on
-      # pull requests that mostly never touch the server. Keyed on
-      # everything its release build reads (the crates, the workspace's
-      # Cargo files and config), on this file, which says how it's built,
+      # The server, as built before from the same code, for every flow (the
+      # start flows need none). The Rust cache above brings back its
+      # dependencies, but its own three crates were compiled again every
+      # run: 11 to 14 minutes, the longest step, on pull requests that mostly
+      # never touch the server. Keyed on everything its release build reads
+      # (the crates, the workspace's Cargo files and config), on how it's
+      # built (`release-nolto`: change it when "build the server" changes),
       # on the compiler, and on the Xcode, whose Mac it was built on; no
-      # restore-keys, so a change to any of them builds it again. Kept
-      # straight after a build that worked, not at the job's end, so a
+      # restore-keys, so a change to any of them builds it again. Not on
+      # this whole file, as it was: any edit to the workflow built it again.
+      # Kept straight after a build that worked, not at the job's end, so a
       # flow failing doesn't lose it.
       #
-      # Still built whenever the Rust cache had no exact match (the app's
-      # own Cargo.lock changed, say): that cache is saved again at the
+      # On main, still built whenever the Rust cache had no exact match (the
+      # app's own Cargo.lock changed, say): that cache is saved again at the
       # job's end from what this run built, and without the server's build
       # it would be saved without the server's release dependencies, for
-      # the next run that builds the server to compile from nothing.
+      # the next run that builds the server to compile from nothing. A pull
+      # request saves no Rust cache, so it doesn't need to.
       #
       # Looked up before the iPhone starts, never after: its key hashes the
       # crates with `hashFiles`, which GitHub's runner stops at a fixed 120
@@ -176,10 +206,11 @@ jobs:
       # failed the job before any flow ran ("The template is not valid").
       - name: the server, as built before from this code
         id: server
+        if: env.FLOWS == 'all'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: target/release/linger-server
-          key: linger-server-xcode-${{ inputs.xcode || '27.1' }}-${{ runner.os }}-${{ runner.arch }}-rustc-${{ steps.toolchain.outputs.cachekey }}-${{ hashFiles('crates/**', 'Cargo.toml', 'Cargo.lock', '.cargo/config.toml', '.github/workflows/ios-simulator.yml') }}
+          key: linger-server-release-nolto-xcode-${{ inputs.xcode || '27.1' }}-${{ runner.os }}-${{ runner.arch }}-rustc-${{ steps.toolchain.outputs.cachekey }}-${{ hashFiles('crates/**', 'Cargo.toml', 'Cargo.lock', '.cargo/config.toml') }}
       # The plain iPhone (not a Pro, Plus, Max, Air or Duo), the size most
       # people have and the one share-photo.yaml's taps inside the share
       # window were measured on, on the newest iOS that has one. Not just the
@@ -227,12 +258,12 @@ jobs:
       # optimisation the image has, which changes how fast it runs, not
       # what it does: with it, this build took 14 minutes here.
       - name: build the server
-        if: steps.server.outputs.cache-hit != 'true' || steps.rust.outputs.cache-hit != 'true'
+        if: env.FLOWS == 'all' && (steps.server.outputs.cache-hit != 'true' || (github.ref == 'refs/heads/main' && steps.rust.outputs.cache-hit != 'true'))
         env:
           CARGO_PROFILE_RELEASE_LTO: "false"
         run: cargo build --locked --release -p linger-server
       - name: keep the server
-        if: steps.server.outputs.cache-hit != 'true'
+        if: env.FLOWS == 'all' && steps.server.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: target/release/linger-server
@@ -314,8 +345,10 @@ jobs:
           # Photos, which Xcode 27's iOS 27.1 didn't have (#839): missing, it
           # fails here, saying so, not in the last flow.
           xcrun simctl listapps "$UDID" | sed -n 's/.*CFBundleIdentifier = "\{0,1\}\([^";]*\)"\{0,1\};.*/\1/p' | sort -u > "$OUT/apps.txt"
-          grep -qx com.apple.mobileslideshow "$OUT/apps.txt" ||
-            { echo "::error::Photos isn't on this iPhone, and the share flow starts there (#839)"; exit 1; }
+          if [ "$FLOWS" = all ]; then
+            grep -qx com.apple.mobileslideshow "$OUT/apps.txt" ||
+              { echo "::error::Photos isn't on this iPhone, and the share flow starts there (#839)"; exit 1; }
+          fi
           # The certificate service, trustd, updates Apple's revocation list
           # ("Valid") in the background, and while it does it holds its
           # database locked, for minutes: every certificate check waits
@@ -367,6 +400,7 @@ jobs:
       # scripts/https-front.mjs and a certificate the simulator is told to
       # trust: the installed app reaches no server over plain http.
       - name: a server on this Mac, behind https
+        if: env.FLOWS == 'all'
         run: |
           set -euo pipefail
           certs="$RUNNER_TEMP/certs"
@@ -404,6 +438,7 @@ jobs:
       # until the front has seen that handshake finish. Stuck for good, it
       # fails here, saying so, rather than in a flow.
       - name: the simulator's first certificate check, out of the way
+        if: env.FLOWS == 'all'
         run: |
           set -euo pipefail
           done_before="$(grep -c 'TLS done' "$OUT/server/front.log" || true)"
@@ -420,18 +455,41 @@ jobs:
           echo "the simulator's first certificate check took about $((SECONDS - started)) s"
           xcrun simctl terminate "$UDID" com.apple.mobilesafari || true
 
+      # The start flows run with no Linger server, but plain-http.yaml says
+      # the app refuses a plain http address "even one on this machine": with
+      # nothing there, it couldn't reach it whatever it allowed. So something
+      # answers plain http where the server would, and the app must still
+      # refuse to reach it.
+      - name: something answering plain http, for plain-http.yaml
+        if: env.FLOWS == 'start'
+        run: |
+          set -euo pipefail
+          mkdir -p "$OUT/server"
+          nohup python3 -m http.server "$SERVER_PORT" --bind 127.0.0.1 > "$OUT/server/plain-http.log" 2>&1 &
+          deadline=$((SECONDS + 30))
+          until curl -fsS -o /dev/null "http://127.0.0.1:$SERVER_PORT/"; do
+            [ "$SECONDS" -lt "$deadline" ] || { cat "$OUT/server/plain-http.log"; echo "::error::nothing answered plain http on $SERVER_PORT"; exit 1; }
+            sleep 1
+          done
+
       - name: the app, installed
         run: xcrun simctl install "$UDID" "$APP"
 
       # The gateway is the app's own (Rust, rustls), which doesn't read the
-      # keychain: SSL_CERT_FILE points it at the test authority. simctl
-      # hands a SIMCTL_CHILD_ variable to the app it launches, and Maestro
-      # launches it with simctl.
+      # keychain: SSL_CERT_FILE points it at the test authority, for every
+      # flow (the start flows reach no server). simctl hands a SIMCTL_CHILD_
+      # variable to the app it launches, and Maestro launches it with simctl.
       - name: Maestro's flows
-        env:
-          SIMCTL_CHILD_SSL_CERT_FILE: ${{ runner.temp }}/certs/ca.pem
         run: |
           set -euo pipefail
+          # The start flows alone, by their tag (#971): Maestro runs the
+          # tagged flows that begin config.yaml's order, in it.
+          tags=""
+          if [ "$FLOWS" = all ]; then
+            export SIMCTL_CHILD_SSL_CERT_FILE="$RUNNER_TEMP/certs/ca.pem"
+          else
+            tags="--include-tags start"
+          fi
           # WebKit's network process makes the page's connections, so a
           # request that never comes back shows there (#848). It hands each
           # certificate to trustd, whose own lines are in trustd.log, from boot.
@@ -445,9 +503,10 @@ jobs:
             [ $((SECONDS - started)) -lt 30 ] || { cat "$OUT/share-window-ready.log"; echo "::error::share-window-ready.mjs didn't start"; exit 1; }
             sleep 1
           done
+          # shellcheck disable=SC2086 # $tags is empty or two words, on purpose
           maestro test --device "$UDID" --test-output-dir "$OUT/maestro" \
-            --format junit --output "$OUT/report.xml" \
-            -e "SERVER=http://127.0.0.1:$SERVER_PORT" -e "SETUP_LINK=$SETUP_LINK" \
+            --format junit --output "$OUT/report.xml" $tags \
+            -e "SERVER=http://127.0.0.1:$SERVER_PORT" -e "SETUP_LINK=${SETUP_LINK:-}" \
             -e "HOST_USERNAME=$HOST_USERNAME" -e "HOST_PASSWORD=$HOST_PASSWORD" \
             -e "WINDOW_READY=http://127.0.0.1:$READY_PORT/" \
             client/tests/ios
