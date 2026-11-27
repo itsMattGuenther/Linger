@@ -39,8 +39,7 @@ public static class LingerWindowProbe {
   // The list: Linger's shown, unowned top-level window of Tauri's class, by
   // Linger's own threads, so no other program's window is looked at. Not
   // Windows' idea of the main window, which can be one of Linger's message
-  // windows (single instance, tao's events) while the list waits for its
-  // page's theme (#968).
+  // windows (single instance, tao's events), which report themselves shown.
   public static IntPtr List(int[] threads) {
     IntPtr found = IntPtr.Zero;
     foreach (int thread in threads) {

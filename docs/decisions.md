@@ -2428,3 +2428,27 @@ the desktop and on phones.
 - **Not part of this:** themes people make themselves (still "V3 or never",
   SPEC §6), and evening warmth that follows the clock. Porch light is the
   warm look, chosen by hand.
+
+## Decided: Linger opens on The door's navy, then the theme (#965)
+
+**Matt, 2026-11-27**: "We can do Linger always opens on navy, then your
+theme, that's fine. I'm happy to do that across the board." What's drawn
+before Linger's page runs can't know the theme: a computer's window is
+built before the page, and a phone shows a launch screen the app can't
+change per person (an iPhone allows one fixed one). So every start looks
+the same, the way a website's loading look does, and the page then draws
+the theme.
+
+- **On a computer** the list appears at once in navy. Windows opened later
+  are built in the theme, so only the start shows navy.
+- **On a phone** the launch screen and the page's ground before it draws
+  are navy, with light status bar icons, whatever the phone's own light or
+  dark mode.
+- **What it replaced:** a theme file kept for the next start (#967), a
+  second copy of the choice that could fall behind the page's, and then a
+  list kept hidden until its page said its theme (#968), which showed
+  nothing on a slow start and couldn't wait without taking the focus after
+  an update's restart.
+- **Later, perhaps:** one settings file that both the window and the page
+  read at start would open a computer in the theme from its first frame.
+  Phones would still open on navy.

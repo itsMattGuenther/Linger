@@ -92,10 +92,9 @@ $app = Start-Process $exe -PassThru
 $started = Get-Date
 try {
     # The list, by its class: Windows' own idea of the main window can be one
-    # of Linger's hidden message windows (single instance, tao's events),
-    # which have no icon. The list stays hidden until its page says its
-    # theme, or for the shell's ten-second deadline (#968), and a runner's
-    # first WebView2 start is slow, so it gets thirty seconds.
+    # of Linger's message windows (single instance, tao's events), which
+    # report themselves shown and have no icon. A runner's first start is
+    # slow, so it gets thirty seconds.
     $list = [IntPtr]::Zero
     for ($i = 0; $i -lt 150; $i++) {
         Start-Sleep -Milliseconds 200

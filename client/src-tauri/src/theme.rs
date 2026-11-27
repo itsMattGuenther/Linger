@@ -5,10 +5,12 @@
 //!
 //! - **On a computer**, the color a window shows before its page draws:
 //!   every open window takes it at once, and a window opened later is built
-//!   in it. Without it a window opened dark under Daylight's paper. At start
-//!   the list is built before any page runs, so it waits, hidden, until its
-//!   page says (#965): the page's own saved choice is the only copy, and
-//!   nothing the shell keeps can fall behind it.
+//!   in it. Without it a window opened dark under Daylight's paper.
+//! - **At start, everywhere**, Linger opens on The door's navy and its page
+//!   then draws the theme (Matt, 2026-11-27): the list is built before any
+//!   page runs, and a phone's launch screen is fixed, so nothing the shell
+//!   draws first can know the theme. The page's own saved choice is the
+//!   only copy; the shell keeps nothing for the next start.
 //! - **On a phone**, the status bar's and navigation bar's icons: dark on
 //!   Daylight's paper, light on every dark theme. The page is drawn under
 //!   both bars, so their icons have to read on its ground rather than follow
@@ -51,13 +53,12 @@ fn look(id: &str) -> Look {
 }
 
 #[cfg(desktop)]
-pub use desktop::{wait_for_theme, waiting, window_color};
+pub use desktop::window_color;
 
 /// The list window puts a theme on: every window takes its color, and so
-/// does every window opened after, and a list waiting to be shown at start
-/// is shown in it. Only the list says; another window's word is refused.
-/// Not `async`, so it runs on the app's main thread, one at a time in the
-/// order the list said them.
+/// does every window opened after. Only the list says; another window's
+/// word is refused. Not `async`, so it runs on the app's main thread, one
+/// at a time in the order the list said them.
 #[cfg(desktop)]
 #[tauri::command]
 pub fn app_theme(
@@ -71,7 +72,6 @@ pub fn app_theme(
 #[cfg(desktop)]
 mod desktop {
     use std::sync::Mutex;
-    use std::time::Duration;
 
     use tauri::window::Color;
     use tauri::{AppHandle, Manager, WebviewWindow};
@@ -79,55 +79,18 @@ mod desktop {
     use super::{look, Look};
 
     /// The theme the list last told, which windows opened from now on are
-    /// built in. The door until the list says.
+    /// built in. The door until the list says, so the list itself opens on
+    /// The door's navy at start (`window::create`).
     static SHOWN: Mutex<&str> = Mutex::new("door");
-
-    /// Whether the list is hidden at start until its page says its theme.
-    static WAIT: Wait = Wait::new();
-
-    /// How long the list waits for its page before it's shown anyway. Only a
-    /// page that failed to load runs into it, so it's generous: a slow
-    /// computer's first start still has its page say first.
-    const DEADLINE: Duration = Duration::from_secs(10);
-
-    /// A window waiting to be shown until its page has said its theme.
-    /// Ended once, by whichever comes first: the page's word or the
-    /// deadline. The window is shown at the end, so only once.
-    pub(super) struct Wait(Mutex<bool>);
-
-    impl Wait {
-        pub(super) const fn new() -> Self {
-            Self(Mutex::new(false))
-        }
-
-        fn held(&self) -> std::sync::MutexGuard<'_, bool> {
-            self.0
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-        }
-
-        pub(super) fn start(&self) {
-            *self.held() = true;
-        }
-
-        pub(super) fn waiting(&self) -> bool {
-            *self.held()
-        }
-
-        /// End the wait. Says whether this ended it, and so whether to show
-        /// the window now: a second end, or one with no wait, shows nothing.
-        pub(super) fn end(&self) -> bool {
-            std::mem::replace(&mut *self.held(), false)
-        }
-    }
 
     fn color(look: Look) -> Color {
         let [r, g, b] = look.window;
         Color(r, g, b, 255)
     }
 
-    /// The color a window is built in: the theme's, so it never shows another
-    /// theme's for a moment before its page draws.
+    /// The color a window is built in: the theme's once the list has said
+    /// it, so a window opened later never shows another theme's for a
+    /// moment before its page draws; The door's navy before.
     pub fn window_color() -> Color {
         color(look(
             &SHOWN
@@ -136,43 +99,7 @@ mod desktop {
         ))
     }
 
-    /// The list was built hidden at start (`window::create`): it's shown
-    /// when its page says its theme, in that theme's color, so it never
-    /// shows another theme's first. Nothing is kept for this: the page's
-    /// own saved choice is the only copy, and it tells first thing
-    /// (`followThemeInShell`). A page that never says is shown at the
-    /// deadline, so Linger never starts with nothing on screen.
-    pub fn wait_for_theme(app: &AppHandle) {
-        WAIT.start();
-        let app = app.clone();
-        tauri::async_runtime::spawn(async move {
-            tokio::time::sleep(DEADLINE).await;
-            let shell = app.clone();
-            let _ = app.run_on_main_thread(move || show_if_waiting(&shell));
-        });
-    }
-
-    /// Whether the list is still waiting for its page's theme. Bringing it
-    /// forward meanwhile (the tray, a second start, a link) is left to the
-    /// end of the wait, moments away, which brings it forward anyway, so
-    /// it isn't shown in another theme's color first (`tray::show_list`).
-    pub fn waiting() -> bool {
-        WAIT.waiting()
-    }
-
-    /// At the end of the wait the list comes forward as the tray's Show
-    /// Linger brings it: shown, restored and focused, as a start that
-    /// somebody made, built visible and focused, always came up. Only such
-    /// a start waits (`window::ListStart`).
-    fn show_if_waiting(app: &AppHandle) {
-        if WAIT.end() {
-            crate::tray::show_list(app);
-        }
-    }
-
-    /// `app_theme` on a computer, on the app's main thread: the color goes
-    /// on every window before a waiting list is shown, so its first frame
-    /// is in it.
+    /// `app_theme` on a computer, on the app's main thread.
     pub fn put_on(app: &AppHandle, window: &WebviewWindow, theme: &str) -> Result<(), String> {
         if window.label() != crate::window::OWNER {
             return Err("only the list window says the theme".into());
@@ -184,33 +111,7 @@ mod desktop {
         for open in app.webview_windows().values() {
             let _ = open.set_background_color(Some(color(now)));
         }
-        show_if_waiting(app);
         Ok(())
-    }
-
-    #[cfg(test)]
-    mod tests {
-        use super::Wait;
-
-        #[test]
-        fn a_waiting_window_is_shown_once() {
-            let wait = Wait::new();
-            wait.start();
-            assert!(wait.waiting(), "a show asked for meanwhile waits too");
-            assert!(wait.end(), "the page's word shows it");
-            assert!(!wait.waiting(), "after it, a show asked for shows it");
-            assert!(!wait.end(), "the deadline after it shows nothing");
-            assert!(!wait.end(), "nor a second word");
-        }
-
-        #[test]
-        fn a_window_that_never_waited_is_never_shown_by_the_end_of_one() {
-            // A start into the tray (#772): the list stays hidden there,
-            // whatever the page says or the deadline.
-            let wait = Wait::new();
-            assert!(!wait.waiting());
-            assert!(!wait.end());
-        }
     }
 }
 
