@@ -61,6 +61,14 @@ Class #12           -
       type          : '(Landroid/content/Context;I)I'
       access        : 0x0019 (PUBLIC STATIC FINAL)
   Virtual methods   -
+Class #13           -
+  Class descriptor  : 'Lio/github/itsmattguenther/linger/SystemBars;'
+  Direct methods    -
+    #0              : (in Lio/github/itsmattguenther/linger/SystemBars;)
+      name          : 'follow'
+      type          : '(Landroid/content/Context;Z)V'
+      access        : 0x0019 (PUBLIC STATIC FINAL)
+  Virtual methods   -
 `;
 /** What Rust crossed by when 0.5.4 was built: the call bar only. */
 const AT_054 = CROSSINGS.filter((each) => each.class === "io.github.itsmattguenther.linger.VoiceCallService");

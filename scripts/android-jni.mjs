@@ -70,6 +70,14 @@ export const CROSSINGS = [
     type: "(Landroid/content/Context;I)I",
     from: "client/src-tauri/src/phone_icon.rs",
   },
+  {
+    // Rust calls it (theme.rs): the status and navigation bars' icons, dark
+    // on a light theme and light on a dark one (#965).
+    class: "io.github.itsmattguenther.linger.SystemBars",
+    method: "follow",
+    type: "(Landroid/content/Context;Z)V",
+    from: "client/src-tauri/src/theme.rs",
+  },
 ];
 
 /**

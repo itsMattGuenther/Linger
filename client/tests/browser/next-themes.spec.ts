@@ -250,6 +250,63 @@ test.describe("the effects on paper", () => {
   });
 });
 
+// The app's own page (main.tsx) in a pretend shell: the bridge answers the
+// theme and leaves every other ask waiting, and writes down what it was
+// asked. The list window tells the shell the saved theme as it starts, on a
+// computer and a phone; another window doesn't (#965).
+test.describe("the app's page tells its shell the theme", () => {
+  async function inShell(page: Page, label: string, theme: Theme) {
+    await page.addInitScript(
+      ({ label, theme }) => {
+        window.localStorage.setItem("linger.next.theme", theme);
+        const asked: Array<[string, unknown]> = [];
+        let next = 0;
+        Object.assign(window, {
+          isTauri: true,
+          __asked: asked,
+          __TAURI_INTERNALS__: {
+            metadata: { currentWindow: { label }, currentWebview: { windowLabel: label, label } },
+            transformCallback: () => (next += 1),
+            unregisterCallback: () => undefined,
+            convertFileSrc: (path: string) => path,
+            invoke: (command: string, args: unknown) => {
+              asked.push([command, args]);
+              return command === "app_theme" ? Promise.resolve(null) : new Promise(() => undefined);
+            },
+          },
+        });
+      },
+      { label, theme },
+    );
+  }
+  const told = (page: Page) =>
+    page.evaluate(() =>
+      ((window as unknown as { __asked?: Array<[string, { theme?: string } | undefined]> }).__asked ?? [])
+        .filter(([command]) => command === "app_theme")
+        .map(([, args]) => args?.theme),
+    );
+
+  test("the list window, on a computer and a phone, and no other window", async ({ page, context }) => {
+    await inShell(page, "main", "daylight");
+    await page.goto("/next.html");
+    await expect.poll(() => told(page)).toEqual(["daylight"]);
+
+    const phone = await context.newPage();
+    await inShell(phone, "main", "dusk");
+    await phone.goto("/next.html?shell=phone");
+    await expect.poll(() => told(phone)).toEqual(["dusk"]);
+
+    const settings = await context.newPage();
+    await inShell(settings, "settings", "daylight");
+    await settings.goto("/next.html?window=settings");
+    expect(await settings.evaluate(() => document.documentElement.dataset.theme)).toBe("daylight");
+    // Its page has asked the shell other things, so it got past where it
+    // would have told the theme, and didn't.
+    await expect.poll(() => settings.evaluate(() => ((window as unknown as { __asked?: unknown[] }).__asked ?? []).length)).toBeGreaterThan(0);
+    expect(await told(settings)).toEqual([]);
+  });
+});
+
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 411, height: 914 } });
 
@@ -261,6 +318,23 @@ test.describe("on a phone", () => {
     await expect(settings.locator(".nx-set-title")).toHaveText("Appearance");
     return settings;
   }
+
+  // The phone's own status and navigation bars follow the theme (#965,
+  // src-tauri/src/theme.rs): the page tells the shell the one it starts in,
+  // and each one picked, once (the fixture writes down what it was told).
+  test("the phone tells its shell the theme it starts in and each one picked", async ({ page }) => {
+    await page.addInitScript(() => window.localStorage.setItem("linger.next.theme", "dusk"));
+    await page.goto("/tests/fixtures/next-list-window.html?one&shell=phone");
+    await expect(page.locator("[data-screen='list']")).toBeVisible();
+    const told = () => page.evaluate(() => document.body.dataset.shelltheme ?? "");
+    await expect.poll(told).toBe("dusk");
+
+    await appearance(page);
+    await choice(page, "daylight").check();
+    await expect.poll(told).toBe("dusk,daylight");
+    await choice(page, "after-dark").check();
+    await expect.poll(told).toBe("dusk,daylight,after-dark");
+  });
 
   test("the phone's Settings has the Theme picker, applied at once and still chosen when Settings opens again", async ({ page }) => {
     await page.goto("/tests/fixtures/next-list-window.html?one&shell=phone");

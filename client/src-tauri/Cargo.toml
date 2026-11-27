@@ -182,7 +182,7 @@ core-foundation = "0.9"
 objc2 = "0.6"
 block2 = "0.6"
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-foundation", "NSArray", "NSData", "NSDictionary", "NSError", "NSFileManager", "NSGeometry", "NSPathUtilities", "NSString", "NSURL", "NSURLResponse", "NSURLSession", "NSValue"] }
-objc2-ui-kit = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-foundation", "UIActivity", "UIActivityViewController", "UIApplication", "UIFont", "UIFontDescriptor", "UIPopoverPresentationController", "UIPopoverSupport", "UIPresentationController", "UIResponder", "UIView", "UIViewController"] }
+objc2-ui-kit = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-foundation", "UIActivity", "UIActivityViewController", "UIApplication", "UIFont", "UIFontDescriptor", "UIInterface", "UIPopoverPresentationController", "UIPopoverSupport", "UIPresentationController", "UIResponder", "UIView", "UIViewController", "UIWindow"] }
 objc2-user-notifications = { version = "0.3", default-features = false, features = ["std", "block2", "bitflags", "UNNotification", "UNNotificationContent", "UNNotificationRequest", "UNNotificationResponse", "UNNotificationSettings", "UNUserNotificationCenter"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]

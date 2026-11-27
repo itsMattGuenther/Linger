@@ -6,11 +6,14 @@
  * was pressed (#241).
  */
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles/app.css";
 import { followAppearance, loadTextSize, onAppearance } from "./core/appearance";
+import { OWNER } from "./core/bus";
 import { followInputMode } from "./core/inputMode";
+import { followThemeInShell } from "./core/theme";
 import { closeKeyboardOnTouch, followKeyboard, followTextSize, onIPhone, onPhone, typingIn } from "./core/phone";
 import { refuseStrayDrops } from "../lib/drops";
 import { voiceEndedAwayFrom } from "../lib/gateway";
@@ -26,6 +29,11 @@ import { WindowBoundary } from "./app/Boundary";
 // Plain names and interface size, the same in every window
 // (core/appearance.ts).
 followAppearance();
+
+// The shell draws in the theme too (#965): a computer's windows before
+// their pages draw, a phone's status and navigation bars. The list tells it,
+// on a computer and a phone (core/theme.ts).
+if (isTauri() && (onPhone() || getCurrentWindow().label === OWNER)) followThemeInShell(onAppearance, invoke);
 
 // The phone app's one window (SPEC §4.15, core/phone.ts): its styles keep
 // clear of the phone's own bars and cutouts, and of the keyboard

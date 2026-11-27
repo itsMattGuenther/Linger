@@ -86,6 +86,9 @@ mod share_window;
 pub mod sounds;
 #[cfg(desktop)]
 mod talk_key;
+// The theme a person picked, for what the shell draws itself (#965): a
+// computer's windows before their pages draw, a phone's bars.
+mod theme;
 #[cfg(desktop)]
 mod tray;
 #[cfg(desktop)]
@@ -590,7 +593,8 @@ fn desktop_app() -> tauri::Builder<tauri::Wry> {
             screen_sound::screen_sound_stop,
             screen_sound::screen_sound_play,
             screen_sound::screen_sound_volume,
-            screen_sound::screen_sound_end
+            screen_sound::screen_sound_end,
+            theme::app_theme
         ])
 }
 
@@ -659,6 +663,7 @@ fn phone_app() -> tauri::Builder<tauri::Wry> {
             share_window::share_sign_ins_kept,
             share_window::share_window_list_read,
             share_window::share_window_list_save,
+            theme::app_theme,
             voice_away::phone_voice_ended
         ])
 }

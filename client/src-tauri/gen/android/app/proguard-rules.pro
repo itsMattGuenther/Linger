@@ -47,3 +47,8 @@
 # their Java names, through JNI (src-tauri/src/phone_icon.rs).
 # scripts/android-jni.mjs checks a release build keeps them.
 -keep class io.github.itsmattguenther.linger.AppIcon { *; }
+
+# The status and navigation bars (#965): Rust calls SystemBars.follow by its
+# Java name, through JNI (src-tauri/src/theme.rs). scripts/android-jni.mjs
+# checks a release build keeps it.
+-keep class io.github.itsmattguenther.linger.SystemBars { *; }
