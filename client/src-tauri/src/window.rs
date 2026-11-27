@@ -762,7 +762,9 @@ mod tests {
 
     /// A window shows its own color until its page draws: every window
     /// Linger builds, the list from the config included, is built in the
-    /// theme's (#965, `theme.rs`), so none opens in another theme's.
+    /// theme's (#965, `theme.rs`), so none opens in another theme's. The
+    /// list after a restart to update is built in the theme the restart
+    /// handed over (`updates::Back`), taken before it's built.
     #[test]
     fn every_window_is_built_in_the_themes_color() {
         let source = include_str!("window.rs");
@@ -777,6 +779,16 @@ mod tests {
         assert_eq!(
             colored, built,
             "a window built here isn't in the theme's color"
+        );
+        let handed = source
+            .find("ifletSome(theme)=back.theme.as_deref(){crate::theme::start_in(theme);}")
+            .expect("the restart's theme is taken");
+        let list = source
+            .find("WebviewWindowBuilder::from_config(")
+            .expect("the list is built");
+        assert!(
+            handed < list,
+            "the list is built before the restart's theme is taken"
         );
     }
 

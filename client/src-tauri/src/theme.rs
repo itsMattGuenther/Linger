@@ -80,8 +80,38 @@ mod desktop {
     use super::{look, Look};
 
     /// The theme the list last told, which windows opened from now on are
-    /// built in. The door until the list says.
-    static SHOWN: Mutex<&str> = Mutex::new("door");
+    /// built in. The door until the list says, or a restart to update hands
+    /// over the one it was showing.
+    static SHOWN: Shown = Shown::new();
+
+    /// A theme shown, by its id.
+    pub(super) struct Shown(Mutex<&'static str>);
+
+    impl Shown {
+        pub(super) const fn new() -> Self {
+            Self(Mutex::new("door"))
+        }
+
+        pub(super) fn id(&self) -> &'static str {
+            *self
+                .0
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+        }
+
+        /// Show this theme from now on; one this Linger doesn't know is The
+        /// door.
+        pub(super) fn put(&self, id: &str) {
+            *self
+                .0
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = look(id).id;
+        }
+
+        pub(super) fn color(&self) -> Color {
+            color(look(self.id()))
+        }
+    }
 
     /// Whether the list is hidden at start until its page says its theme.
     static WAIT: Wait = Wait::new();
@@ -130,28 +160,20 @@ mod desktop {
     /// The theme shown now, by its id: what a restart to update hands the
     /// next start (`updates.rs`).
     pub fn shown_id() -> &'static str {
-        *SHOWN
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+        SHOWN.id()
     }
 
     /// Start in the theme the last run was showing when it restarted to
     /// update (`updates::Back`), so a list shown at once is built in it.
     /// One this Linger doesn't know is The door.
     pub fn start_in(id: &str) {
-        *SHOWN
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = look(id).id;
+        SHOWN.put(id);
     }
 
     /// The color a window is built in: the theme's, so it never shows another
     /// theme's for a moment before its page draws.
     pub fn window_color() -> Color {
-        color(look(
-            &SHOWN
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner),
-        ))
+        SHOWN.color()
     }
 
     /// The list was built hidden at start (`window::create`): it's shown
@@ -196,9 +218,7 @@ mod desktop {
             return Err("only the list window says the theme".into());
         }
         let now = look(theme);
-        *SHOWN
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = now.id;
+        SHOWN.put(now.id);
         for open in app.webview_windows().values() {
             let _ = open.set_background_color(Some(color(now)));
         }
@@ -208,7 +228,7 @@ mod desktop {
 
     #[cfg(test)]
     mod tests {
-        use super::Wait;
+        use super::{Shown, Wait};
 
         #[test]
         fn a_waiting_window_is_shown_once() {
@@ -223,17 +243,16 @@ mod desktop {
 
         /// A restart to update hands over its theme (`updates::Back`); the
         /// next start builds its windows in it, and in The door for one it
-        /// doesn't know. The only test that sets the shown theme.
+        /// doesn't know, as before anything says.
         #[test]
         fn a_start_builds_in_the_theme_it_was_handed() {
-            super::start_in("daylight");
-            let daylight = (super::shown_id(), super::window_color());
-            super::start_in("sunrise");
-            let stray = super::shown_id();
-            super::start_in("door");
-            assert_eq!(daylight.0, "daylight");
-            assert_eq!(daylight.1, super::color(crate::theme::look("daylight")));
-            assert_eq!(stray, "door");
+            let shown = Shown::new();
+            assert_eq!(shown.id(), "door");
+            shown.put("daylight");
+            assert_eq!(shown.id(), "daylight");
+            assert_eq!(shown.color(), super::color(crate::theme::look("daylight")));
+            shown.put("sunrise");
+            assert_eq!(shown.id(), "door");
         }
 
         #[test]

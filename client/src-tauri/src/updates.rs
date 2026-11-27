@@ -351,9 +351,11 @@ fn forget(dir: &Path) {
 /// What a restart to update leaves the next start: how the list comes back,
 /// and the theme it was showing (#965). A list that comes back behind other
 /// windows is shown at once, before its page can say its theme, so it's
-/// built in this one. Written moments before the restart and taken at the
-/// next start, so it can't fall behind the page's choice: nobody has used
-/// Linger for half an hour when it restarts by itself.
+/// built in this one. Written as the install starts and taken at the next
+/// start, so nothing can change the page's choice in between but a theme
+/// picked during the install itself: not for this restart, which happens
+/// after half an hour with nobody using Linger, and harmless for one into
+/// the tray, whose page says its theme before anybody shows it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Back {
     pub come_back: ComeBack,
