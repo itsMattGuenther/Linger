@@ -184,11 +184,14 @@ mod desktop {
     /// deadline, so Linger never starts with nothing on screen.
     pub fn wait_for_theme(app: &AppHandle) {
         WAIT.start();
+        eprintln!("linger: the list waits for its page's theme");
         let app = app.clone();
         tauri::async_runtime::spawn(async move {
             tokio::time::sleep(DEADLINE).await;
             let shell = app.clone();
-            let _ = app.run_on_main_thread(move || show_if_waiting(&shell));
+            let _ = app.run_on_main_thread(move || {
+                show_if_waiting(&shell, "its page never said its theme");
+            });
         });
     }
 
@@ -204,8 +207,11 @@ mod desktop {
     /// Linger brings it: shown, restored and focused, as a start that
     /// somebody made, built visible and focused, always came up. Only such
     /// a start waits (`window::ListStart`).
-    fn show_if_waiting(app: &AppHandle) {
+    /// Said in the log with `why`, so a start that took long can be told
+    /// apart from one whose page never said.
+    fn show_if_waiting(app: &AppHandle, why: &str) {
         if WAIT.end() {
+            eprintln!("linger: {why}; the list is shown");
             crate::tray::show_list(app);
         }
     }
@@ -222,7 +228,7 @@ mod desktop {
         for open in app.webview_windows().values() {
             let _ = open.set_background_color(Some(color(now)));
         }
-        show_if_waiting(app);
+        show_if_waiting(app, "its page said its theme");
         Ok(())
     }
 

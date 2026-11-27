@@ -88,7 +88,9 @@ public static class LingerIconProbe {
   }
 }
 '@
-$app = Start-Process $exe -PassThru
+# What the app says at start (`linger:` lines on stderr), printed below.
+$said = Join-Path $Output 'running-app-stderr.txt'
+$app = Start-Process $exe -PassThru -RedirectStandardError $said
 $started = Get-Date
 try {
     # The list, by its class: Windows' own idea of the main window can be one
@@ -107,9 +109,11 @@ try {
     if ($list -eq [IntPtr]::Zero) {
         Write-Output "Linger's top-level windows:"
         Write-Output ([LingerIconProbe]::Describe(@($app.Threads | ForEach-Object { $_.Id }), [IntPtr]::Zero))
+        Get-Content -LiteralPath $said -ErrorAction SilentlyContinue | ForEach-Object { Write-Output "  app: $_" }
         throw 'Installed app did not show its list'
     }
     Write-Output ("The list shown {0:N1} s after start" -f ((Get-Date) - $started).TotalSeconds)
+    Get-Content -LiteralPath $said -ErrorAction SilentlyContinue | Where-Object { $_ -like 'linger:*' } | ForEach-Object { Write-Output "  app: $_" }
     # Tao's window icon uses ICON_SMALL; ICON_BIG is a separate taskbar override
     # and may be unset. Its absence does not mean the window has no icon.
     # Tao sets the icon just after the window appears, so one look the moment
