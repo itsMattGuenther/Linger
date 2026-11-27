@@ -38,4 +38,3 @@
 - [ ] The task's acceptance criteria all pass
 - [ ] Docs updated in the same commit as the behavior they describe
 - [ ] Regenerated TS bindings committed, if any `linger-core` type changed
-- [ ] If this finishes a `TASKS.md` task: flipped to ✅ with a dated landing note

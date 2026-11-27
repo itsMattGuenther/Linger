@@ -8,9 +8,9 @@ commit. They are large: read the sections your change touches, not whole files.
 
 ## Start every session by reading
 
-1. Your task: the GitHub issue, or the `TASKS.md` entry it points at. Open
-   `TASKS.md` only when the task is there. It is large, and so are its
-   archives in `docs/tasks/`.
+1. Your task: the GitHub issue. `TASKS.md` holds only the next release's
+   notes and work not yet planned. The archives in `docs/tasks/` are large:
+   read one only when your change touches its area.
 2. `SPEC.md` §2 (design thesis) and §6 (scope), so you know what Linger
    refuses to be.
 3. The sections of `SPEC.md`, `ARCHITECTURE.md` and `PROTOCOL.md` your
@@ -114,8 +114,8 @@ rewritten for it.
 **Commits**
 - Conventional-ish: `feat(gateway): resume with sequence replay`
 - One logical change per commit. Docs updated in the same commit as the behavior change.
-- Branches are `feat/t-xxx-short-slug` (or `docs/…`, `fix/…`). Pushing the branch
-  is how a task is claimed — see `TASKS.md` §"How to run a task".
+- Branches are `feat/<issue>-short-slug` (or `docs/…`, `fix/…`, `test/…`).
+  Assigning yourself the issue is how it's claimed (*Pull requests and issues*).
 - **A `docs/…` branch carries docs only.** Greptile skips it (a filter in its
   dashboard, since each review costs a credit), so a script, a test or a code
   comment goes on a `fix/…`, `feat/…` or `test/…` branch, where it gets
@@ -275,9 +275,8 @@ pull request reads them, and they go stale first. These are the overview docs:
 - `ARCHITECTURE.md` §1 (the drawing), §2 (stack choices), §3 (repository
   layout), §5 (schema), §9 (deployment) and §10 (milestones).
 - The README's layout, under Development.
-- Milestone status, which lives in three places that must agree: *Build order*
-  in this file, `ARCHITECTURE.md` §10, and `TASKS.md`'s *Status* and section
-  headings.
+- Milestone status, which lives in two places that must agree: *Build order*
+  in this file and `ARCHITECTURE.md` §10.
 
 Change them in the same commit as the change that makes them wrong:
 
@@ -286,7 +285,7 @@ Change them in the same commit as the change that makes them wrong:
 - **A migration**: §5, every table and column it adds, drops or renames.
 - **What runs where**: a new process, container or port, or a job moved
   between the server, the shell and the page: §1, §2 and §9.
-- **A milestone started, shipped, closed or cut**: all three status places at
+- **A milestone started, shipped, closed or cut**: both status places at
   once.
 
 `scripts/overview-docs.test.mjs` fails CI when a crate, a top-level directory,
@@ -464,24 +463,24 @@ M0 scaffold → M1 server REST → M2 gateway → M3 client shell
   → M12 voice                                                        ← V2, built
   → M13 ambient voice                                   ← V2, cut 2026-10-11
   → M15 the Buddy list client (#198)                    ← built, the app from 0.4.0
-  → M16 screen sharing (#360)                ← V2, shipped in 0.5.2, check owed
+  → M16 screen sharing (#360)                           ← V2, shipped in 0.5.2
   → mobile (T-16xx), notifications (#830)  ← Android from 0.4.8, iPhone in the App Store
   → backburner: entrance sounds (T-901…T-903)
 ```
 
 Everything above the backburner line is built, but **M13 (ambient voice),
-which is cut** (`docs/decisions.md`): don't build toward it. M16's real check
-(T-1908) is still owed. **The phone app** (iPhone and Android, from the same
-Tauri 2 crate) and **phone notifications** (#830; read SPEC §4.15 first) are
-being built; their tasks are `TASKS.md` §Mobile. Before touching message
-loading, read `docs/tasks/m10.md`: M10 changed how the client holds history.
+which is cut** (`docs/decisions.md`): don't build toward it. **The phone app**
+(iPhone and Android, from the same Tauri 2 crate) and **phone notifications**
+(read SPEC §4.15 first) go on in issues, tracked by #253 and #830. Before
+touching message loading, read `docs/tasks/m10.md`: M10 changed how the client
+holds history. Before touching the gateway's fan-out, or any query that lists
+messages, files or search results, read `docs/tasks/m11.md`: DMs put a
+membership check in every one. Before touching voice, `docs/tasks/m12.md`.
 The release checks' steps are in `docs/tasks/release-checks.md`, for
-re-running when their area changes. Close a milestone's checks before
-starting the next.
+re-running when their area changes.
 
 **The app is the Buddy list client, in `client/src/next/` (M15, #198).** Read
-`docs/design/architecture.md` before touching it; what's left of M15 is in
-`TASKS.md`.
+`docs/design/architecture.md` before touching it.
 - **Visual rules:** `docs/design/system.md` governs, and the kit's tests
   enforce it.
 - **Shared logic:** `client/src/lib/` is the logic the windows share (`.ts`

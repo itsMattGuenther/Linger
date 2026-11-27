@@ -423,3 +423,139 @@ written. The tasks still open stay in `TASKS.md` under "V1 polish".
   `+ file` no longer takes the accent on hover; SPEC §5.3 spends that on four
   things and this is not one. Native form controls follow the theme
   (`color-scheme`), so the device pickers and filters stopped rendering white.
+
+## Still open in `TASKS.md` until 2026-11-27
+
+Archived from `TASKS.md` on 2026-11-27, when the work queue moved to GitHub's
+issues (`docs/decisions.md`, "GitHub's issues are the work queue"). Matt, that
+day: the real-world checks still marked owed here were ones nobody could run by
+hand, and the app in daily use since has settled them. The marks are left as
+they stood. What was never built is listed in `TASKS.md`, "Written down, not
+planned".
+
+- ⏳ **T-925 · Use the selected app icon on every desktop surface** — effort:
+  **medium** — Matt, 2026-09-17. The running Windows app was reported without the chosen icon;
+  the affected surface and cause have not been reproduced yet. Audit the
+  existing porch artwork through bundle configuration, packaged assets and
+  installed behavior. Check the app window, taskbar/dock, launcher/Start menu
+  and installer for each supported package; do not design a replacement icon.
+  *Accept:* record Windows and Linux results, including the Omarchy AppImage,
+  with package/version and the surface checked. Distinguish incorrect assets
+  or app identity from stale OS icon caches. Check macOS when a distributable
+  build is available; do not claim a platform passed from source inspection.
+
+  **PR #77 merged 2026-09-17; installed-surface acceptance open.**
+  Published v0.1.0 predates the porch artwork;
+  its AppImage and Windows application still contain the old icons. Explicit
+  NSIS installer/uninstaller icons were also missing, and the Linux window
+  selected only the 32-pixel PNG. The configuration now uses the porch ICO for
+  both installer surfaces and a 256-pixel Linux window icon. All six source
+  formats regenerate correctly; Debian/RPM/AppImage resources and Windows
+  NSIS/MSI application, installer/uninstaller resources pass. Installed
+  Windows shortcuts target the correct executable. Its running caption icon
+  matches the approved 32-pixel PNG exactly; the actual Linux AppImage window
+  matches the 256-pixel PNG on both backends. CI runs and remaining real
+  launcher/taskbar/cache checks are recorded in
+  [app-icon-checks.md](../app-icon-checks.md); no release has been published.
+
+- ⏳ **T-929 · Evaluate native Wayland for packaged Linux input** — effort:
+  **high** — Matt, 2026-09-17. T-928 isolates wtype corruption to XWayland; the current AppImage
+  startup hook forces X11 as a graphics compatibility fallback. Evaluate a
+  supported per-launch native Wayland option before changing that default.
+  *Accept:* test actual packaged startup, typing, paste, graphics and updates
+  on Wayland and X11, including a machine that needs the GBM workaround.
+  Preserve a working fallback. Do not claim system-WebKit fixture results
+  prove an AppImage works; see `docs/linux-input-checks.md`.
+
+  **Implementation ready; field acceptance open, 2026-09-17 (PR #78).**
+  `LINGER_LINUX_BACKEND=wayland|x11` applies after the AppImage launcher and
+  preserves the default X11 fallback. An actual CI-built AppImage preserves
+  synthetic typing and Unicode paste on Wayland; explicit/default X11 still
+  reproduces the typing defect and preserves paste. Both render under the
+  isolated software compositor; invalid options fail before GTK starts.
+  Package hash, method and remaining checks are in
+  [linux-input-checks.md](../linux-input-checks.md). Spoken input, physical
+  paste, hardware graphics and a signed update remain unclaimed. No system
+  packages or global desktop settings were changed; no release was published.
+
+- ⏳ **T-933 · Clean notification onset and complete knock playback** — effort: **high** — Matt,
+  2026-09-22. GitHub #94 and #95: investigate the short crackle and clipped
+  two-tap knock reported in 0.3.1,
+  comparing Preview and live playback with the clean reference clips. Check
+  startup/resume, repeated playback and scheduling before changing the score.
+  *Accept:* capture the onset, add a regression check for the confirmed fault,
+  run the shared player on Linux and Windows, and confirm by listening on the
+  affected installation. Verify both knock taps, spacing and complete decay.
+  Matt requested one combined fix/build for both reports. Package output alone
+  does not prove listening quality.
+
+  **Correction implemented 2026-09-22.** The existing score renders into cached
+  buffers with 50 ms of silent leading samples. This preserves the attack when
+  the output starts; buffering alone did not fix the reproduced onset loss.
+  First/repeated Preview, delayed setup, received-event playback and Preview
+  after idle pass the Linux virtual-speaker checks for DMs and knocks. Both
+  knock taps retain their decay and 140 ms spacing. The full local gate passes; Chromium
+  checks preserve all twelve scores at 44.1/48 kHz. Linux/Windows package CI and
+  affected-installation listening remain required before closing #94/#95. See
+  [capture method and limits](../packaged-audio-checks.md).
+
+- ✅ **T-907 · Open healthy servers while another is unavailable** — effort:
+  **high**
+  `useSessions` waits for all saved servers, and the HTTP client has no request
+  deadline. Failed servers disappear for that launch. Restore each server
+  independently, retain an unavailable entry with a retry action, and keep its
+  saved sign-in unless explicitly rejected. Do not add an offline database.
+  *Accept:* with two saved servers and one stalled response, the healthy one
+  becomes usable within a bounded time. The other can recover without restart
+  or re-entering credentials. Test token rotation and React StrictMode so no
+  saved token is spent twice. **Decided 2026-09-26 (parity decision 21):**
+  fix it, in the Buddy list client's list window. **Done:** every request
+  already had a 30-second deadline (#118); the wait was `Promise.all`. Each
+  server now restores on its own, the list opens when the first is in (5 s at
+  most), and one that can't be reached stays as a line with Try now and
+  retries on its own (5, 15, 30, then every 60 s).
+
+- ✅ **T-908 · Pin a message from the conversation** — effort: **medium**
+  Use the existing pin/unpin endpoints and message action strip; indicate the
+  saved state and report failures without losing it. No new wire fields.
+  *Accept:* pinning in one client appears in another and in media's pinned
+  filter; unpin removes it. A DM's pin remains invisible to non-members, and
+  pinned attachments retain the existing expiry protection. Read M10 and M11
+  notes before touching history or visibility. **Decided 2026-09-26 (parity
+  decision 21):** build it in the Buddy list client, as Pin in the message menu.
+
+- 🟡 **T-910 · Measure the release's size and running cost** — effort: **medium**
+  Record installer size, cold launch time, total process memory and idle CPU
+  on Windows and Linux; include WebView processes. Repeat after an extended
+  session with several rooms and during four-person voice. Check how retained
+  message history grows; virtualization alone does not bound it.
+  *Accept:* versioned measurements with hardware and method, explicit future
+  regression budgets, and any observed growth recorded as a focused follow-up.
+  Do not change history storage without first reading M10's notes.
+  **Started 2026-10-11:** Linux, on one fast desktop, in
+  `docs/performance.md`, with budgets: opening (after a restart, cold and
+  warm), memory, idle processor use and sizes, for 0.4.10 and the night
+  audit's combined branch, now on `main`. `scripts/startup-time.mjs`
+  measures it again. It opens in about a second, and SPEC §7 now says so
+  (#591; it said 400 ms).
+  Left: Windows (the page has the steps for a friend), a long session,
+  four-person voice, history growth.
+
+- ✅ **T-921 · Show a private room's occupants as around to outsiders** — effort:
+  **medium**
+  T-918's third native client receives the documented `in_room` presence with
+  `room_id: null`, but renders “in a room” instead of HC-7's “around”. The
+  conversation's contents and identity remain hidden. Review the M11 notes
+  and PROTOCOL §8 before changing this; keep initial presence and live updates
+  consistent, including accessible labels and name popovers. Any protocol
+  clarification must preserve compatibility with existing clients.
+  *Accept:* an outsider sees the same ordinary around presentation while two
+  people use a DM; its members still see their conversation normally.
+  **Decided 2026-09-26 (parity decision 21), wider than first written:** being
+  in a DM shows as "around" to **everybody**, the DM's own people included, so
+  nobody sees that you're DMing, let alone with whom (the old client named
+  them). Your own card can still say where you are.
+  **Done 2026-09-26:** the server rewrites presence for anybody in a DM to
+  `around` with no room, for every receiver, and sends no enter, leave or
+  occupancy for DMs; the list shows an older server's in-a-DM entry as around
+  too.

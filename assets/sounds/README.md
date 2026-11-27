@@ -14,7 +14,7 @@ Good directions: soft percussion (woodblock, rimshot, brush), short mallet notes
 (marimba, vibraphone), small mechanical sounds (typewriter ding, latch click,
 cassette clunk), gentle synth blips, a screen-door creak (the on-theme one).
 
-Curation and normalization happen in task T-903 (see TASKS.md). Custom user
+Curation and normalization happen in task T-903 (listed in `TASKS.md`). Custom user
 uploads are handled separately: max 2 s / 200 KB, transcoded server-side to Opus
 and loudness-normalized; longer files are rejected, never truncated.
 

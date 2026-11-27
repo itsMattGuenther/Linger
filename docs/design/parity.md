@@ -1,6 +1,9 @@
 # Parity: what "ready to switch" means
 
-**Status:** the gate for M15's switch (#198, T-1810), written 2026-09-25.
+**Status:** written 2026-09-25 as the gate for M15's switch (#198, T-1810).
+The switch happened in 0.4.0 and M15 closed on 2026-11-27 (`docs/decisions.md`).
+What stays useful is the list itself: what the client does, and which test
+proves each item.
 
 The Buddy list client becomes the default only when every item below is
 **proved** in the new client, or deliberately dropped by a recorded decision.
@@ -51,27 +54,19 @@ The Buddy list client is the app from 0.4.0. Of 231 items: **172 done**,
 **50 partly**, **7 to build** and **2 dropped** (the host's time zone,
 decision 3, and status pictures, PPL-10, #269). Every decision is made.
 
-What's left, biggest first:
-
-- **Checks in the real app.** The package checks now prove the list window
-  starts in the packaged WebKitGTK and WebView2 (T-1812), but nobody has used
-  0.4.0 signed in on a real desktop yet: windows and title bars, remembered
-  window places, voice, a 10,000-message room, downloads, dropped files on
-  Windows, and whether each window's permissions let it do what it does.
-- **Decided, to build** (`TASKS.md`, M15): the push-to-talk key picker
-  (decision 6), drafts that survive closing and restarts (11), arrival cards
-  (13) and the door chime (12), empty-state lines (17), banner clicks (20),
-  quiet rooms folding past eight (22), and the three old gaps (21): Pin,
-  DMs showing as "around", and a slow server not holding up the others.
-- **Smaller pieces still missing:** a per-server own window (MULTI-7) and
-  evening warmth (LOOK-2, waiting on an evening version of the colors).
+A 🟡 that waited only on a check in the real desktop app was settled by the
+app in daily use since (`docs/decisions.md`, 2026-11-27). What was never built
+is listed in `TASKS.md`, a per-server own window (MULTI-7) and evening warmth
+(LOOK-2) among it. Evening warmth still waits for an evening version of the
+colors; Porch light (#964) is the warm look, chosen by hand.
 
 ## Decisions
 
 Each is referenced by the items it blocks. Matt decides; the answer goes into
 `buddy-list.md` or `system.md`, and the item moves on. **All 22 are decided**
-(2026-09-25 and 2026-09-26); what they call for that isn't built yet is in
-`TASKS.md` under M15.
+(2026-09-25 and 2026-09-26); what they call for that isn't built yet was
+tracked under M15 (`docs/tasks/m15.md`); what's still unbuilt is listed in
+`TASKS.md`.
 
 1. **The status bar's jobs.** Today a permanent status bar (SPEC §5.6) shows
    connection state in protocol words ("connecting… tls ok… ready (28ms)"),

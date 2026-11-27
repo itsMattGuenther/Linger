@@ -21,8 +21,8 @@ breaking any of them.
 
 1. Read the issue, `SPEC.md` §2 and §6, and the sections of `SPEC.md`,
    `ARCHITECTURE.md` and `PROTOCOL.md` your change touches (`PROTOCOL.md`
-   for anything crossing client and server). Open `TASKS.md` only when the
-   issue points at a task there. The docs are the source of truth: if code
+   for anything crossing client and server). `TASKS.md` holds only the next
+   release's notes and work not yet planned. The docs are the source of truth: if code
    and docs disagree, the docs win, or the docs change first, in the same
    commit.
 2. Find the issue. If there isn't one, the `linger-report` skill drafts one; a

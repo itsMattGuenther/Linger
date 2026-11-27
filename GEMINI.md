@@ -2,7 +2,7 @@
 
 The working agreement lives in `AGENTS.md` — read it first and follow it. Its
 Hard Rules are non-negotiable, and the docs (`SPEC.md`, `ARCHITECTURE.md`,
-`PROTOCOL.md`) win over code. The work queue is `TASKS.md`.
+`PROTOCOL.md`) win over code. The work queue is GitHub's issues.
 
 One rule bears restating where every session will see it: **no AI attribution,
 ever, no exceptions.** The author of a commit is the person running the session,

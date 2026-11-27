@@ -1846,7 +1846,7 @@ first two are the system defaults.
 | 17 | Multi-server list in the client | §3 |
 
 One V1 item is parked and does not block the rest of the build: **entrance sounds**
-(item 4). They go after M8 (export) — see `TASKS.md` *Backburner* (T-901…T-903).
+(item 4). They go after M8 (export); `TASKS.md` lists them (T-901…T-903).
 
 **Activity detection used to be item 8 and is gone** (Matt, 2026-08-28 —
 `docs/decisions.md`). It was parked on 2026-08-23 and cut five days later. §4.3
@@ -1886,7 +1886,8 @@ being in a room's voice is being in the room) stays, as part of §4.14.
   advice rather than a product; and if a theme can repaint the 16 name colours, the
   4.5:1 contrast guarantee has to move with it, live, in front of whoever is making it.
   A gallery inside the app is out — that is a store without prices, and §2 rules out
-  every payment surface. See `TASKS.md` M14.
+  every payment surface. Six built-in themes shipped (#964, #965); the three
+  questions for a person's own are in `docs/tasks/queue-2026-11-27.md`, M14.
 
 ---
 
