@@ -18,6 +18,22 @@ const WINDOW = {
 } as const;
 type Theme = keyof typeof WINDOW;
 
+/** Each theme's lamp and green (`--lamp-1`, `--green-1`): two themes share The door's, and two don't. */
+const LAMP: Record<Theme, string> = {
+  door: "rgb(243, 181, 92)",
+  "after-dark": "rgb(236, 173, 89)",
+  "porch-light": "rgb(243, 181, 92)",
+  dusk: "rgb(249, 188, 102)",
+  original: "rgb(243, 181, 92)",
+};
+const GREEN: Record<Theme, string> = {
+  door: "rgb(124, 201, 143)",
+  "after-dark": "rgb(119, 186, 135)",
+  "porch-light": "rgb(124, 201, 143)",
+  dusk: "rgb(135, 210, 153)",
+  original: "rgb(124, 201, 143)",
+};
+
 const NAMES: Record<Theme, string> = {
   door: "The door",
   "after-dark": "After dark",
@@ -73,15 +89,28 @@ test.describe("on a computer", () => {
     await expect(choice(page, "porch-light")).toBeFocused();
   });
 
+  // The page in Dusk, whose lamp and green differ from The door's: a picture
+  // whose own theme shares The door's still shows The door's, not Dusk's.
   test("each theme's picture is in that theme's own colors, whatever the page's", async ({ page }) => {
     await settings(page);
-    await choice(page, "original").check();
-    await expect.poll(() => themeOf(page)).toBe("original");
+    await choice(page, "dusk").check();
+    await expect.poll(() => themeOf(page)).toBe("dusk");
     for (const theme of Object.keys(WINDOW) as Theme[]) {
       const card = themes(page).locator(".k-choice").filter({ has: page.getByRole("radio", { name: NAMES[theme], exact: true }) });
       const picture = card.locator(".k-choice-sample");
       await expect(picture).toHaveAttribute("aria-hidden", "true");
-      expect(await picture.evaluate((sample) => getComputedStyle(sample).backgroundColor)).toBe(WINDOW[theme]);
+      const seen = await picture.evaluate((sample) => {
+        const color = (selector: string) => {
+          const part = sample.querySelector(selector);
+          return part ? getComputedStyle(part).backgroundColor : null;
+        };
+        return {
+          window: getComputedStyle(sample).backgroundColor,
+          lamp: color("[data-row='lit'] .k-choice-sample-dot"),
+          green: color("[data-row='selected'] .k-choice-sample-dot"),
+        };
+      });
+      expect(seen, theme).toEqual({ window: WINDOW[theme], lamp: LAMP[theme], green: GREEN[theme] });
     }
   });
 

@@ -164,10 +164,12 @@ one.
 
 - **The door is `:root`.** Every other theme is one block of values under
   `[data-theme="<id>"]`, in `tokens.css` like every other color, so no file
-  but `tokens.css` holds a color literal. A theme block sets only tokens The
-  door already has.
-- **Mostly primitives.** A theme sets the night, ink, hairline, lamp, sign
-  and status colors and their see-through layers; the roles follow. It sets
+  but `tokens.css` holds a color literal. A theme block sets nothing The
+  door lacks.
+- **Every primitive.** A theme sets all the night, ink, hairline, lamp, sign
+  and status colors and their see-through layers, even one the same as The
+  door's, so a theme on one element takes none of its colors from the
+  page's theme; the roles follow. It sets
   a role only where a mix needs another strength, as `--react-mine-wash`
   does in After dark and Porch light.
 - **A see-through token's number is The door's strength.** A theme may lay

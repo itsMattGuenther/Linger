@@ -86,8 +86,6 @@
   --black-a45: rgb(0 0 0 / 0.45);
   --black-a60: rgb(0 0 0 / 0.6);
   --black-a70: rgb(0 0 0 / 0.7);
-  /* Masks read only alpha; this is "fully shown". */
-  --mask-solid: rgb(0 0 0);
 }
 
 /* --- 2. semantic roles ------------------------------------------------------
@@ -207,6 +205,9 @@
 
 /* --- 3. scales and the rest ------------------------------------------------ */
 :root {
+  /* Masks read only alpha; this is "fully shown", in every theme. */
+  --mask-solid: rgb(0 0 0);
+
   /* The ring itself, which only the keyboard lights (#375, below). */
   --focus-ring: var(--focus);
   --focus-width: 2px;
@@ -408,11 +409,14 @@
 
 /* --- 4. themes ---------------------------------------------------------------
    Each theme is a set of values for the color tokens above, and nothing else
-   (SPEC §5.3, docs/design/system.md "Themes", #963). It sets only tokens The
-   door has, mostly primitives; a role only where a mix needs another
-   strength. Every theme keeps the 16 name colors. `contrast.test.ts` lays each
-   block over The door and checks it at the same floors, and `core/theme.ts`
-   lists the ones Settings offers.
+   (SPEC §5.3, docs/design/system.md "Themes", #963). It sets every primitive
+   of layer 1, even one the same as The door's: a theme on one element (a
+   preview in the Theme picker) would otherwise take that color from the
+   page's theme. It sets a role only where a mix needs another strength, and
+   nothing The door lacks. Every theme keeps the 16 name colors.
+   `contrast.test.ts` holds each block to all of that, lays it over The door
+   and checks it at the same floors, and `core/theme.ts` lists the ones
+   Settings offers.
 
    A see-through token's number is The door's strength. A theme may lay the
    lamp on thicker than `--lamp-a08` says, make it from a deeper amber, or tint
@@ -449,6 +453,7 @@
 
   --lamp-1: #ecad59;
   --lamp-2: #f8bf6f;
+  --lamp-ink: #1c1206;
   --sign-1: #2eaed5;
   --red-1: #e26b6a;
   --red-ink: #fdc9c6;
@@ -467,6 +472,15 @@
   --sign-a10: rgb(46 174 213 / 0.1);
   --sign-a28: rgb(46 174 213 / 0.28);
   --sign-a38: rgb(46 174 213 / 0.38);
+  --white-a02: rgb(255 255 255 / 0.02);
+  --white-a04: rgb(255 255 255 / 0.04);
+  --white-a06: rgb(255 255 255 / 0.06);
+  --white-a07: rgb(255 255 255 / 0.07);
+  --white-a09: rgb(255 255 255 / 0.09);
+  --white-a10: rgb(255 255 255 / 0.1);
+  --black-a45: rgb(0 0 0 / 0.45);
+  --black-a60: rgb(0 0 0 / 0.6);
+  --black-a70: rgb(0 0 0 / 0.7);
 
   /* Your own reaction's blue, mixed into a near-black control, is faint at
      The door's 22%. */
@@ -500,6 +514,14 @@
   --hair-2: #403731;
   --hair-3: #5c5047;
 
+  --lamp-1: #f3b55c;
+  --lamp-2: #ffc674;
+  --lamp-ink: #1c1206;
+  --sign-1: #2ec5f2;
+  --red-1: #f06e6e;
+  --red-ink: #ffc9c4;
+  --green-1: #7cc98f;
+
   --lamp-a06: rgb(243 181 92 / 0.081);
   --lamp-a08: rgb(243 181 92 / 0.108);
   --lamp-a12: rgb(243 181 92 / 0.162);
@@ -508,12 +530,20 @@
   --lamp-a45: rgb(243 181 92 / 0.608);
   --warm-a06: rgb(234 210 174 / 0.06);
   --warm-a24: rgb(234 210 174 / 0.24);
+  --red-a16: rgb(240 110 110 / 0.16);
+  --red-a42: rgb(240 110 110 / 0.42);
+  --sign-a10: rgb(46 197 242 / 0.1);
+  --sign-a28: rgb(46 197 242 / 0.28);
+  --sign-a38: rgb(46 197 242 / 0.38);
   --white-a02: rgb(255 246 232 / 0.02);
   --white-a04: rgb(255 246 232 / 0.04);
   --white-a06: rgb(255 246 232 / 0.06);
   --white-a07: rgb(255 246 232 / 0.07);
   --white-a09: rgb(255 246 232 / 0.09);
   --white-a10: rgb(255 246 232 / 0.1);
+  --black-a45: rgb(0 0 0 / 0.45);
+  --black-a60: rgb(0 0 0 / 0.6);
+  --black-a70: rgb(0 0 0 / 0.7);
 
   /* Your own reaction's blue, mixed into a warm control, comes out grey at
      The door's 22%: more blue, so it still reads as yours. */
@@ -550,6 +580,8 @@
 
   --lamp-1: #f9bc66;
   --lamp-2: #ffcc7f;
+  --lamp-ink: #1c1206;
+  --sign-1: #2ec5f2;
   --red-1: #fc8987;
   --red-ink: #ffd3ce;
   --green-1: #87d299;
@@ -564,6 +596,15 @@
   --warm-a24: rgb(241 223 192 / 0.24);
   --red-a16: rgb(252 137 135 / 0.16);
   --red-a42: rgb(252 137 135 / 0.42);
+  --sign-a10: rgb(46 197 242 / 0.1);
+  --sign-a28: rgb(46 197 242 / 0.28);
+  --sign-a38: rgb(46 197 242 / 0.38);
+  --white-a02: rgb(255 255 255 / 0.02);
+  --white-a04: rgb(255 255 255 / 0.04);
+  --white-a06: rgb(255 255 255 / 0.06);
+  --white-a07: rgb(255 255 255 / 0.07);
+  --white-a09: rgb(255 255 255 / 0.09);
+  --white-a10: rgb(255 255 255 / 0.1);
   --black-a45: rgb(5 9 26 / 0.45);
   --black-a60: rgb(5 9 26 / 0.6);
   --black-a70: rgb(5 9 26 / 0.7);
@@ -602,6 +643,14 @@
      not brick, so it can't be taken for an unread row's amber edge. */
   --hair-3: #2c5080;
 
+  --lamp-1: #f3b55c;
+  --lamp-2: #ffc674;
+  --lamp-ink: #1c1206;
+  --sign-1: #2ec5f2;
+  --red-1: #f06e6e;
+  --red-ink: #ffc9c4;
+  --green-1: #7cc98f;
+
   --lamp-a06: rgb(255 156 46 / 0.087);
   --lamp-a08: rgb(255 156 46 / 0.116);
   --lamp-a12: rgb(255 156 46 / 0.174);
@@ -610,6 +659,11 @@
   --lamp-a45: rgb(255 156 46 / 0.652);
   --warm-a06: rgb(237 215 187 / 0.06);
   --warm-a24: rgb(237 215 187 / 0.24);
+  --red-a16: rgb(240 110 110 / 0.16);
+  --red-a42: rgb(240 110 110 / 0.42);
+  --sign-a10: rgb(46 197 242 / 0.1);
+  --sign-a28: rgb(46 197 242 / 0.28);
+  --sign-a38: rgb(46 197 242 / 0.38);
   --white-a02: rgb(255 242 228 / 0.02);
   --white-a04: rgb(255 242 228 / 0.04);
   --white-a06: rgb(255 242 228 / 0.06);

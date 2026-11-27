@@ -210,6 +210,16 @@ describe("the themes in tokens.css (#964)", () => {
     expect(door?.selectors).toContain(":root");
   });
 
+  // A theme on one element (the Theme picker's previews) takes any primitive
+  // its block leaves out from the page's theme, not from The door.
+  it("set every primitive The door's block does, so none comes from the page's theme", () => {
+    const door = RULES.find((rule) => rule.selectors.includes('[data-theme="door"]'));
+    const primitives = [...(door?.vars.keys() ?? [])];
+    expect(primitives.length).toBeGreaterThan(40);
+    const missing = [...OWN].flatMap(([id, vars]) => (id === "door" ? [] : primitives.filter((name) => !vars.has(name)).map((name) => `${id}: ${name}`)));
+    expect(missing, missing.join("\n")).toEqual([]);
+  });
+
   it("set only tokens The door has, so a theme can't add a color nothing else knows", () => {
     const strays = [...OWN].flatMap(([id, vars]) => [...vars.keys()].filter((name) => !DOOR.has(name) && !NAMES.has(name)).map((name) => `${id}: ${name}`));
     expect(strays, strays.join("\n")).toEqual([]);
