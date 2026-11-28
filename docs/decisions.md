@@ -2507,3 +2507,30 @@ created that it's very obvious these are non-issues."
   (`m15.md`, `mobile.md`, `m16.md`, and the ends of `v1-polish.md` and
   `m12.md`), and the rest went to `queue-2026-11-27.md`, with its marks
   unchanged.
+
+## Decided: personal entrance sounds are cut
+
+**Matt, 2026-11-28**: "a personal entrance sound can get scrapped. I don't
+plan on building that personally for users."
+
+They were SPEC §4.1's sound each person picks, played for the others in a
+room when they arrive: 12 to 16 bundled sounds, and uploads of up to 2
+seconds (T-901…T-903). They had waited as V1's last item since 2026-08-21
+and were never built.
+
+- **Every sound Linger plays now stays**: the voice cues, the knock, the
+  message cues, and the door chime, one shared chime for an arrival, off by
+  default. Parity decision 12 (`docs/design/parity.md`) made the door chime
+  the first step toward entrance sounds, which would later replace it. It now
+  stays as it is.
+- **The rules those sounds keep stay in SPEC §4.1**, where they were written
+  for entrance sounds: the global mute, quiet hours, and the door chime's
+  once per 5 minutes for the same person.
+- **Gone from the plans**: SPEC §6's item 4, the entry in `TASKS.md`, the
+  last line of *Build order*, and `assets/sounds/`, which waited for the
+  bundled set. The full plan is still in `docs/tasks/queue-2026-11-27.md`.
+- **What's left in the code** is never set by any app: the `entrance_sounds`
+  table, and an `entrance_sound` field on `User`, `PATCH /me` and
+  `room.enter`. #974 drops the table and stops the server reading or writing
+  it. The fields stay on the wire, always null, so older apps see what they
+  always have (PROTOCOL §9).

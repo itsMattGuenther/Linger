@@ -216,18 +216,17 @@ A room is a place, not a filing cabinet.
   It calls nobody: no sound, no notification, and the room doesn't turn bold. A DM's
   voice gets the same line, just as quiet, and it doesn't light the DM.
 
-**Entrance sounds.** Each user picks a personal sound that plays for others already
-in a room when they arrive. This is the cheapest piece of emotional design
-available and no modern app does it, because a 50,000-member server can't.
-
-Requirements:
-- Ship 12–16 curated sounds (<1.2s, normalized to −16 LUFS).
-- Custom upload allowed: max 2 seconds, max 200 KB, transcoded server-side to Opus and
-  loudness-normalized. Reject anything longer — do not truncate.
-- Rate limit: a given user's sound plays at most once per 5 minutes per listener,
-  regardless of how many times they enter.
-- Global mute, per-user mute, and automatic mute between 22:00–08:00 listener-local
-  time (off until they opt in).
+**Personal entrance sounds are cut** (Matt, 2026-11-28, `docs/decisions.md`): a
+sound each person picked, played for the others in a room when they arrived. The
+rules written here for them stay, because every sound Linger plays keeps them:
+- A **global mute**, one switch.
+- **Quiet hours**, 22:00 to 08:00 in the listener's own time, off until they turn
+  them on, and movable. They silence the sounds that arrive on their own (a DM, a
+  room's message, a knock); voice and mute cues answer something you are doing, so
+  they still play.
+- **The door chime**, one shared soft chime when somebody arrives (off by default),
+  plays at most once per 5 minutes for the same person, for each listener, however
+  many times they come in.
 
 ### 4.2 No unread counts
 
@@ -355,7 +354,7 @@ people's voice.
   notifications intact; desktop banners request silent presentation so they
   do not double the app's chime.
 - Use the existing player. No uploads, remote assets or libraries for these
-  cues. Personal entrance sounds remain a separate, unbuilt feature (§4.1).
+  cues. Personal entrance sounds are cut (§4.1).
 
 Expect pushback on removing counts from people conditioned by ten years of them. Hold
 the line for at least one month of real use before revisiting.
@@ -1831,7 +1830,6 @@ first two are the system defaults.
 | 1 | Self-hosted server: single binary + Docker image | ARCHITECTURE |
 | 2 | Invite-link registration; the host and members only, and since #424 a co-host the host names | §2, §4.16 |
 | 3 | Rooms with occupancy and in-room presence | §4.1 |
-| 4 | Entrance sounds | §4.1 |
 | 5 | Text: markdown, edit, delete, reply | §4.7 |
 | 6 | No unread counts; "left off here" line | §4.2 |
 | 7 | Roster-forward layout | §3 |
@@ -1845,8 +1843,9 @@ first two are the system defaults.
 | 16 | Desktop client: Linux, Windows, macOS | ARCHITECTURE |
 | 17 | Multi-server list in the client | §3 |
 
-One V1 item is parked and does not block the rest of the build: **entrance sounds**
-(item 4). They go after M8 (export); `TASKS.md` lists them (T-901…T-903).
+**Entrance sounds used to be item 4 and are cut** (Matt, 2026-11-28,
+`docs/decisions.md`). They waited as V1's last item from 2026-08-21 and were never
+built. §4.1 keeps the rules every sound follows.
 
 **Activity detection used to be item 8 and is gone** (Matt, 2026-08-28 —
 `docs/decisions.md`). It was parked on 2026-08-23 and cut five days later. §4.3

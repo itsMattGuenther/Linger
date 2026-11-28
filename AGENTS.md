@@ -439,11 +439,11 @@ M0 scaffold → M1 server REST → M2 gateway → M3 client shell
   → M15 the Buddy list client (#198)                    ← built, the app from 0.4.0
   → M16 screen sharing (#360)                           ← V2, shipped in 0.5.2
   → mobile (T-16xx), notifications (#830)  ← Android from 0.4.8, iPhone in the App Store
-  → backburner: entrance sounds (T-901…T-903)
+  → entrance sounds (T-901…T-903)                       ← V1, cut 2026-11-28
 ```
 
-Everything above the backburner line is built, but **M13 (ambient voice),
-which is cut** (`docs/decisions.md`): don't build toward it. **The phone app**
+Everything here is built, but **M13 (ambient voice) and entrance sounds,
+which are cut** (`docs/decisions.md`): don't build toward them. **The phone app**
 (iPhone and Android, from the same Tauri 2 crate) and **phone notifications**
 (read SPEC §4.15 first) go on in issues, tracked by #253 and #830. Before
 touching message loading, read `docs/tasks/m10.md`: M10 changed how the client

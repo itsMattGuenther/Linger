@@ -73,7 +73,8 @@ dropped. The prototype it started from is on the `design/buddy-list` branch.
   they never take focus, and stay silent in quiet hours and on a Quiet server
   (decision 13). The **door chime** is the first step toward personal entrance
   sounds: one shared chime, off by default, at most once per 5 minutes per
-  listener (decision 12).
+  listener (decision 12). Personal entrance sounds were cut on 2026-11-28
+  (`docs/decisions.md`), so the door chime stays as it is.
 - **Many rooms**: past eight, rooms with nobody in them and nothing new fold
   under "More rooms", in the host's order, with no number (decision 22).
 - **"4:52 AM there"** is skipped for now (decision 3).
