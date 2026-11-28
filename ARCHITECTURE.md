@@ -280,8 +280,7 @@ linger/
 ├─ push-relay/                # the push relay at push.linger.im: a Cloudflare
 │                             #   Worker (#887), deployed by hand, not by CI
 ├─ packaging/arch/            # the Arch and Omarchy package and its repository
-├─ assets/                    # logos and fonts' licenses; sounds/ waits for
-│                             #   entrance sounds (TASKS.md)
+├─ assets/                    # logos and fonts' licenses
 ├─ agents/                    # skills for contributors' own agents (#147)
 ├─ docs/                      # guides, decisions, design, release notes;
 │                             #   docs/tasks/ archives closed milestones
@@ -1505,10 +1504,10 @@ question it was for. The feature it was a spike for was cut on 2026-08-28
 (`docs/decisions.md`); the spike was still worth the evening, because finding
 out early what a thing costs is how you get to decide whether to build it.
 
-**Entrance sounds moved to the end of the queue** (Matt, 2026-08-21). They are still
-V1 (SPEC §6, item 4) — they are simply the last thing built, after M8, and M4's check
-no longer waits on them. `TASKS.md` lists them as T-901…T-903
-(they were T-403, T-404, T-408).
+**Entrance sounds moved to the end of the queue** (Matt, 2026-08-21), as T-901…T-903
+(they were T-403, T-404, T-408), so M4's check no longer waited on them. **They are
+cut** (Matt, 2026-11-28, `docs/decisions.md`): they were V1 item 4 (SPEC §6) and
+were never built.
 
 **Activity detection is cut** (Matt, 2026-08-28 — `docs/decisions.md`). Parked on
 2026-08-23, deleted five days later: the crate, the registry, the wire field, and

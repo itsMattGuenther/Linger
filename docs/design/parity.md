@@ -152,6 +152,8 @@ tracked under M15 (`docs/tasks/m15.md`); what's still unbuilt is listed in
     **Decided (2026-09-26):** the door chime is the first step toward entrance
     sounds: one shared soft chime, off by default, with the once-per-5-minutes
     limit and quiet hours. Personal entrance sounds later replace it.
+    **Since 2026-11-28** personal entrance sounds are cut (`docs/decisions.md`),
+    so the door chime stays as it is.
 13. **Arrival cards.** Are they notifications? They must not take focus.
     Should they follow quiet hours and a quiet server? Should they be
     announced to screen readers? *(NEW-5)*

@@ -33,14 +33,6 @@ Known work with no issue yet. Starting one begins with an issue, and anything
 from V2, V3 or the anti-goals needs Matt's word first (AGENTS hard rule 10).
 The full text of each is in its archive.
 
-- **Entrance sounds** (T-901…T-903, SPEC §4.1). Still V1 (SPEC §6, item 4),
-  last on purpose. Playback on `room.enter` extends `client/src/lib/sound.ts`
-  (it already has the global mute and quiet hours) with bundled `.opus`, a
-  5-minute cooldown per listener, and a per-person mute. Custom uploads: at
-  most 2 s and 200 KB, transcoded to Opus at −16 LUFS, a long file refused and
-  never cut (ffmpeg goes into the server image). The bundled set, 12 to 16
-  sounds, is curated with Matt (`assets/sounds/README.md`).
-  `docs/tasks/queue-2026-11-27.md`, "Entrance sounds".
 - **A macOS build** (T-705's other half; Windows signing is #372). Developer
   ID signing, `notarytool` and a stapled ticket, then the two macOS entries in
   `release.yml` uncommented, in the same pass and never before. Not built on
