@@ -242,12 +242,13 @@ pub enum ServerEvent {
         room_id: RoomId,
         user_ids: Vec<UserId>,
     },
-    /// Sent only to clients in that room; the receiver applies its own
-    /// mute rules and quiet hours before playing anything (SPEC §4.1).
+    /// Sent only to clients in that room. It was for playing the person's
+    /// entrance sound, which were cut (#974), and no app acts on it now.
     #[serde(rename = "room.enter")]
     RoomEnter {
         room_id: RoomId,
         user_id: UserId,
+        /// Always null (#974), kept for older apps (PROTOCOL §9).
         entrance_sound: Option<String>,
     },
     #[serde(rename = "room.leave")]

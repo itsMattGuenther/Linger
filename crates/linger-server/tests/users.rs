@@ -29,8 +29,7 @@ async fn patch_me_round_trips_style_and_status() {
                 "reading": null, "listening": "Bill Evans", "working_on": "the media grid",
                 "image_id": null, "image_url": null,
                 "away_message": null, "away_since": null
-            },
-            "entrance_sound": "screen-door"
+            }
         }))
         .send()
         .await
@@ -42,7 +41,6 @@ async fn patch_me_round_trips_style_and_status() {
     assert_eq!(updated.display_name, "Matt 💾");
     assert_eq!(updated.style.font_key, "departure-mono");
     assert_eq!(updated.style.weight, 700);
-    assert_eq!(updated.entrance_sound.as_deref(), Some("screen-door"));
     let status = updated.status.expect("status saved");
     assert_eq!(status.listening.as_deref(), Some("Bill Evans"));
 
@@ -57,19 +55,57 @@ async fn patch_me_round_trips_style_and_status() {
         .await
         .unwrap();
     assert_eq!(users[0].style.font_key, "departure-mono");
+}
 
-    // Clearing the entrance sound with "".
-    let cleared: User = client
-        .patch(server.url("/me"))
+/// Entrance sounds were cut (#974). An app up to 0.5.5 sends
+/// `entrance_sound: null` with every look it saves, so that save must still
+/// work; anything else in the field is ignored too, never refused or kept, and
+/// every `User` says null, as older apps expect.
+#[tokio::test]
+async fn entrance_sound_is_ignored_and_always_null() {
+    let server = common::spawn_server().await;
+    let host = common::bootstrap_host(&server).await;
+    let client = reqwest::Client::new();
+
+    for sound in [
+        serde_json::Value::Null,
+        serde_json::json!("airhorn"),
+        serde_json::json!("woodblock"),
+        serde_json::json!(""),
+    ] {
+        let resp = client
+            .patch(server.url("/me"))
+            .bearer_auth(&host.access_token)
+            .json(&serde_json::json!({
+                "display_name": "Matt",
+                "style": null,
+                "status": null,
+                "entrance_sound": sound
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200, "entrance_sound {sound} was refused");
+        let saved: User = resp.json().await.unwrap();
+        assert_eq!(saved.display_name, "Matt");
+        assert!(
+            saved.entrance_sound.is_none(),
+            "entrance_sound {sound} was kept"
+        );
+    }
+
+    let users: Vec<serde_json::Value> = client
+        .get(server.url("/users"))
         .bearer_auth(&host.access_token)
-        .json(&serde_json::json!({ "entrance_sound": "" }))
         .send()
         .await
         .unwrap()
         .json()
         .await
         .unwrap();
-    assert!(cleared.entrance_sound.is_none());
+    for user in users {
+        assert_eq!(user.get("entrance_sound"), Some(&serde_json::Value::Null));
+    }
 }
 
 #[tokio::test]
@@ -98,7 +134,6 @@ async fn server_rejects_every_off_list_key() {
     with(serde_json::json!({ "weight": 600 }));
     with(serde_json::json!({ "fill": { "kind": "solid", "color": "#ff00ff" } }));
     with(serde_json::json!({ "fill": { "kind": "gradient", "from": "teal", "to": "hotpink" } }));
-    cases.push(serde_json::json!({ "entrance_sound": "airhorn" }));
     cases.push(serde_json::json!({ "status": { "line": "x".repeat(241) } }));
     cases.push(serde_json::json!({ "display_name": "" }));
 

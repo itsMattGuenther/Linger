@@ -371,11 +371,6 @@ CREATE TABLE user_status_fields (
   PRIMARY KEY (user_id, position)
 );
 
-CREATE TABLE entrance_sounds (
-  user_id         BLOB PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-  sound_key       TEXT NOT NULL                -- bundled key, or object key for custom
-);
-
 CREATE TABLE rooms (
   id              BLOB PRIMARY KEY,
   slug            TEXT NOT NULL UNIQUE,        -- [a-z0-9-]{1,32}; `dm-` reserved

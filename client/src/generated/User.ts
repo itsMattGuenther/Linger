@@ -12,7 +12,8 @@ export type User = { id: UserId, username: string, display_name: string, is_host
  */
 is_cohost: boolean, style: Style, status: UserStatus | null, 
 /**
- * Bundled sound key, or object key for a custom upload.
+ * Always null. Personal entrance sounds were cut (#974, SPEC §4.1); the
+ * field stays so an older app finds what it always has (PROTOCOL §9).
  */
 entrance_sound: string | null, last_seen_at: number | null, 
 /**

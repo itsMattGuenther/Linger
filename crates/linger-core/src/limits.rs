@@ -18,12 +18,6 @@ pub const MAX_ATTACHMENTS_PER_MESSAGE: usize = 10;
 /// Filenames are stored and echoed in a download header, so they are bounded.
 pub const MAX_FILENAME_CHARS: usize = 200;
 
-/// Custom entrance sounds: max 2 seconds, max 200 KB, reject (never truncate).
-pub const MAX_ENTRANCE_SOUND_BYTES: u64 = 200 * 1024;
-pub const MAX_ENTRANCE_SOUND_MS: u32 = 2_000;
-/// A given user's entrance sound plays at most once per 5 min per listener.
-pub const ENTRANCE_SOUND_COOLDOWN_MS: u64 = 5 * 60 * 1000;
-
 /// User-status fields (SPEC §4.6).
 pub const MAX_STATUS_LINE_CHARS: usize = 240;
 /// A field's value.

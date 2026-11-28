@@ -38,25 +38,6 @@ pub const FONTS: [&str; 12] = [
     "silkscreen",
 ];
 
-/// Bundled entrance-sound keys (SPEC §4.1). Provisional until T-903 curates the
-/// actual audio; the keys are chosen to match the curation directions so files
-/// can land without a contract change. Custom uploads (M4) use object keys and
-/// are validated separately.
-pub const ENTRANCE_SOUNDS: [&str; 12] = [
-    "woodblock",
-    "rimshot",
-    "brush",
-    "marimba",
-    "vibraphone",
-    "typewriter-ding",
-    "latch-click",
-    "cassette-clunk",
-    "soft-blip",
-    "small-chime",
-    "screen-door",
-    "double-knock",
-];
-
 /// The oldest app release this server works with (#793, PROTOCOL §9), sent as
 /// `oldest_client` on `GET /health`. An app older than this doesn't connect to the
 /// server: it says so in plain words and offers the update instead of failing
@@ -83,11 +64,6 @@ pub const OLDEST_CLIENT: &str = "0.4.1";
 /// Whether `key` names a bundled font.
 pub fn is_valid_font_key(key: &str) -> bool {
     FONTS.contains(&key)
-}
-
-/// Whether `key` names a bundled entrance sound.
-pub fn is_valid_entrance_sound_key(key: &str) -> bool {
-    ENTRANCE_SOUNDS.contains(&key)
 }
 
 #[cfg(test)]

@@ -26,6 +26,10 @@ empties the list (`docs/releasing.md`).
   Theme picks one on each computer and phone: The door (the default), After
   dark, Porch light, Dusk and The original are dark, and Daylight is light.
   Linger opens on The door's navy, then draws the theme.
+- **Hosts: one small database change** (#974, migration 0028). It drops the
+  `entrance_sounds` table: personal entrance sounds are cut, and no Linger
+  app ever set one. `update.sh` backs up the database first, as
+  always. An older app sees no difference.
 
 ## Written down, not planned
 

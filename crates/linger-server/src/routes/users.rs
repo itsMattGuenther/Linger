@@ -303,13 +303,9 @@ async fn patch_me(
     // What comes back is the status to save, without the characters that
     // turn text around (#488).
     let status = req.status.as_ref().map(validate::status).transpose()?;
-    if let Some(sound) = &req.entrance_sound {
-        if !sound.is_empty() && !linger_core::is_valid_entrance_sound_key(sound) {
-            return Err(ApiError::validation(
-                "That entrance sound isn't in the bundled set.",
-            ));
-        }
-    }
+    // Entrance sounds were cut (#974). An app up to 0.5.5 sends
+    // `entrance_sound: null` whenever it saves a look, so the field is
+    // accepted and ignored, whatever it holds, the way `image_id` is above.
     // "Show my local time" (#604): a zone name, or "" to turn it off.
     if let Some(zone) = req.time_zone.as_deref().filter(|zone| !zone.is_empty()) {
         validate::time_zone(zone)?;
@@ -422,24 +418,6 @@ async fn patch_me(
         .bind(now_ms())
         .execute(&mut *tx)
         .await?;
-    }
-
-    if let Some(sound) = &req.entrance_sound {
-        if sound.is_empty() {
-            sqlx::query("DELETE FROM entrance_sounds WHERE user_id = ?")
-                .bind(auth.id.to_vec())
-                .execute(&mut *tx)
-                .await?;
-        } else {
-            sqlx::query(
-                "INSERT INTO entrance_sounds (user_id, sound_key) VALUES (?, ?)
-                 ON CONFLICT(user_id) DO UPDATE SET sound_key = excluded.sound_key",
-            )
-            .bind(auth.id.to_vec())
-            .bind(sound)
-            .execute(&mut *tx)
-            .await?;
-        }
     }
 
     if let Some(zone) = &req.time_zone {

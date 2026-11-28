@@ -163,8 +163,8 @@ async fn room_focus_enter_leave_occupancy_and_typing_limits() {
     let (mut a, _) = connect_ready(&server, &host.access_token).await;
     let (mut b, _) = connect_ready(&server, &member.access_token).await;
 
-    // A sits. Everyone gets occupancy + presence; only sitters get room.enter —
-    // which includes A itself (the client filters its own entrance at playback).
+    // A sits. Everyone gets occupancy + presence; only sitters get room.enter,
+    // A itself included.
     send_json(
         &mut a,
         json!({ "op": "room.focus", "d": { "room_id": room_id } }),
@@ -172,6 +172,10 @@ async fn room_focus_enter_leave_occupancy_and_typing_limits() {
     .await;
     let (own_enter, _) = wait_for(&mut a, "room.enter").await;
     assert_eq!(own_enter["d"]["user_id"], host.user.id.to_string());
+    // Entrance sounds were cut (#974): the field stays, null, for older apps.
+    assert!(own_enter["d"]
+        .as_object()
+        .is_some_and(|d| d.get("entrance_sound") == Some(&serde_json::Value::Null)));
 
     let (occupancy, _) = wait_for(&mut b, "room.occupancy").await;
     assert_eq!(occupancy["d"]["room_id"], room_id.as_str());
@@ -183,7 +187,7 @@ async fn room_focus_enter_leave_occupancy_and_typing_limits() {
     assert_eq!(presence["d"]["state"], "in_room");
     assert!(
         !skipped.iter().any(|f| f["op"] == "room.enter"),
-        "B is not in the room and must not hear the entrance"
+        "B is not in the room and must not be told who came in"
     );
 
     // B sits too: A (a sitter) hears B enter.

@@ -3,10 +3,15 @@ import type { Style } from "./Style";
 import type { UserStatus } from "./UserStatus";
 
 /**
- * `PATCH /me`: absent fields unchanged; `style`/`status` replace whole objects;
- * `entrance_sound: ""` clears the sound (PROTOCOL §5).
+ * `PATCH /me`: absent fields unchanged; `style`/`status` replace whole objects
+ * (PROTOCOL §5).
  */
-export type UpdateMeRequest = { display_name: string | null, style: Style | null, status: UserStatus | null, entrance_sound: string | null, 
+export type UpdateMeRequest = { display_name: string | null, style: Style | null, status: UserStatus | null, 
+/**
+ * Ignored, a string included. Personal entrance sounds were cut (#974);
+ * an app up to 0.5.5 sends `null` here whenever it saves your look.
+ */
+entrance_sound: string | null, 
 /**
  * "Show my local time" (#604): a time-zone name turns it on or moves
  * it, `""` turns it off. Absent or null leaves it as it is, so an app
