@@ -267,7 +267,7 @@ async fn drain(ws: &mut Ws, window: Duration) -> Vec<Value> {
 }
 
 /// A member with a bit of everything set up: style, status and its fields,
-/// an entrance sound, notification rules both ways, a read position, a block
+/// notification rules both ways, a read position, a block
 /// both ways, an invite, a sign-in link the host made, and a report both ways.
 struct Lived {
     server: TestServer,
@@ -302,7 +302,6 @@ async fn lived_in() -> Lived {
                 "image_id": null, "image_url": null,
                 "away_message": null, "away_since": null
             },
-            "entrance_sound": "woodblock",
             "time_zone": "America/Toronto"
         }))
         .send()
@@ -476,7 +475,6 @@ async fn a_deleted_account_leaves_nothing_about_them_behind() {
         ("user_style", "user_id"),
         ("user_status", "user_id"),
         ("user_status_fields", "user_id"),
-        ("entrance_sounds", "user_id"),
         ("read_markers", "user_id"),
         ("notify_rules", "user_id"),
         ("notify_rules", "target_user_id"),

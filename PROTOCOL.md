@@ -839,7 +839,7 @@ off:
 points at an account (messages, files, invites, emoji, polls, reports) would stop the
 row's delete, and the links that cascade would take the reports about the person with
 them. So it is kept as a stand-in: display name, password, style, status and its fields,
-entrance sound and time zone are cleared, `deactivated_at` and `deleted_at` are set, and
+and time zone are cleared, `deactivated_at` and `deleted_at` are set, and
 the username stays. A mention is stored as the text `@username`, and a newcomer who took
 the name would inherit every old mention of the person who left, so it is never free
 again. Each deleted person keeps their own stand-in, so two people's messages never run
@@ -981,8 +981,9 @@ Both endpoints announce themselves on the gateway: `remove` fans out `user.remov
 them" (§8).
 
 `PATCH /me` semantics: absent fields are unchanged; `style` and `status` replace the
-whole object when present. `entrance_sound: ""` clears the sound (bundled keys are
-validated against `linger-core::ENTRANCE_SOUNDS` until custom uploads land in M4).
+whole object when present. `entrance_sound` is ignored, whatever it holds: personal
+entrance sounds were cut (#974, SPEC §4.1), and an app up to 0.5.5 sends `null` there
+whenever it saves a look.
 
 A `status` that clears the away message the saved one had (from a message to `null` or
 `""`) also **ends away on every one of the person's gateway sessions** (#653, §8). A
@@ -1004,7 +1005,7 @@ type User = {
   is_cohost: boolean;                 // a co-host the host named (#424); never with is_host
   style: Style;
   status: UserStatus | null;
-  entrance_sound: string | null;      // bundled key or object key
+  entrance_sound: string | null;      // always null: entrance sounds were cut (#974)
   last_seen_at: number | null;
   time_zone?: string;                 // "America/Chicago" when they show their local time (#604); absent when off
 }
@@ -1967,7 +1968,7 @@ newest, never dropped.
   `presence.update` to everybody. The move itself happens when the frame arrives, so a
   `ready` has it at once and a `presence.update` after it lands in order. Only the
   telling waits: at the person's turn, everybody is told where they are by then, once.
-  A room they passed through on the way hears nothing and plays no entrance sound.
+  A room they passed through on the way hears nothing.
 - **Joins and leaves are taken at most `RATE_VOICE_SEAT` times per session**: ten, then
   one a second, mute and deafen changes included. Each seat taken or left makes the
   forwarding server offer everybody in that voice room a fresh connection. Past the limit
@@ -2031,7 +2032,7 @@ that tells everybody nothing new is told to nobody.
 | `reaction.update` | `{ message_id, key, count, user_ids }` — one emoji's reactions on a message as they now are; `count` 0 means none are left. It never notifies, sounds, or makes a room look new (#485) |
 | `presence.update` | `PresenceEntry` |
 | `room.occupancy` | `{ room_id, user_ids }` |
-| `room.enter` | `{ room_id, user_id, entrance_sound }` — triggers the sound |
+| `room.enter` | `{ room_id, user_id, entrance_sound }`: somebody came into a room you're in. `entrance_sound` is always null (#974), and no app acts on it now |
 | `room.leave` | `{ room_id, user_id }` |
 | `user.update` | `User` — the current state of this person, **whether or not the client already had them**. A display name, style or status change, and equally somebody who was not on the roster a moment ago: the client's fold appends when the id is unknown |
 | `user.remove` | `{ user_id, deleted? }` — this person is off the server. The mirror of `user.update`, and it names an id rather than carrying a `User` because there is no state left to describe: `User` has no `deactivated_at` field and is not going to grow one to carry a tombstone. `deleted: true` when the account was deleted rather than removed (§5, #650), so the client labels what they left "Deleted account"; left out for a removal and by servers from before |

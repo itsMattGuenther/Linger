@@ -597,13 +597,13 @@ fn tell_presence(state: &AppState, user_id: UserId) {
 
 /// Tell everybody somebody moved, at most `RATE_ROOM_FOCUS` times (#527).
 /// Each move can send a `room.leave`, a `room.enter`, two `room.occupancy`
-/// and a `presence.update` to everybody connected, and reads the database.
+/// and a `presence.update` to everybody connected.
 ///
 /// The move itself has already happened (`Gateway::move_to`): this is only
 /// the telling, held back past the limit the way presence is (`tell_presence`,
 /// #497). When the person's turn comes, everybody is told where they are by
 /// then, once, however many moves came in between. A room they passed
-/// through on the way hears nothing, and plays nobody's entrance sound.
+/// through on the way hears nothing.
 async fn tell_focus(state: &AppState, user_id: UserId) {
     // A turn is already coming, and it will tell this move too.
     if state.gateway.focus_held.contains(&user_id) {
@@ -611,7 +611,7 @@ async fn tell_focus(state: &AppState, user_id: UserId) {
     }
     let key = format!("focus:{user_id}");
     let Err(mut wait_ms) = state.limiter.check(&key, RATE_ROOM_FOCUS) else {
-        tell_focus_now(state, user_id).await;
+        state.gateway.tell_focus(user_id);
         return;
     };
     // Two of their apps can both get here; the one that holds it waits.
@@ -630,20 +630,8 @@ async fn tell_focus(state: &AppState, user_id: UserId) {
         // Let go first, then tell: a move that lands after this is told by
         // its own turn, and one that landed before is where they are now.
         state.gateway.focus_held.remove(&user_id);
-        tell_focus_now(&state, user_id).await;
+        state.gateway.tell_focus(user_id);
     });
-}
-
-/// Tell a move now, with the sound the room plays for whoever comes in.
-async fn tell_focus_now(state: &AppState, user_id: UserId) {
-    let entrance_sound: Option<String> =
-        sqlx::query_scalar("SELECT sound_key FROM entrance_sounds WHERE user_id = ?")
-            .bind(user_id.to_vec())
-            .fetch_optional(&state.db.read)
-            .await
-            .ok()
-            .flatten();
-    state.gateway.tell_focus(user_id, entrance_sound);
 }
 
 /// Take, change or leave a session's voice seat, at most `RATE_VOICE_SEAT`

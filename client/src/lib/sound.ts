@@ -1,8 +1,7 @@
 /**
  * The sound player. There is exactly one, and this is it.
  *
- * Knock and notification chimes (SPEC §4.2/§4.9). Future personal entrance
- * sounds (T-901) extend this player rather than creating another one.
+ * Knock and notification chimes (SPEC §4.2/§4.9).
  *
  * The gate is SPEC §4.1's, and it applies to knocks too:
  *
@@ -33,8 +32,7 @@
  * a cue plays through Web Audio as before.
  *
  * The knock itself is synthesized rather than played from a file. Two soft
- * taps from an oscillator need no audio asset. The shared score in chimes.ts
- * does not reach into T-903's separate entrance-sound curation.
+ * taps from an oscillator need no audio asset.
  */
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { renderChime } from "./chimes";

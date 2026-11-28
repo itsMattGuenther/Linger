@@ -214,7 +214,8 @@ pub struct User {
     pub is_cohost: bool,
     pub style: Style,
     pub status: Option<UserStatus>,
-    /// Bundled sound key, or object key for a custom upload.
+    /// Always null. Personal entrance sounds were cut (#974, SPEC §4.1); the
+    /// field stays so an older app finds what it always has (PROTOCOL §9).
     pub entrance_sound: Option<String>,
     #[ts(type = "number | null")]
     pub last_seen_at: Option<i64>,
@@ -332,14 +333,16 @@ pub struct DeleteRemovedRequest {
     pub everything: bool,
 }
 
-/// `PATCH /me`: absent fields unchanged; `style`/`status` replace whole objects;
-/// `entrance_sound: ""` clears the sound (PROTOCOL §5).
+/// `PATCH /me`: absent fields unchanged; `style`/`status` replace whole objects
+/// (PROTOCOL §5).
 #[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct UpdateMeRequest {
     pub display_name: Option<String>,
     pub style: Option<Style>,
     pub status: Option<UserStatus>,
+    /// Ignored, a string included. Personal entrance sounds were cut (#974);
+    /// an app up to 0.5.5 sends `null` here whenever it saves your look.
     pub entrance_sound: Option<String>,
     /// "Show my local time" (#604): a time-zone name turns it on or moves
     /// it, `""` turns it off. Absent or null leaves it as it is, so an app

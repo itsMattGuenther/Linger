@@ -1189,7 +1189,7 @@ impl Gateway {
     /// throughout, so a held turn and a closing connection can't interleave
     /// their frames. The presence goes out while it is held too, for the
     /// reason `tell_presence` gives.
-    fn tell_focus(&self, user_id: UserId, entrance_sound: Option<String>) {
+    fn tell_focus(&self, user_id: UserId) {
         let mut told = self.focus_told.entry(user_id).or_insert(None);
         let Some(now) = self.presence.get(&user_id).map(|e| e.value().room_id) else {
             // Offline in between: `session_gone` told everybody.
@@ -1216,7 +1216,7 @@ impl Gateway {
                 self.publish(ServerEvent::RoomEnter {
                     room_id: new,
                     user_id,
-                    entrance_sound,
+                    entrance_sound: None,
                 });
                 self.publish(ServerEvent::RoomOccupancy {
                     room_id: new,
@@ -1355,7 +1355,7 @@ impl Gateway {
             .get(&user_id)
             .is_some_and(|room| room.is_some());
         if moved || told_somewhere {
-            self.tell_focus(user_id, None);
+            self.tell_focus(user_id);
         }
         self.focus_told.remove(&user_id);
         self.presence.remove(&user_id);

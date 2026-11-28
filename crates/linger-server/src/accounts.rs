@@ -106,7 +106,6 @@ pub async fn delete(state: &AppState, id: UserId, everything: bool) -> Result<()
         "DELETE FROM user_style WHERE user_id = ?",
         "DELETE FROM user_status WHERE user_id = ?",
         "DELETE FROM user_status_fields WHERE user_id = ?",
-        "DELETE FROM entrance_sounds WHERE user_id = ?",
         "DELETE FROM read_markers WHERE user_id = ?",
         "DELETE FROM notify_rules WHERE user_id = ?",
         "DELETE FROM notify_rules WHERE target_user_id = ?",

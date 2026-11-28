@@ -88,7 +88,7 @@ mod tests {
                 away_since: Some(1_700_000_000_000),
                 ..UserStatus::default()
             }),
-            entrance_sound: Some("door".into()),
+            entrance_sound: None,
             last_seen_at: None,
             time_zone: Some("America/Chicago".into()),
         }

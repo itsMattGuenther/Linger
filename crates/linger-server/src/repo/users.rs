@@ -1,5 +1,5 @@
 //! Assembling `wire::User` from users + user_style + user_status +
-//! user_status_fields + entrance_sounds.
+//! user_status_fields.
 
 use std::collections::HashMap;
 
@@ -15,12 +15,10 @@ const USER_SELECT: &str = "
     SELECT u.id, u.username, u.display_name, u.is_host, u.is_cohost, u.last_seen_at, u.time_zone,
            s.font_key, s.weight, s.italic, s.fill_kind, s.fill_from, s.fill_to,
            s.effect, s.msg_font_key,
-           g.user_id AS status_user, g.line, g.away_message, g.away_since,
-           e.sound_key
+           g.user_id AS status_user, g.line, g.away_message, g.away_since
     FROM users u
     LEFT JOIN user_style s      ON s.user_id = u.id
-    LEFT JOIN user_status g     ON g.user_id = u.id
-    LEFT JOIN entrance_sounds e ON e.user_id = u.id";
+    LEFT JOIN user_status g     ON g.user_id = u.id";
 
 /// Removed members are absent from everything a member can ask for (T-413), so
 /// every query here says which side of that line it wants rather than
@@ -89,7 +87,8 @@ fn row_to_user(row: &SqliteRow) -> Result<User, ApiError> {
         is_cohost: row.get::<i64, _>("is_cohost") != 0,
         style,
         status,
-        entrance_sound: row.get("sound_key"),
+        // Entrance sounds were cut (#974): always null, for older apps.
+        entrance_sound: None,
         last_seen_at: row.get("last_seen_at"),
         time_zone: row.get("time_zone"),
     })
